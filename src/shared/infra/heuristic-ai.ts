@@ -13,13 +13,15 @@ export function mentions(text: string, name: string) {
 const STOP = new Set(("Telegram Russian Russia Ukrainian Ukraine Iranian Iran Chinese China The A An In On At Of And Or But New Our We They It This That These Those " +
   "Monday Tuesday Wednesday Thursday Friday Saturday Sunday January February March April May June July August September October November December " +
   "MHz GHz CRPA GNSS GPS FPV UAV UAVs USV UGV EW AI RF HD km kg USD EUR UAH RUB Air Land Sea Defense Defence Forces Army Navy Report Dispatch Update Source Sources " +
-  "Kyiv Moscow Kharkiv Odesa Donetsk Crimea Black Front Western Eastern Southern Northern Sea Oblast").split(" ").map((w) => w.toLowerCase()));
+  "Also New One Two Three Several Later Then After Before Near Meanwhile Reportedly Estimated Price Cost Unit Russians Ukrainians Kyiv Moscow Kharkiv Odesa Donetsk Crimea Black Front Western Eastern Southern Northern Sea Oblast").split(" ").map((w) => w.toLowerCase()));
 
 /** Find proper nouns, acronyms and model designations without requiring quotes. */
 export function detectNames(raw: string): string[] {
   const out: string[] = [];
   const add = (s: string) => {
-    const n = s.trim().replace(/[.,;:!?)]+$/, "");
+    const words = s.trim().replace(/[.,;:!?)]+$/, "").split(/\s+/);
+    while (words.length > 1 && STOP.has(words[0]!.toLowerCase())) words.shift();
+    const n = words.join(" ");
     if (n.length < 2 || STOP.has(n.toLowerCase())) return;
     if (n.split(/\s+/).every((w) => STOP.has(w.toLowerCase()))) return;
     if (!out.some((o) => o.toLowerCase() === n.toLowerCase())) out.push(n);
@@ -30,9 +32,15 @@ export function detectNames(raw: string): string[] {
   // Acronym names, optionally with a single-letter variant: STING S, MAGURA V5
   for (const m of raw.matchAll(/\b([A-Z]{3,}(?:\s(?:[A-Z]\d*|V\d+)\b)?)/g)) add(m[1]!);
   // Capitalised 1–2 word phrases not at sentence start: Baba Yaga, Bars, Magura V5
-  for (const m of raw.matchAll(/(?<=[a-z0-9,;:()]\s|[a-z0-9]\s\s)([A-Z][a-z]{2,}(?:\s(?:[A-Z][a-z]{2,}|[A-Z]\d+))?)/g)) add(m[1]!);
+  for (const m of raw.matchAll(/\b([A-Z][a-z]{2,}\s(?:[A-Z][a-z]{2,}|[A-Z]\d+))\b/g)) add(m[1]!);
+  for (const m of raw.matchAll(/(?<=[a-z0-9,;:()]\s)([A-Z][a-z]{2,})\b/g)) add(m[1]!);
   // Drop names that are prefixes of a longer detected designation (Geran vs Geran-5)
-  return out.filter((n) => !out.some((o) => o !== n && o.toLowerCase().startsWith(n.toLowerCase() + "-")));
+  return dropContained(out, out);
+}
+
+/** Remove names that are a word-part of a longer name (Geran ⊂ Geran-5, Yaga ⊂ Baba Yaga). */
+function dropContained(names: string[], against: string[]) {
+  return names.filter((n) => !against.some((o) => o.toLowerCase() !== n.toLowerCase() && mentions(o.replace(/-/g, " "), n.replace(/-/g, " ")) && o.length > n.length));
 }
 
 const catalogNames = (d: Drone) => [...d.name.split(/\s*\/\s*/), d.name, d.cyrillic ?? "", ...d.aliases].filter((n) => n.length > 2);
@@ -47,7 +55,7 @@ export function resolveSystems(raw: string, catalog: Drone[]): DetectedSystem[] 
     if (hit && !seen.has(d.id)) { seen.add(d.id); systems.push({ name: hit, matchId: d.id }); }
   }
   // 2. Detected names not already covered — check for variant-of relations
-  for (const n of detectNames(raw)) {
+  for (const n of dropContained(detectNames(raw), systems.map((s) => s.name))) {
     if (systems.some((s) => s.name.toLowerCase() === n.toLowerCase())) continue;
     if (catalog.some((d) => catalogNames(d).some((c) => c.toLowerCase() === n.toLowerCase()))) continue;
     const b = base(n);

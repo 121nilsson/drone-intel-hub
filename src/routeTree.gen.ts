@@ -14,6 +14,7 @@ import { Route as CatalogRouteImport } from './routes/catalog'
 import { Route as CounterpartsRouteImport } from './routes/counterparts'
 import { Route as IntakeRouteImport } from './routes/intake'
 import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as SourcesRouteImport } from './routes/sources'
 import { Route as SpecsRouteImport } from './routes/specs'
 import { Route as SystemsIdRouteImport } from './routes/systems/$id'
 
@@ -42,6 +43,11 @@ const SettingsRoute = SettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SourcesRoute = SourcesRouteImport.update({
+  id: '/sources',
+  path: '/sources',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SpecsRoute = SpecsRouteImport.update({
   id: '/specs',
   path: '/specs',
@@ -59,6 +65,7 @@ export interface FileRoutesByFullPath {
   '/counterparts': typeof CounterpartsRoute
   '/intake': typeof IntakeRoute
   '/settings': typeof SettingsRoute
+  '/sources': typeof SourcesRoute
   '/specs': typeof SpecsRoute
   '/systems/$id': typeof SystemsIdRoute
 }
@@ -68,6 +75,7 @@ export interface FileRoutesByTo {
   '/counterparts': typeof CounterpartsRoute
   '/intake': typeof IntakeRoute
   '/settings': typeof SettingsRoute
+  '/sources': typeof SourcesRoute
   '/specs': typeof SpecsRoute
   '/systems/$id': typeof SystemsIdRoute
 }
@@ -78,6 +86,7 @@ export interface FileRoutesById {
   '/counterparts': typeof CounterpartsRoute
   '/intake': typeof IntakeRoute
   '/settings': typeof SettingsRoute
+  '/sources': typeof SourcesRoute
   '/specs': typeof SpecsRoute
   '/systems/$id': typeof SystemsIdRoute
 }
@@ -89,6 +98,7 @@ export interface FileRouteTypes {
     | '/counterparts'
     | '/intake'
     | '/settings'
+    | '/sources'
     | '/specs'
     | '/systems/$id'
   fileRoutesByTo: FileRoutesByTo
@@ -98,6 +108,7 @@ export interface FileRouteTypes {
     | '/counterparts'
     | '/intake'
     | '/settings'
+    | '/sources'
     | '/specs'
     | '/systems/$id'
   id:
@@ -107,6 +118,7 @@ export interface FileRouteTypes {
     | '/counterparts'
     | '/intake'
     | '/settings'
+    | '/sources'
     | '/specs'
     | '/systems/$id'
   fileRoutesById: FileRoutesById
@@ -117,6 +129,7 @@ export interface RootRouteChildren {
   CounterpartsRoute: typeof CounterpartsRoute
   IntakeRoute: typeof IntakeRoute
   SettingsRoute: typeof SettingsRoute
+  SourcesRoute: typeof SourcesRoute
   SpecsRoute: typeof SpecsRoute
   SystemsIdRoute: typeof SystemsIdRoute
 }
@@ -158,6 +171,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/sources': {
+      id: '/sources'
+      path: '/sources'
+      fullPath: '/sources'
+      preLoaderRoute: typeof SourcesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/specs': {
       id: '/specs'
       path: '/specs'
@@ -181,6 +201,7 @@ const rootRouteChildren: RootRouteChildren = {
   CounterpartsRoute: CounterpartsRoute,
   IntakeRoute: IntakeRoute,
   SettingsRoute: SettingsRoute,
+  SourcesRoute: SourcesRoute,
   SpecsRoute: SpecsRoute,
   SystemsIdRoute: SystemsIdRoute,
 }
