@@ -1,0 +1,157 @@
+import type { Drone, SpecAttribute } from "./types";
+
+const ago = (d: number) => new Date(Date.now() - d * 86400000).toISOString();
+const s = (key: string, label: string, unit: string | undefined, claims: [number | string, string, number][]): SpecAttribute => ({
+  key, label, ...(unit ? { unit } : {}), discoveredBy: "seed",
+  claims: claims.map(([value, source, d]) => ({ value, source, date: ago(d) })),
+});
+
+export const SEED_DRONES: Drone[] = [
+  {
+    id: "geran-2", name: "Geran-2", cyrillic: "Герань-2", aliases: ["Shahed-136", "Shahed", "Moped"], domain: "Air",
+    origin: "IR", operators: ["RU"], propulsion: "Piston (MD-550)",
+    summary: "Long-range delta-wing loitering munition, now license-produced at Alabuga with Kometa-M anti-jam GNSS.",
+    specs: [
+      s("speed", "Cruise speed", "km/h", [[185, "GUR briefing", 40], [180, "OSINT Telegram", 20], [190, "CIT", 9]]),
+      s("range", "Range", "km", [[2000, "GUR briefing", 40], [1800, "ISW", 30], [2500, "RU milblog", 5]]),
+      s("payload", "Warhead", "kg", [[50, "GUR briefing", 40], [90, "Defense Express", 3], [50, "CAR", 30]]),
+      s("cameras", "Onboard cameras", undefined, [[1, "Defense Express", 4]]),
+    ],
+    rf: [
+      { role: "gnss", band: "L1/L2", freqMHz: [1227, 1602], notes: "GPS/GLONASS" },
+      { role: "antijam", band: "CRPA", notes: "Kometa-M 8-element" },
+      { role: "uplink", band: "LTE/3G", freqMHz: [800, 2600], notes: "Modem telemetry on newer lots" },
+    ],
+    components: [
+      { part: "Engine MD-550 clone", manufacturer: "Mado / Limbach copy", origin: "IR" },
+      { part: "Kometa-M CRPA", manufacturer: "VNIIR-Progress", origin: "RU" },
+      { part: "MCU STM32", manufacturer: "STMicroelectronics", origin: "CH" },
+    ],
+    evolution: [
+      { date: ago(60), kind: "payload", description: "Thermobaric warhead variant observed", source: "CIT" },
+      { date: ago(3), kind: "payload", description: "Warhead claims upgraded 50 → 90 kg", source: "Defense Express" },
+      { date: ago(4), kind: "other", description: "Rear-facing camera + LTE modem for in-flight retasking", source: "Defense Express" },
+    ],
+    counterpartIds: ["lyutyi"], createdAt: ago(200), updatedAt: ago(3),
+  },
+  {
+    id: "lyutyi", name: "FP-1 / Lyutyi", cyrillic: "Лютий", aliases: ["Liutyi", "AN-196"], domain: "Air",
+    origin: "UA", operators: ["UA"], propulsion: "Piston",
+    summary: "Ukrainian long-range strike UAV used against refineries and airbases deep inside Russia.",
+    specs: [
+      s("speed", "Cruise speed", "km/h", [[200, "Ukroboronprom", 50], [180, "Forbes", 30]]),
+      s("range", "Range", "km", [[1000, "Ukroboronprom", 50], [1500, "Kyiv Independent", 6]]),
+      s("payload", "Warhead", "kg", [[75, "Ukroboronprom", 50], [50, "RUSI", 40]]),
+    ],
+    rf: [
+      { role: "gnss", band: "L1", freqMHz: [1575, 1576] },
+      { role: "antijam", band: "CRPA", notes: "Domestic 4-element" },
+      { role: "uplink", band: "Satcom", notes: "Unconfirmed" },
+    ],
+    components: [{ part: "Engine", manufacturer: "Unknown (Chinese ICE)", origin: "CN" }],
+    evolution: [{ date: ago(6), kind: "airframe", description: "Range claim extended to 1500 km", source: "Kyiv Independent" }],
+    counterpartIds: ["geran-2"], createdAt: ago(150), updatedAt: ago(6),
+  },
+  {
+    id: "lancet-3", name: "Lancet-3", cyrillic: "Ланцет-3", aliases: ["Izdeliye 53", "Product 53"], domain: "Air",
+    origin: "RU", operators: ["RU"], propulsion: "Electric",
+    summary: "ZALA loitering munition with X-wing airframe, primary counter-battery precision strike asset.",
+    specs: [
+      s("speed", "Max speed", "km/h", [[110, "ZALA", 100], [300, "RU milblog (dive)", 10]]),
+      s("range", "Range", "km", [[40, "ZALA", 100], [70, "OSINT", 2]]),
+      s("payload", "Warhead", "kg", [[3, "ZALA", 100], [5, "OSINT", 20]]),
+    ],
+    rf: [
+      { role: "video", band: "L", freqMHz: [868, 915] },
+      { role: "uplink", band: "UHF", freqMHz: [433, 435] },
+      { role: "gnss", band: "L1", freqMHz: [1575, 1602] },
+    ],
+    components: [
+      { part: "Jetson TX2 module", manufacturer: "NVIDIA", origin: "US" },
+      { part: "Camera module", manufacturer: "Sony", origin: "JP" },
+    ],
+    evolution: [{ date: ago(2), kind: "frequency", description: "Video link hopped 868 → 2.4 GHz on captured airframe", source: "Serhii Flash" }],
+    counterpartIds: ["warmate"], createdAt: ago(300), updatedAt: ago(2),
+  },
+  {
+    id: "warmate", name: "Warmate", aliases: ["WB Warmate"], domain: "Air", origin: "PL", operators: ["UA"], propulsion: "Electric",
+    summary: "Polish loitering munition supplied to Ukraine.",
+    specs: [
+      s("speed", "Max speed", "km/h", [[150, "WB Group", 200]]),
+      s("range", "Range", "km", [[30, "WB Group", 200], [40, "Janes", 60]]),
+      s("payload", "Warhead", "kg", [[1.4, "WB Group", 200]]),
+    ],
+    rf: [{ role: "video", band: "L", freqMHz: [868, 915] }, { role: "gnss", band: "L1", freqMHz: [1575, 1576] }],
+    components: [{ part: "Datalink", manufacturer: "WB Electronics", origin: "PL" }],
+    evolution: [], counterpartIds: ["lancet-3"], createdAt: ago(300), updatedAt: ago(60),
+  },
+  {
+    id: "kvn-fiber", name: "KVN Fiber-Optic FPV", cyrillic: "КВН", aliases: ["Knyaz Vandal Novgorodsky", "Vandal"], domain: "Air",
+    origin: "RU", operators: ["RU"], propulsion: "Electric",
+    summary: "Fiber-optic tethered FPV immune to RF jamming; spool lengths increasing rapidly.",
+    specs: [
+      s("speed", "Max speed", "km/h", [[100, "Rybar", 40], [120, "UA EW unit", 10]]),
+      s("range", "Range", "km", [[10, "Rybar", 40], [20, "UA EW unit", 1]]),
+      s("fiber_spool", "Fiber spool length", "km", [[10, "Rybar", 40], [20, "UA EW unit", 1], [15, "Defense Express", 5]]),
+      s("payload", "Payload", "kg", [[2.5, "Rybar", 40]]),
+    ],
+    rf: [{ role: "video", band: "Fiber (no RF)", notes: "Immune to EW" }],
+    components: [
+      { part: "Optical fiber", manufacturer: "Chinese suppliers", origin: "CN" },
+      { part: "Motors 2807", manufacturer: "T-Motor / clones", origin: "CN" },
+    ],
+    evolution: [{ date: ago(1), kind: "other", description: "Spool length claim extended to 20 km", source: "UA EW unit" }],
+    counterpartIds: ["ua-fiber-fpv"], createdAt: ago(120), updatedAt: ago(1),
+  },
+  {
+    id: "ua-fiber-fpv", name: "Ukrainian Fiber FPV", aliases: ["Optoviolokno FPV"], domain: "Air", origin: "UA", operators: ["UA"], propulsion: "Electric",
+    summary: "Domestic fiber-optic FPV family produced by volunteer workshops.",
+    specs: [
+      s("range", "Range", "km", [[10, "Brave1", 30], [12, "Militarnyi", 5]]),
+      s("fiber_spool", "Fiber spool length", "km", [[10, "Brave1", 30], [12, "Militarnyi", 5]]),
+      s("payload", "Payload", "kg", [[2, "Brave1", 30]]),
+    ],
+    rf: [{ role: "video", band: "Fiber (no RF)" }],
+    components: [{ part: "Motors 2807", manufacturer: "Domestic + CN", origin: "UA" }],
+    evolution: [{ date: ago(5), kind: "motor", description: "Swap to domestic 2807 motors", source: "Militarnyi" }],
+    counterpartIds: ["kvn-fiber"], createdAt: ago(100), updatedAt: ago(5),
+  },
+  {
+    id: "magura-v5", name: "Magura V5", cyrillic: "Магура", aliases: ["MAGURA"], domain: "Sea", origin: "UA", operators: ["UA"], propulsion: "Waterjet",
+    summary: "Unmanned surface vessel credited with multiple Black Sea Fleet kills; now carries R-73 / FPV motherships.",
+    specs: [
+      s("speed", "Max speed", "km/h", [[78, "GUR", 120], [80, "Navy News", 40]]),
+      s("range", "Range", "km", [[800, "GUR", 120], [1000, "Defense Express", 6]]),
+      s("payload", "Payload", "kg", [[320, "GUR", 120]]),
+      s("missiles", "Air-defense missiles", undefined, [[2, "GUR", 4]]),
+    ],
+    rf: [{ role: "uplink", band: "Satcom", notes: "Starlink terminal" }, { role: "gnss", band: "L1", freqMHz: [1575, 1576] }],
+    components: [{ part: "Satcom terminal", manufacturer: "SpaceX", origin: "US" }],
+    evolution: [{ date: ago(4), kind: "payload", description: "R-73 air-to-air missile launcher fitted", source: "GUR" }],
+    counterpartIds: ["katran-x"], createdAt: ago(250), updatedAt: ago(4),
+  },
+  {
+    id: "katran-x", name: "Katran-X", cyrillic: "Катран-X", aliases: [], domain: "Sea", origin: "RU", operators: ["RU"], propulsion: "Outboard",
+    summary: "Newly cataloged Russian strike USV prototype.",
+    specs: [s("speed", "Max speed", "km/h", [[70, "RU milblog", 2]]), s("payload", "Payload", "kg", [[300, "RU milblog", 2]])],
+    rf: [{ role: "uplink", band: "UHF", freqMHz: [433, 435] }],
+    components: [], evolution: [{ date: ago(2), kind: "other", description: "First cataloged", source: "RU milblog" }],
+    counterpartIds: ["magura-v5"], createdAt: ago(2), updatedAt: ago(2),
+  },
+  {
+    id: "courier-ugv", name: "Kur'er UGV", cyrillic: "Курьер", aliases: ["Courier"], domain: "Land", origin: "RU", operators: ["RU"], propulsion: "Electric tracked",
+    summary: "Small tracked UGV for logistics and mine-laying; seen with AGS-17 mount.",
+    specs: [s("speed", "Max speed", "km/h", [[15, "TASS", 90], [12, "OSINT", 10]]), s("payload", "Payload", "kg", [[200, "TASS", 90]]), s("jammers", "Onboard jammers", undefined, [[1, "OSINT", 3]])],
+    rf: [{ role: "uplink", band: "ISM 900", freqMHz: [900, 930] }, { role: "video", band: "S", freqMHz: [2400, 2483] }],
+    components: [{ part: "Radio", manufacturer: "Mesh radio (CN)", origin: "CN" }],
+    evolution: [{ date: ago(3), kind: "payload", description: "Onboard jammer fitted", source: "OSINT" }],
+    counterpartIds: ["termit"], createdAt: ago(80), updatedAt: ago(3),
+  },
+  {
+    id: "termit", name: "Termit UGV", cyrillic: "Терміт", aliases: [], domain: "Land", origin: "UA", operators: ["UA"], propulsion: "Electric tracked",
+    summary: "Ukrainian tracked UGV for casualty evacuation and logistics.",
+    specs: [s("speed", "Max speed", "km/h", [[20, "Brave1", 60]]), s("payload", "Payload", "kg", [[300, "Brave1", 60]]), s("range", "Range", "km", [[20, "Brave1", 60]])],
+    rf: [{ role: "uplink", band: "ISM 900", freqMHz: [868, 928] }, { role: "video", band: "S", freqMHz: [2400, 2483] }],
+    components: [], evolution: [], counterpartIds: ["courier-ugv"], createdAt: ago(5), updatedAt: ago(5),
+  },
+];

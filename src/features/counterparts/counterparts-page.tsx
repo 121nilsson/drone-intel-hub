@@ -1,0 +1,57 @@
+import { useNavigate } from "@tanstack/react-router";
+import { consensus } from "@/entities/drone/consensus";
+import { flag, type Drone } from "@/entities/drone/types";
+import { useDrones } from "@/shared/infra/services";
+import { Panel, Tag } from "@/shared/ui/primitives";
+
+function overlap(a: Drone, b: Drone) {
+  const shared: string[] = [];
+  for (const x of a.rf) for (const y of b.rf) {
+    if (x.band === y.band || (x.freqMHz && y.freqMHz && x.freqMHz[0] <= y.freqMHz[1] && y.freqMHz[0] <= x.freqMHz[1])) shared.push(`${x.role}/${y.role} · ${x.band}`);
+  }
+  return [...new Set(shared)];
+}
+
+export function CounterpartsPage({ a, b }: { a?: string | undefined; b?: string | undefined }) {
+  const drones = useDrones();
+  const nav = useNavigate();
+  const A = drones.find((d) => d.id === a) ?? drones[0]!;
+  const B = drones.find((d) => d.id === b) ?? drones.find((d) => A.counterpartIds.includes(d.id)) ?? drones[1]!;
+  const keys = [...new Set([...A.specs, ...B.specs].map((s) => s.key))];
+  const shared = overlap(A, B);
+  const fiberImmune = [A, B].filter((d) => d.rf.some((r) => r.band.startsWith("Fiber")));
+  const set = (k: "a" | "b", v: string) => nav({ to: "/counterparts", search: { a: k === "a" ? v : A.id, b: k === "b" ? v : B.id } });
+
+  const Card = ({ d, k }: { d: Drone; k: "a" | "b" }) => (
+    <Panel title={<select value={d.id} onChange={(e) => set(k, e.target.value)} className="bg-transparent font-mono text-xs uppercase outline-none">
+      {drones.map((x) => <option key={x.id} value={x.id} className="bg-card">{x.name}</option>)}</select>}>
+      <h2 className="text-2xl font-semibold">{d.name}</h2>
+      <div className="mt-2 flex flex-wrap gap-1.5"><Tag tone="primary">{d.domain}</Tag><Tag>{flag(d.origin)}</Tag>{d.operators.map((o) => <Tag key={o} tone="accent">Op {flag(o)}</Tag>)}</div>
+      <ul className="mt-4 space-y-1 text-sm">{d.rf.map((r, i) => <li key={i} className="font-mono"><span className="text-muted-foreground">{r.role}</span> {r.band}</li>)}</ul>
+    </Panel>
+  );
+
+  return (
+    <div className="space-y-6">
+      <h1 className="text-3xl font-semibold">Counterpart comparison</h1>
+      <div className="grid gap-4 md:grid-cols-2"><Card d={A} k="a" /><Card d={B} k="b" /></div>
+      <Panel title="Shared RF bands / mutual EW vulnerability">
+        {shared.length ? <ul className="flex flex-wrap gap-2">{shared.map((s) => <Tag key={s} tone="danger">{s}</Tag>)}</ul> : <p className="text-sm text-muted-foreground">No shared RF bands detected.</p>}
+        {fiberImmune.length > 0 && <p className="mt-3 text-sm text-accent">{fiberImmune.map((d) => d.name).join(", ")}: fiber-optic link — immune to RF jamming.</p>}
+      </Panel>
+      <Panel title="Specification delta">
+        <table className="w-full text-sm">
+          <thead><tr className="font-mono text-[11px] uppercase text-muted-foreground"><th className="pb-2 text-left">Attribute</th><th className="pb-2 text-right">{A.name}</th><th className="pb-2 text-right">{B.name}</th></tr></thead>
+          <tbody className="divide-y divide-border">
+            {keys.map((k) => {
+              const sa = A.specs.find((s) => s.key === k), sb = B.specs.find((s) => s.key === k);
+              return <tr key={k}><td className="py-2">{(sa ?? sb)!.label}</td>
+                <td className="py-2 text-right font-mono">{sa ? consensus(sa).display : "—"}</td>
+                <td className="py-2 text-right font-mono">{sb ? consensus(sb).display : "—"}</td></tr>;
+            })}
+          </tbody>
+        </table>
+      </Panel>
+    </div>
+  );
+}
