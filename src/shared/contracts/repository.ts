@@ -1,3 +1,4 @@
+import type { MonitoredSource } from "@/entities/source/types";
 import type { Candidate, Domain, Drone } from "@/entities/drone/types";
 
 export interface CatalogFacets {
@@ -24,4 +25,11 @@ export interface CandidateRepository {
 
 export interface Subscribable {
   subscribe(fn: () => void): () => void;
+}
+
+export interface SourceRepository {
+  list(): MonitoredSource[];
+  add(s: MonitoredSource): void;
+  update(id: string, patch: Partial<MonitoredSource>): void;
+  remove(id: string): void;
 }

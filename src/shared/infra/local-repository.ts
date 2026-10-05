@@ -1,6 +1,8 @@
 import type { Candidate, Drone } from "@/entities/drone/types";
 import { SEED_DRONES } from "@/entities/drone/seed";
-import type { CandidateRepository, CatalogFacets, DroneRepository, Subscribable } from "@/shared/contracts/repository";
+import type { MonitoredSource } from "@/entities/source/types";
+import { SEED_SOURCES } from "@/entities/source/seed";
+import type { SourceRepository, CandidateRepository, CatalogFacets, DroneRepository, Subscribable } from "@/shared/contracts/repository";
 
 const norm = (s: string) => s.toLowerCase().normalize("NFKD");
 
@@ -52,4 +54,17 @@ export class LocalCandidateRepository extends Emitter implements CandidateReposi
   list() { return this.items; }
   add(c: Candidate) { this.items = [c, ...this.items]; this.persist(); }
   update(id: string, patch: Partial<Candidate>) { this.items = this.items.map((c) => (c.id === id ? { ...c, ...patch } : c)); this.persist(); }
+}
+
+export class LocalSourceRepository extends Emitter implements SourceRepository {
+  private items: MonitoredSource[] = SEED_SOURCES;
+  constructor(private key = "dti.sources.v1") { super(); }
+  hydrate() {
+    try { const raw = localStorage.getItem(this.key); if (raw) { this.items = JSON.parse(raw); this.emit(); } } catch { /* ignore */ }
+  }
+  private persist() { try { localStorage.setItem(this.key, JSON.stringify(this.items)); } catch { /* ignore */ } this.emit(); }
+  list() { return this.items; }
+  add(s: MonitoredSource) { this.items = [s, ...this.items]; this.persist(); }
+  update(id: string, patch: Partial<MonitoredSource>) { this.items = this.items.map((x) => (x.id === id ? { ...x, ...patch } : x)); this.persist(); }
+  remove(id: string) { this.items = this.items.filter((x) => x.id !== id); this.persist(); }
 }

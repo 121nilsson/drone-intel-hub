@@ -64,6 +64,12 @@ export interface ExtractedSpec {
   unit?: string;
 }
 
+export interface DetectedSystem {
+  name: string;
+  matchId?: string;
+  variantOf?: string;
+}
+
 export interface Extraction {
   name?: string;
   aliases: string[];
@@ -73,6 +79,7 @@ export interface Extraction {
   propulsion?: string;
   specs: ExtractedSpec[];
   rfBands: string[];
+  systems?: DetectedSystem[];
   matchId?: string;
   confidence: number; // 0..1
   rationale: string;
