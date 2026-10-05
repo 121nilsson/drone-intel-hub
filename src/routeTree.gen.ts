@@ -10,33 +10,115 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as CatalogRouteImport } from './routes/catalog'
+import { Route as CounterpartsRouteImport } from './routes/counterparts'
+import { Route as IntakeRouteImport } from './routes/intake'
+import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as SpecsRouteImport } from './routes/specs'
+import { Route as SystemsIdRouteImport } from './routes/systems/$id'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const CatalogRoute = CatalogRouteImport.update({
+  id: '/catalog',
+  path: '/catalog',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CounterpartsRoute = CounterpartsRouteImport.update({
+  id: '/counterparts',
+  path: '/counterparts',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const IntakeRoute = IntakeRouteImport.update({
+  id: '/intake',
+  path: '/intake',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SettingsRoute = SettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SpecsRoute = SpecsRouteImport.update({
+  id: '/specs',
+  path: '/specs',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SystemsIdRoute = SystemsIdRouteImport.update({
+  id: '/systems/$id',
+  path: '/systems/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/catalog': typeof CatalogRoute
+  '/counterparts': typeof CounterpartsRoute
+  '/intake': typeof IntakeRoute
+  '/settings': typeof SettingsRoute
+  '/specs': typeof SpecsRoute
+  '/systems/$id': typeof SystemsIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/catalog': typeof CatalogRoute
+  '/counterparts': typeof CounterpartsRoute
+  '/intake': typeof IntakeRoute
+  '/settings': typeof SettingsRoute
+  '/specs': typeof SpecsRoute
+  '/systems/$id': typeof SystemsIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/catalog': typeof CatalogRoute
+  '/counterparts': typeof CounterpartsRoute
+  '/intake': typeof IntakeRoute
+  '/settings': typeof SettingsRoute
+  '/specs': typeof SpecsRoute
+  '/systems/$id': typeof SystemsIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    | '/'
+    | '/catalog'
+    | '/counterparts'
+    | '/intake'
+    | '/settings'
+    | '/specs'
+    | '/systems/$id'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to:
+    | '/'
+    | '/catalog'
+    | '/counterparts'
+    | '/intake'
+    | '/settings'
+    | '/specs'
+    | '/systems/$id'
+  id:
+    | '__root__'
+    | '/'
+    | '/catalog'
+    | '/counterparts'
+    | '/intake'
+    | '/settings'
+    | '/specs'
+    | '/systems/$id'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  CatalogRoute: typeof CatalogRoute
+  CounterpartsRoute: typeof CounterpartsRoute
+  IntakeRoute: typeof IntakeRoute
+  SettingsRoute: typeof SettingsRoute
+  SpecsRoute: typeof SpecsRoute
+  SystemsIdRoute: typeof SystemsIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -48,11 +130,59 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/catalog': {
+      id: '/catalog'
+      path: '/catalog'
+      fullPath: '/catalog'
+      preLoaderRoute: typeof CatalogRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/counterparts': {
+      id: '/counterparts'
+      path: '/counterparts'
+      fullPath: '/counterparts'
+      preLoaderRoute: typeof CounterpartsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/intake': {
+      id: '/intake'
+      path: '/intake'
+      fullPath: '/intake'
+      preLoaderRoute: typeof IntakeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/settings': {
+      id: '/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof SettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/specs': {
+      id: '/specs'
+      path: '/specs'
+      fullPath: '/specs'
+      preLoaderRoute: typeof SpecsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/systems/$id': {
+      id: '/systems/$id'
+      path: '/systems/$id'
+      fullPath: '/systems/$id'
+      preLoaderRoute: typeof SystemsIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  CatalogRoute: CatalogRoute,
+  CounterpartsRoute: CounterpartsRoute,
+  IntakeRoute: IntakeRoute,
+  SettingsRoute: SettingsRoute,
+  SpecsRoute: SpecsRoute,
+  SystemsIdRoute: SystemsIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
