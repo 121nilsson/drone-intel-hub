@@ -7,6 +7,13 @@ import { Panel, Tag } from "@/shared/ui/primitives";
 const WEEK = 7 * 86400000;
 
 export function BriefingPage() {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  if (!mounted) return <p className="animate-pulse font-mono text-sm text-muted-foreground">Loading briefing…</p>;
+  return <Briefing />;
+}
+
+function Briefing() {
   const drones = useDrones();
   const candidates = useCandidates();
   const { summarizer, settings } = useServices();
@@ -57,8 +64,8 @@ Pending queue: ${candidates.filter((c) => c.status === "pending").length}.`;
           <ul className="divide-y divide-border">
             {drift.map((e, i) => (
               <li key={i} className="flex flex-wrap items-start gap-3 py-2.5">
-                <span className="w-20 font-mono text-xs text-muted-foreground">{e.date.slice(5, 10)}</span>
-                <Tag tone={e.kind === "frequency" ? "accent" : e.kind === "payload" ? "danger" : "primary"}>{e.kind}</Tag>
+                <span className="w-14 font-mono text-xs text-muted-foreground">{e.date.slice(5, 10)}</span>
+                <Tag className="w-24 justify-center" tone={e.kind === "frequency" ? "accent" : e.kind === "payload" ? "danger" : "primary"}>{e.kind}</Tag>
                 <div className="min-w-0 flex-1">
                   <Link to="/systems/$id" params={{ id: e.drone.id }} className="font-medium hover:text-primary">{e.drone.name}</Link>
                   <p className="text-sm text-muted-foreground">{e.description} <span className="font-mono text-xs">— {e.source}</span></p>
