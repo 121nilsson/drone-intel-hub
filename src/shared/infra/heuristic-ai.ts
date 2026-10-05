@@ -104,7 +104,7 @@ function scan(raw: string, catalog: Drone[], deep: boolean): Extraction {
   const matched = systems.filter((s) => s.matchId);
   const novel = systems.filter((s) => !s.matchId);
   // Single unambiguous catalog match only when no new/variant system is the subject
-  const matchId = matched.length === 1 && !novel.some((s) => s.variantOf) ? matched[0]!.matchId : undefined;
+  const matchId = matched.length === 1 && novel.length === 0 ? matched[0]!.matchId : undefined;
   const primary = novel[0] ?? matched[0];
 
   let confidence = 0.2 + specs.length * 0.1 + (domain ? 0.1 : 0) + (matchId ? 0.3 : 0) + (rfBands.length ? 0.08 : 0);
