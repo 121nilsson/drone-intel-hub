@@ -3,8 +3,8 @@ import { IntakePage } from "@/features/intake/intake-page";
 
 export const Route = createFileRoute("/intake")({
   validateSearch: (s: Record<string, unknown>): { draft?: string; source?: string } => ({
-    ...(typeof s.draft === "string" ? { draft: s.draft } : {}),
-    ...(typeof s.source === "string" ? { source: s.source } : {}),
+    ...(typeof s["draft"] === "string" ? { draft: s["draft"] } : {}),
+    ...(typeof s["source"] === "string" ? { source: s["source"] } : {}),
   }),
   head: () => ({ meta: [
     { title: "Intake & Triage Queue — DRONE//INT" },

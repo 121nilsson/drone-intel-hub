@@ -61,7 +61,7 @@ function CandidateRow({ c }: { c: Candidate }) {
   );
 }
 
-export function IntakePage({ draft, draftSource }: { draft?: string; draftSource?: string } = {}) {
+export function IntakePage({ draft, draftSource }: { draft?: string | undefined; draftSource?: string | undefined } = {}) {
   const svc = useServices();
   const candidates = useCandidates();
   const [raw, setRaw] = useState("");
