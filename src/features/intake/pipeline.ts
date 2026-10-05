@@ -31,9 +31,9 @@ export async function runTwoTier(raw: string, source: string, d: PipelineDeps): 
   return { kind: "queued", candidate };
 }
 
-export function promote(c: Candidate, d: Pick<PipelineDeps, "drones" | "candidates">): Drone {
+export function promote(c: Candidate, d: Pick<PipelineDeps, "drones" | "candidates">, nameOverride?: string): Drone {
   const e = c.extraction;
-  const name = e.name ?? `Uncataloged ${e.domain ?? "system"} ${c.id.slice(0, 4).toUpperCase()}`;
+  const name = nameOverride?.trim() || e.name || `Uncataloged ${e.domain ?? "system"} ${c.id.slice(0, 4).toUpperCase()}`;
   const now = new Date().toISOString();
   const base: Drone = {
     id: name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") + "-" + c.id.slice(0, 4),

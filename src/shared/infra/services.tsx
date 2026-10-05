@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
 import type { AIProviderSettings, BriefingSummarizer, IntelExtractor } from "@/shared/contracts/ai";
-import { LocalCandidateRepository, LocalDroneRepository } from "./local-repository";
+import { LocalCandidateRepository, LocalDroneRepository, LocalSourceRepository } from "./local-repository";
 import { HeuristicExtractor, HeuristicSummarizer } from "./heuristic-ai";
 import { OpenAICompatibleExtractor, OpenAICompatibleSummarizer } from "./openai-compatible-ai";
 
@@ -16,6 +16,7 @@ export const DEFAULT_SETTINGS: AIProviderSettings = {
 interface Services {
   drones: LocalDroneRepository;
   candidates: LocalCandidateRepository;
+  sources: LocalSourceRepository;
   settings: AIProviderSettings;
   saveSettings(s: AIProviderSettings): void;
   tier1: IntelExtractor;
@@ -30,22 +31,23 @@ const SETTINGS_KEY = "dti.settings.v1";
 export function ServicesProvider({ children }: { children: ReactNode }) {
   const [drones] = useState(() => new LocalDroneRepository());
   const [candidates] = useState(() => new LocalCandidateRepository());
+  const [sources] = useState(() => new LocalSourceRepository());
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
   useEffect(() => {
-    drones.hydrate(); candidates.hydrate();
+    drones.hydrate(); candidates.hydrate(); sources.hydrate();
     try { const s = localStorage.getItem(SETTINGS_KEY); if (s) setSettings({ ...DEFAULT_SETTINGS, ...JSON.parse(s) }); } catch { /* ignore */ }
-  }, [drones, candidates]);
+  }, [drones, candidates, sources]);
 
   const value = useMemo<Services>(() => {
     const remote = !!settings.apiKey;
     return {
-      drones, candidates, settings,
+      drones, candidates, sources, settings,
       saveSettings: (s) => { setSettings(s); localStorage.setItem(SETTINGS_KEY, JSON.stringify(s)); },
       tier1: remote ? new OpenAICompatibleExtractor(1, settings) : new HeuristicExtractor(1),
       tier2: remote ? new OpenAICompatibleExtractor(2, settings) : new HeuristicExtractor(2),
       summarizer: remote ? new OpenAICompatibleSummarizer(settings) : new HeuristicSummarizer(),
     };
-  }, [drones, candidates, settings]);
+  }, [drones, candidates, sources, settings]);
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 
@@ -62,4 +64,8 @@ export function useDrones() {
 export function useCandidates() {
   const { candidates } = useServices();
   return useSyncExternalStore((f) => candidates.subscribe(f), () => candidates.list(), () => candidates.list());
+}
+export function useSources() {
+  const { sources } = useServices();
+  return useSyncExternalStore((f) => sources.subscribe(f), () => sources.list(), () => sources.list());
 }

@@ -5,7 +5,10 @@ import { chatCompletion } from "./ai-proxy.functions";
 const EXTRACT_SYS = `You are a defense technical intelligence analyst. Extract drone system data from raw reports.
 Reply in json with keys: name (string|null), aliases (string[]), domain ("Air"|"Land"|"Sea"|"Multi"|null), origin (ISO2|null), operators (ISO2[]), propulsion (string|null),
 specs (array of {key: snake_case, label, value: number|string, unit|null}) — include ANY novel attribute (e.g. jammers count, fiber spool length),
-rfBands (string[]), matchId (id from catalog or null), confidence (0..1), rationale (short).`;
+rfBands (string[]), systems (array of {name, matchId: catalog id|null, variantOf: catalog id|null}) listing EVERY drone system mentioned (e.g. attacker and interceptor),
+matchId (id from catalog or null), confidence (0..1), rationale (short).
+Only match a catalog id when the name matches exactly; a different variant number (Geran-5 vs Geran-2) is a NEW system with variantOf set.
+If a price/unit cost appears, add spec {key:"unit_cost", label:"Unit Cost / Price", value:"$15,000 - $20,000"}.`;
 
 export class OpenAICompatibleExtractor implements IntelExtractor {
   readonly label: string;
@@ -33,6 +36,11 @@ export class OpenAICompatibleExtractor implements IntelExtractor {
         key: String(s["key"]), label: String(s["label"] ?? s["key"]), value: s["value"] as number | string, ...(s["unit"] ? { unit: String(s["unit"]) } : {}),
       })) : [],
       rfBands: strs(j["rfBands"]),
+      systems: Array.isArray(j["systems"]) ? (j["systems"] as Record<string, unknown>[]).filter((s) => s["name"]).map((s) => ({
+        name: String(s["name"]),
+        ...(s["matchId"] && catalog.some((d) => d.id === s["matchId"]) ? { matchId: String(s["matchId"]) } : {}),
+        ...(s["variantOf"] ? { variantOf: String(s["variantOf"]) } : {}),
+      })) : [],
       ...(j["matchId"] && catalog.some((d) => d.id === j["matchId"]) ? { matchId: String(j["matchId"]) } : {}),
       confidence: Math.max(0, Math.min(1, Number(j["confidence"]) || 0)),
       rationale: String(j["rationale"] ?? ""),
