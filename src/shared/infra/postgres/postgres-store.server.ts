@@ -5,7 +5,7 @@ type Sql = ReturnType<typeof postgres>;
 let client: Sql | undefined;
 
 function sql(): Sql {
-  const url = process.env.DATABASE_URL;
+  const url = process.env["DATABASE_URL"];
   if (!url) throw new Error("DATABASE_URL not set");
   client ??= postgres(url, { max: 5, prepare: false, idle_timeout: 20 });
   return client;

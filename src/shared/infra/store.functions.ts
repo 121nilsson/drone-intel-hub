@@ -19,12 +19,12 @@ async function store() {
 
 /** True when the server has a PostgreSQL connection configured. */
 export const getStoreStatus = createServerFn({ method: "GET" }).handler(async () => ({
-  postgres: !!process.env.DATABASE_URL,
+  postgres: !!process.env["DATABASE_URL"],
 }));
 
 export const storeLoad = createServerFn({ method: "POST" })
   .inputValidator((d: { c: Collection }) => ({ c: checkCollection(d?.c) }))
-  .handler(async ({ data }) => (await (await store()).load(data.c)) as unknown[] | null);
+  .handler(async ({ data }) => JSON.stringify(await (await store()).load(data.c)));
 
 export const storeSeed = createServerFn({ method: "POST" })
   .inputValidator((d: { c: Collection; items: unknown[] }) => {
