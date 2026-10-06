@@ -2,3 +2,9 @@ node_modules
 .output
 dist
 .git
+
+# Local env — must not be baked into the image, the compose service injects it
+.env
+.env.*
+!.env.example
+!.env.local.example

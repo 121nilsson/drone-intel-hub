@@ -31,7 +31,69 @@ npm run dev
 ## Self-hosting with PostgreSQL
 
 ```bash
-docker compose up --build   # app on http://localhost:3000, Postgres on :5432
+docker compose up --build   # app on http://localhost:3010
 ```
 
 Migrations in `migrations/` run automatically on first DB start. Without `DATABASE_URL` the app stores data in the browser.
+
+## Local development with PostgreSQL in Docker
+
+Run only the database and point the dev server at it:
+
+```bash
+docker compose up -d db                 # Postgres on 127.0.0.1:5435
+cp .env.example .env                    # then edit if you changed the password
+npm run dev                             # Vite picks .env up via nitro
+```
+
+The database is created and migrated on first start. To re-run migrations from
+scratch, drop the volume: `docker compose down -v`.
+
+`.env` is gitignored; `.env.example` is the committed template. `DATABASE_URL`
+must use the published host port (`5435`), not the container port (`5432`).
+
+## Inference provider
+
+The app runs a built-in heuristic engine when no provider is configured. To use
+NVIDIA NIM, copy `.env.local.example` to `.env.local` and set the key:
+
+```bash
+cp .env.local.example .env.local   # then paste NVIDIA_API_KEY
+```
+
+| Variable | Purpose |
+| --- | --- |
+| `NVIDIA_API_KEY` | NIM API key. Stays on the server, never sent to the browser. |
+| `NVIDIA_BASE_URL` | Any OpenAI-compatible base URL. Defaults to NIM. |
+| `NVIDIA_TIER1_MODEL` | Fast screening model. |
+| `NVIDIA_TIER2_MODEL` | Reasoning model used for escalation and briefings. |
+
+`.env.local` wins over anything saved in the browser's Settings page, per field.
+Clear `NVIDIA_API_KEY` to fall back to a key stored in Settings, and leave that
+blank too to return to the local engine.
+
+## Scheduled auto-ingest
+
+A Nitro task polls every monitored source on a cron and runs drone-relevant posts
+through the same two-tier pipeline the UI uses. It runs **only in the built app** -
+Nitro is a build-time plugin here, so `npm run dev` does not schedule anything.
+
+```
+docker compose up --build   # then wait for the first tick, or press "Sync all now"
+```
+
+| Where | What |
+| --- | --- |
+| `vite.config.ts` | Cron expression and the `sources:sync` task name |
+| `tasks/sources/sync.ts` | Task entry point; calls the shared `runAutoSync` |
+| `src/shared/infra/fetch-posts.server.ts` | Server-side ingest body |
+| `src/shared/infra/fetch-posts.ts` | Transport parsing, shared with the browser |
+
+**Throttle.** Every run claims a slot in `sync_state` via a compare-and-swap upsert,
+so overlapping ticks cannot both proceed and the minimum interval (1 min) holds even
+across restarts. The manual button forces past the throttle; the cron does not. This
+needs `DATABASE_URL` - without it auto-sync reports that it is unavailable.
+
+To change the cadence, edit the cron in `vite.config.ts`. Applying
+`migrations/002_sync_state.sql` only happens on a fresh volume, so run it by hand if
+the table is missing on an existing database.

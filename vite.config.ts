@@ -12,4 +12,17 @@ export default defineConfig({
     // nitro/vite builds from this
     server: { entry: "server" },
   },
+  nitro: {
+    // The wrapper's `nitro` type only documents preset/output/cloudflare, but at runtime it
+    // spreads the whole object into `nitro()` (see @lovable.dev/vite-tanstack-config
+    // dist/index.js:1770). The cast passes tasks config through without patching their types.
+    experimental: { tasks: true },
+    // Nitro scans `tasks/` only within its scanDirs, which default to the serverDir rather
+    // than the project root, so the root-level tasks/ directory has to be listed here.
+    scanDirs: ["."],
+    scheduledTasks: {
+      // Auto-ingest every 15 min; the task itself enforces a 1 min floor via sync_state.
+      "*/15 * * * *": "sources:sync",
+    },
+  } as never,
 });

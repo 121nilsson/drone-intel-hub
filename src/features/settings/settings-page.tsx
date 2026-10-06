@@ -3,7 +3,7 @@ import { DEFAULT_SETTINGS, useServices } from "@/shared/infra/services";
 import { Btn, Panel } from "@/shared/ui/primitives";
 
 export function SettingsPage() {
-  const { settings, saveSettings } = useServices();
+  const { settings, saveSettings, aiKeyFromEnv } = useServices();
   const [s, setS] = useState(settings);
   const [saved, setSaved] = useState(false);
   useEffect(() => setS(settings), [settings]);
@@ -24,7 +24,11 @@ export function SettingsPage() {
           {field("tier1Model", "Tier 1 model (fast screening)")}
           {field("tier2Model", "Tier 2 model (reasoning escalation)")}
           <div className="grid grid-cols-2 gap-4">{field("escalationThreshold", "Escalate below", "number")}{field("autoMergeThreshold", "Auto-merge above", "number")}</div>
-          <p className="text-xs text-muted-foreground">Key is kept in this browser only and forwarded per request. Leave empty to use the built-in local extraction engine.</p>
+          <p className="text-xs text-muted-foreground">
+            {aiKeyFromEnv
+              ? "NVIDIA_API_KEY is set in .env.local — it overrides the fields above and stays on the server. Leave the key blank to fall back to a key saved in this browser."
+              : "Key is kept in this browser only and forwarded per request. Leave empty to use the built-in local extraction engine."}
+          </p>
           <div className="flex gap-2">
             <Btn onClick={() => { saveSettings(s); setSaved(true); setTimeout(() => setSaved(false), 1500); }}>{saved ? "Saved" : "Save"}</Btn>
             <Btn variant="ghost" onClick={() => setS(DEFAULT_SETTINGS)}>Reset</Btn>

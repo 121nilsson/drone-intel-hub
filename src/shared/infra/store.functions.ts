@@ -23,22 +23,22 @@ export const getStoreStatus = createServerFn({ method: "GET" }).handler(async ()
 }));
 
 export const storeLoad = createServerFn({ method: "POST" })
-  .inputValidator((d: { c: Collection }) => ({ c: checkCollection(d?.c) }))
+  .validator((d: { c: Collection }) => ({ c: checkCollection(d?.c) }))
   .handler(async ({ data }) => JSON.stringify(await (await store()).load(data.c)));
 
 export const storeSeed = createServerFn({ method: "POST" })
-  .inputValidator((d: { c: Collection; items: unknown[] }) => {
+  .validator((d: { c: Collection; items: unknown[] }) => {
     if (!Array.isArray(d?.items)) throw new Error("Invalid items");
     return { c: checkCollection(d.c), items: d.items.map(checkDoc) };
   })
   .handler(async ({ data }) => { await (await store()).seed(data.c, data.items as never); return { ok: true }; });
 
 export const storePut = createServerFn({ method: "POST" })
-  .inputValidator((d: { c: Collection; doc: unknown }) => ({ c: checkCollection(d?.c), doc: checkDoc(d?.doc) }))
+  .validator((d: { c: Collection; doc: unknown }) => ({ c: checkCollection(d?.c), doc: checkDoc(d?.doc) }))
   .handler(async ({ data }) => { await (await store()).put(data.c, data.doc as never); return { ok: true }; });
 
 export const storeRemove = createServerFn({ method: "POST" })
-  .inputValidator((d: { c: Collection; id: string }) => {
+  .validator((d: { c: Collection; id: string }) => {
     if (typeof d?.id !== "string") throw new Error("Invalid id");
     return { c: checkCollection(d.c), id: d.id };
   })

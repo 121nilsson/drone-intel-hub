@@ -16,7 +16,7 @@ export function BriefingPage() {
 function Briefing() {
   const drones = useDrones();
   const candidates = useCandidates();
-  const { summarizer, settings } = useServices();
+  const { summarizer, settings, aiConfigured } = useServices();
   const [now] = useState(() => Date.now());
   const recent = (iso: string) => now - new Date(iso).getTime() < WEEK;
 
@@ -45,7 +45,7 @@ Pending queue: ${candidates.filter((c) => c.status === "pending").length}.`;
         <h1 className="mt-1 text-3xl font-semibold tracking-tight md:text-4xl">Unmanned systems: weekly shifts</h1>
       </div>
 
-      <Panel title="Executive summary" right={<Tag tone={settings.apiKey ? "primary" : "default"}>{settings.apiKey ? settings.tier2Model : "local engine"}</Tag>}>
+      <Panel title="Executive summary" right={<Tag tone={aiConfigured ? "primary" : "default"}>{aiConfigured ? settings.tier2Model : "local engine"}</Tag>}>
         {err ? <p className="text-sm text-destructive">{err}</p> : summary ? <p className="whitespace-pre-line leading-relaxed">{summary}</p> : <p className="animate-pulse font-mono text-sm text-muted-foreground">Compiling briefing…</p>}
       </Panel>
 

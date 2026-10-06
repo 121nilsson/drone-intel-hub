@@ -1,6 +1,7 @@
 import type { Drone, Extraction } from "@/entities/drone/types";
 import type { AIProviderSettings, BriefingSummarizer, IntelExtractor } from "@/shared/contracts/ai";
 import { chatCompletion } from "./ai-proxy.functions";
+import { chatCompletionOnce, type ChatTransport } from "./ai-proxy.server";
 
 const EXTRACT_SYS = `You are a defense technical intelligence analyst. Extract drone system data from raw reports.
 Reply in json with keys: name (string|null), aliases (string[]), domain ("Air"|"Land"|"Sea"|"Multi"|null), origin (ISO2|null), operators (ISO2[]), propulsion (string|null),
@@ -12,16 +13,34 @@ If a price/unit cost appears, add spec {key:"unit_cost", label:"Unit Cost / Pric
 
 export class OpenAICompatibleExtractor implements IntelExtractor {
   readonly label: string;
-  constructor(readonly tier: 1 | 2, private cfg: AIProviderSettings) {
+  /**
+   * `chat` is injected so the same extractor works in both contexts: the browser passes the
+   * server-function bridge (keeps the key off the client), while a scheduled task passes
+   * `chatCompletionOnce` because server functions have no context outside a request.
+   */
+  constructor(
+    readonly tier: 1 | 2,
+    private cfg: AIProviderSettings,
+    private chat: ChatTransport = (i) => chatCompletion({ data: i }),
+  ) {
     this.label = tier === 1 ? cfg.tier1Model : cfg.tier2Model;
   }
   async extract(raw: string, catalog: Drone[]): Promise<Extraction> {
-    const index = catalog.map((d) => `${d.id}: ${[d.name, d.cyrillic, ...d.aliases].filter(Boolean).join(" / ")}`).join("\n");
-    const r = await chatCompletion({ data: {
-      baseUrl: this.cfg.baseUrl, apiKey: this.cfg.apiKey, model: this.tier === 1 ? this.cfg.tier1Model : this.cfg.tier2Model,
-      system: EXTRACT_SYS + (this.tier === 2 ? "\nThink carefully about ambiguous aliases and transliterations before matching." : ""),
-      prompt: `Catalog:\n${index}\n\nReport:\n${raw}`, json: true,
-    } });
+    const index = catalog
+      .map((d) => `${d.id}: ${[d.name, d.cyrillic, ...d.aliases].filter(Boolean).join(" / ")}`)
+      .join("\n");
+    const r = await this.chat({
+      baseUrl: this.cfg.baseUrl,
+      apiKey: this.cfg.apiKey,
+      model: this.tier === 1 ? this.cfg.tier1Model : this.cfg.tier2Model,
+      system:
+        EXTRACT_SYS +
+        (this.tier === 2
+          ? "\nThink carefully about ambiguous aliases and transliterations before matching."
+          : ""),
+      prompt: `Catalog:\n${index}\n\nReport:\n${raw}`,
+      json: true,
+    });
     if (!r.ok) throw new Error(r.error);
     const j = JSON.parse(r.content.replace(/^```json|```$/g, "").trim()) as Record<string, unknown>;
     const strs = (v: unknown) => (Array.isArray(v) ? v.map(String) : []);
@@ -32,16 +51,29 @@ export class OpenAICompatibleExtractor implements IntelExtractor {
       ...(j["origin"] ? { origin: String(j["origin"]) } : {}),
       operators: strs(j["operators"]),
       ...(j["propulsion"] ? { propulsion: String(j["propulsion"]) } : {}),
-      specs: Array.isArray(j["specs"]) ? (j["specs"] as Record<string, unknown>[]).map((s) => ({
-        key: String(s["key"]), label: String(s["label"] ?? s["key"]), value: s["value"] as number | string, ...(s["unit"] ? { unit: String(s["unit"]) } : {}),
-      })) : [],
+      specs: Array.isArray(j["specs"])
+        ? (j["specs"] as Record<string, unknown>[]).map((s) => ({
+            key: String(s["key"]),
+            label: String(s["label"] ?? s["key"]),
+            value: s["value"] as number | string,
+            ...(s["unit"] ? { unit: String(s["unit"]) } : {}),
+          }))
+        : [],
       rfBands: strs(j["rfBands"]),
-      systems: Array.isArray(j["systems"]) ? (j["systems"] as Record<string, unknown>[]).filter((s) => s["name"]).map((s) => ({
-        name: String(s["name"]),
-        ...(s["matchId"] && catalog.some((d) => d.id === s["matchId"]) ? { matchId: String(s["matchId"]) } : {}),
-        ...(s["variantOf"] ? { variantOf: String(s["variantOf"]) } : {}),
-      })) : [],
-      ...(j["matchId"] && catalog.some((d) => d.id === j["matchId"]) ? { matchId: String(j["matchId"]) } : {}),
+      systems: Array.isArray(j["systems"])
+        ? (j["systems"] as Record<string, unknown>[])
+            .filter((s) => s["name"])
+            .map((s) => ({
+              name: String(s["name"]),
+              ...(s["matchId"] && catalog.some((d) => d.id === s["matchId"])
+                ? { matchId: String(s["matchId"]) }
+                : {}),
+              ...(s["variantOf"] ? { variantOf: String(s["variantOf"]) } : {}),
+            }))
+        : [],
+      ...(j["matchId"] && catalog.some((d) => d.id === j["matchId"])
+        ? { matchId: String(j["matchId"]) }
+        : {}),
       confidence: Math.max(0, Math.min(1, Number(j["confidence"]) || 0)),
       rationale: String(j["rationale"] ?? ""),
     };
@@ -49,13 +81,20 @@ export class OpenAICompatibleExtractor implements IntelExtractor {
 }
 
 export class OpenAICompatibleSummarizer implements BriefingSummarizer {
-  constructor(private cfg: AIProviderSettings) {}
+  constructor(
+    private cfg: AIProviderSettings,
+    private chat: ChatTransport = (i) => chatCompletion({ data: i }),
+  ) {}
   async summarize(context: string) {
-    const r = await chatCompletion({ data: {
-      baseUrl: this.cfg.baseUrl, apiKey: this.cfg.apiKey, model: this.cfg.tier2Model, json: false,
-      system: "Write a terse 4-6 sentence executive intelligence summary of weekly drone technology shifts. No preamble.",
+    const r = await this.chat({
+      baseUrl: this.cfg.baseUrl,
+      apiKey: this.cfg.apiKey,
+      model: this.cfg.tier2Model,
+      json: false,
+      system:
+        "Write a terse 4-6 sentence executive intelligence summary of weekly drone technology shifts. No preamble.",
       prompt: context,
-    } });
+    });
     if (!r.ok) throw new Error(r.error);
     return r.content;
   }

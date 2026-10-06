@@ -1,15 +1,5 @@
-import postgres from "postgres";
 import type { Collection, CollectionMap, DocumentStore } from "@/shared/contracts/store";
-
-type Sql = ReturnType<typeof postgres>;
-let client: Sql | undefined;
-
-function sql(): Sql {
-  const url = process.env["DATABASE_URL"];
-  if (!url) throw new Error("DATABASE_URL not set");
-  client ??= postgres(url, { max: 5, prepare: false, idle_timeout: 20 });
-  return client;
-}
+import { db, type Sql } from "./db.server";
 
 const ORDER: Record<Collection, string> = {
   drones: "name asc",
@@ -20,18 +10,20 @@ const ORDER: Record<Collection, string> = {
 /** PostgreSQL implementation. Schema lives in /migrations (plain SQL, portable). */
 export class PostgresStore implements DocumentStore {
   async load<C extends Collection>(c: C) {
-    const db = sql();
-    const rows = await db.unsafe<{ data: CollectionMap[C] }[]>(`select data from ${c} order by ${ORDER[c]}`);
+    const conn = db();
+    const rows = await conn.unsafe<{ data: CollectionMap[C] }[]>(
+      `select data from ${c} order by ${ORDER[c]}`,
+    );
     if (rows.length === 0) {
-      const [meta] = await db`select 1 from collection_meta where name = ${c}`;
+      const [meta] = await conn`select 1 from collection_meta where name = ${c}`;
       if (!meta) return null;
     }
     return rows.map((r) => r.data);
   }
 
   async seed<C extends Collection>(c: C, items: CollectionMap[C][]) {
-    const db = sql();
-    await db.begin(async (tx) => {
+    const conn = db();
+    await conn.begin(async (tx) => {
       const [meta] = await tx`select 1 from collection_meta where name = ${c} for update`;
       if (meta) return;
       for (const doc of [...items].reverse()) await this.upsert(tx as unknown as Sql, c, doc);
@@ -40,13 +32,13 @@ export class PostgresStore implements DocumentStore {
   }
 
   async put<C extends Collection>(c: C, doc: CollectionMap[C]) {
-    const db = sql();
-    await this.upsert(db, c, doc);
-    await db`insert into collection_meta (name) values (${c}) on conflict do nothing`;
+    const conn = db();
+    await this.upsert(conn, c, doc);
+    await conn`insert into collection_meta (name) values (${c}) on conflict do nothing`;
   }
 
   async remove(c: Collection, id: string) {
-    await sql().unsafe(`delete from ${c} where id = $1`, [id]);
+    await db().unsafe(`delete from ${c} where id = $1`, [id]);
   }
 
   private async upsert<C extends Collection>(db: Sql, c: C, doc: CollectionMap[C]) {
