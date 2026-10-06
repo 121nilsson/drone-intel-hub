@@ -1,6 +1,10 @@
 import { createContext, useContext, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
 import type { AIProviderSettings, BriefingSummarizer, IntelExtractor } from "@/shared/contracts/ai";
 import { LocalCandidateRepository, LocalDroneRepository, LocalSourceRepository } from "./local-repository";
+import type { DocumentStore } from "@/shared/contracts/store";
+import { LocalStorageStore } from "./local-store";
+import { RemoteStore } from "./remote-store";
+import { getStoreStatus } from "./store.functions";
 import { HeuristicExtractor, HeuristicSummarizer } from "./heuristic-ai";
 import { OpenAICompatibleExtractor, OpenAICompatibleSummarizer } from "./openai-compatible-ai";
 
@@ -34,8 +38,18 @@ export function ServicesProvider({ children }: { children: ReactNode }) {
   const [sources] = useState(() => new LocalSourceRepository());
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
   useEffect(() => {
-    drones.hydrate(); candidates.hydrate(); sources.hydrate();
     try { const s = localStorage.getItem(SETTINGS_KEY); if (s) setSettings({ ...DEFAULT_SETTINGS, ...JSON.parse(s) }); } catch { /* ignore */ }
+    // Storage selection: PostgreSQL when the server has DATABASE_URL, otherwise this browser.
+    (async () => {
+      let store: DocumentStore = new LocalStorageStore();
+      try { if ((await getStoreStatus()).postgres) store = new RemoteStore(); } catch { /* offline → local */ }
+      try { await Promise.all([drones.attach(store), candidates.attach(store), sources.attach(store)]); }
+      catch (e) {
+        console.error("[store] remote unavailable, falling back to browser storage", e);
+        const local = new LocalStorageStore();
+        await Promise.all([drones.attach(local), candidates.attach(local), sources.attach(local)]);
+      }
+    })();
   }, [drones, candidates, sources]);
 
   const value = useMemo<Services>(() => {
