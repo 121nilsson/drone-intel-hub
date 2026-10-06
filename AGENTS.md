@@ -13,3 +13,6 @@
 - Feature-Sliced: features live in src/features/<slice>, shared contracts in src/shared/contracts, entities in src/entities — keeps slices decoupled.
 - Features depend only on contracts (DroneRepository, IntelExtractor, BriefingSummarizer); concrete implementations are chosen solely in src/shared/infra/services.tsx — so storage/inference can be swapped without touching features.
 - External AI calls go through the chatCompletion server function proxy — keeps provider calls off the browser.
+- Persistence goes through the async DocumentStore contract (src/shared/contracts/store.ts); repositories are write-through caches that attach a store at startup — so localStorage, PostgreSQL or any DB swap without touching features.
+- PostgreSQL is selected automatically when the server has DATABASE_URL; schema lives as plain portable SQL in /migrations (also mounted by docker-compose) — keeps the DB vendor-neutral and self-hostable.
+- Server-only DB code lives in *.server.ts files and is dynamically imported inside server-function handlers — keeps the driver out of the browser bundle.
