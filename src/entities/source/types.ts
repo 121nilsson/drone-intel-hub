@@ -11,4 +11,8 @@ export interface MonitoredSource {
   domain: Domain;
   notes: string;
   lastFetched?: string;
+  /** Post IDs already ingested — prevents duplicates across syncs. */
+  seenIds?: string[];
+  lastError?: string | undefined;
+  autoSync?: boolean;
 }
