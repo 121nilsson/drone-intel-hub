@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 
-export interface FetchedPost { id: string; text: string; url: string; date?: string }
+export interface FetchedPost { id: string; text: string; url: string; date?: string | undefined }
 interface Input { platform: "X" | "Telegram" | "RSS" | "Web"; handle: string }
 
 const decode = (s: string) =>
@@ -42,10 +42,10 @@ function parseWeb(html: string, url: string): FetchedPost[] {
   const re = /<a[^>]+href="([^"#]+)"[^>]*>([\s\S]{25,300}?)<\/a>/g;
   const seen = new Set<string>(); let m: RegExpExecArray | null;
   while ((m = re.exec(html)) && out.length < 25) {
-    const text = decode(m[2]);
+    const text = decode(m[2] ?? "");
     if (text.split(" ").length < 5 || seen.has(text)) continue;
     seen.add(text);
-    const href = new URL(m[1], url).toString();
+    const href = new URL(m[1] ?? "", url).toString();
     out.push({ id: `web:${href}`, text, url: href });
   }
   return out;
