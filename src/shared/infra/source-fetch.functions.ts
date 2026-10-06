@@ -61,7 +61,7 @@ export const fetchSourcePosts = createServerFn({ method: "POST" })
     try {
       if (data.platform === "X") return { ok: false, error: "X/Twitter needs a paid API — not supported yet" };
       if (data.platform === "Telegram") {
-        const chan = data.handle.replace(/^@|^https?:\/\/t\.me\/(s\/)?/, "").split("/")[0];
+        const chan = data.handle.replace(/^@|^https?:\/\/t\.me\/(s\/)?/, "").split("/")[0] ?? "";
         if (!/^[A-Za-z0-9_]{3,64}$/.test(chan)) return { ok: false, error: "Invalid Telegram handle" };
         const r = await fetch(`https://t.me/s/${chan}`, { headers: UA });
         if (!r.ok) return { ok: false, error: `Telegram ${r.status}` };

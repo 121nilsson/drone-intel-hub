@@ -13,6 +13,6 @@ export interface MonitoredSource {
   lastFetched?: string;
   /** Post IDs already ingested — prevents duplicates across syncs. */
   seenIds?: string[];
-  lastError?: string;
+  lastError?: string | undefined;
   autoSync?: boolean;
 }
