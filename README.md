@@ -27,3 +27,11 @@ npm run dev
 - TypeScript
 - React
 - Tailwind CSS
+
+## Self-hosting with PostgreSQL
+
+```bash
+docker compose up --build   # app on http://localhost:3000, Postgres on :5432
+```
+
+Migrations in `migrations/` run automatically on first DB start. Without `DATABASE_URL` the app stores data in the browser.
