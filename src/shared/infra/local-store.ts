@@ -63,4 +63,54 @@ export class LocalStorageStore implements DocumentStore {
       ((this.read(c) ?? []) as { id: string }[]).filter((x) => x.id !== id),
     );
   }
+
+  /**
+   * Single-tab lease. localStorage has no compare-and-swap, so this cannot be made atomic
+   * across tabs the way the PostgreSQL claim is - two tabs can still read the same pending
+   * set. It is still worth having: the dominant case is one browser driving the queue while
+   * the cron works against PostgreSQL, and the lease stops a single tab from double-processing
+   * after a re-render or a double-click.
+   *
+   * The lease fields are stripped before writing so they never persist into the document.
+   */
+  async claim(
+    c: Collection,
+    opts: { limit: number; leaseMs: number; owner: string },
+  ): Promise<string[] | null> {
+    type Leased = { id: string; status?: string; leaseUntil?: number; leaseBy?: string };
+    const items = (this.read(c) ?? []) as Leased[];
+    const now = Date.now();
+    const taken = items
+      .filter((d) => d.status === "pending")
+      .filter((d) => d.leaseUntil === undefined || d.leaseUntil < now || d.leaseBy === opts.owner)
+      .slice(0, opts.limit);
+    if (!taken.length) return [];
+    const ids = new Set(taken.map((d) => d.id));
+    const leased = new Map(taken.map((d) => [d.id, now + opts.leaseMs] as const));
+    this.write(
+      c,
+      items.map((d) => {
+        const { leaseUntil: _u, leaseBy: _o, ...rest } = d;
+        return ids.has(d.id)
+          ? { ...rest, leaseUntil: leased.get(d.id), leaseBy: opts.owner }
+          : rest;
+      }),
+    );
+    return [...ids];
+  }
+
+  async release(c: Collection, ids: string[], owner: string) {
+    if (!ids.length) return;
+    type Leased = { id: string; leaseUntil?: number; leaseBy?: string };
+    const items = (this.read(c) ?? []) as Leased[];
+    const set = new Set(ids);
+    this.write(
+      c,
+      items.map((d) => {
+        if (!set.has(d.id) || d.leaseBy !== owner) return d;
+        const { leaseUntil: _u, leaseBy: _o, ...rest } = d;
+        return rest;
+      }),
+    );
+  }
 }

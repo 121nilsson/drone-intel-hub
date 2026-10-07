@@ -45,4 +45,11 @@ export interface DispatchRepository {
   update(id: string, patch: Partial<RawDispatch>): void;
   /** Oldest pending first. */
   pending(limit: number): RawDispatch[];
+  /**
+   * Lease up to `limit` pending dispatches for exclusive processing. Returns null when the
+   * backing store cannot lease, so callers can fall back to `pending()`. See DocumentStore.claim.
+   */
+  claim?(limit: number, leaseMs: number, owner: string): Promise<string[] | null>;
+  /** Release leases held by `owner`. */
+  release?(ids: string[], owner: string): Promise<void>;
 }

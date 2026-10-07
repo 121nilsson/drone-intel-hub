@@ -33,7 +33,12 @@ export async function fetchAllSources(): Promise<SyncReport[]> {
   const drones = new LocalDroneRepository();
   const candidates = new LocalCandidateRepository();
   const dispatches = new LocalDispatchRepository();
-  await Promise.all([sources.attach(store), drones.attach(store), candidates.attach(store), dispatches.attach(store)]);
+  await Promise.all([
+    sources.attach(store),
+    drones.attach(store),
+    candidates.attach(store),
+    dispatches.attach(store),
+  ]);
 
   const useRemote = !!process.env["NVIDIA_API_KEY"];
   const cfg = {
@@ -65,10 +70,25 @@ export async function fetchAllSources(): Promise<SyncReport[]> {
   for (const s of targets) {
     const c = await collectSource(s, fetchOne, dispatches);
     sources.update(s.id, { lastFetched: new Date().toISOString(), lastError: c.error });
-    reports.push({ source: s.name, fetched: c.stored, relevant: 0, merged: 0, queued: 0, ...(c.error ? { error: c.error } : {}) });
+    reports.push({
+      source: s.name,
+      fetched: c.stored,
+      relevant: 0,
+      merged: 0,
+      queued: 0,
+      ...(c.error ? { error: c.error } : {}),
+    });
   }
-  // Stage 2: drain a bounded batch; the rest waits for the next tick.
+  // Stage 2: drain a bounded batch; the rest waits for the next tick. Leased, so a manual
+  // browser run overlapping this tick cannot process the same dispatch twice.
   const p = await processPending(dispatches, deps, 25);
-  reports.push({ source: QUEUE_ROW, fetched: p.processed + p.irrelevant, relevant: p.processed, merged: p.merged, queued: p.queued, ...(p.failed ? { error: `${p.failed} failed, ${p.remaining} pending` } : {}) });
+  reports.push({
+    source: QUEUE_ROW,
+    fetched: p.processed + p.irrelevant,
+    relevant: p.processed,
+    merged: p.merged,
+    queued: p.queued,
+    ...(p.failed ? { error: `${p.failed} failed, ${p.remaining} pending` } : {}),
+  });
   return reports;
 }

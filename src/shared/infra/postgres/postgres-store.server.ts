@@ -23,6 +23,47 @@ export class PostgresStore implements DocumentStore {
     return rows.map((r) => r.data);
   }
 
+  /**
+   * Exclusive claim via `for update skip locked`.
+   *
+   * `skip locked` is what makes this safe under concurrency: two workers selecting the same
+   * pending rows do not block each other, the second simply skips past whatever the first
+   * has locked and takes a different batch. Combined with the `lease_until` predicate, a
+   * document is either claimed by exactly one worker or not claimed at all.
+   *
+   * One statement, so claim-and-stamp cannot interleave. `now()` is transaction time, so every
+   * row in a batch gets the same expiry.
+   */
+  async claim(c: Collection, opts: { limit: number; leaseMs: number; owner: string }) {
+    const conn = db();
+    const { limit, leaseMs, owner } = opts;
+    const rows = await conn.unsafe<{ id: string }[]>(
+      `update dispatches
+          set lease_until = now() + ($2::int * interval '1 millisecond'),
+              lease_by = $3
+        where id in (
+          select id from dispatches
+           where status = 'pending'
+             and (lease_until is null or lease_until < now())
+           order by created_at asc
+           limit $1
+           for update skip locked
+        )
+        returning id`,
+      [limit, leaseMs, owner],
+    );
+    return rows.map((r) => r.id);
+  }
+
+  async release(c: Collection, ids: string[], owner: string) {
+    if (!ids.length) return;
+    await db().unsafe(
+      `update dispatches set lease_until = null, lease_by = null
+        where id = any($1::text[]) and lease_by = $2`,
+      [ids, owner],
+    );
+  }
+
   async seed<C extends Collection>(c: C, items: CollectionMap[C][]) {
     const conn = db();
     await conn.begin(async (tx) => {
@@ -58,6 +99,10 @@ export class PostgresStore implements DocumentStore {
         on conflict (id) do update set status = excluded.status, tier = excluded.tier, data = excluded.data`;
     } else if (c === "dispatches") {
       const d = doc as CollectionMap["dispatches"];
+      // The lease columns are deliberately not written here. A `put` carries only document
+      // data, and the caller may be holding a stale cached copy - letting it stamp lease_until
+      // would either extend a dead worker's lease or clear a live one. Only claim/release
+      // touch them, which is what keeps claiming exclusive.
       await db`insert into dispatches (id, source_id, status, created_at, processed_at, data)
         values (${d.id}, ${d.sourceId}, ${d.status}, ${d.createdAt}, ${d.processedAt ?? null}, ${data})
         on conflict (id) do update set status = excluded.status, processed_at = excluded.processed_at, data = excluded.data`;

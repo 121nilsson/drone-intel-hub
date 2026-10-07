@@ -108,6 +108,14 @@ so overlapping ticks cannot both proceed and the minimum interval (1 min) holds 
 across restarts. The manual button forces past the throttle; the cron does not. This
 needs `DATABASE_URL` - without it auto-sync reports that it is unavailable.
 
-To change the cadence, edit the cron in `vite.config.ts`. Applying
-`migrations/002_sync_state.sql` only happens on a fresh volume, so run it by hand if
-the table is missing on an existing database.
+**Per-dispatch lease.** The throttle guards the *job*; the lease guards each *dispatch*.
+`processPending` claims dispatches in storage with `for update skip locked`, so a manual
+"Analyse queue" overlapping a cron tick cannot process the same dispatch twice and produce
+duplicate candidates or merges. Leases are released in a `finally`, and expire after 5 min
+so a crashed worker never pins a dispatch permanently. Without the lease columns
+(`migrations/004_dispatch_lease.sql`) claiming silently falls back to plain reads, which is
+the old double-processing behaviour rather than an error.
+
+To change the cadence, edit the cron in `vite.config.ts`. Migrations only run on a fresh
+volume, so apply `002_sync_state.sql` and `004_dispatch_lease.sql` by hand on an existing
+database.

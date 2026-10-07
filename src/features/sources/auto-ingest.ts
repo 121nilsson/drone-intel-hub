@@ -14,10 +14,39 @@ export type Fetcher = (
 /** Label the server job uses for its stage-2 queue row, which is not a monitored source. */
 export const QUEUE_ROW = "Queue";
 
-export interface CollectReport { source: string; fetched: number; stored: number; error?: string }
-export interface ProcessReport { processed: number; irrelevant: number; merged: number; queued: number; failed: number; remaining: number }
+/**
+ * How long a processing lease is held before another worker may reclaim the document.
+ * Generous enough to cover a slow two-tier extraction (which can take tens of seconds) plus
+ * the transport's retry budget, but short enough that a crashed worker blocks a document for
+ * minutes rather than hours. Overlapping claims only matter if a run is abandoned outright,
+ * since leases are released in a `finally`.
+ */
+export const LEASE_MS = 5 * 60_000;
+
+export interface CollectReport {
+  source: string;
+  fetched: number;
+  stored: number;
+  error?: string;
+}
+export interface ProcessReport {
+  processed: number;
+  irrelevant: number;
+  merged: number;
+  queued: number;
+  failed: number;
+  remaining: number;
+  /** Documents leased exclusively by this run - 0 when another worker holds them all. */ leased: number;
+}
 /** Combined report kept for the server job's stored result. */
-export interface SyncReport { source: string; fetched: number; relevant: number; merged: number; queued: number; error?: string }
+export interface SyncReport {
+  source: string;
+  fetched: number;
+  relevant: number;
+  merged: number;
+  queued: number;
+  error?: string;
+}
 
 export const dispatchId = (sourceId: string, externalId: string) => `${sourceId}|${externalId}`;
 
@@ -60,35 +89,79 @@ export async function processPending(
   dispatches: DispatchRepository,
   deps: PipelineDeps,
   limit = 20,
+  opts: { leaseMs?: number; owner?: string } = {},
 ): Promise<ProcessReport> {
-  const rep: ProcessReport = { processed: 0, irrelevant: 0, merged: 0, queued: 0, failed: 0, remaining: 0 };
-  for (const d of dispatches.pending(limit)) {
-    const now = new Date().toISOString();
-    if (!DRONE_HINT.test(d.text)) {
-      dispatches.update(d.id, { status: "irrelevant", text: "", processedAt: now });
-      rep.irrelevant++;
-      continue;
+  const rep: ProcessReport = {
+    processed: 0,
+    irrelevant: 0,
+    merged: 0,
+    queued: 0,
+    failed: 0,
+    remaining: 0,
+    leased: 0,
+  };
+
+  // Lease first, then process. Reading `pending()` directly is a read-then-write race: the
+  // browser's "Analyse queue" and the cron task both call this, and both would see the same
+  // documents and produce duplicate candidates and duplicate merges. Claiming in storage
+  // makes the set exclusive. A null result means the store cannot lease, so fall back.
+  const leaseMs = opts.leaseMs ?? LEASE_MS;
+  const owner = opts.owner ?? crypto.randomUUID();
+  let claimed: string[] | null = null;
+  if (dispatches.claim) claimed = await dispatches.claim(limit, leaseMs, owner);
+  // Leases are released in `finally` so a thrown pipeline error cannot leave documents pinned
+  // until the lease expires. A crashed worker is covered by the expiry instead.
+  try {
+    const batch =
+      claimed === null
+        ? dispatches.pending(limit)
+        : claimed
+            .map((id) => dispatches.list().find((d) => d.id === id))
+            .filter((d): d is NonNullable<typeof d> => !!d);
+    rep.leased = claimed?.length ?? 0;
+
+    for (const d of batch) {
+      const now = new Date().toISOString();
+      if (!DRONE_HINT.test(d.text)) {
+        dispatches.update(d.id, { status: "irrelevant", text: "", processedAt: now });
+        rep.irrelevant++;
+        continue;
+      }
+      try {
+        const r = await runTwoTier(d.text, `${d.sourceName} · ${d.url}`, deps);
+        dispatches.update(d.id, {
+          status: "processed",
+          processedAt: now,
+          outcome: r.kind,
+          candidateIds: [r.candidate.id],
+          droneIds:
+            r.kind === "auto-merged"
+              ? [r.droneId]
+              : r.candidate.extraction.matchId
+                ? [r.candidate.extraction.matchId]
+                : [],
+          error: undefined,
+        });
+        rep.processed++;
+        if (r.kind === "auto-merged") rep.merged++;
+        else rep.queued++;
+      } catch (e) {
+        const attempts = (d.attempts ?? 0) + 1;
+        const error = e instanceof Error ? e.message : "Processing failed";
+        dispatches.update(d.id, {
+          attempts,
+          error,
+          status: attempts >= MAX_ATTEMPTS ? "failed" : "pending",
+        });
+        rep.failed++;
+        // Stop the batch on errors (rate limits, credits, provider down) — next run retries.
+        break;
+      }
     }
-    try {
-      const r = await runTwoTier(d.text, `${d.sourceName} · ${d.url}`, deps);
-      dispatches.update(d.id, {
-        status: "processed",
-        processedAt: now,
-        outcome: r.kind,
-        candidateIds: [r.candidate.id],
-        droneIds: r.kind === "auto-merged" ? [r.droneId] : r.candidate.extraction.matchId ? [r.candidate.extraction.matchId] : [],
-        error: undefined,
-      });
-      rep.processed++;
-      if (r.kind === "auto-merged") rep.merged++; else rep.queued++;
-    } catch (e) {
-      const attempts = (d.attempts ?? 0) + 1;
-      const error = e instanceof Error ? e.message : "Processing failed";
-      dispatches.update(d.id, { attempts, error, status: attempts >= MAX_ATTEMPTS ? "failed" : "pending" });
-      rep.failed++;
-      // Stop the batch on errors (rate limits, credits, provider down) — next run retries.
-      break;
-    }
+  } finally {
+    // Release everything this run took, including the ones it never reached after `break`,
+    // so a rate-limited pass does not stall the queue for the rest of the lease window.
+    if (claimed?.length) await dispatches.release?.(claimed, owner).catch(() => {});
   }
   rep.remaining = dispatches.pending(Number.MAX_SAFE_INTEGER).length;
   return rep;

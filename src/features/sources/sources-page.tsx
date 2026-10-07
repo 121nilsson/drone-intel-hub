@@ -36,6 +36,9 @@ export function SourcesPage() {
   const dispatches = useDispatches();
   const svcRef = useRef(svc);
   svcRef.current = svc;
+  // Stable per tab, not per call: a lease must survive re-renders so `finally` can release
+  // the rows this tab actually claimed, and two tabs must never share an owner.
+  const ownerRef = useRef<string>(crypto.randomUUID());
   const say = (m: string) => setLog((l) => [m, ...l].slice(0, 40));
 
   const collectOne = useCallback(
@@ -47,7 +50,11 @@ export function SourcesPage() {
         sv.dispatches,
       );
       sv.sources.update(s.id, { lastFetched: new Date().toISOString(), lastError: c.error });
-      say(c.error ? `${s.name}: ${c.error}` : `${s.name}: ${c.fetched} fetched · ${c.stored} new stored`);
+      say(
+        c.error
+          ? `${s.name}: ${c.error}`
+          : `${s.name}: ${c.fetched} fetched · ${c.stored} new stored`,
+      );
       return c;
     },
     [fetchFn],
@@ -55,9 +62,23 @@ export function SourcesPage() {
 
   const processQueue = useCallback(async () => {
     const sv = svcRef.current;
-    const deps = { ...sv, escalationThreshold: sv.settings.escalationThreshold, autoMergeThreshold: sv.settings.autoMergeThreshold };
-    const p = await processPending(sv.dispatches, deps, 20);
-    say(`Queue: ${p.processed} analysed (${p.merged} merged, ${p.queued} queued) · ${p.irrelevant} not drone-related · ${p.failed ? `${p.failed} failed · ` : ""}${p.remaining} waiting`);
+    const deps = {
+      ...sv,
+      escalationThreshold: sv.settings.escalationThreshold,
+      autoMergeThreshold: sv.settings.autoMergeThreshold,
+    };
+    const p = await processPending(sv.dispatches, deps, 20, { owner: ownerRef.current });
+    // Claimed 0 while work remains means another worker (usually the cron task) holds every
+    // pending dispatch right now - worth saying, or the button looks broken.
+    if (p.leased === 0 && p.remaining > 0) {
+      say(
+        `Queue: nothing claimed - another run holds all ${p.remaining} pending. Try again shortly.`,
+      );
+      return;
+    }
+    say(
+      `Queue: ${p.processed} analysed (${p.merged} merged, ${p.queued} queued) · ${p.irrelevant} not drone-related · ${p.failed ? `${p.failed} failed · ` : ""}${p.remaining} waiting`,
+    );
   }, []);
 
   const syncOne = useCallback(
@@ -93,7 +114,10 @@ export function SourcesPage() {
     });
     setF({ ...f, name: "", handle: "", notes: "" });
   };
-  const counts = { pending: 0, processed: 0, irrelevant: 0, failed: 0 } as Record<DispatchStatus, number>;
+  const counts = { pending: 0, processed: 0, irrelevant: 0, failed: 0 } as Record<
+    DispatchStatus,
+    number
+  >;
   for (const d of dispatches) counts[d.status]++;
   const shown = dispatches.filter((d) => filter === "all" || d.status === filter).slice(0, 50);
   const sample = (s: MonitoredSource) =>
@@ -209,17 +233,42 @@ export function SourcesPage() {
               {shown.map((d) => (
                 <li key={d.id} className="py-2">
                   <div className="flex flex-wrap items-center gap-2 font-mono text-[11px] text-muted-foreground">
-                    <Tag tone={d.status === "processed" ? "primary" : d.status === "failed" ? "danger" : "default"}>{d.status}</Tag>
+                    <Tag
+                      tone={
+                        d.status === "processed"
+                          ? "primary"
+                          : d.status === "failed"
+                            ? "danger"
+                            : "default"
+                      }
+                    >
+                      {d.status}
+                    </Tag>
                     <span>{d.sourceName}</span>
                     <span>{new Date(d.publishedAt ?? d.createdAt).toLocaleString()}</span>
                     {d.droneIds?.map((id) => (
-                      <a key={id} href={`/systems/${id}`} className="text-primary underline">{id}</a>
+                      <a key={id} href={`/systems/${id}`} className="text-primary underline">
+                        {id}
+                      </a>
                     ))}
-                    {d.outcome === "queued" && <a href="/intake" className="text-primary underline">in intake queue</a>}
+                    {d.outcome === "queued" && (
+                      <a href="/intake" className="text-primary underline">
+                        in intake queue
+                      </a>
+                    )}
                   </div>
                   {d.text && <p className="mt-1 line-clamp-3 text-sm">{d.text}</p>}
-                  {d.error && <p className="mt-1 font-mono text-[11px] text-destructive">{d.error}</p>}
-                  <a href={d.url} target="_blank" rel="noreferrer" className="mt-1 block break-all font-mono text-[11px] text-muted-foreground underline">{d.url}</a>
+                  {d.error && (
+                    <p className="mt-1 font-mono text-[11px] text-destructive">{d.error}</p>
+                  )}
+                  <a
+                    href={d.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-1 block break-all font-mono text-[11px] text-muted-foreground underline"
+                  >
+                    {d.url}
+                  </a>
                 </li>
               ))}
             </ul>
