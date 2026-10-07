@@ -32,4 +32,5 @@ export interface SourceRepository {
   add(s: MonitoredSource): void;
   update(id: string, patch: Partial<MonitoredSource>): void;
   remove(id: string): void;
+  addMissingDefaults?(): number;
 }

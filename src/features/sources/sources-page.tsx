@@ -93,6 +93,17 @@ export function SourcesPage() {
             <Btn onClick={syncAll} disabled={!!busy}>
               {busy === "all" ? "Syncing…" : "Sync all now"}
             </Btn>
+            <Btn
+              variant="ghost"
+              onClick={() => {
+                const count = svc.sources.addMissingDefaults?.() ?? 0;
+                if (count > 0) {
+                  setLog((l) => [{ source: "System", fetched: count, relevant: 0, merged: 0, queued: 0 }, ...l]);
+                }
+              }}
+            >
+              Load default sources
+            </Btn>
             <span className="font-mono text-xs text-muted-foreground">
               Auto-sync runs server-side every {AUTO_MIN} min
               {syncState?.configured

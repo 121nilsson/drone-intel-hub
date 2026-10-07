@@ -78,4 +78,14 @@ export class LocalSourceRepository extends CachedRepository<"sources"> implement
     const doc = this.items.find((x) => x.id === id); if (doc) this.save(doc);
   }
   remove(id: string) { this.items = this.items.filter((x) => x.id !== id); this.drop(id); }
+  addMissingDefaults(): number {
+    const existingIds = new Set(this.items.map((s) => s.id));
+    const missing = SEED_SOURCES.filter((s) => !existingIds.has(s.id));
+    for (const s of missing) {
+      this.items = [...this.items, s];
+      this.save(s);
+    }
+    this.emit();
+    return missing.length;
+  }
 }
