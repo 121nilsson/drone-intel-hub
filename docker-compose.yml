@@ -27,6 +27,7 @@ services:
       NVIDIA_BASE_URL: ${NVIDIA_BASE_URL:-}
       NVIDIA_TIER1_MODEL: ${NVIDIA_TIER1_MODEL:-}
       NVIDIA_TIER2_MODEL: ${NVIDIA_TIER2_MODEL:-}
+      PROVIDER_RPM: ${PROVIDER_RPM:-}
     ports:
       - "3010:3010"
     depends_on:

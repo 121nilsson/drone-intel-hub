@@ -1,5 +1,5 @@
 import type { JSONValue } from "postgres";
-import type { SyncReport } from "@/features/sources/auto-ingest";
+import { QUEUE_ROW, type SyncReport } from "@/features/sources/auto-ingest";
 import { db, dbConfigured } from "./postgres/db.server";
 
 /** Single global throttle slot for the auto-ingest job. */
@@ -96,11 +96,16 @@ export async function runAutoSync(opts?: {
     const { fetchAllSources } = await import("./fetch-posts.server");
     const reports = await fetchAllSources();
     await storeResult(reports);
-    const failed = reports.filter((r) => r.error).length;
-    return {
-      ran: true,
-      reason: `Synced ${reports.length} sources${failed ? `, ${failed} failed` : ""}`,
-    };
+    // The queue is reported as a pseudo-source row, so exclude it from the source count and
+    // from the unreachable count. Its failures (rate limits, bad posts) matter, but calling
+    // them "sources failed" would misattribute them.
+    const sources = reports.filter((r) => r.source !== QUEUE_ROW);
+    const queue = reports.find((r) => r.source === QUEUE_ROW);
+    const unreachable = sources.filter((r) => r.error).length;
+    const parts = [`Collected ${sources.length} sources`];
+    if (unreachable) parts.push(`${unreachable} unreachable`);
+    if (queue?.error) parts.push(queue.error);
+    return { ran: true, reason: parts.join(", ") };
   } catch (e) {
     // Release the slot so a transient failure does not lock out the next tick.
     await releaseSlot();

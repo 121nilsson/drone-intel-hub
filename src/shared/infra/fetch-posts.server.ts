@@ -10,7 +10,12 @@ import { OpenAICompatibleExtractor } from "./openai-compatible-ai";
 import { dbConfigured } from "./postgres/db.server";
 import { PostgresStore } from "./postgres/postgres-store.server";
 import { DEFAULT_SETTINGS } from "./settings-defaults";
-import { collectSource, processPending, type SyncReport } from "@/features/sources/auto-ingest";
+import {
+  QUEUE_ROW,
+  collectSource,
+  processPending,
+  type SyncReport,
+} from "@/features/sources/auto-ingest";
 import { fetchOne } from "./fetch-posts";
 
 /**
@@ -64,6 +69,6 @@ export async function fetchAllSources(): Promise<SyncReport[]> {
   }
   // Stage 2: drain a bounded batch; the rest waits for the next tick.
   const p = await processPending(dispatches, deps, 25);
-  reports.push({ source: "Queue", fetched: p.processed + p.irrelevant, relevant: p.processed, merged: p.merged, queued: p.queued, ...(p.failed ? { error: `${p.failed} failed, ${p.remaining} pending` } : {}) });
+  reports.push({ source: QUEUE_ROW, fetched: p.processed + p.irrelevant, relevant: p.processed, merged: p.merged, queued: p.queued, ...(p.failed ? { error: `${p.failed} failed, ${p.remaining} pending` } : {}) });
   return reports;
 }

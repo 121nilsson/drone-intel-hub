@@ -67,10 +67,23 @@ cp .env.local.example .env.local   # then paste NVIDIA_API_KEY
 | `NVIDIA_BASE_URL` | Any OpenAI-compatible base URL. Defaults to NIM. |
 | `NVIDIA_TIER1_MODEL` | Fast screening model. |
 | `NVIDIA_TIER2_MODEL` | Reasoning model used for escalation and briefings. |
+| `PROVIDER_RPM` | Requests/min the shared transport paces itself to. Defaults to 35, under the 40 RPM free-tier cap. Set `0` to disable (self-hosted endpoint). |
 
 `.env.local` wins over anything saved in the browser's Settings page, per field.
 Clear `NVIDIA_API_KEY` to fall back to a key stored in Settings, and leave that
 blank too to return to the local engine.
+
+### Rate limits
+
+The transport paces every request start so the aggregate rate stays under the
+key's cap, no matter how many callers share it — a cron tick, a manual sync and a
+browser tab all draw on the same budget. A `429` or transient `5xx` is retried
+with exponential backoff and full jitter, honouring `Retry-After`, rather than
+surfacing as a failed extraction.
+
+Each dispatch is processed independently and stays `pending` until it succeeds, so
+one rate-limited post does not abandon the rest of the queue. A dispatch that keeps
+failing is retried on later ticks and marked `failed` after `MAX_ATTEMPTS`.
 
 ## Scheduled auto-ingest
 

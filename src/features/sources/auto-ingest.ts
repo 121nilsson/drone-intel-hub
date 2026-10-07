@@ -11,6 +11,9 @@ export type Fetcher = (
   s: MonitoredSource,
 ) => Promise<{ ok: true; posts: FetchedPost[] } | { ok: false; error: string }>;
 
+/** Label the server job uses for its stage-2 queue row, which is not a monitored source. */
+export const QUEUE_ROW = "Queue";
+
 export interface CollectReport { source: string; fetched: number; stored: number; error?: string }
 export interface ProcessReport { processed: number; irrelevant: number; merged: number; queued: number; failed: number; remaining: number }
 /** Combined report kept for the server job's stored result. */
