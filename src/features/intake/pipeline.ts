@@ -111,6 +111,152 @@ export function promote(
   return changed.find((x) => x.id === drone.id) ?? drone;
 }
 
+export function mergeDrones(
+  keepId: string,
+  mergeId: string,
+  d: Pick<PipelineDeps, "drones" | "candidates">,
+  reason?: string,
+): Drone | undefined {
+  if (keepId === mergeId) return undefined;
+  const keep = d.drones.get(keepId);
+  const merge = d.drones.get(mergeId);
+  if (!keep || !merge) return undefined;
+
+  // 1. Merge metadata & descriptive fields
+  const name =
+    keep.name.startsWith("Uncataloged") && !merge.name.startsWith("Uncataloged")
+      ? merge.name
+      : keep.name;
+  const cyrillic = keep.cyrillic || merge.cyrillic;
+  const aliases = [
+    ...new Set([...keep.aliases, ...merge.aliases, ...(merge.name !== name ? [merge.name] : [])]),
+  ].filter((a) => a.toLowerCase() !== name.toLowerCase());
+  const domain = keep.domain && keep.domain !== "Multi" ? keep.domain : merge.domain || "Multi";
+  const origin = keep.origin && keep.origin !== "??" ? keep.origin : merge.origin || "??";
+  const manufacturer = keep.manufacturer || merge.manufacturer;
+  const operators = [...new Set([...keep.operators, ...merge.operators])];
+  const propulsion =
+    keep.propulsion && keep.propulsion !== "Unknown" ? keep.propulsion : merge.propulsion || "Unknown";
+  const summary = (keep.summary?.length ?? 0) >= (merge.summary?.length ?? 0) ? keep.summary : merge.summary;
+
+  // 2. Merge specs preserving all claims and provenance
+  const specsMap = new Map<string, SpecAttribute>();
+  for (const s of keep.specs) {
+    specsMap.set(s.key, { ...s, claims: [...s.claims] });
+  }
+  for (const s of merge.specs) {
+    const existing = specsMap.get(s.key);
+    if (existing) {
+      for (const claim of s.claims) {
+        const isDuplicate = existing.claims.some(
+          (c) => String(c.value) === String(claim.value) && c.source === claim.source
+        );
+        if (!isDuplicate) {
+          existing.claims.push(claim);
+        }
+      }
+    } else {
+      specsMap.set(s.key, { ...s, claims: [...s.claims] });
+    }
+  }
+
+  // 3. Merge RF links
+  const rf = [...keep.rf];
+  for (const link of merge.rf) {
+    const exists = rf.some(
+      (r) => r.role === link.role && r.band.toLowerCase() === link.band.toLowerCase()
+    );
+    if (!exists) rf.push(link);
+  }
+
+  // 4. Merge supply components
+  const components = [...keep.components];
+  for (const comp of merge.components) {
+    const exists = components.some(
+      (c) =>
+        c.part.toLowerCase() === comp.part.toLowerCase() &&
+        c.manufacturer.toLowerCase() === comp.manufacturer.toLowerCase()
+    );
+    if (!exists) components.push(comp);
+  }
+
+  // 5. Merge evolution history (sorted by date)
+  const mergeEvolution = merge.evolution.map((e) => ({
+    ...e,
+    description: e.description.includes(merge.name) ? e.description : `[${merge.name}] ${e.description}`,
+  }));
+  const evolution = [
+    ...keep.evolution,
+    {
+      date: new Date().toISOString(),
+      kind: "other" as const,
+      description: reason || `Merged duplicate system '${merge.name}' (${mergeId}) into '${name}' (${keepId})`,
+      source: "catalog-merge",
+    },
+    ...mergeEvolution,
+  ].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+  // 6. Merge counterpart IDs (cleaning up references to self and merged id)
+  const counterpartIds = [...new Set([...keep.counterpartIds, ...merge.counterpartIds])].filter(
+    (id) => id !== keepId && id !== mergeId
+  );
+
+  const createdAt =
+    keep.createdAt && merge.createdAt
+      ? new Date(keep.createdAt) < new Date(merge.createdAt)
+        ? keep.createdAt
+        : merge.createdAt
+      : keep.createdAt || merge.createdAt || new Date().toISOString();
+
+  const result: Drone = {
+    id: keepId,
+    name,
+    ...(cyrillic ? { cyrillic } : {}),
+    aliases,
+    domain,
+    origin,
+    ...(manufacturer ? { manufacturer } : {}),
+    operators,
+    propulsion,
+    summary,
+    specs: Array.from(specsMap.values()),
+    rf,
+    components,
+    evolution,
+    counterpartIds,
+    createdAt,
+    updatedAt: new Date().toISOString(),
+  };
+
+  // Upsert merged target
+  d.drones.upsert(result);
+
+  // 7. Update counterpart links on other drones pointing to mergeId
+  for (const other of d.drones.list()) {
+    if (other.id === keepId || other.id === mergeId) continue;
+    if (other.counterpartIds.includes(mergeId)) {
+      const updated = [
+        ...new Set(other.counterpartIds.map((cId) => (cId === mergeId ? keepId : cId)).filter((cId) => cId !== other.id)),
+      ];
+      d.drones.upsert({ ...other, counterpartIds: updated, updatedAt: new Date().toISOString() });
+    }
+  }
+
+  // 8. Update candidates resolved into mergeId
+  if (d.candidates) {
+    for (const c of d.candidates.list()) {
+      if (c.resolvedInto === mergeId) {
+        d.candidates.update(c.id, { resolvedInto: keepId });
+      }
+    }
+  }
+
+  // 9. Remove merged drone
+  d.drones.remove?.(mergeId);
+
+  return result;
+}
+
 export function mergeInto(
   c: Candidate,
   droneId: string,

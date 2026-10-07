@@ -88,6 +88,10 @@ export class LocalDroneRepository extends CachedRepository<"drones"> implements 
       i >= 0 ? this.items.map((d) => (d.id === drone.id ? drone : d)) : [...this.items, drone];
     this.save(drone);
   }
+  remove(id: string) {
+    this.items = this.items.filter((d) => d.id !== id);
+    this.drop(id);
+  }
   search(query: string, f: CatalogFacets = {}) {
     const q = norm(query.trim());
     return this.items.filter((d) => {

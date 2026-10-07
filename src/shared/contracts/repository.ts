@@ -15,6 +15,7 @@ export interface DroneRepository {
   list(): Drone[];
   get(id: string): Drone | undefined;
   upsert(drone: Drone): void;
+  remove(id: string): void;
   search(query: string, facets?: CatalogFacets): Drone[];
 }
 
