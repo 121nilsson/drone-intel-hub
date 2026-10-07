@@ -5,6 +5,8 @@ const ORDER: Record<Collection, string> = {
   drones: "name asc",
   candidates: "created_at desc",
   sources: "position desc",
+  // Newest first; capped so the browser cache stays bounded as the archive grows.
+  dispatches: "created_at desc limit 3000",
 };
 
 /** PostgreSQL implementation. Schema lives in /migrations (plain SQL, portable). */
@@ -54,6 +56,11 @@ export class PostgresStore implements DocumentStore {
       await db`insert into candidates (id, status, tier, created_at, data)
         values (${d.id}, ${d.status}, ${d.tier}, ${d.createdAt}, ${data})
         on conflict (id) do update set status = excluded.status, tier = excluded.tier, data = excluded.data`;
+    } else if (c === "dispatches") {
+      const d = doc as CollectionMap["dispatches"];
+      await db`insert into dispatches (id, source_id, status, created_at, processed_at, data)
+        values (${d.id}, ${d.sourceId}, ${d.status}, ${d.createdAt}, ${d.processedAt ?? null}, ${data})
+        on conflict (id) do update set status = excluded.status, processed_at = excluded.processed_at, data = excluded.data`;
     } else {
       const d = doc as CollectionMap["sources"];
       await db`insert into sources (id, platform, handle, data)

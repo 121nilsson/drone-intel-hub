@@ -2,6 +2,7 @@ import { chatCompletionOnce } from "./ai-proxy.server";
 import { HeuristicExtractor } from "./heuristic-ai";
 import {
   LocalCandidateRepository,
+  LocalDispatchRepository,
   LocalDroneRepository,
   LocalSourceRepository,
 } from "./local-repository";
@@ -9,7 +10,7 @@ import { OpenAICompatibleExtractor } from "./openai-compatible-ai";
 import { dbConfigured } from "./postgres/db.server";
 import { PostgresStore } from "./postgres/postgres-store.server";
 import { DEFAULT_SETTINGS } from "./settings-defaults";
-import { syncSource, type SyncReport } from "@/features/sources/auto-ingest";
+import { collectSource, processPending, type SyncReport } from "@/features/sources/auto-ingest";
 import { fetchOne } from "./fetch-posts";
 
 /**
@@ -17,7 +18,7 @@ import { fetchOne } from "./fetch-posts";
  *
  * Reuses the same write-through repositories the browser uses, attached to PostgresStore,
  * so candidates and merged specs persist exactly as on a manual sync. Only the transport
- * is server-side; syncSource and the two-tier pipeline are shared with the UI.
+ * is server-side; collectSource, processPending and the two-tier pipeline are shared with the UI.
  */
 export async function fetchAllSources(): Promise<SyncReport[]> {
   if (!dbConfigured()) throw new Error("Auto-sync needs DATABASE_URL (PostgreSQL)");
@@ -26,7 +27,8 @@ export async function fetchAllSources(): Promise<SyncReport[]> {
   const sources = new LocalSourceRepository();
   const drones = new LocalDroneRepository();
   const candidates = new LocalCandidateRepository();
-  await Promise.all([sources.attach(store), drones.attach(store), candidates.attach(store)]);
+  const dispatches = new LocalDispatchRepository();
+  await Promise.all([sources.attach(store), drones.attach(store), candidates.attach(store), dispatches.attach(store)]);
 
   const useRemote = !!process.env["NVIDIA_API_KEY"];
   const cfg = {
@@ -52,16 +54,16 @@ export async function fetchAllSources(): Promise<SyncReport[]> {
     autoMergeThreshold: DEFAULT_SETTINGS.autoMergeThreshold,
   };
 
+  // Stage 1: collect every source into the dispatch queue (network only).
   const targets = sources.list().filter((s) => s.platform !== "X");
   const reports: SyncReport[] = [];
   for (const s of targets) {
-    const rep = await syncSource(s, fetchOne, deps, (ids) => {
-      const cur = sources.list().find((x) => x.id === s.id);
-      sources.update(s.id, { seenIds: [...ids, ...(cur?.seenIds ?? [])].slice(0, 500) });
-    });
-    // Mirror the browser path: stamp the source and surface any fetch error on it.
-    sources.update(s.id, { lastFetched: new Date().toISOString(), lastError: rep.error });
-    reports.push(rep);
+    const c = await collectSource(s, fetchOne, dispatches);
+    sources.update(s.id, { lastFetched: new Date().toISOString(), lastError: c.error });
+    reports.push({ source: s.name, fetched: c.stored, relevant: 0, merged: 0, queued: 0, ...(c.error ? { error: c.error } : {}) });
   }
+  // Stage 2: drain a bounded batch; the rest waits for the next tick.
+  const p = await processPending(dispatches, deps, 25);
+  reports.push({ source: "Queue", fetched: p.processed + p.irrelevant, relevant: p.processed, merged: p.merged, queued: p.queued, ...(p.failed ? { error: `${p.failed} failed, ${p.remaining} pending` } : {}) });
   return reports;
 }

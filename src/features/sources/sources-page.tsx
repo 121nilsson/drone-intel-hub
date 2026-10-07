@@ -4,11 +4,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { DOMAINS, type Domain } from "@/entities/drone/types";
 import { PLATFORMS, type MonitoredSource, type SourcePlatform } from "@/entities/source/types";
 import { sampleDispatch } from "@/entities/source/seed";
-import { useServices, useSources } from "@/shared/infra/services";
+import { useDispatches, useServices, useSources } from "@/shared/infra/services";
+import type { DispatchStatus } from "@/entities/dispatch/types";
 import { fetchSourcePosts } from "@/shared/infra/source-fetch.functions";
 import { getSyncState, type SyncState } from "@/shared/infra/source-sync.functions";
 import { Btn, Panel, Tag } from "@/shared/ui/primitives";
-import { syncSource, type SyncReport } from "./auto-ingest";
+import { collectSource, processPending } from "./auto-ingest";
 
 const field =
   "w-full border border-border bg-background px-2 py-1.5 font-mono text-xs outline-none focus:border-primary";
@@ -29,42 +30,52 @@ export function SourcesPage() {
     notes: "",
   });
   const [busy, setBusy] = useState<string | null>(null);
-  const [log, setLog] = useState<SyncReport[]>([]);
+  const [log, setLog] = useState<string[]>([]);
   const [syncState, setSyncState] = useState<SyncState | null>(null);
+  const [filter, setFilter] = useState<DispatchStatus | "all">("all");
+  const dispatches = useDispatches();
   const svcRef = useRef(svc);
   svcRef.current = svc;
+  const say = (m: string) => setLog((l) => [m, ...l].slice(0, 40));
+
+  const collectOne = useCallback(
+    async (s: MonitoredSource) => {
+      const sv = svcRef.current;
+      const c = await collectSource(
+        s,
+        (x) => fetchFn({ data: { platform: x.platform, handle: x.handle } }),
+        sv.dispatches,
+      );
+      sv.sources.update(s.id, { lastFetched: new Date().toISOString(), lastError: c.error });
+      say(c.error ? `${s.name}: ${c.error}` : `${s.name}: ${c.fetched} fetched · ${c.stored} new stored`);
+      return c;
+    },
+    [fetchFn],
+  );
+
+  const processQueue = useCallback(async () => {
+    const sv = svcRef.current;
+    const deps = { ...sv, escalationThreshold: sv.settings.escalationThreshold, autoMergeThreshold: sv.settings.autoMergeThreshold };
+    const p = await processPending(sv.dispatches, deps, 20);
+    say(`Queue: ${p.processed} analysed (${p.merged} merged, ${p.queued} queued) · ${p.irrelevant} not drone-related · ${p.failed ? `${p.failed} failed · ` : ""}${p.remaining} waiting`);
+  }, []);
 
   const syncOne = useCallback(
     async (s: MonitoredSource) => {
-      const sv = svcRef.current;
-      const rep = await syncSource(
-        s,
-        (x) => fetchFn({ data: { platform: x.platform, handle: x.handle } }),
-        {
-          ...sv,
-          escalationThreshold: sv.settings.escalationThreshold,
-          autoMergeThreshold: sv.settings.autoMergeThreshold,
-        },
-        (ids) => {
-          const cur = sv.sources.list().find((x) => x.id === s.id);
-          sv.sources.update(s.id, { seenIds: [...ids, ...(cur?.seenIds ?? [])].slice(0, 500) });
-        },
-      );
-      sv.sources.update(s.id, { lastFetched: new Date().toISOString(), lastError: rep.error });
-      setLog((l) => [rep, ...l].slice(0, 30));
-      return rep;
+      await collectOne(s);
+      await processQueue();
     },
-    [fetchFn],
+    [collectOne, processQueue],
   );
 
   const syncAll = useCallback(async () => {
     setBusy("all");
     for (const s of svcRef.current.sources.list().filter((x) => x.platform !== "X"))
-      await syncOne(s);
+      await collectOne(s);
     setBusy(null);
     const st = await stateFn();
     setSyncState(st);
-  }, [syncOne, stateFn]);
+  }, [collectOne, stateFn]);
 
   useEffect(() => {
     stateFn()
@@ -82,6 +93,9 @@ export function SourcesPage() {
     });
     setF({ ...f, name: "", handle: "", notes: "" });
   };
+  const counts = { pending: 0, processed: 0, irrelevant: 0, failed: 0 } as Record<DispatchStatus, number>;
+  for (const d of dispatches) counts[d.status]++;
+  const shown = dispatches.filter((d) => filter === "all" || d.status === filter).slice(0, 50);
   const sample = (s: MonitoredSource) =>
     nav({ to: "/intake", search: { draft: sampleDispatch(s.domain), source: s.name } });
 
@@ -91,14 +105,25 @@ export function SourcesPage() {
         <Panel title={`Monitored sources · ${sources.length}`}>
           <div className="mb-3 flex flex-wrap items-center gap-3">
             <Btn onClick={syncAll} disabled={!!busy}>
-              {busy === "all" ? "Syncing…" : "Sync all now"}
+              {busy === "all" ? "Fetching…" : "Fetch all feeds"}
+            </Btn>
+            <Btn
+              variant="ghost"
+              disabled={!!busy || counts.pending === 0}
+              onClick={async () => {
+                setBusy("queue");
+                await processQueue();
+                setBusy(null);
+              }}
+            >
+              {busy === "queue" ? "Analysing…" : `Analyse queue (${counts.pending})`}
             </Btn>
             <Btn
               variant="ghost"
               onClick={() => {
                 const count = svc.sources.addMissingDefaults?.() ?? 0;
                 if (count > 0) {
-                  setLog((l) => [{ source: "System", fetched: count, relevant: 0, merged: 0, queued: 0 }, ...l]);
+                  say(`Added ${count} default sources`);
                 }
               }}
             >
@@ -129,7 +154,7 @@ export function SourcesPage() {
                   {s.lastFetched && (
                     <p className="mt-1 font-mono text-[11px] text-muted-foreground">
                       Last synced {new Date(s.lastFetched).toLocaleString()} ·{" "}
-                      {s.seenIds?.length ?? 0} posts seen
+                      {dispatches.filter((d) => d.sourceId === s.id).length} posts stored
                     </p>
                   )}
                   {s.lastError && (
@@ -158,24 +183,53 @@ export function SourcesPage() {
             ))}
           </ul>
           <p className="mt-3 text-xs text-muted-foreground">
-            Sync pulls real recent posts (public Telegram channels, RSS feeds, website headlines),
-            skips ones already seen, keeps only drone-related posts and runs them through the
-            two-tier extractor. Matches auto-merge; the rest land in the Intake queue. X needs a
-            paid API and is not supported.
+            Fetching only saves new posts (public Telegram channels, RSS feeds, website headlines)
+            to the archive — no AI yet. Analysing then works through the waiting posts in small
+            batches: drone-related ones keep their full text and are linked to the systems they
+            mention; others are reduced to a stub so they are never fetched again. X needs a paid
+            API and is not supported.
           </p>
         </Panel>
+        <Panel title={`Dispatch archive · ${dispatches.length}`}>
+          <div className="mb-3 flex flex-wrap gap-2 font-mono text-xs">
+            {(["all", "pending", "processed", "irrelevant", "failed"] as const).map((k) => (
+              <button
+                key={k}
+                onClick={() => setFilter(k)}
+                className={`border px-2 py-1 ${filter === k ? "border-primary text-primary" : "border-border text-muted-foreground"}`}
+              >
+                {k} {k === "all" ? dispatches.length : counts[k]}
+              </button>
+            ))}
+          </div>
+          {shown.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Nothing here yet — fetch some feeds.</p>
+          ) : (
+            <ul className="divide-y divide-border">
+              {shown.map((d) => (
+                <li key={d.id} className="py-2">
+                  <div className="flex flex-wrap items-center gap-2 font-mono text-[11px] text-muted-foreground">
+                    <Tag tone={d.status === "processed" ? "primary" : d.status === "failed" ? "danger" : "default"}>{d.status}</Tag>
+                    <span>{d.sourceName}</span>
+                    <span>{new Date(d.publishedAt ?? d.createdAt).toLocaleString()}</span>
+                    {d.droneIds?.map((id) => (
+                      <a key={id} href={`/systems/${id}`} className="text-primary underline">{id}</a>
+                    ))}
+                    {d.outcome === "queued" && <a href="/intake" className="text-primary underline">in intake queue</a>}
+                  </div>
+                  {d.text && <p className="mt-1 line-clamp-3 text-sm">{d.text}</p>}
+                  {d.error && <p className="mt-1 font-mono text-[11px] text-destructive">{d.error}</p>}
+                  <a href={d.url} target="_blank" rel="noreferrer" className="mt-1 block break-all font-mono text-[11px] text-muted-foreground underline">{d.url}</a>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Panel>
         {log.length > 0 && (
-          <Panel title="Sync log">
+          <Panel title="Activity log">
             <ul className="space-y-1 font-mono text-xs">
               {log.map((r, i) => (
-                <li key={i}>
-                  {r.source}:{" "}
-                  {r.error ? (
-                    <span className="text-destructive">{r.error}</span>
-                  ) : (
-                    `${r.fetched} new · ${r.relevant} drone-related · ${r.merged} merged · ${r.queued} queued`
-                  )}
-                </li>
+                <li key={i}>{r}</li>
               ))}
             </ul>
           </Panel>
