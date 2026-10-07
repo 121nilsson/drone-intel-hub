@@ -97,6 +97,14 @@ export const SEED_SOURCES: MonitoredSource[] = [
   { id: "markito0171", name: "Markito", platform: "X", handle: "@markito0171", domain: "Air", notes: "Ukrainian EW and drone commentary; technical frontline observations." },
   { id: "200-zoka", name: "200 Zoka", platform: "X", handle: "@200_zoka", domain: "Multi", notes: "Documents new UGV and FPV types with geotagged imagery." },
   { id: "nrg8000", name: "Nrg8000", platform: "X", handle: "@Nrg8000", domain: "Air", notes: "UAV tracking, FPV development and commercial drone militarisation." },
+  // --- Maritime, teardown & EW ---
+  { id: "covert-shores", name: "Covert Shores (H I Sutton)", platform: "RSS", handle: "http://www.hisutton.com/feed.xml", domain: "Sea", notes: "Naval drones, USVs and UUVs (MAGURA, Sea Baby) with line drawings." },
+  { id: "naval-news", name: "Naval News", platform: "RSS", handle: "https://www.navalnews.com/feed/", domain: "Sea", notes: "Black Sea maritime drone warfare and naval countermeasures.", autoSync: true },
+  { id: "car-teardowns", name: "Conflict Armament Research", platform: "RSS", handle: "https://www.conflictarm.com/feed/", domain: "Multi", notes: "Physical teardowns of downed drones; component serials, supply chains, CRPA modules." },
+  { id: "ares", name: "Armament Research Services", platform: "RSS", handle: "https://armamentresearch.com/feed/", domain: "Multi", notes: "Technical munition reports, FPV warheads and improvised payloads." },
+  { id: "c4isrnet", name: "C4ISRNET", platform: "RSS", handle: "https://www.c4isrnet.com/arc/outboundfeeds/rss/", domain: "Multi", notes: "EW, RF spectrum, jammers and counter-drone procurement.", autoSync: true },
+  { id: "kiber-boroshno", name: "KiberBoroshno", platform: "Telegram", handle: "@kiber_boroshno", domain: "Air", notes: "UA technical OSINT: launch sites, wreckage and telemetry hardware." },
+  { id: "warspotting", name: "WarSpotting", platform: "Web", handle: "https://warspotting.net/", domain: "Multi", notes: "Photo-verified loss database with exact variant identification." },
 ];
 
 const SAMPLES: Record<Domain, string[]> = {
