@@ -2,7 +2,8 @@ import type { Candidate, Drone } from "@/entities/drone/types";
 import { SEED_DRONES } from "@/entities/drone/seed";
 import type { MonitoredSource } from "@/entities/source/types";
 import { SEED_SOURCES } from "@/entities/source/seed";
-import type { SourceRepository, CandidateRepository, CatalogFacets, DroneRepository, Subscribable } from "@/shared/contracts/repository";
+import type { RawDispatch } from "@/entities/dispatch/types";
+import type { DispatchRepository, SourceRepository, CandidateRepository, CatalogFacets, DroneRepository, Subscribable } from "@/shared/contracts/repository";
 import type { Collection, CollectionMap, DocumentStore } from "@/shared/contracts/store";
 
 const norm = (s: string) => s.toLowerCase().normalize("NFKD");
@@ -87,5 +88,23 @@ export class LocalSourceRepository extends CachedRepository<"sources"> implement
     }
     this.emit();
     return missing.length;
+  }
+}
+
+export class LocalDispatchRepository extends CachedRepository<"dispatches"> implements DispatchRepository {
+  constructor() { super("dispatches", []); }
+  has(id: string) { return this.items.some((d) => d.id === id); }
+  add(d: RawDispatch) {
+    if (this.has(d.id)) return false;
+    this.items = [d, ...this.items];
+    this.save(d);
+    return true;
+  }
+  update(id: string, patch: Partial<RawDispatch>) {
+    this.items = this.items.map((x) => (x.id === id ? { ...x, ...patch } : x));
+    const doc = this.items.find((x) => x.id === id); if (doc) this.save(doc);
+  }
+  pending(limit: number) {
+    return this.items.filter((d) => d.status === "pending").sort((a, b) => a.createdAt.localeCompare(b.createdAt)).slice(0, limit);
   }
 }

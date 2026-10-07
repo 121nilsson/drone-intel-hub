@@ -1,4 +1,5 @@
 import type { MonitoredSource } from "@/entities/source/types";
+import type { RawDispatch } from "@/entities/dispatch/types";
 import type { Candidate, Domain, Drone } from "@/entities/drone/types";
 
 export interface CatalogFacets {
@@ -33,4 +34,15 @@ export interface SourceRepository {
   update(id: string, patch: Partial<MonitoredSource>): void;
   remove(id: string): void;
   addMissingDefaults?(): number;
+}
+
+/** Raw dispatch archive + processing queue. */
+export interface DispatchRepository {
+  list(): RawDispatch[];
+  has(id: string): boolean;
+  /** Returns false when the dispatch already exists (dedupe). */
+  add(d: RawDispatch): boolean;
+  update(id: string, patch: Partial<RawDispatch>): void;
+  /** Oldest pending first. */
+  pending(limit: number): RawDispatch[];
 }
