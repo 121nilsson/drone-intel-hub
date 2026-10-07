@@ -97,6 +97,8 @@ export interface Candidate {
   extraction: Extraction;
   status: CandidateStatus;
   resolvedInto?: string;
+  /** Who resolved it; absent on candidates resolved before auto-triage existed. */
+  resolvedBy?: "auto" | "analyst";
 }
 
 export const FLAGS: Record<string, string> = {

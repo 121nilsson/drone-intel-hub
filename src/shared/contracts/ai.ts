@@ -19,4 +19,8 @@ export interface AIProviderSettings {
   translateModel: string;
   escalationThreshold: number;
   autoMergeThreshold: number;
+  /** A confident, uncatalogued, uniquely named system is promoted without review. */
+  autoPromoteThreshold: number;
+  /** Below this a candidate is discarded as noise without review. */
+  autoDiscardThreshold: number;
 }

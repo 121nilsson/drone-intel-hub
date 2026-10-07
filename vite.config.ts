@@ -30,8 +30,9 @@ export default defineConfig({
     // than the project root, so the root-level tasks/ directory has to be listed here.
     scanDirs: ["."],
     scheduledTasks: {
-      // Auto-ingest every 1 hour; the task itself enforces a 1 min floor via sync_state.
-      "* 1 * * *": "sources:sync",
+      // Auto-ingest every 10 minutes. The task enforces a 9 min floor via sync_state so ticks
+      // cannot overlap, and each run stops starting AI work after an 8 min window.
+      "*/10 * * * *": "sources:sync",
     },
   } as never,
 });

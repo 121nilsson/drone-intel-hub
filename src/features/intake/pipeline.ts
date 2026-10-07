@@ -1,4 +1,4 @@
-import type { Candidate, Drone } from "@/entities/drone/types";
+import type { Candidate, Drone, Extraction, SpecAttribute } from "@/entities/drone/types";
 import type { IntelExtractor } from "@/shared/contracts/ai";
 import type { CandidateRepository, DroneRepository } from "@/shared/contracts/repository";
 import type { Procurement } from "@/entities/procurement/types";
@@ -13,11 +13,30 @@ export interface PipelineDeps {
   candidates: CandidateRepository;
   escalationThreshold: number;
   autoMergeThreshold: number;
+  /** Unset disables auto-promotion; every new system then waits for review. */
+  autoPromoteThreshold?: number;
+  /** Unset disables auto-discard. */
+  autoDiscardThreshold?: number;
 }
 
 export type PipelineResult =
   | { kind: "auto-merged"; droneId: string; candidate: Candidate }
+  | { kind: "auto-promoted"; droneId: string; candidate: Candidate }
+  | { kind: "auto-discarded"; candidate: Candidate }
   | { kind: "queued"; candidate: Candidate };
+
+const norm = (s: string) => s.trim().toLowerCase();
+
+/** True when any of the extraction's names is already a catalog name or alias. */
+function collidesWithCatalog(e: Extraction, catalog: Drone[]): boolean {
+  const known = new Set<string>();
+  for (const d of catalog) {
+    known.add(norm(d.name));
+    if (d.cyrillic) known.add(norm(d.cyrillic));
+    for (const a of d.aliases) known.add(norm(a));
+  }
+  return [e.name ?? "", ...e.aliases].some((n) => n.trim() && known.has(norm(n)));
+}
 
 export async function runTwoTier(
   raw: string,
@@ -55,8 +74,33 @@ export async function runTwoTier(
     }
     candidate.status = "merged";
     candidate.resolvedInto = target.id;
+    candidate.resolvedBy = "auto";
     d.candidates.add(candidate);
     return { kind: "auto-merged", droneId: target.id, candidate };
+  }
+  // A name colliding with the catalog means the model missed a match; promoting it would
+  // create a duplicate, so it goes to review instead.
+  if (
+    d.autoPromoteThreshold !== undefined &&
+    !extraction.matchId &&
+    extraction.name?.trim() &&
+    extraction.confidence >= d.autoPromoteThreshold &&
+    !collidesWithCatalog(extraction, catalog)
+  ) {
+    d.candidates.add(candidate);
+    const drone = promote(candidate, d);
+    d.candidates.update(candidate.id, { resolvedBy: "auto" });
+    return {
+      kind: "auto-promoted",
+      droneId: drone.id,
+      candidate: { ...candidate, status: "promoted", resolvedInto: drone.id, resolvedBy: "auto" },
+    };
+  }
+  if (d.autoDiscardThreshold !== undefined && extraction.confidence < d.autoDiscardThreshold) {
+    candidate.status = "discarded";
+    candidate.resolvedBy = "auto";
+    d.candidates.add(candidate);
+    return { kind: "auto-discarded", candidate };
   }
   d.candidates.add(candidate);
   return { kind: "queued", candidate };

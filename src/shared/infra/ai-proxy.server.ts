@@ -39,16 +39,33 @@ const env = (k: string) => {
 const rpm = Number(env("PROVIDER_RPM") ?? 35);
 const MIN_SPACING_MS = Number.isFinite(rpm) && rpm > 0 ? Math.ceil(60_000 / rpm) : 0;
 
+/** Requests per minute the pacer allows, or 0 when pacing is disabled. */
+export const providerRpm = () => (MIN_SPACING_MS ? rpm : 0);
+
 /** The earliest time the next call is allowed to start. Monotonic via Date.now() under fake timers. */
 let nextSlot = 0;
 
-/** Reserve this caller's start slot and wait for it. Returns immediately when pacing is off. */
+/**
+ * Set by a 429. The provider's limit is per key, so once one caller is told to back off every
+ * other caller sharing the key would be refused too - they all wait, not just the one that
+ * got the 429. Applies even with pacing off, since a Retry-After is the provider's own word.
+ */
+let pausedUntil = 0;
+
+function pauseAll(ms: number) {
+  pausedUntil = Math.max(pausedUntil, Date.now() + ms);
+}
+
+/** Reserve this caller's start slot and wait for it. */
 function pace(): Promise<void> {
-  if (!MIN_SPACING_MS) return Promise.resolve();
-  const turn = nextSlot;
-  // max() keeps a burst from walking `nextSlot` arbitrarily far into the future.
-  nextSlot = Math.max(nextSlot, Date.now()) + MIN_SPACING_MS;
-  const delay = turn - Date.now();
+  const now = Date.now();
+  let turn = Math.max(now, pausedUntil);
+  if (MIN_SPACING_MS) {
+    // Anchoring on `turn` keeps a burst from walking `nextSlot` arbitrarily far ahead.
+    turn = Math.max(turn, nextSlot);
+    nextSlot = turn + MIN_SPACING_MS;
+  }
+  const delay = turn - now;
   return delay > 0 ? new Promise((r) => setTimeout(r, delay)) : Promise.resolve();
 }
 
@@ -72,6 +89,40 @@ const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 /** Collapse the status text to a short, single-line, length-capped reason. */
 function reason(statusText: string) {
   return statusText.replace(/\s+/g, " ").trim().slice(0, 80);
+}
+
+/** A short kind the Sources page can show. The URL and body stay out of the string. */
+function transportError(e: unknown): string {
+  const name = e instanceof Error ? e.name : "";
+  if (name === "TimeoutError" || name === "AbortError") return "Provider timeout";
+  if (name === "TypeError") return "Provider network";
+  return name ? `Provider network (${name})` : "Provider network";
+}
+
+function statusError(status: number, statusText: string): string {
+  const detail = reason(statusText);
+  const kind =
+    status === 429
+      ? "rate limit"
+      : status === 408
+        ? "timeout"
+        : status === 401 || status === 403
+          ? "auth"
+          : status === 402
+            ? "credits"
+            : status === 400
+              ? "bad request"
+              : status === 404
+                ? "not found"
+                : status === 425 ||
+                    status === 500 ||
+                    status === 502 ||
+                    status === 503 ||
+                    status === 504
+                  ? "unavailable"
+                  : null;
+  if (!kind) return detail ? `Provider ${status}: ${detail}` : `Provider ${status}`;
+  return detail ? `Provider ${kind} (${status}: ${detail})` : `Provider ${kind} (${status})`;
 }
 
 /** Retry-After is either delta-seconds or an HTTP date; either way it beats our own guess. */
@@ -133,7 +184,7 @@ export async function chatCompletionOnce(d: ChatInput): Promise<ChatResult> {
     } catch (e) {
       // Transport-level failure (DNS, TLS, socket reset, timeout) is worth another try.
       // The error message can echo the URL, so it is not surfaced verbatim.
-      error = `Provider request failed (${e instanceof Error ? e.name : "unknown error"})`;
+      error = transportError(e);
       owed = backoffMs(attempt);
       continue;
     }
@@ -160,11 +211,18 @@ export async function chatCompletionOnce(d: ChatInput): Promise<ChatResult> {
     // Provider bodies can echo the prompt, the key, or an internal model error. They are
     // persisted into dispatch `error` fields and rendered in the UI, so keep the status and a
     // short scrubbed reason instead of up to 300 chars of upstream payload.
-    error = `Provider ${res.status}${reason(res.statusText) ? `: ${reason(res.statusText)}` : ""}`;
+    error = statusError(res.status, res.statusText);
     // A 400/401/404 will fail identically on every retry, so surface it immediately.
     if (!RETRYABLE.has(res.status) || attempt === ATTEMPTS - 1)
       return { ok: false as const, error };
-    owed = backoffMs(attempt, retryAfterMs(res));
+    const wait = backoffMs(attempt, retryAfterMs(res));
+    if (res.status === 429) {
+      // Paid through the shared pause, which this caller's own pace() also honours.
+      pauseAll(wait);
+      owed = 0;
+    } else {
+      owed = wait;
+    }
   }
   return { ok: false as const, error };
 }

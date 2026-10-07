@@ -1,4 +1,4 @@
-import { chatCompletionOnce } from "./ai-proxy.server";
+import { chatCompletionOnce, providerRpm } from "./ai-proxy.server";
 import { HeuristicExtractor } from "./heuristic-ai";
 import {
   LocalCandidateRepository,
@@ -21,6 +21,12 @@ import {
 } from "@/features/sources/auto-ingest";
 import { fetchOne } from "./fetch-posts";
 
+/** AI time per run. Under the 10-minute cron period so a run never overlaps the next tick. */
+const AI_WINDOW_MS = 8 * 60_000;
+const CALLS_PER_DISPATCH = 1.5;
+/** How many dispatches one run may lease, also when pacing is off and only the deadline binds. */
+const MAX_BATCH = 400;
+
 /**
  * Server-side auto-ingest: the body the scheduled task invokes.
  *
@@ -30,7 +36,11 @@ import { fetchOne } from "./fetch-posts";
  */
 export async function fetchAllSources(
   report?: (progress: WorkProgress) => Promise<void> | void,
-): Promise<SyncReport[]> {
+  opts: {
+    /** While set, stage 2 is skipped: the provider recently rate-limited this key. */
+    cooldownUntil?: string;
+  } = {},
+): Promise<{ reports: SyncReport[]; stopReason?: string }> {
   if (!dbConfigured()) throw new Error("Auto-sync needs DATABASE_URL (PostgreSQL)");
 
   const store = new PostgresStore();
@@ -67,10 +77,13 @@ export async function fetchAllSources(
       : new HeuristicExtractor(2),
     escalationThreshold: DEFAULT_SETTINGS.escalationThreshold,
     autoMergeThreshold: DEFAULT_SETTINGS.autoMergeThreshold,
+    autoPromoteThreshold: DEFAULT_SETTINGS.autoPromoteThreshold,
+    autoDiscardThreshold: DEFAULT_SETTINGS.autoDiscardThreshold,
   };
 
   // Stage 1: collect every source into the dispatch queue (network only).
-  const targets = sources.list().filter((s) => s.platform !== "X");
+  // Opt-out rather than opt-in: sources without the flag predate it and keep being polled.
+  const targets = sources.list().filter((s) => s.platform !== "X" && s.autoSync !== false);
   const reports: SyncReport[] = [];
   for (let i = 0; i < targets.length; i++) {
     const s = targets[i]!;
@@ -86,15 +99,36 @@ export async function fetchAllSources(
       ...(c.error ? { error: c.error } : {}),
     });
   }
-  // Stage 2: drain a bounded batch; the rest waits for the next tick. Leased, so a manual
-  // browser run overlapping this tick cannot process the same dispatch twice.
+  if (opts.cooldownUntil) {
+    const pending = dispatches.pending(Number.MAX_SAFE_INTEGER).length;
+    const current = `Cooling down until ${opts.cooldownUntil} after a provider rate limit`;
+    await report?.({ ...fetchingProgress(current, 0, 0), phase: "done", remaining: pending });
+    reports.push({
+      source: QUEUE_ROW,
+      fetched: 0,
+      relevant: 0,
+      merged: 0,
+      queued: 0,
+      error: `${current}, ${pending} pending`,
+    });
+    return { reports };
+  }
+
+  // Stage 2: drain the queue for a fixed window; the rest waits for the next tick. Leased, so a
+  // manual browser run overlapping this tick cannot process the same dispatch twice.
   //
-  // 120 rather than a token few: collection outruns processing, so a small batch leaves the
-  // backlog growing without bound. At ~1.5 model calls per dispatch and ~3s each that is ~9 min
-  // of work per 15-min tick and ~12 requests/min - well inside the 40 RPM cap. The lease
-  // scales with the batch (leaseFor) so a long batch cannot outlive its own lease.
-  let lastItem: WorkProgress | null = null;
-  const p = await processPending(dispatches, deps, 120, {
+  // The batch is sized from the request budget rather than a fixed count: the pacer allows
+  // `rpm` calls a minute and a dispatch costs ~1.5 calls (tier-2 escalation), so this is about
+  // what the window can actually fit. The deadline is the real bound - it keeps a slow model
+  // from running the job into the next tick. With pacing off (self-hosted) the deadline alone
+  // bounds the run. The lease scales with the batch (leaseFor) so it outlives the run.
+  const rpm = providerRpm();
+  const limit = rpm ? Math.ceil((AI_WINDOW_MS / 60_000) * rpm / CALLS_PER_DISPATCH) : MAX_BATCH;
+  // Assigned only inside onItem, which control-flow analysis cannot see; the cast keeps it
+  // from being narrowed to `null` for the rest of the function.
+  let lastItem = null as WorkProgress | null;
+  const p = await processPending(dispatches, deps, Math.min(limit, MAX_BATCH), {
+    deadline: Date.now() + AI_WINDOW_MS,
     onItem: async (event) => {
       lastItem = progressFromItem(event);
       await report?.(lastItem);
@@ -109,6 +143,8 @@ export async function fetchAllSources(
     processed: p.processed,
     irrelevant: p.irrelevant,
     merged: p.merged,
+    promoted: p.promoted,
+    discarded: p.discarded,
     queued: p.queued,
     failed: p.failed,
     remaining: p.remaining,
@@ -122,7 +158,11 @@ export async function fetchAllSources(
     queued: p.queued,
     // Backlog is reported whenever there is any, not only on failure - otherwise a queue that
     // is quietly growing looks identical to a healthy one.
-    ...(p.failed || p.remaining ? { error: `${p.failed} failed, ${p.remaining} pending` } : {}),
+    ...(p.failed || p.remaining
+      ? {
+          error: `${p.failed} failed${p.stopReason ? ` · ${p.stopReason}` : ""}, ${p.remaining} pending`,
+        }
+      : {}),
   });
-  return reports;
+  return { reports, ...(p.stopReason ? { stopReason: p.stopReason } : {}) };
 }

@@ -32,6 +32,9 @@ function repo(seed: Drone[]) {
       const i = items.findIndex((x) => x.id === d.id);
       items = i >= 0 ? items.map((x) => (x.id === d.id ? d : x)) : [...items, d];
     },
+    remove: (id: string) => {
+      items = items.filter((x) => x.id !== id);
+    },
     search: () => items,
     _all: () => items,
   };
@@ -154,6 +157,57 @@ describe("runTwoTier relation persistence", () => {
     d.tier2 = d.tier1;
     await runTwoTier("c", SRC, d);
     expect(JSON.stringify(d.drones.get("shahed-136")?.counterpartIds)).toBe(before);
+  });
+});
+
+describe("runTwoTier auto-triage", () => {
+  const triage = (drones: Drone[], e: Partial<Extraction>) => ({
+    ...deps(drones, e),
+    autoPromoteThreshold: 0.9,
+    autoDiscardThreshold: 0.25,
+  });
+
+  it("promotes a confident, uncatalogued system without review", async () => {
+    const d = triage([drone("geran-2")], { name: "Orlan-30", confidence: 0.95 });
+    const res = await runTwoTier("report", SRC, d);
+
+    expect(res.kind).toBe("auto-promoted");
+    if (res.kind !== "auto-promoted") return;
+    expect(d.drones.get(res.droneId)?.name).toBe("Orlan-30");
+    expect(res.candidate.resolvedBy).toBe("auto");
+    expect(res.candidate.status).toBe("promoted");
+  });
+
+  it("queues instead of promoting when the name collides with a catalog alias", async () => {
+    const d = triage([drone("geran-2", { aliases: ["Orlan-30"] })], {
+      name: "orlan-30",
+      confidence: 0.95,
+    });
+    const before = d.drones.list().length;
+    const res = await runTwoTier("report", SRC, d);
+
+    expect(res.kind).toBe("queued");
+    expect(d.drones.list()).toHaveLength(before);
+  });
+
+  it("does not promote an unnamed system", async () => {
+    const d = triage([], { confidence: 0.95 });
+    expect((await runTwoTier("report", SRC, d)).kind).toBe("queued");
+  });
+
+  it("discards low-confidence noise but keeps the candidate for audit", async () => {
+    const d = triage([drone("geran-2")], { matchId: "geran-2", confidence: 0.1 });
+    const res = await runTwoTier("report", SRC, d);
+
+    expect(res.kind).toBe("auto-discarded");
+    expect(d._cands).toHaveLength(1);
+    expect(d._cands[0]!.status).toBe("discarded");
+    expect(d._cands[0]!.resolvedBy).toBe("auto");
+  });
+
+  it("leaves everything to review when the thresholds are unset", async () => {
+    const d = deps([], { name: "Orlan-30", confidence: 0.95 });
+    expect((await runTwoTier("report", SRC, d)).kind).toBe("queued");
   });
 });
 

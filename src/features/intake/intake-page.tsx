@@ -62,6 +62,7 @@ function CandidateRow({ c }: { c: Candidate }) {
         <Tag tone={c.tier === 2 ? "accent" : "default"}>Tier {c.tier}</Tag>
         <Tag tone={e.confidence > 0.75 ? "primary" : e.confidence > 0.5 ? "accent" : "danger"}>conf {Math.round(e.confidence * 100)}%</Tag>
         {e.domain && <Tag>{e.domain}</Tag>}
+        {c.resolvedBy === "auto" && <Tag tone="accent">auto</Tag>}
         <span className="ml-auto font-mono text-xs text-muted-foreground">{c.source}</span>
       </div>
       <h3 className="mt-2 text-lg font-semibold">{e.name ?? "Unnamed system"}</h3>
@@ -98,13 +99,13 @@ function CandidateRow({ c }: { c: Candidate }) {
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <input value={name} onChange={(ev) => setName(ev.target.value)} placeholder="System name"
             className="w-48 border border-border bg-card px-2 py-1.5 font-mono text-xs outline-none focus:border-primary" aria-label="Candidate name" />
-          <Btn onClick={() => promote(c, svc, name)} disabled={!name.trim()}>Promote</Btn>
+          <Btn onClick={() => { promote(c, svc, name); svc.candidates.update(c.id, { resolvedBy: "analyst" }); }} disabled={!name.trim()}>Promote</Btn>
           <select value={target} onChange={(ev) => setTarget(ev.target.value)} className="border border-border bg-card px-2 py-1.5 font-mono text-xs" aria-label="Merge target">
             <option value="">-- Select system to merge into --</option>
             {drones.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
           </select>
-          <Btn variant="ghost" disabled={!target} onClick={() => mergeInto(c, target, svc)}>Merge</Btn>
-          <Btn variant="danger" onClick={() => svc.candidates.update(c.id, { status: "discarded" })}>Discard</Btn>
+          <Btn variant="ghost" disabled={!target} onClick={() => { mergeInto(c, target, svc); svc.candidates.update(c.id, { resolvedBy: "analyst" }); }}>Merge</Btn>
+          <Btn variant="danger" onClick={() => svc.candidates.update(c.id, { status: "discarded", resolvedBy: "analyst" })}>Discard</Btn>
         </div>
       ) : (
         <p className="mt-3 font-mono text-xs uppercase text-muted-foreground">
@@ -128,8 +129,15 @@ export function IntakePage({ draft, draftSource }: { draft?: string | undefined;
     if (!raw.trim()) return;
     setBusy(true); setMsg(null);
     try {
-      const r = await runTwoTier(raw, source, { ...svc, escalationThreshold: svc.settings.escalationThreshold, autoMergeThreshold: svc.settings.autoMergeThreshold });
-      setMsg(r.kind === "auto-merged" ? `Auto-merged into ${r.droneId} (Tier ${r.candidate.tier}).` : `Queued for triage (Tier ${r.candidate.tier}, ${Math.round(r.candidate.extraction.confidence * 100)}%).`);
+      const { escalationThreshold, autoMergeThreshold, autoPromoteThreshold, autoDiscardThreshold } = svc.settings;
+      const r = await runTwoTier(raw, source, { ...svc, escalationThreshold, autoMergeThreshold, autoPromoteThreshold, autoDiscardThreshold });
+      const conf = `Tier ${r.candidate.tier}, ${Math.round(r.candidate.extraction.confidence * 100)}%`;
+      setMsg(
+        r.kind === "auto-merged" ? `Auto-merged into ${r.droneId} (${conf}).`
+          : r.kind === "auto-promoted" ? `Auto-promoted as new system ${r.droneId} (${conf}).`
+            : r.kind === "auto-discarded" ? `Auto-discarded as low confidence (${conf}).`
+              : `Queued for triage (${conf}).`,
+      );
       setRaw("");
     } catch (e) { setMsg(`Extraction failed: ${(e as Error).message}`); }
     setBusy(false);
@@ -148,7 +156,7 @@ export function IntakePage({ draft, draftSource }: { draft?: string | undefined;
           <Btn onClick={submit} disabled={busy || !raw.trim()}>{busy ? "Analyzing…" : "Ingest"}</Btn>
         </div>
         {msg && <p className="mt-3 font-mono text-xs text-accent">{msg}</p>}
-        <p className="mt-4 text-xs text-muted-foreground">Tier 1 screens and extracts. Below {Math.round(svc.settings.escalationThreshold * 100)}% confidence or without a catalog match, Tier 2 reasoning re-analyzes. Matches above {Math.round(svc.settings.autoMergeThreshold * 100)}% auto-merge.</p>
+        <p className="mt-4 text-xs text-muted-foreground">Tier 1 screens and extracts. Below {Math.round(svc.settings.escalationThreshold * 100)}% confidence or without a catalog match, Tier 2 reasoning re-analyzes. Matches above {Math.round(svc.settings.autoMergeThreshold * 100)}% auto-merge; new, uniquely named systems above {Math.round(svc.settings.autoPromoteThreshold * 100)}% auto-promote; anything below {Math.round(svc.settings.autoDiscardThreshold * 100)}% is auto-discarded.</p>
       </Panel>
       <div className="space-y-6">
         <Panel title={`Triage queue · ${pending.length}`}>

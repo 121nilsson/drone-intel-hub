@@ -22,7 +22,7 @@ export interface RawDispatch {
   /** Candidate ids and drone ids this dispatch produced — provenance for later cross-referencing. */
   candidateIds?: string[];
   droneIds?: string[];
-  outcome?: "auto-merged" | "queued" | undefined;
+  outcome?: "auto-merged" | "auto-promoted" | "auto-discarded" | "queued" | undefined;
 }
 
 export const MAX_ATTEMPTS = 3;

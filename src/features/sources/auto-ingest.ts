@@ -63,10 +63,61 @@ export interface ProcessReport {
   processed: number;
   irrelevant: number;
   merged: number;
+  /** New systems auto-promoted into the catalog. */
+  promoted: number;
+  /** Low-confidence candidates auto-discarded. */
+  discarded: number;
   queued: number;
   failed: number;
   remaining: number;
   /** Documents leased exclusively by this run - 0 when another worker holds them all. */ leased: number;
+  /** Why this batch stopped, when a provider or pipeline error aborted the rest. */
+  stopReason?: string;
+}
+
+const PROVIDER_KINDS: [RegExp, string][] = [
+  [/timeout/i, "timeout"],
+  [/429|rate[\s-]?limit/i, "rate limit"],
+  [/401|403|\bauth\b|api key|unauthorized/i, "auth"],
+  [/402|\bcredits?\b|quota|insufficient/i, "credits"],
+  [/\b(425|500|502|503|504)\b|unavailable/i, "unavailable"],
+  [/\b400\b|bad request/i, "bad request"],
+  [/\b404\b|not found/i, "not found"],
+  [/typeerror|\bnetwork\b|fetch failed|econn/i, "network"],
+  [/invalid provider response|unexpected token|syntaxerror/i, "invalid response"],
+];
+
+/** A stable label for a provider failure, including older messages already stored on a dispatch. */
+export function providerErrorKind(message: string): string | null {
+  for (const [pattern, kind] of PROVIDER_KINDS) {
+    if (pattern.test(message)) return kind;
+  }
+  return null;
+}
+
+/** Short line for the status strip, activity log, and dispatch row. Status codes are kept. */
+export function formatProviderError(message: string): string {
+  const kind = providerErrorKind(message);
+  if (!kind) return message.replace(/\s+/g, " ").trim().slice(0, 120);
+  const status = message.match(/\b(400|401|402|403|404|408|425|429|500|502|503|504)\b/);
+  return status ? `Provider ${kind} (${status[1]})` : `Provider ${kind}`;
+}
+
+const COOLDOWN_BASE_MS = 5 * 60_000;
+export const COOLDOWN_MAX_MS = 60 * 60_000;
+
+/** Backoff after a run stopped on a provider rate limit. */
+export interface Cooldown {
+  /** Consecutive rate-limited runs, so each repeat waits twice as long. */
+  level: number;
+  until: string;
+}
+
+/** The cooldown to store after another rate-limited run: 5 min, doubling, capped at an hour. */
+export function nextCooldown(previous: Cooldown | null, now = Date.now()): Cooldown {
+  const level = previous?.level ?? 0;
+  const ms = Math.min(COOLDOWN_MAX_MS, COOLDOWN_BASE_MS * 2 ** level);
+  return { level: level + 1, until: new Date(now + ms).toISOString() };
 }
 
 /** Longer than one provider attempt budget (3 × 90s plus backoff), so a slow call is not "stalled". */
@@ -86,6 +137,9 @@ export interface WorkProgress {
   processed: number;
   irrelevant: number;
   merged: number;
+  /** Optional: heartbeats written before auto-triage existed lack them. */
+  promoted?: number;
+  discarded?: number;
   queued: number;
   failed: number;
   remaining: number;
@@ -102,6 +156,8 @@ export interface WorkItemEvent {
   processed: number;
   irrelevant: number;
   merged: number;
+  promoted: number;
+  discarded: number;
   queued: number;
   failed: number;
   remaining: number;
@@ -141,6 +197,8 @@ export function progressFromItem(event: WorkItemEvent): WorkProgress {
     processed: event.processed,
     irrelevant: event.irrelevant,
     merged: event.merged,
+    promoted: event.promoted,
+    discarded: event.discarded,
     queued: event.queued,
     failed: event.failed,
     remaining: event.remaining,
@@ -201,6 +259,8 @@ export async function processPending(
   opts: {
     leaseMs?: number;
     owner?: string;
+    /** Epoch ms after which no new post is started; the rest stay pending for the next run. */
+    deadline?: number;
     /** Called before each post is marked. A failure here is ignored so progress cannot fail the batch. */
     onItem?: (event: WorkItemEvent) => void | Promise<void>;
   } = {},
@@ -209,6 +269,8 @@ export async function processPending(
     processed: 0,
     irrelevant: 0,
     merged: 0,
+    promoted: 0,
+    discarded: 0,
     queued: 0,
     failed: 0,
     remaining: 0,
@@ -240,6 +302,7 @@ export async function processPending(
 
     for (let i = 0; i < batch.length; i++) {
       const d = batch[i]!;
+      if (opts.deadline !== undefined && Date.now() >= opts.deadline) break;
       try {
         await opts.onItem?.({
           id: d.id,
@@ -250,6 +313,8 @@ export async function processPending(
           processed: rep.processed,
           irrelevant: rep.irrelevant,
           merged: rep.merged,
+          promoted: rep.promoted,
+          discarded: rep.discarded,
           queued: rep.queued,
           failed: rep.failed,
           remaining: dispatches.pending(Number.MAX_SAFE_INTEGER).length,
@@ -272,7 +337,7 @@ export async function processPending(
           outcome: r.kind,
           candidateIds: [r.candidate.id],
           droneIds:
-            r.kind === "auto-merged"
+            r.kind === "auto-merged" || r.kind === "auto-promoted"
               ? [r.droneId]
               : r.candidate.extraction.matchId
                 ? [r.candidate.extraction.matchId]
@@ -281,6 +346,8 @@ export async function processPending(
         });
         rep.processed++;
         if (r.kind === "auto-merged") rep.merged++;
+        else if (r.kind === "auto-promoted") rep.promoted++;
+        else if (r.kind === "auto-discarded") rep.discarded++;
         else rep.queued++;
       } catch (e) {
         const attempts = (d.attempts ?? 0) + 1;
@@ -291,6 +358,7 @@ export async function processPending(
           status: attempts >= MAX_ATTEMPTS ? "failed" : "pending",
         });
         rep.failed++;
+        rep.stopReason = formatProviderError(error);
         // Stop the batch on errors (rate limits, credits, provider down) — next run retries.
         break;
       }

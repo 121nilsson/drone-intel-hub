@@ -1,5 +1,12 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
-import { collectSource, processPending, type WorkItemEvent } from "@/features/sources/auto-ingest";
+import {
+  collectSource,
+  COOLDOWN_MAX_MS,
+  formatProviderError,
+  nextCooldown,
+  processPending,
+  type WorkItemEvent,
+} from "@/features/sources/auto-ingest";
 import { MAX_ATTEMPTS, type RawDispatch } from "@/entities/dispatch/types";
 import type { MonitoredSource } from "@/entities/source/types";
 import type { DispatchRepository } from "@/shared/contracts/repository";
@@ -120,6 +127,10 @@ function deps(tier1: IntelExtractor): PipelineDeps {
         if (i >= 0) items[i] = d;
         else items.push(d);
       },
+      remove: (id) => {
+        const i = items.findIndex((x) => x.id === id);
+        if (i >= 0) items.splice(i, 1);
+      },
       search: () => items,
     },
     candidates: { list: () => cands, add: (c) => cands.push(c), update: () => {} },
@@ -135,6 +146,18 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+describe("provider error labels", () => {
+  it("names the failure the operator can act on", () => {
+    expect(formatProviderError("Provider request failed (TimeoutError)")).toBe("Provider timeout");
+    expect(formatProviderError("Provider rate limit (429)")).toBe("Provider rate limit (429)");
+    expect(formatProviderError("Provider 503: unavailable")).toBe("Provider unavailable (503)");
+    expect(formatProviderError("Unexpected token } in JSON at position 12")).toBe(
+      "Provider invalid response",
+    );
+    expect(formatProviderError("No API key: set NVIDIA_API_KEY")).toBe("Provider auth");
+  });
+});
+
 describe("processPending per-dispatch isolation", () => {
   it("keeps a rate-limited dispatch pending so a later tick retries it", async () => {
     const { tier1 } = scripted({ "A drone report": new Error("Provider 429: rate limited") });
@@ -143,6 +166,7 @@ describe("processPending per-dispatch isolation", () => {
     const rep = await processPending(repo, deps(tier1));
 
     expect(rep.failed).toBe(1);
+    expect(rep.stopReason).toBe("Provider rate limit (429)");
     expect(repo.list()[0]!.status).toBe("pending");
     expect(repo.list()[0]!.attempts).toBe(1);
     // The error is retained for the operator rather than swallowed.
@@ -208,6 +232,7 @@ describe("processPending per-dispatch isolation", () => {
 
     expect(calls).toEqual(["drone bad"]);
     expect(rep.failed).toBe(1);
+    expect(rep.stopReason).toBe("Provider rate limit (429)");
     expect(rep.remaining).toBe(2);
   });
 
@@ -301,6 +326,58 @@ describe("processPending per-dispatch isolation", () => {
     expect(d.text).toBe("");
     // Still in the archive, so the same external id is not re-collected.
     expect(d.id).toBe("src-1|p1");
+  });
+});
+
+describe("nextCooldown", () => {
+  const NOW = Date.parse("2026-10-07T12:00:00.000Z");
+  const minutes = (c: { until: string }) => (Date.parse(c.until) - NOW) / 60_000;
+
+  it("starts at five minutes after the first rate-limited run", () => {
+    const c = nextCooldown(null, NOW);
+    expect(c.level).toBe(1);
+    expect(minutes(c)).toBe(5);
+  });
+
+  it("doubles for each consecutive rate-limited run", () => {
+    const first = nextCooldown(null, NOW);
+    const second = nextCooldown(first, NOW);
+    const third = nextCooldown(second, NOW);
+    expect([minutes(second), minutes(third)]).toEqual([10, 20]);
+  });
+
+  it("is capped at an hour", () => {
+    expect(Date.parse(nextCooldown({ level: 20, until: "" }, NOW).until) - NOW).toBe(
+      COOLDOWN_MAX_MS,
+    );
+  });
+});
+
+describe("processPending auto-triage counts", () => {
+  it("counts auto-promoted and auto-discarded posts separately from the queue", async () => {
+    const { tier1 } = scripted({
+      "drone new": extraction({ name: "Brand New UAV", confidence: 0.95 }),
+      "drone noise": extraction({ confidence: 0.1 }),
+    });
+    const repo = dispatchRepo([
+      makeDispatch({ externalId: "p1", text: "drone new" }),
+      makeDispatch({ externalId: "p2", text: "drone noise" }),
+    ]);
+
+    const rep = await processPending(repo, {
+      ...deps(tier1),
+      autoPromoteThreshold: 0.9,
+      autoDiscardThreshold: 0.25,
+    });
+
+    expect(rep.promoted).toBe(1);
+    expect(rep.discarded).toBe(1);
+    expect(rep.queued).toBe(0);
+    const outcomes = repo
+      .list()
+      .map((d) => d.outcome)
+      .sort();
+    expect(outcomes).toEqual(["auto-discarded", "auto-promoted"]);
   });
 });
 

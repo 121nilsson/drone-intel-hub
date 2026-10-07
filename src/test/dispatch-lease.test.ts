@@ -80,6 +80,10 @@ function deps(tier1: IntelExtractor): PipelineDeps & { _cands: Candidate[] } {
         if (i >= 0) items[i] = d;
         else items.push(d);
       },
+      remove: (id) => {
+        const i = items.findIndex((x) => x.id === id);
+        if (i >= 0) items.splice(i, 1);
+      },
       search: () => items,
     },
     candidates: { list: () => cands, add: (c) => cands.push(c), update: () => {} },
@@ -357,6 +361,51 @@ describe("lease duration covers the batch", () => {
     const rep = await processPending(leasedRepo(store), deps(tier1), 120, { owner: "a" });
     expect(rep.processed).toBe(3);
     expect(rep.leased).toBe(3);
+  });
+});
+
+describe("processPending deadline", () => {
+  it("stops starting posts at the deadline and releases the ones it never reached", async () => {
+    const store = newStore(4);
+    let clock = 1_000_000;
+    vi.spyOn(Date, "now").mockImplementation(() => clock);
+    const calls: string[] = [];
+    // Each analysis costs 10s of wall clock, so a 15s window fits exactly two posts.
+    const tier1: IntelExtractor = {
+      tier: 1,
+      label: "slow",
+      extract: async (raw: string) => {
+        calls.push(raw);
+        clock += 10_000;
+        return extraction({ matchId: "shahed-136" });
+      },
+    };
+
+    const rep = await processPending(leasedRepo(store), deps(tier1), 4, {
+      owner: "a",
+      leaseMs: 60_000,
+      deadline: clock + 15_000,
+    });
+
+    expect(calls).toHaveLength(2);
+    expect(rep.processed).toBe(2);
+    expect(rep.remaining).toBe(2);
+    // Unreached posts are claimable again right away, not pinned until the lease expires.
+    expect(store.leases.size).toBe(0);
+  });
+
+  it("processes nothing when the deadline has already passed", async () => {
+    const store = newStore(2);
+    const { tier1, calls } = scripted();
+
+    const rep = await processPending(leasedRepo(store), deps(tier1), 2, {
+      owner: "a",
+      deadline: Date.now() - 1,
+    });
+
+    expect(calls).toHaveLength(0);
+    expect(rep.remaining).toBe(2);
+    expect(store.leases.size).toBe(0);
   });
 });
 

@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
-import { DOMAINS, flag, type Domain } from "@/entities/drone/types";
+import { DOMAINS, flag, type Domain, type Drone } from "@/entities/drone/types";
 import { useDrones, useServices } from "@/shared/infra/services";
 import type { CatalogFacets } from "@/shared/contracts/repository";
 import { Btn, Tag } from "@/shared/ui/primitives";

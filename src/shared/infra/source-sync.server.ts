@@ -1,5 +1,12 @@
 import type { JSONValue } from "postgres";
-import { QUEUE_ROW, type SyncReport, type WorkProgress } from "@/features/sources/auto-ingest";
+import {
+  QUEUE_ROW,
+  nextCooldown,
+  providerErrorKind,
+  type Cooldown,
+  type SyncReport,
+  type WorkProgress,
+} from "@/features/sources/auto-ingest";
 import { db, dbConfigured } from "./postgres/db.server";
 
 /** Single global throttle slot for the auto-ingest job. */
@@ -10,6 +17,40 @@ const SLOT = "sources:auto";
  * progress until the next run writes one.
  */
 const PROGRESS_SLOT = "sources:progress";
+/**
+ * Rate-limit cooldown, persisted so it survives across ticks and restarts: the in-process
+ * pacer forgets a 429 the moment the run ends. `last_result` holds a Cooldown object.
+ */
+const COOLDOWN_SLOT = "sources:cooldown";
+
+function parseCooldown(raw: unknown): Cooldown | null {
+  const value = typeof raw === "string" ? safeJson(raw) : raw;
+  if (!value || typeof value !== "object") return null;
+  const c = value as Record<string, unknown>;
+  const level = num(c["level"]);
+  const until = c["until"];
+  if (level === null || typeof until !== "string" || Number.isNaN(Date.parse(until))) return null;
+  return { level, until };
+}
+
+async function readCooldown(): Promise<Cooldown | null> {
+  const rows = await db()`select last_result from sync_state where name = ${COOLDOWN_SLOT}`;
+  return rows.length ? parseCooldown(rows[0]!["last_result"]) : null;
+}
+
+async function writeCooldown(cooldown: Cooldown) {
+  const conn = db();
+  await conn`
+    insert into sync_state (name, last_sync, last_result)
+    values (${COOLDOWN_SLOT}, now(), ${conn.json(cooldown as unknown as JSONValue)})
+    on conflict (name) do update
+      set last_sync = excluded.last_sync,
+          last_result = excluded.last_result`;
+}
+
+async function clearCooldown() {
+  await db()`delete from sync_state where name = ${COOLDOWN_SLOT}`;
+}
 
 function num(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
@@ -43,6 +84,8 @@ function parseProgress(raw: unknown): WorkProgress | null {
   )
     return null;
   const currentId = p["currentId"];
+  const promoted = num(p["promoted"]);
+  const discarded = num(p["discarded"]);
   return {
     phase,
     current: p["current"],
@@ -52,6 +95,8 @@ function parseProgress(raw: unknown): WorkProgress | null {
     processed,
     irrelevant,
     merged,
+    ...(promoted !== null ? { promoted } : {}),
+    ...(discarded !== null ? { discarded } : {}),
     queued,
     failed,
     remaining,
@@ -122,29 +167,36 @@ export interface SyncState {
   configured: boolean;
   /** Heartbeat of the background auto-sync, or null when it has never reported. */
   progress: WorkProgress | null;
+  /** While in the future, auto-sync collects but skips AI work after a provider rate limit. */
+  cooldownUntil: string | null;
 }
 
 /** Throttle state for the UI. Never throws: a missing table just means "no auto-sync yet". */
 export async function readSyncState(): Promise<SyncState> {
-  if (!dbConfigured()) return { lastSync: null, configured: false, progress: null };
+  const none: SyncState = { lastSync: null, configured: false, progress: null, cooldownUntil: null };
+  if (!dbConfigured()) return none;
   try {
     const rows = await db()`
       select name, last_sync, last_result from sync_state
-      where name = ${SLOT} or name = ${PROGRESS_SLOT}`;
+      where name in (${SLOT}, ${PROGRESS_SLOT}, ${COOLDOWN_SLOT})`;
     let lastSync: string | null = null;
     let progress: WorkProgress | null = null;
+    let cooldownUntil: string | null = null;
     for (const row of rows) {
       if (row["name"] === SLOT) {
         const raw = row["last_sync"];
         lastSync = raw ? new Date(raw as Date).toISOString() : null;
       } else if (row["name"] === PROGRESS_SLOT) {
         progress = parseProgress(row["last_result"]);
+      } else if (row["name"] === COOLDOWN_SLOT) {
+        const c = parseCooldown(row["last_result"]);
+        if (c && Date.parse(c.until) > Date.now()) cooldownUntil = c.until;
       }
     }
-    return { lastSync, configured: true, progress };
+    return { lastSync, configured: true, progress, cooldownUntil };
   } catch (e) {
     console.error("[sync-state]", e);
-    return { lastSync: null, configured: false, progress: null };
+    return none;
   }
 }
 
@@ -182,9 +234,21 @@ export async function runAutoSync(opts?: {
   };
 
   try {
+    // A cooldown read failure must not block collection; it just means "no cooldown known".
+    const cooldown = await readCooldown().catch(() => null);
+    const cooling = cooldown && Date.parse(cooldown.until) > Date.now() ? cooldown : null;
     const { fetchAllSources } = await import("./fetch-posts.server");
-    const reports = await fetchAllSources(report);
+    const { reports, stopReason } = await fetchAllSources(report, {
+      ...(cooling ? { cooldownUntil: cooling.until } : {}),
+    });
     await storeResult(reports);
+    try {
+      if (stopReason && providerErrorKind(stopReason) === "rate limit")
+        await writeCooldown(nextCooldown(cooldown));
+      else if (!cooling && cooldown) await clearCooldown();
+    } catch (e) {
+      console.error("[auto-sync] cooldown", e);
+    }
     // The queue is reported as a pseudo-source row, so exclude it from the source count and
     // from the unreachable count. Its failures (rate limits, bad posts) matter, but calling
     // them "sources failed" would misattribute them.

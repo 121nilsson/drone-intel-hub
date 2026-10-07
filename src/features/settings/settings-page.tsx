@@ -25,6 +25,7 @@ export function SettingsPage() {
           {field("tier2Model", "Tier 2 model (reasoning escalation)")}
           {field("translateModel", "Translation model")}
           <div className="grid grid-cols-2 gap-4">{field("escalationThreshold", "Escalate below", "number")}{field("autoMergeThreshold", "Auto-merge above", "number")}</div>
+          <div className="grid grid-cols-2 gap-4">{field("autoPromoteThreshold", "Auto-promote new system above", "number")}{field("autoDiscardThreshold", "Auto-discard below", "number")}</div>
           <p className="text-xs text-muted-foreground">
             {aiKeyFromEnv
               ? "NVIDIA_API_KEY is set in .env.local — it overrides the fields above and stays on the server. Leave the key blank to fall back to a key saved in this browser."

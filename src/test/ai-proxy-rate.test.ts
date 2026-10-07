@@ -202,6 +202,25 @@ describe("chatCompletionOnce pacing", () => {
     }
   });
 
+  it("pauses every caller sharing the key after a 429, not just the one that got it", async () => {
+    const { fn, starts } = stubFetchTiming([
+      { status: 429, body: "slow down", headers: { "retry-after": "20" } },
+      ok("x"),
+    ]);
+    const chat = await loadTransport("0");
+
+    const first = chat(INPUT);
+    // Let the first request land and receive its 429 before the second caller arrives.
+    await vi.advanceTimersByTimeAsync(1);
+    const second = chat(INPUT);
+    await vi.advanceTimersByTimeAsync(60_000);
+    await Promise.all([first, second]);
+
+    expect(fn).toHaveBeenCalledTimes(3);
+    // The second caller never got a 429 itself, yet waits out the provider's Retry-After.
+    expect(starts[1]! - starts[0]!).toBeGreaterThanOrEqual(20_000);
+  });
+
   it("does not pace when disabled", async () => {
     const { starts } = stubFetchTiming([ok("x")]);
     const chat = await loadTransport("0");
@@ -297,7 +316,7 @@ describe("chatCompletionOnce request handling", () => {
     const res = await p;
 
     expect(res.ok).toBe(false);
-    if (!res.ok) expect(res.error).toContain("TimeoutError");
+    if (!res.ok) expect(res.error).toBe("Provider timeout");
     expect(fn).toHaveBeenCalledTimes(3);
   });
 });

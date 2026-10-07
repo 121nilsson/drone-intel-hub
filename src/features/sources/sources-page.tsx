@@ -13,6 +13,7 @@ import { Btn, Panel, Tag } from "@/shared/ui/primitives";
 import {
   collectSource,
   fetchingProgress,
+  formatProviderError,
   processPending,
   progressFromItem,
   WORK_STALE_MS,
@@ -22,7 +23,7 @@ import {
 const field =
   "w-full border border-border bg-background px-2 py-1.5 font-mono text-xs outline-none focus:border-primary";
 /** Matches the cron in vite.config.ts. */
-const AUTO_MIN = 60;
+const AUTO_MIN = 10;
 
 function ExpandableText({ text, className = "" }: { text: string; className?: string }) {
   const [expanded, setExpanded] = useState(false);
@@ -130,10 +131,12 @@ function WorkStatus({
   local,
   remote,
   pending,
+  stopped,
 }: {
   local: WorkProgress | null;
   remote: WorkProgress | null;
   pending: number;
+  stopped: string | null;
 }) {
   const lines: { key: string; text: string; tone: "live" | "stalled" | "idle" }[] = [];
   if (local && local.phase !== "done")
@@ -147,7 +150,15 @@ function WorkStatus({
       tone: "stalled",
     });
   if (lines.length === 0)
-    lines.push({ key: "idle", text: `Idle · ${pending} waiting`, tone: "idle" });
+    lines.push(
+      stopped
+        ? {
+            key: "stopped",
+            text: `Stopped · ${stopped} · ${pending} waiting`,
+            tone: "stalled",
+          }
+        : { key: "idle", text: `Idle · ${pending} waiting`, tone: "idle" },
+    );
   const toneClass = {
     live: "text-primary",
     stalled: "text-destructive",
@@ -179,6 +190,7 @@ export function SourcesPage() {
   });
   const [busy, setBusy] = useState<string | null>(null);
   const [work, setWork] = useState<WorkProgress | null>(null);
+  const [stopped, setStopped] = useState<string | null>(null);
   const [log, setLog] = useState<string[]>([]);
   const [syncState, setSyncState] = useState<SyncState | null>(null);
   const [filter, setFilter] = useState<DispatchStatus | "all">("all");
@@ -218,6 +230,8 @@ export function SourcesPage() {
       ...sv,
       escalationThreshold: sv.settings.escalationThreshold,
       autoMergeThreshold: sv.settings.autoMergeThreshold,
+      autoPromoteThreshold: sv.settings.autoPromoteThreshold,
+      autoDiscardThreshold: sv.settings.autoDiscardThreshold,
     };
     try {
       const p = await processPending(sv.dispatches, deps, 20, {
@@ -227,13 +241,15 @@ export function SourcesPage() {
       // Claimed 0 while work remains means another worker (usually the cron task) holds every
       // pending dispatch right now - worth saying, or the button looks broken.
       if (p.leased === 0 && p.remaining > 0) {
+        setStopped(null);
         say(
           `Queue: nothing claimed - another run holds all ${p.remaining} pending. Try again shortly.`,
         );
         return;
       }
+      setStopped(p.stopReason ?? null);
       say(
-        `Queue: ${p.processed} analysed (${p.merged} merged, ${p.queued} queued) · ${p.irrelevant} not drone-related · ${p.failed ? `${p.failed} failed · ` : ""}${p.remaining} waiting`,
+        `Queue: ${p.processed} analysed (${p.merged} merged, ${p.promoted} promoted, ${p.discarded} discarded, ${p.queued} queued) · ${p.irrelevant} not drone-related · ${p.failed ? `${p.failed} failed${p.stopReason ? ` · ${p.stopReason}` : ""} · ` : ""}${p.remaining} waiting`,
       );
     } finally {
       setWork(null);
@@ -368,8 +384,14 @@ export function SourcesPage() {
                   : " · not yet run"
                 : " · needs PostgreSQL"}
             </span>
+            {syncState?.cooldownUntil && (
+              <span className="font-mono text-xs text-destructive">
+                Rate-limited · AI analysis paused until{" "}
+                {new Date(syncState.cooldownUntil).toLocaleTimeString()}
+              </span>
+            )}
           </div>
-          <WorkStatus local={work} remote={remote} pending={counts.pending} />
+          <WorkStatus local={work} remote={remote} pending={counts.pending} stopped={stopped} />
           <ul className="divide-y divide-border">
             {sources.map((s) => (
               <li key={s.id} className="flex flex-wrap items-start gap-3 py-3">
@@ -393,7 +415,19 @@ export function SourcesPage() {
                     <p className="mt-1 font-mono text-[11px] text-destructive">{s.lastError}</p>
                   )}
                 </div>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <label
+                    className="flex items-center gap-1 font-mono text-xs text-muted-foreground"
+                    title="Include this source in the scheduled server-side auto-sync"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={s.autoSync !== false}
+                      disabled={s.platform === "X"}
+                      onChange={(e) => svc.sources.update(s.id, { autoSync: e.target.checked })}
+                    />
+                    Auto
+                  </label>
                   <Btn
                     disabled={!!busy || s.platform === "X"}
                     onClick={async () => {
@@ -478,7 +512,9 @@ export function SourcesPage() {
                     />
                   )}
                   {d.error && (
-                    <p className="mt-1 font-mono text-[11px] text-destructive">{d.error}</p>
+                    <p className="mt-1 font-mono text-[11px] text-destructive">
+                      {formatProviderError(d.error)}
+                    </p>
                   )}
                   <a
                     href={d.url}

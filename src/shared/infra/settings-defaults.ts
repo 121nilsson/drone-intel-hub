@@ -10,4 +10,6 @@ export const DEFAULT_SETTINGS: AIProviderSettings = {
   translateModel: "nvidia/riva-translate-4b-instruct-v2",
   escalationThreshold: 0.6,
   autoMergeThreshold: 0.85,
+  autoPromoteThreshold: 0.9,
+  autoDiscardThreshold: 0.25,
 };
