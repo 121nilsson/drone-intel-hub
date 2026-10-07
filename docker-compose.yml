@@ -19,10 +19,13 @@ services:
 
   app:
     build: .
+    env_file:
+      - .env
+      - path: .env.local
+        required: false
     environment:
       DATABASE_URL: postgres://droneint:${POSTGRES_PASSWORD:-droneint}@db:5432/droneint
       PORT: 3010
-      # Compose interpolates from .env (not .env.local); unset means no remote inference.
       NVIDIA_API_KEY: ${NVIDIA_API_KEY:-}
       NVIDIA_BASE_URL: ${NVIDIA_BASE_URL:-}
       NVIDIA_TIER1_MODEL: ${NVIDIA_TIER1_MODEL:-}

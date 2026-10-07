@@ -107,6 +107,11 @@ export class PostgresStore implements DocumentStore {
       await db`insert into dispatches (id, source_id, status, created_at, processed_at, data)
         values (${d.id}, ${d.sourceId}, ${d.status}, ${d.createdAt}, ${d.processedAt ?? null}, ${data})
         on conflict (id) do update set status = excluded.status, processed_at = excluded.processed_at, data = excluded.data`;
+    } else if (c === "procurements") {
+      const d = doc as CollectionMap["procurements"];
+      await db`insert into procurements (id, company, country, amount, currency, program, product, customer, announced_at, source, source_url, notes, created_at, data)
+        values (${d.id}, ${d.company}, ${d.country ?? ""}, ${d.amount ?? null}, ${d.currency ?? null}, ${d.program ?? null}, ${d.product ?? null}, ${d.customer ?? null}, ${d.announcedAt ?? null}, ${d.source}, ${d.sourceUrl ?? null}, ${d.notes ?? null}, ${d.createdAt}, ${data})
+        on conflict (id) do update set company = excluded.company, country = excluded.country, amount = excluded.amount, currency = excluded.currency, program = excluded.program, product = excluded.product, customer = excluded.customer, announced_at = excluded.announced_at, source = excluded.source, source_url = excluded.source_url, notes = excluded.notes, data = excluded.data`;
     } else {
       const d = doc as CollectionMap["sources"];
       await db`insert into sources (id, platform, handle, data)

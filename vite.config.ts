@@ -8,7 +8,7 @@ import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 import { loadEnv } from "vite";
 
 // Populate process.env with variables from .env and .env.local for server functions in dev mode
-const env = loadEnv(process.env.NODE_ENV || "development", process.cwd(), "");
+const env = loadEnv(process.env["NODE_ENV"] || "development", process.cwd(), "");
 for (const [key, val] of Object.entries(env)) {
   if (process.env[key] === undefined) {
     process.env[key] = val;
@@ -30,8 +30,8 @@ export default defineConfig({
     // than the project root, so the root-level tasks/ directory has to be listed here.
     scanDirs: ["."],
     scheduledTasks: {
-      // Auto-ingest every 15 min; the task itself enforces a 1 min floor via sync_state.
-      "*/15 * * * *": "sources:sync",
+      // Auto-ingest every 1 hour; the task itself enforces a 1 min floor via sync_state.
+      "* 1 * * *": "sources:sync",
     },
   } as never,
 });

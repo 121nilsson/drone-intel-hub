@@ -15,7 +15,7 @@ import { collectSource, processPending } from "./auto-ingest";
 const field =
   "w-full border border-border bg-background px-2 py-1.5 font-mono text-xs outline-none focus:border-primary";
 /** Matches the cron in vite.config.ts. */
-const AUTO_MIN = 15;
+const AUTO_MIN = 60;
 
 function ExpandableText({ text, className = "" }: { text: string; className?: string }) {
   const [expanded, setExpanded] = useState(false);
@@ -215,7 +215,7 @@ export function SourcesPage() {
               Load default sources
             </Btn>
             <span className="font-mono text-xs text-muted-foreground">
-              Auto-sync runs server-side every {AUTO_MIN} min
+              Auto-sync runs server-side every {AUTO_MIN} minutes
               {syncState?.configured
                 ? syncState.lastSync
                   ? ` · last run ${new Date(syncState.lastSync).toLocaleString()}`

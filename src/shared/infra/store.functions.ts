@@ -2,7 +2,13 @@ import { createServerFn } from "@tanstack/react-start";
 import type { Collection } from "@/shared/contracts/store";
 import { MAX_LEASE_MS } from "@/features/sources/auto-ingest";
 
-const COLLECTIONS: Collection[] = ["drones", "candidates", "sources", "dispatches"];
+const COLLECTIONS: Collection[] = [
+  "drones",
+  "candidates",
+  "sources",
+  "dispatches",
+  "procurements",
+];
 const checkCollection = (c: unknown): Collection => {
   if (!COLLECTIONS.includes(c as Collection)) throw new Error("Invalid collection");
   return c as Collection;
