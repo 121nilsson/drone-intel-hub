@@ -1,18 +1,21 @@
 import type { Candidate, Drone } from "@/entities/drone/types";
 import type { MonitoredSource } from "@/entities/source/types";
+import type { RawDispatch } from "@/entities/dispatch/types";
 
-export type Collection = "drones" | "candidates" | "sources";
+export type Collection = "drones" | "candidates" | "sources" | "dispatches";
 
 export interface CollectionMap {
   drones: Drone;
   candidates: Candidate;
   sources: MonitoredSource;
+  dispatches: RawDispatch;
 }
 
 export interface Snapshot {
   drones: Drone[];
   candidates: Candidate[];
   sources: MonitoredSource[];
+  dispatches: RawDispatch[];
 }
 
 /**

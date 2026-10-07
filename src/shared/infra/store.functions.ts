@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import type { Collection } from "@/shared/contracts/store";
 
-const COLLECTIONS: Collection[] = ["drones", "candidates", "sources"];
+const COLLECTIONS: Collection[] = ["drones", "candidates", "sources", "dispatches"];
 const checkCollection = (c: unknown): Collection => {
   if (!COLLECTIONS.includes(c as Collection)) throw new Error("Invalid collection");
   return c as Collection;

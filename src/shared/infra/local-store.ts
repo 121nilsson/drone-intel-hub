@@ -4,6 +4,7 @@ const KEYS: Record<Collection, string> = {
   drones: "dti.drones.v1",
   candidates: "dti.candidates.v1",
   sources: "dti.sources.v1",
+  dispatches: "dti.dispatches.v1",
 };
 
 /** Browser-only store: one JSON array per collection in localStorage. */
