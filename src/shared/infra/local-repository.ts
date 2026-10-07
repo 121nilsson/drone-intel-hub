@@ -58,6 +58,19 @@ abstract class CachedRepository<C extends Collection> implements Subscribable {
       this.emit();
     }
   }
+
+  /**
+   * Re-read this collection. A null load is left as-is so a missing collection is not reseeded
+   * the way attach() would. `apply` runs after the read so a caller can drop a snapshot that
+   * went stale while the load was in flight.
+   */
+  async reload(apply: () => boolean = () => true) {
+    if (!this.store) return;
+    const loaded = await this.store.load(this.collection);
+    if (!loaded || !apply()) return;
+    this.items = loaded;
+    this.emit();
+  }
   protected save(doc: CollectionMap[C]) {
     this.emit();
     this.store

@@ -10,7 +10,14 @@ import { fetchSourcePosts } from "@/shared/infra/source-fetch.functions";
 import { getSyncState, type SyncState } from "@/shared/infra/source-sync.functions";
 import { translateText } from "@/shared/infra/ai-proxy.functions";
 import { Btn, Panel, Tag } from "@/shared/ui/primitives";
-import { collectSource, processPending } from "./auto-ingest";
+import {
+  collectSource,
+  fetchingProgress,
+  processPending,
+  progressFromItem,
+  WORK_STALE_MS,
+  type WorkProgress,
+} from "./auto-ingest";
 
 const field =
   "w-full border border-border bg-background px-2 py-1.5 font-mono text-xs outline-none focus:border-primary";
@@ -36,7 +43,15 @@ function ExpandableText({ text, className = "" }: { text: string; className?: st
   );
 }
 
-function DispatchTranslateButton({ text, model, translateFn }: { text: string; model: string; translateFn: ReturnType<typeof useServerFn<typeof translateText>> }) {
+function DispatchTranslateButton({
+  text,
+  model,
+  translateFn,
+}: {
+  text: string;
+  model: string;
+  translateFn: ReturnType<typeof useServerFn<typeof translateText>>;
+}) {
   const [translating, setTranslating] = useState(false);
   const [translated, setTranslated] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -60,7 +75,9 @@ function DispatchTranslateButton({ text, model, translateFn }: { text: string; m
   if (translated) {
     return (
       <div className="mt-1 border-l-2 border-primary/30 pl-3">
-        <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">English translation</p>
+        <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+          English translation
+        </p>
         <p className="mt-0.5 text-sm">{translated}</p>
       </div>
     );
@@ -68,10 +85,81 @@ function DispatchTranslateButton({ text, model, translateFn }: { text: string; m
 
   return (
     <div className="mt-1 flex items-center gap-2">
-      <Btn variant="ghost" onClick={handleTranslate} disabled={translating} className="px-2 py-0.5 text-xs">
+      <Btn
+        variant="ghost"
+        onClick={handleTranslate}
+        disabled={translating}
+        className="px-2 py-0.5 text-xs"
+      >
         {translating ? "Translating…" : "Translate"}
       </Btn>
       {error && <span className="font-mono text-[11px] text-destructive">{error}</span>}
+    </div>
+  );
+}
+
+function progressAge(progress: WorkProgress): number | null {
+  const age = Date.now() - Date.parse(progress.updatedAt);
+  return Number.isFinite(age) ? age : null;
+}
+
+function isActive(progress: WorkProgress | null): progress is WorkProgress {
+  return !!progress && (progress.phase === "fetching" || progress.phase === "analysing");
+}
+
+/** A heartbeat still inside one provider attempt budget. */
+function isLive(progress: WorkProgress | null): progress is WorkProgress {
+  if (!isActive(progress)) return false;
+  const age = progressAge(progress);
+  return age !== null && age <= WORK_STALE_MS;
+}
+
+function isStalled(progress: WorkProgress | null): progress is WorkProgress {
+  if (!isActive(progress)) return false;
+  const age = progressAge(progress);
+  return age !== null && age > WORK_STALE_MS;
+}
+
+function formatWork(progress: WorkProgress): string {
+  if (progress.phase === "analysing")
+    return `Analysing · ${progress.current} · ${progress.index} of ${progress.total} · ${progress.remaining} waiting`;
+  return `Fetching · ${progress.current} · ${progress.index} of ${progress.total}`;
+}
+
+function WorkStatus({
+  local,
+  remote,
+  pending,
+}: {
+  local: WorkProgress | null;
+  remote: WorkProgress | null;
+  pending: number;
+}) {
+  const lines: { key: string; text: string; tone: "live" | "stalled" | "idle" }[] = [];
+  if (local && local.phase !== "done")
+    lines.push({ key: "local", text: formatWork(local), tone: "live" });
+  if (isLive(remote))
+    lines.push({ key: "remote", text: `Auto-sync · ${formatWork(remote)}`, tone: "live" });
+  else if (isStalled(remote))
+    lines.push({
+      key: "remote",
+      text: `Auto-sync stalled · ${formatWork(remote)}`,
+      tone: "stalled",
+    });
+  if (lines.length === 0)
+    lines.push({ key: "idle", text: `Idle · ${pending} waiting`, tone: "idle" });
+  const toneClass = {
+    live: "text-primary",
+    stalled: "text-destructive",
+    idle: "text-muted-foreground",
+  } as const;
+  return (
+    <div className="mb-3 space-y-1 font-mono text-xs">
+      {lines.map((line) => (
+        <p key={line.key} className={toneClass[line.tone]}>
+          {line.text}
+        </p>
+      ))}
     </div>
   );
 }
@@ -90,6 +178,7 @@ export function SourcesPage() {
     notes: "",
   });
   const [busy, setBusy] = useState<string | null>(null);
+  const [work, setWork] = useState<WorkProgress | null>(null);
   const [log, setLog] = useState<string[]>([]);
   const [syncState, setSyncState] = useState<SyncState | null>(null);
   const [filter, setFilter] = useState<DispatchStatus | "all">("all");
@@ -99,6 +188,9 @@ export function SourcesPage() {
   // Stable per tab, not per call: a lease must survive re-renders so `finally` can release
   // the rows this tab actually claimed, and two tabs must never share an owner.
   const ownerRef = useRef<string>(crypto.randomUUID());
+  const workRef = useRef<WorkProgress | null>(null);
+  workRef.current = work;
+  const lastReload = useRef(0);
   const say = (m: string) => setLog((l) => [m, ...l].slice(0, 40));
 
   const collectOne = useCallback(
@@ -127,42 +219,88 @@ export function SourcesPage() {
       escalationThreshold: sv.settings.escalationThreshold,
       autoMergeThreshold: sv.settings.autoMergeThreshold,
     };
-    const p = await processPending(sv.dispatches, deps, 20, { owner: ownerRef.current });
-    // Claimed 0 while work remains means another worker (usually the cron task) holds every
-    // pending dispatch right now - worth saying, or the button looks broken.
-    if (p.leased === 0 && p.remaining > 0) {
+    try {
+      const p = await processPending(sv.dispatches, deps, 20, {
+        owner: ownerRef.current,
+        onItem: (event) => setWork(progressFromItem(event)),
+      });
+      // Claimed 0 while work remains means another worker (usually the cron task) holds every
+      // pending dispatch right now - worth saying, or the button looks broken.
+      if (p.leased === 0 && p.remaining > 0) {
+        say(
+          `Queue: nothing claimed - another run holds all ${p.remaining} pending. Try again shortly.`,
+        );
+        return;
+      }
       say(
-        `Queue: nothing claimed - another run holds all ${p.remaining} pending. Try again shortly.`,
+        `Queue: ${p.processed} analysed (${p.merged} merged, ${p.queued} queued) · ${p.irrelevant} not drone-related · ${p.failed ? `${p.failed} failed · ` : ""}${p.remaining} waiting`,
       );
-      return;
+    } finally {
+      setWork(null);
     }
-    say(
-      `Queue: ${p.processed} analysed (${p.merged} merged, ${p.queued} queued) · ${p.irrelevant} not drone-related · ${p.failed ? `${p.failed} failed · ` : ""}${p.remaining} waiting`,
-    );
   }, []);
 
   const syncOne = useCallback(
     async (s: MonitoredSource) => {
-      await collectOne(s);
-      await processQueue();
+      setWork(fetchingProgress(s.name, 1, 1));
+      try {
+        await collectOne(s);
+        await processQueue();
+      } finally {
+        setWork(null);
+      }
     },
     [collectOne, processQueue],
   );
 
   const syncAll = useCallback(async () => {
     setBusy("all");
-    for (const s of svcRef.current.sources.list().filter((x) => x.platform !== "X"))
-      await collectOne(s);
-    setBusy(null);
-    const st = await stateFn();
-    setSyncState(st);
+    const list = svcRef.current.sources.list().filter((x) => x.platform !== "X");
+    try {
+      for (let i = 0; i < list.length; i++) {
+        const s = list[i]!;
+        setWork(fetchingProgress(s.name, i + 1, list.length));
+        await collectOne(s);
+      }
+    } finally {
+      setWork(null);
+      setBusy(null);
+    }
+    try {
+      setSyncState(await stateFn());
+    } catch {
+      /* the poll retries */
+    }
   }, [collectOne, stateFn]);
 
   useEffect(() => {
-    stateFn()
-      .then(setSyncState)
-      .catch(() => {});
+    let stop = false;
+    const tick = () => {
+      stateFn()
+        .then((st) => {
+          if (!stop) setSyncState(st);
+        })
+        .catch(() => {});
+    };
+    tick();
+    const id = setInterval(tick, 3000);
+    return () => {
+      stop = true;
+      clearInterval(id);
+    };
   }, [stateFn]);
+
+  // While the server run is live and this tab is idle, refresh caches so pending counts move.
+  // At most every 10s. Skip the snapshot if this tab started writing during the load.
+  useEffect(() => {
+    if (!isLive(syncState?.progress ?? null) || workRef.current) return;
+    const now = Date.now();
+    if (now - lastReload.current < 10_000) return;
+    lastReload.current = now;
+    const apply = () => workRef.current === null;
+    void svcRef.current.dispatches.reload(apply);
+    void svcRef.current.sources.reload(apply);
+  }, [syncState]);
 
   const add = () => {
     if (!f.name.trim() || !f.handle.trim()) return;
@@ -180,6 +318,11 @@ export function SourcesPage() {
   >;
   for (const d of dispatches) counts[d.status]++;
   const shown = dispatches.filter((d) => filter === "all" || d.status === filter).slice(0, 50);
+  const remote = syncState?.progress ?? null;
+  const workingIds = new Set<string>();
+  if (work?.phase === "analysing" && work.currentId) workingIds.add(work.currentId);
+  if (isLive(remote) && remote.phase === "analysing" && remote.currentId)
+    workingIds.add(remote.currentId);
   const sample = (s: MonitoredSource) =>
     nav({ to: "/intake", search: { draft: sampleDispatch(s.domain), source: s.name } });
   const translateFn = useServerFn(translateText);
@@ -197,8 +340,11 @@ export function SourcesPage() {
               disabled={!!busy || counts.pending === 0}
               onClick={async () => {
                 setBusy("queue");
-                await processQueue();
-                setBusy(null);
+                try {
+                  await processQueue();
+                } finally {
+                  setBusy(null);
+                }
               }}
             >
               {busy === "queue" ? "Analysing…" : `Analyse queue (${counts.pending})`}
@@ -223,6 +369,7 @@ export function SourcesPage() {
                 : " · needs PostgreSQL"}
             </span>
           </div>
+          <WorkStatus local={work} remote={remote} pending={counts.pending} />
           <ul className="divide-y divide-border">
             {sources.map((s) => (
               <li key={s.id} className="flex flex-wrap items-start gap-3 py-3">
@@ -251,8 +398,11 @@ export function SourcesPage() {
                     disabled={!!busy || s.platform === "X"}
                     onClick={async () => {
                       setBusy(s.id);
-                      await syncOne(s);
-                      setBusy(null);
+                      try {
+                        await syncOne(s);
+                      } finally {
+                        setBusy(null);
+                      }
                     }}
                   >
                     {busy === s.id ? "Syncing…" : "Sync"}
@@ -305,6 +455,7 @@ export function SourcesPage() {
                     >
                       {d.status}
                     </Tag>
+                    {workingIds.has(d.id) && <Tag tone="primary">working</Tag>}
                     <span>{d.sourceName}</span>
                     <span>{new Date(d.publishedAt ?? d.createdAt).toLocaleString()}</span>
                     {d.droneIds?.map((id) => (
@@ -319,7 +470,13 @@ export function SourcesPage() {
                     )}
                   </div>
                   {d.text && <ExpandableText text={d.text} className="mt-1 text-sm" />}
-                  {d.text && <DispatchTranslateButton text={d.text} model={svc.settings.translateModel} translateFn={translateFn} />}
+                  {d.text && (
+                    <DispatchTranslateButton
+                      text={d.text}
+                      model={svc.settings.translateModel}
+                      translateFn={translateFn}
+                    />
+                  )}
                   {d.error && (
                     <p className="mt-1 font-mono text-[11px] text-destructive">{d.error}</p>
                   )}

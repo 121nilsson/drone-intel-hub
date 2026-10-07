@@ -68,6 +68,85 @@ export interface ProcessReport {
   remaining: number;
   /** Documents leased exclusively by this run - 0 when another worker holds them all. */ leased: number;
 }
+
+/** Longer than one provider attempt budget (3 × 90s plus backoff), so a slow call is not "stalled". */
+export const WORK_STALE_MS = 6 * 60_000;
+
+export type WorkPhase = "fetching" | "analysing" | "done";
+
+/** Heartbeat for the Sources status strip. The auto-sync job persists this; a tab holds it in memory. */
+export interface WorkProgress {
+  phase: WorkPhase;
+  /** Source name, or source name plus a short quoted excerpt while analysing. */
+  current: string;
+  /** Dispatch id while analysing, so the archive row can be tagged. */
+  currentId?: string;
+  index: number;
+  total: number;
+  processed: number;
+  irrelevant: number;
+  merged: number;
+  queued: number;
+  failed: number;
+  remaining: number;
+  updatedAt: string;
+}
+
+/** Fired at the start of a post, before it is marked, with the counts from earlier posts in this batch. */
+export interface WorkItemEvent {
+  id: string;
+  sourceName: string;
+  excerpt: string;
+  index: number;
+  total: number;
+  processed: number;
+  irrelevant: number;
+  merged: number;
+  queued: number;
+  failed: number;
+  remaining: number;
+}
+
+const EXCERPT_LEN = 80;
+
+function postExcerpt(text: string): string {
+  const flat = text.replace(/\s+/g, " ").trim();
+  if (flat.length <= EXCERPT_LEN) return flat;
+  return `${flat.slice(0, EXCERPT_LEN - 1)}…`;
+}
+
+export function fetchingProgress(name: string, index: number, total: number): WorkProgress {
+  return {
+    phase: "fetching",
+    current: name,
+    index,
+    total,
+    processed: 0,
+    irrelevant: 0,
+    merged: 0,
+    queued: 0,
+    failed: 0,
+    remaining: 0,
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+export function progressFromItem(event: WorkItemEvent): WorkProgress {
+  return {
+    phase: "analysing",
+    current: event.excerpt ? `${event.sourceName} · "${event.excerpt}"` : event.sourceName,
+    currentId: event.id,
+    index: event.index,
+    total: event.total,
+    processed: event.processed,
+    irrelevant: event.irrelevant,
+    merged: event.merged,
+    queued: event.queued,
+    failed: event.failed,
+    remaining: event.remaining,
+    updatedAt: new Date().toISOString(),
+  };
+}
 /** Combined report kept for the server job's stored result. */
 export interface SyncReport {
   source: string;
@@ -119,7 +198,12 @@ export async function processPending(
   dispatches: DispatchRepository,
   deps: PipelineDeps,
   limit = 20,
-  opts: { leaseMs?: number; owner?: string } = {},
+  opts: {
+    leaseMs?: number;
+    owner?: string;
+    /** Called before each post is marked. A failure here is ignored so progress cannot fail the batch. */
+    onItem?: (event: WorkItemEvent) => void | Promise<void>;
+  } = {},
 ): Promise<ProcessReport> {
   const rep: ProcessReport = {
     processed: 0,
@@ -154,7 +238,25 @@ export async function processPending(
     // relatively expensive, so we don't want to do it per-post.
     const catalogPattern = buildCatalogPattern(deps.drones.list());
 
-    for (const d of batch) {
+    for (let i = 0; i < batch.length; i++) {
+      const d = batch[i]!;
+      try {
+        await opts.onItem?.({
+          id: d.id,
+          sourceName: d.sourceName,
+          excerpt: postExcerpt(d.text),
+          index: i + 1,
+          total: batch.length,
+          processed: rep.processed,
+          irrelevant: rep.irrelevant,
+          merged: rep.merged,
+          queued: rep.queued,
+          failed: rep.failed,
+          remaining: dispatches.pending(Number.MAX_SAFE_INTEGER).length,
+        });
+      } catch {
+        /* progress must not fail the batch */
+      }
       const now = new Date().toISOString();
       const isRelevant = DRONE_HINT.test(d.text) || (catalogPattern?.test(d.text) ?? false);
       if (!isRelevant) {

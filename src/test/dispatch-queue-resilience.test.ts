@@ -1,5 +1,5 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
-import { collectSource, processPending } from "@/features/sources/auto-ingest";
+import { collectSource, processPending, type WorkItemEvent } from "@/features/sources/auto-ingest";
 import { MAX_ATTEMPTS, type RawDispatch } from "@/entities/dispatch/types";
 import type { MonitoredSource } from "@/entities/source/types";
 import type { DispatchRepository } from "@/shared/contracts/repository";
@@ -224,6 +224,68 @@ describe("processPending per-dispatch isolation", () => {
     expect(calls).toHaveLength(2);
     expect(rep.processed).toBe(2);
     expect(rep.remaining).toBe(1);
+  });
+
+  it("reports each post before marking it, in order", async () => {
+    const repo = dispatchRepo([
+      makeDispatch({
+        externalId: "1",
+        text: "A drone report",
+        createdAt: "2026-01-01T00:00:00.000Z",
+      }),
+      makeDispatch({
+        externalId: "2",
+        text: "A post about gardening",
+        createdAt: "2026-01-01T00:00:01.000Z",
+      }),
+    ]);
+    const events: WorkItemEvent[] = [];
+    const { tier1 } = scripted({ "A drone report": extraction({ matchId: "shahed-136" }) });
+
+    await processPending(repo, deps(tier1), 20, {
+      onItem: (event) => {
+        const row = repo.list().find((d) => d.id === event.id);
+        expect(row?.status).toBe("pending");
+        events.push(event);
+      },
+    });
+
+    expect(
+      events.map((event) => `${event.index}/${event.total}:${event.id}:${event.excerpt}`),
+    ).toEqual(["1/2:src-1|1:A drone report", "2/2:src-1|2:A post about gardening"]);
+    expect(events[0]!.processed).toBe(0);
+    expect(events[0]!.remaining).toBe(2);
+    expect(events[1]!.processed).toBe(1);
+    expect(events[1]!.remaining).toBe(1);
+  });
+
+  it("still processes the batch when onItem throws", async () => {
+    const repo = dispatchRepo([
+      makeDispatch({
+        externalId: "1",
+        text: "A drone report",
+        createdAt: "2026-01-01T00:00:00.000Z",
+      }),
+      makeDispatch({
+        externalId: "2",
+        text: "A drone report",
+        createdAt: "2026-01-01T00:00:01.000Z",
+      }),
+    ]);
+    const { tier1 } = scripted({ "A drone report": extraction({ matchId: "shahed-136" }) });
+    let calls = 0;
+
+    const rep = await processPending(repo, deps(tier1), 20, {
+      onItem: () => {
+        calls++;
+        if (calls === 1) throw new Error("progress failed");
+        return Promise.reject(new Error("progress failed"));
+      },
+    });
+
+    expect(calls).toBe(2);
+    expect(rep.processed).toBe(2);
+    expect(repo.list().every((d) => d.status === "processed")).toBe(true);
   });
 
   it("strips the text of irrelevant posts but keeps them for dedupe", async () => {

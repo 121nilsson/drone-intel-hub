@@ -13,8 +13,11 @@ import { DEFAULT_SETTINGS } from "./settings-defaults";
 import {
   QUEUE_ROW,
   collectSource,
+  fetchingProgress,
   processPending,
+  progressFromItem,
   type SyncReport,
+  type WorkProgress,
 } from "@/features/sources/auto-ingest";
 import { fetchOne } from "./fetch-posts";
 
@@ -25,7 +28,9 @@ import { fetchOne } from "./fetch-posts";
  * so candidates and merged specs persist exactly as on a manual sync. Only the transport
  * is server-side; collectSource, processPending and the two-tier pipeline are shared with the UI.
  */
-export async function fetchAllSources(): Promise<SyncReport[]> {
+export async function fetchAllSources(
+  report?: (progress: WorkProgress) => Promise<void> | void,
+): Promise<SyncReport[]> {
   if (!dbConfigured()) throw new Error("Auto-sync needs DATABASE_URL (PostgreSQL)");
 
   const store = new PostgresStore();
@@ -67,7 +72,9 @@ export async function fetchAllSources(): Promise<SyncReport[]> {
   // Stage 1: collect every source into the dispatch queue (network only).
   const targets = sources.list().filter((s) => s.platform !== "X");
   const reports: SyncReport[] = [];
-  for (const s of targets) {
+  for (let i = 0; i < targets.length; i++) {
+    const s = targets[i]!;
+    await report?.(fetchingProgress(s.name, i + 1, targets.length));
     const c = await collectSource(s, fetchOne, dispatches);
     sources.update(s.id, { lastFetched: new Date().toISOString(), lastError: c.error });
     reports.push({
@@ -86,7 +93,27 @@ export async function fetchAllSources(): Promise<SyncReport[]> {
   // backlog growing without bound. At ~1.5 model calls per dispatch and ~3s each that is ~9 min
   // of work per 15-min tick and ~12 requests/min - well inside the 40 RPM cap. The lease
   // scales with the batch (leaseFor) so a long batch cannot outlive its own lease.
-  const p = await processPending(dispatches, deps, 120);
+  let lastItem: WorkProgress | null = null;
+  const p = await processPending(dispatches, deps, 120, {
+    onItem: async (event) => {
+      lastItem = progressFromItem(event);
+      await report?.(lastItem);
+    },
+  });
+  await report?.({
+    phase: "done",
+    current: lastItem?.current ?? QUEUE_ROW,
+    ...(lastItem?.currentId ? { currentId: lastItem.currentId } : {}),
+    index: lastItem?.index ?? 0,
+    total: lastItem?.total ?? 0,
+    processed: p.processed,
+    irrelevant: p.irrelevant,
+    merged: p.merged,
+    queued: p.queued,
+    failed: p.failed,
+    remaining: p.remaining,
+    updatedAt: new Date().toISOString(),
+  });
   reports.push({
     source: QUEUE_ROW,
     fetched: p.processed + p.irrelevant,
