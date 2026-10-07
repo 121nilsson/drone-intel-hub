@@ -1,8 +1,10 @@
 import type { Candidate, Drone } from "@/entities/drone/types";
 import type { IntelExtractor } from "@/shared/contracts/ai";
 import type { CandidateRepository, DroneRepository } from "@/shared/contracts/repository";
+import type { Procurement } from "@/entities/procurement/types";
 import { mergeSpecs } from "@/features/dynamic-specs/spec-engine";
 import { counterpartIdsFor, linkCounterparts } from "@/entities/drone/relations";
+import { chatCompletionOnce } from "@/shared/infra/ai-proxy.server";
 
 export interface PipelineDeps {
   tier1: IntelExtractor;
@@ -83,6 +85,7 @@ export function promote(
     aliases: e.aliases,
     domain: e.domain ?? "Multi",
     origin: e.origin ?? "??",
+    ...(e.manufacturer ? { manufacturer: e.manufacturer } : {}),
     operators: e.operators,
     propulsion: e.propulsion ?? "Unknown",
     summary: c.raw.slice(0, 200),
@@ -127,4 +130,45 @@ export function mergeInto(
   ];
   d.drones.upsert(merged);
   d.candidates.update(c.id, { status: "merged", resolvedInto: droneId });
+}
+
+const PROCURE_SYS = `You are a defense procurement analyst. Extract contract and grant information from the report.
+Reply in json with keys: company (string), country (ISO2), amount (string|null), currency (string|null),
+program (string|null), product (string|null), customer (string|null), announcedAt (string|null), notes (string|null).
+Only report information that appears in the text. If no procurement info is found, return null for all fields.`;
+
+export async function extractProcurement(
+  raw: string,
+  source: string,
+  cfg: { baseUrl: string; apiKey: string; model: string },
+): Promise<Procurement | null> {
+  const r = await chatCompletionOnce({
+    baseUrl: cfg.baseUrl,
+    apiKey: cfg.apiKey,
+    model: cfg.model,
+    system: PROCURE_SYS,
+    prompt: raw,
+    json: true,
+  });
+  if (!r.ok) return null;
+  try {
+    const j = JSON.parse(r.content.replace(/^```json|```$/g, "").trim()) as Record<string, unknown>;
+    if (!j || !j["company"]) return null;
+    return {
+      id: crypto.randomUUID(),
+      company: String(j["company"]),
+      country: j["country"] ? String(j["country"]) : "",
+      ...(j["amount"] ? { amount: String(j["amount"]) } : {}),
+      ...(j["currency"] ? { currency: String(j["currency"]) } : {}),
+      ...(j["program"] ? { program: String(j["program"]) } : {}),
+      ...(j["product"] ? { product: String(j["product"]) } : {}),
+      ...(j["customer"] ? { customer: String(j["customer"]) } : {}),
+      ...(j["announcedAt"] ? { announcedAt: String(j["announcedAt"]) } : {}),
+      source,
+      ...(j["notes"] ? { notes: String(j["notes"]) } : {}),
+      createdAt: new Date().toISOString(),
+    };
+  } catch {
+    return null;
+  }
 }

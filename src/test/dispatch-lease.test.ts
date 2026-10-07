@@ -1,5 +1,10 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
-import { collectSource, processPending } from "@/features/sources/auto-ingest";
+import {
+  collectSource,
+  leaseFor,
+  processPending,
+  MAX_LEASE_MS,
+} from "@/features/sources/auto-ingest";
 import { MAX_ATTEMPTS, type RawDispatch } from "@/entities/dispatch/types";
 import type { DispatchRepository } from "@/shared/contracts/repository";
 import type { PipelineDeps } from "@/features/intake/pipeline";
@@ -320,6 +325,38 @@ describe("processPending leasing", () => {
     expect(last!.failed).toBe(1);
     expect(store.docs[0]!.status).toBe("failed");
     expect(store.docs[0]!.attempts).toBe(MAX_ATTEMPTS);
+  });
+});
+
+describe("lease duration covers the batch", () => {
+  // The invariant that keeps the lease meaningful: it must outlive the run that took it,
+  // otherwise a still-running batch can have its documents re-claimed mid-flight.
+  it("scales the lease with the batch size", () => {
+    expect(leaseFor(120)).toBeGreaterThan(leaseFor(20));
+  });
+
+  it("keeps a short interactive run on a short lease for fast crash recovery", () => {
+    expect(leaseFor(20)).toBe(5 * 60_000);
+    expect(leaseFor(1)).toBe(5 * 60_000);
+  });
+
+  it("covers the full cron batch", () => {
+    // ~9 min of expected work for the 120-item batch; 30 min is generous headroom.
+    expect(leaseFor(120)).toBeGreaterThanOrEqual(30 * 60_000);
+  });
+
+  it("never exceeds the cap the server will accept", () => {
+    expect(leaseFor(10_000)).toBe(MAX_LEASE_MS);
+    expect(MAX_LEASE_MS).toBeLessThanOrEqual(60 * 60_000);
+  });
+
+  it("defaults the batch lease to something that covers it", async () => {
+    const store = newStore(3);
+    const { tier1 } = scripted();
+    // No explicit leaseMs: the batch-derived default must be used.
+    const rep = await processPending(leasedRepo(store), deps(tier1), 120, { owner: "a" });
+    expect(rep.processed).toBe(3);
+    expect(rep.leased).toBe(3);
   });
 });
 

@@ -7,6 +7,7 @@ const ORDER: Record<Collection, string> = {
   sources: "position desc",
   // Newest first; capped so the browser cache stays bounded as the archive grows.
   dispatches: "created_at desc limit 3000",
+  procurements: "created_at desc",
 };
 
 /** PostgreSQL implementation. Schema lives in /migrations (plain SQL, portable). */

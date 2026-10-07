@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
 import type { AIProviderSettings, BriefingSummarizer, IntelExtractor } from "@/shared/contracts/ai";
-import { LocalCandidateRepository, LocalDispatchRepository, LocalDroneRepository, LocalSourceRepository } from "./local-repository";
+import { LocalCandidateRepository, LocalDispatchRepository, LocalDroneRepository, LocalProcurementRepository, LocalSourceRepository } from "./local-repository";
 import type { DocumentStore } from "@/shared/contracts/store";
 import { LocalStorageStore } from "./local-store";
 import { RemoteStore } from "./remote-store";
@@ -17,6 +17,7 @@ interface Services {
   candidates: LocalCandidateRepository;
   sources: LocalSourceRepository;
   dispatches: LocalDispatchRepository;
+  procurements: LocalProcurementRepository;
   settings: AIProviderSettings;
   saveSettings(s: AIProviderSettings): void;
   /** True when a provider is reachable: an env key or one saved in this browser. */
@@ -45,6 +46,7 @@ export function ServicesProvider({ children }: { children: ReactNode }) {
   const [candidates] = useState(() => new LocalCandidateRepository());
   const [sources] = useState(() => new LocalSourceRepository());
   const [dispatches] = useState(() => new LocalDispatchRepository());
+  const [procurements] = useState(() => new LocalProcurementRepository());
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
   const [envCfg, setEnvCfg] = useState<EnvProviderConfig | null>(null);
   useEffect(() => {
@@ -55,11 +57,11 @@ export function ServicesProvider({ children }: { children: ReactNode }) {
       getEnvProviderConfig().then(setEnvCfg).catch(() => setEnvCfg(null));
       let store: DocumentStore = new LocalStorageStore();
       try { if ((await getStoreStatus()).postgres) store = new RemoteStore(); } catch { /* offline → local */ }
-      try { await Promise.all([drones.attach(store), candidates.attach(store), sources.attach(store), dispatches.attach(store)]); }
+      try { await Promise.all([drones.attach(store), candidates.attach(store), sources.attach(store), dispatches.attach(store), procurements.attach(store)]); }
       catch (e) {
         console.error("[store] remote unavailable, falling back to browser storage", e);
         const local = new LocalStorageStore();
-        await Promise.all([drones.attach(local), candidates.attach(local), sources.attach(local), dispatches.attach(local)]);
+        await Promise.all([drones.attach(local), candidates.attach(local), sources.attach(local), dispatches.attach(local), procurements.attach(local)]);
       }
     })();
   }, [drones, candidates, sources, dispatches]);
@@ -76,7 +78,7 @@ export function ServicesProvider({ children }: { children: ReactNode }) {
     };
     const remote = envCfg?.hasKey === true || !!settings.apiKey;
     return {
-      drones, candidates, sources, dispatches,
+      drones, candidates, sources, dispatches, procurements,
       settings: resolved,
       // When the env supplies the key, `s.apiKey` arrives blanked. Keep whatever this
       // browser had stored so clearing NVIDIA_API_KEY later doesn't silently lose it.

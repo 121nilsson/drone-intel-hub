@@ -3,6 +3,7 @@ import { SEED_DRONES } from "@/entities/drone/seed";
 import type { MonitoredSource } from "@/entities/source/types";
 import { SEED_SOURCES } from "@/entities/source/seed";
 import type { RawDispatch } from "@/entities/dispatch/types";
+import type { Procurement } from "@/entities/procurement/types";
 import type {
   DispatchRepository,
   SourceRepository,
@@ -21,6 +22,7 @@ export function droneHaystack(d: Drone) {
       d.name,
       d.cyrillic ?? "",
       ...d.aliases,
+      d.manufacturer ?? "",
       ...d.components.map((c) => `${c.manufacturer} ${c.part}`),
     ].join(" | "),
   );
@@ -189,5 +191,15 @@ export class LocalDispatchRepository
   }
   async release(ids: string[], owner: string) {
     await this.store?.release?.("dispatches", ids, owner);
+  }
+}
+
+export class LocalProcurementRepository extends CachedRepository<"procurements"> {
+  constructor() {
+    super("procurements", []);
+  }
+  add(p: Procurement) {
+    this.items = [p, ...this.items];
+    this.save(p);
   }
 }

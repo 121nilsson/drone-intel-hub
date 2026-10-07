@@ -16,6 +16,7 @@ export interface AIProviderSettings {
   apiKey: string;
   tier1Model: string;
   tier2Model: string;
+  translateModel: string;
   escalationThreshold: number;
   autoMergeThreshold: number;
 }

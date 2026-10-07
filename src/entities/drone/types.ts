@@ -45,6 +45,7 @@ export interface Drone {
   aliases: string[];
   domain: Domain;
   origin: string; // country of origin code
+  manufacturer?: string; // company that designed/produces the system
   operators: string[]; // battlefield operator codes
   propulsion: string;
   summary: string;
@@ -75,6 +76,7 @@ export interface Extraction {
   aliases: string[];
   domain?: Domain;
   origin?: string;
+  manufacturer?: string;
   operators: string[];
   propulsion?: string;
   specs: ExtractedSpec[];

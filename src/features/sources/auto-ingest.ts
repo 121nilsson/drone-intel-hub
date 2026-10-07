@@ -3,9 +3,30 @@ import { MAX_ATTEMPTS, type RawDispatch } from "@/entities/dispatch/types";
 import type { FetchedPost } from "@/shared/infra/source-fetch.functions";
 import type { DispatchRepository } from "@/shared/contracts/repository";
 import { runTwoTier, type PipelineDeps } from "@/features/intake/pipeline";
+import type { Drone } from "@/entities/drone/types";
 
 export const DRONE_HINT =
-  /drone|uav|ugv|usv|fpv|shahed|geran|lancet|bpla|бпла|дрон|квадрокоптер|ланцет|герань|interceptor|loitering|unmanned|jammer|РЭБ|EW\b/i;
+  /drone|uav|ugv|usv|fpv|shahed|geran|lancet|bpla|бла|бпла|дрон|квадрокоптер|ланцет|герань|шахед|мавик|молния|курьер|термит|катран|магура|баба яга|interceptor|loitering|unmanned|jammer|РЭБ|EW\b/i;
+
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Build a regex from every drone's name, cyrillic spelling, and aliases.
+ * This grows automatically as the catalog expands — new systems are caught
+ * without any code changes. Returns null when the catalog is empty.
+ */
+function buildCatalogPattern(drones: Drone[]): RegExp | null {
+  const terms = new Set<string>();
+  for (const d of drones) {
+    if (d.name) terms.add(escapeRegex(d.name));
+    if (d.cyrillic) terms.add(escapeRegex(d.cyrillic));
+    for (const a of d.aliases) terms.add(escapeRegex(a));
+  }
+  if (terms.size === 0) return null;
+  return new RegExp([...terms].join("|"), "i");
+}
 
 export type Fetcher = (
   s: MonitoredSource,
@@ -15,13 +36,22 @@ export type Fetcher = (
 export const QUEUE_ROW = "Queue";
 
 /**
- * How long a processing lease is held before another worker may reclaim the document.
- * Generous enough to cover a slow two-tier extraction (which can take tens of seconds) plus
- * the transport's retry budget, but short enough that a crashed worker blocks a document for
- * minutes rather than hours. Overlapping claims only matter if a run is abandoned outright,
- * since leases are released in a `finally`.
+ * Lease duration is derived from the batch size, not fixed. A lease must outlive the run that
+ * took it: if it expires while the batch is still working, another worker can re-claim a
+ * document this run is still processing - reintroducing exactly the double-processing the
+ * lease exists to prevent. The real constraint is therefore batch duration, which scales with
+ * `limit` (roughly two model calls per document, several seconds each).
+ *
+ * So the budget is per document, and short interactive runs keep a short lease - meaning fast
+ * recovery if a worker dies - while a large cron batch gets proportionally longer cover.
  */
-export const LEASE_MS = 5 * 60_000;
+const LEASE_PER_ITEM_MS = 15_000;
+const MIN_LEASE_MS = 5 * 60_000;
+export const MAX_LEASE_MS = 60 * 60_000;
+
+/** Long enough to cover the whole batch. See LEASE_PER_ITEM_MS. */
+export const leaseFor = (limit: number) =>
+  Math.min(MAX_LEASE_MS, Math.max(MIN_LEASE_MS, limit * LEASE_PER_ITEM_MS));
 
 export interface CollectReport {
   source: string;
@@ -105,7 +135,7 @@ export async function processPending(
   // browser's "Analyse queue" and the cron task both call this, and both would see the same
   // documents and produce duplicate candidates and duplicate merges. Claiming in storage
   // makes the set exclusive. A null result means the store cannot lease, so fall back.
-  const leaseMs = opts.leaseMs ?? LEASE_MS;
+  const leaseMs = opts.leaseMs ?? leaseFor(limit);
   const owner = opts.owner ?? crypto.randomUUID();
   let claimed: string[] | null = null;
   if (dispatches.claim) claimed = await dispatches.claim(limit, leaseMs, owner);
@@ -120,9 +150,14 @@ export async function processPending(
             .filter((d): d is NonNullable<typeof d> => !!d);
     rep.leased = claimed?.length ?? 0;
 
+    // Build the dynamic catalog pattern once per batch — regex construction is
+    // relatively expensive, so we don't want to do it per-post.
+    const catalogPattern = buildCatalogPattern(deps.drones.list());
+
     for (const d of batch) {
       const now = new Date().toISOString();
-      if (!DRONE_HINT.test(d.text)) {
+      const isRelevant = DRONE_HINT.test(d.text) || (catalogPattern?.test(d.text) ?? false);
+      if (!isRelevant) {
         dispatches.update(d.id, { status: "irrelevant", text: "", processedAt: now });
         rep.irrelevant++;
         continue;

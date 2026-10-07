@@ -8,6 +8,7 @@ import { useDispatches, useServices, useSources } from "@/shared/infra/services"
 import type { DispatchStatus } from "@/entities/dispatch/types";
 import { fetchSourcePosts } from "@/shared/infra/source-fetch.functions";
 import { getSyncState, type SyncState } from "@/shared/infra/source-sync.functions";
+import { translateText } from "@/shared/infra/ai-proxy.functions";
 import { Btn, Panel, Tag } from "@/shared/ui/primitives";
 import { collectSource, processPending } from "./auto-ingest";
 
@@ -15,6 +16,65 @@ const field =
   "w-full border border-border bg-background px-2 py-1.5 font-mono text-xs outline-none focus:border-primary";
 /** Matches the cron in vite.config.ts. */
 const AUTO_MIN = 15;
+
+function ExpandableText({ text, className = "" }: { text: string; className?: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const isLong = text.length > 200;
+  return (
+    <div>
+      <p className={`${className} ${!expanded && isLong ? "line-clamp-3" : ""}`}>{text}</p>
+      {isLong && (
+        <button
+          type="button"
+          onClick={() => setExpanded(!expanded)}
+          className="mt-1 font-mono text-[11px] text-muted-foreground hover:text-primary"
+        >
+          {expanded ? "Show less" : "Show more"}
+        </button>
+      )}
+    </div>
+  );
+}
+
+function DispatchTranslateButton({ text, model, translateFn }: { text: string; model: string; translateFn: ReturnType<typeof useServerFn<typeof translateText>> }) {
+  const [translating, setTranslating] = useState(false);
+  const [translated, setTranslated] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleTranslate = async () => {
+    setTranslating(true);
+    setError(null);
+    try {
+      const res = await translateFn({ data: { text, model } });
+      if (res.ok) {
+        setTranslated(res.translated);
+      } else {
+        setError(res.error);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Translation failed");
+    }
+    setTranslating(false);
+  };
+
+  if (translated) {
+    return (
+      <div className="mt-1 border-l-2 border-primary/30 pl-3">
+        <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">English translation</p>
+        <p className="mt-0.5 text-sm">{translated}</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-1 flex items-center gap-2">
+      <Btn variant="ghost" onClick={handleTranslate} disabled={translating} className="px-2 py-0.5 text-xs">
+        {translating ? "Translating…" : "Translate"}
+      </Btn>
+      {error && <span className="font-mono text-[11px] text-destructive">{error}</span>}
+    </div>
+  );
+}
 
 export function SourcesPage() {
   const svc = useServices();
@@ -122,6 +182,7 @@ export function SourcesPage() {
   const shown = dispatches.filter((d) => filter === "all" || d.status === filter).slice(0, 50);
   const sample = (s: MonitoredSource) =>
     nav({ to: "/intake", search: { draft: sampleDispatch(s.domain), source: s.name } });
+  const translateFn = useServerFn(translateText);
 
   return (
     <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
@@ -257,7 +318,8 @@ export function SourcesPage() {
                       </a>
                     )}
                   </div>
-                  {d.text && <p className="mt-1 line-clamp-3 text-sm">{d.text}</p>}
+                  {d.text && <ExpandableText text={d.text} className="mt-1 text-sm" />}
+                  {d.text && <DispatchTranslateButton text={d.text} model={svc.settings.translateModel} translateFn={translateFn} />}
                   {d.error && (
                     <p className="mt-1 font-mono text-[11px] text-destructive">{d.error}</p>
                   )}

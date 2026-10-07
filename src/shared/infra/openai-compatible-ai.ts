@@ -4,12 +4,13 @@ import { chatCompletion } from "./ai-proxy.functions";
 import { chatCompletionOnce, type ChatTransport } from "./ai-proxy.server";
 
 const EXTRACT_SYS = `You are a defense technical intelligence analyst. Extract drone system data from raw reports.
-Reply in json with keys: name (string|null), aliases (string[]), domain ("Air"|"Land"|"Sea"|"Multi"|null), origin (ISO2|null), operators (ISO2[]), propulsion (string|null),
+Reply in json with keys: name (string|null), aliases (string[]), domain ("Air"|"Land"|"Sea"|"Multi"|null), origin (ISO2|null), manufacturer (string|null), operators (ISO2[]), propulsion (string|null),
 specs (array of {key: snake_case, label, value: number|string, unit|null}) — include ANY novel attribute (e.g. jammers count, fiber spool length),
 rfBands (string[]), systems (array of {name, matchId: catalog id|null, variantOf: catalog id|null}) listing EVERY drone system mentioned (e.g. attacker and interceptor),
 matchId (id from catalog or null), confidence (0..1), rationale (short).
 Only match a catalog id when the name matches exactly; a different variant number (Geran-5 vs Geran-2) is a NEW system with variantOf set.
-If a price/unit cost appears, add spec {key:"unit_cost", label:"Unit Cost / Price", value:"$15,000 - $20,000"}.`;
+If a price/unit cost appears, add spec {key:"unit_cost", label:"Unit Cost / Price", value:"$15,000 - $20,000"}.
+Only report system names that appear verbatim in the report. Do NOT invent, guess, or construct variant names. If a name is ambiguous, set confidence below 0.3 and explain why in the rationale.`;
 
 export class OpenAICompatibleExtractor implements IntelExtractor {
   readonly label: string;
@@ -49,6 +50,7 @@ export class OpenAICompatibleExtractor implements IntelExtractor {
       aliases: strs(j["aliases"]),
       ...(j["domain"] ? { domain: j["domain"] as Extraction["domain"] & string } : {}),
       ...(j["origin"] ? { origin: String(j["origin"]) } : {}),
+      ...(j["manufacturer"] ? { manufacturer: String(j["manufacturer"]) } : {}),
       operators: strs(j["operators"]),
       ...(j["propulsion"] ? { propulsion: String(j["propulsion"]) } : {}),
       specs: Array.isArray(j["specs"])

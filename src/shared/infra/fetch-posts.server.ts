@@ -81,14 +81,21 @@ export async function fetchAllSources(): Promise<SyncReport[]> {
   }
   // Stage 2: drain a bounded batch; the rest waits for the next tick. Leased, so a manual
   // browser run overlapping this tick cannot process the same dispatch twice.
-  const p = await processPending(dispatches, deps, 25);
+  //
+  // 120 rather than a token few: collection outruns processing, so a small batch leaves the
+  // backlog growing without bound. At ~1.5 model calls per dispatch and ~3s each that is ~9 min
+  // of work per 15-min tick and ~12 requests/min - well inside the 40 RPM cap. The lease
+  // scales with the batch (leaseFor) so a long batch cannot outlive its own lease.
+  const p = await processPending(dispatches, deps, 120);
   reports.push({
     source: QUEUE_ROW,
     fetched: p.processed + p.irrelevant,
     relevant: p.processed,
     merged: p.merged,
     queued: p.queued,
-    ...(p.failed ? { error: `${p.failed} failed, ${p.remaining} pending` } : {}),
+    // Backlog is reported whenever there is any, not only on failure - otherwise a queue that
+    // is quietly growing looks identical to a healthy one.
+    ...(p.failed || p.remaining ? { error: `${p.failed} failed, ${p.remaining} pending` } : {}),
   });
   return reports;
 }

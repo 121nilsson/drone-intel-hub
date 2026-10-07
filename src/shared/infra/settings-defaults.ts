@@ -7,6 +7,7 @@ export const DEFAULT_SETTINGS: AIProviderSettings = {
   apiKey: "",
   tier1Model: "meta/llama-3.1-8b-instruct",
   tier2Model: "deepseek-ai/deepseek-r1",
+  translateModel: "nvidia/riva-translate-4b-instruct-v2",
   escalationThreshold: 0.6,
   autoMergeThreshold: 0.85,
 };

@@ -1,19 +1,61 @@
 import { Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
+import { useServerFn } from "@tanstack/react-start";
 import { useCandidates, useDrones, useServices } from "@/shared/infra/services";
+import { translateText } from "@/shared/infra/ai-proxy.functions";
 import { Btn, Panel, Tag } from "@/shared/ui/primitives";
 import { mergeInto, promote, runTwoTier } from "./pipeline";
 import type { Candidate } from "@/entities/drone/types";
+
+function ExpandableText({ text, className = "" }: { text: string; className?: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const isLong = text.length > 200;
+  return (
+    <div>
+      <p className={`${className} ${!expanded && isLong ? "line-clamp-3" : ""}`}>{text}</p>
+      {isLong && (
+        <button
+          type="button"
+          onClick={() => setExpanded(!expanded)}
+          className="mt-1 font-mono text-[11px] text-muted-foreground hover:text-primary"
+        >
+          {expanded ? "Show less" : "Show more"}
+        </button>
+      )}
+    </div>
+  );
+}
 
 const SAMPLE = `Telegram dispatch: Russia launched Geran-5 jet drones, one intercepted by a STING S interceptor. 4 jammers onboard and new 1575 MHz CRPA. Cruise 600 km/h, range 1000 km, 90 kg warhead. Unit cost $15,000-$20,000.`;
 
 function CandidateRow({ c }: { c: Candidate }) {
   const svc = useServices();
   const drones = useDrones();
+  const translateFn = useServerFn(translateText);
   const e = c.extraction;
   const systems = e.systems ?? [];
   const [target, setTarget] = useState(e.matchId ?? "");
   const [name, setName] = useState(e.name ?? systems.find((s) => !s.matchId)?.name ?? "");
+  const [translating, setTranslating] = useState(false);
+  const [translated, setTranslated] = useState<string | null>(null);
+  const [translateError, setTranslateError] = useState<string | null>(null);
+
+  const handleTranslate = async () => {
+    setTranslating(true);
+    setTranslateError(null);
+    try {
+      const res = await translateFn({ data: { text: c.raw, model: svc.settings.translateModel } });
+      if (res.ok) {
+        setTranslated(res.translated);
+      } else {
+        setTranslateError(res.error);
+      }
+    } catch (err) {
+      setTranslateError(err instanceof Error ? err.message : "Translation failed");
+    }
+    setTranslating(false);
+  };
+
   return (
     <li className="border border-border bg-background/50 p-4">
       <div className="flex flex-wrap items-center gap-2">
@@ -34,7 +76,19 @@ function CandidateRow({ c }: { c: Candidate }) {
           ))}
         </div>
       )}
-      <p className="mt-2 line-clamp-3 text-sm">{c.raw}</p>
+      <ExpandableText text={c.raw} className="mt-2 text-sm" />
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <Btn variant="ghost" onClick={handleTranslate} disabled={translating || !c.raw.trim()}>
+          {translating ? "Translating…" : "Translate"}
+        </Btn>
+        {translateError && <span className="font-mono text-xs text-destructive">{translateError}</span>}
+      </div>
+      {translated && (
+        <div className="mt-2 border-l-2 border-primary/30 pl-3">
+          <p className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">English translation</p>
+          <p className="mt-1 text-sm">{translated}</p>
+        </div>
+      )}
       <div className="mt-2 flex flex-wrap gap-1.5">
         {e.specs.map((s, i) => <Tag key={i} tone="primary">{s.label}: {String(s.value)}{s.unit ? ` ${s.unit}` : ""}</Tag>)}
         {e.rfBands.map((b) => <Tag key={b}>{b}</Tag>)}

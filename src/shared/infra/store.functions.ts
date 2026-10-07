@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import type { Collection } from "@/shared/contracts/store";
+import { MAX_LEASE_MS } from "@/features/sources/auto-ingest";
 
 const COLLECTIONS: Collection[] = ["drones", "candidates", "sources", "dispatches"];
 const checkCollection = (c: unknown): Collection => {
@@ -70,8 +71,9 @@ export const storeClaim = createServerFn({ method: "POST" })
     return {
       c: checkCollection(d.c),
       limit: Math.min(limit, MAX_CLAIM),
-      // Clamped server-side so a caller cannot pin rows indefinitely.
-      leaseMs: Math.min(leaseMs, 30 * 60_000),
+      // Clamped server-side so a caller cannot pin rows indefinitely. The ceiling must
+      // accommodate the largest real batch (120 items => 30 min) with headroom.
+      leaseMs: Math.min(leaseMs, MAX_LEASE_MS),
       owner: d.owner,
     };
   })

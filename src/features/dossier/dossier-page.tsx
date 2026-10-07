@@ -36,7 +36,7 @@ export function DossierPage({ id }: { id: string }) {
   return (
     <div className="space-y-6">
       <div>
-        <div className="flex flex-wrap gap-2"><Tag tone="primary">{d.domain}</Tag><Tag>Origin {flag(d.origin)}</Tag>{d.operators.map((o) => <Tag key={o} tone="accent">Operator {flag(o)}</Tag>)}<Tag>{d.propulsion}</Tag></div>
+        <div className="flex flex-wrap gap-2"><Tag tone="primary">{d.domain}</Tag><Tag>Origin {flag(d.origin)}</Tag>{d.manufacturer && <Tag tone="accent">{d.manufacturer}</Tag>}{d.operators.map((o) => <Tag key={o} tone="accent">Operator {flag(o)}</Tag>)}<Tag>{d.propulsion}</Tag></div>
         <h1 className="mt-3 text-3xl font-semibold md:text-4xl">{d.name} {d.cyrillic && <span className="text-muted-foreground">{d.cyrillic}</span>}</h1>
         <p className="mt-2 max-w-3xl text-muted-foreground">{d.summary}</p>
         {(() => { const cost = d.specs.find((s) => s.key === "unit_cost"); return cost ? (

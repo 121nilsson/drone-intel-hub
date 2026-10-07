@@ -23,6 +23,7 @@ export function SettingsPage() {
           {field("apiKey", "API key", "password")}
           {field("tier1Model", "Tier 1 model (fast screening)")}
           {field("tier2Model", "Tier 2 model (reasoning escalation)")}
+          {field("translateModel", "Translation model")}
           <div className="grid grid-cols-2 gap-4">{field("escalationThreshold", "Escalate below", "number")}{field("autoMergeThreshold", "Auto-merge above", "number")}</div>
           <p className="text-xs text-muted-foreground">
             {aiKeyFromEnv
