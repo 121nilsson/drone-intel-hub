@@ -98,7 +98,7 @@ export const SEED_SOURCES: MonitoredSource[] = [
   { id: "200-zoka", name: "200 Zoka", platform: "X", handle: "@200_zoka", domain: "Multi", notes: "Documents new UGV and FPV types with geotagged imagery." },
   { id: "nrg8000", name: "Nrg8000", platform: "X", handle: "@Nrg8000", domain: "Air", notes: "UAV tracking, FPV development and commercial drone militarisation." },
   // --- Maritime, teardown & EW ---
-  { id: "covert-shores", name: "Covert Shores (H I Sutton)", platform: "RSS", handle: "http://www.hisutton.com/feed.xml", domain: "Sea", notes: "Naval drones, USVs and UUVs (MAGURA, Sea Baby) with line drawings." },
+  { id: "covert-shores", name: "Covert Shores (H I Sutton)", platform: "RSS", handle: "https://www.hisutton.com/feed.xml", domain: "Sea", notes: "Naval drones, USVs and UUVs (MAGURA, Sea Baby) with line drawings." },
   { id: "naval-news", name: "Naval News", platform: "RSS", handle: "https://www.navalnews.com/feed/", domain: "Sea", notes: "Black Sea maritime drone warfare and naval countermeasures.", autoSync: true },
   { id: "car-teardowns", name: "Conflict Armament Research", platform: "RSS", handle: "https://www.conflictarm.com/feed/", domain: "Multi", notes: "Physical teardowns of downed drones; component serials, supply chains, CRPA modules." },
   { id: "ares", name: "Armament Research Services", platform: "RSS", handle: "https://armamentresearch.com/feed/", domain: "Multi", notes: "Technical munition reports, FPV warheads and improvised payloads." },

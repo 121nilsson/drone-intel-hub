@@ -59,7 +59,20 @@ const MAX_BACKOFF_MS = 30_000;
 /** 429 is the one that matters here; the rest are the usual transient provider failures. */
 const RETRYABLE = new Set([408, 425, 429, 500, 502, 503, 504]);
 
+/**
+ * Per-request ceiling. Without it a stalled provider connection holds its pacing slot for as
+ * long as the socket lives, and the whole sequential ingest pass stalls behind it. Generous
+ * because a slow reasoning model is legitimate - this exists to bound a hang, not to police
+ * latency. Override with PROVIDER_TIMEOUT_MS for a self-hosted endpoint.
+ */
+const timeoutMs = Number(env("PROVIDER_TIMEOUT_MS") ?? 90_000);
+
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+/** Collapse the status text to a short, single-line, length-capped reason. */
+function reason(statusText: string) {
+  return statusText.replace(/\s+/g, " ").trim().slice(0, 80);
+}
 
 /** Retry-After is either delta-seconds or an HTTP date; either way it beats our own guess. */
 function retryAfterMs(res: Response): number | undefined {
@@ -113,14 +126,20 @@ export async function chatCompletionOnce(d: ChatInput): Promise<ChatResult> {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
         body,
+        ...(Number.isFinite(timeoutMs) && timeoutMs > 0
+          ? { signal: AbortSignal.timeout(timeoutMs) }
+          : {}),
       });
     } catch (e) {
-      // Transport-level failure (DNS, TLS, socket reset) is worth another try.
-      error = `Provider request failed: ${e instanceof Error ? e.message : String(e)}`;
+      // Transport-level failure (DNS, TLS, socket reset, timeout) is worth another try.
+      // The error message can echo the URL, so it is not surfaced verbatim.
+      error = `Provider request failed (${e instanceof Error ? e.name : "unknown error"})`;
       owed = backoffMs(attempt);
       continue;
     }
 
+    // Read once: the body is needed for the success path, and the error path deliberately
+    // ignores it (see below).
     const text = await res.text();
     if (res.ok) {
       try {
@@ -138,7 +157,10 @@ export async function chatCompletionOnce(d: ChatInput): Promise<ChatResult> {
       }
     }
 
-    error = `Provider ${res.status}: ${text.slice(0, 300)}`;
+    // Provider bodies can echo the prompt, the key, or an internal model error. They are
+    // persisted into dispatch `error` fields and rendered in the UI, so keep the status and a
+    // short scrubbed reason instead of up to 300 chars of upstream payload.
+    error = `Provider ${res.status}${reason(res.statusText) ? `: ${reason(res.statusText)}` : ""}`;
     // A 400/401/404 will fail identically on every retry, so surface it immediately.
     if (!RETRYABLE.has(res.status) || attempt === ATTEMPTS - 1)
       return { ok: false as const, error };

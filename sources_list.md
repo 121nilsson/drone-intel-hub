@@ -9,7 +9,7 @@
 > The app currently supports four platform types:
 > - **Telegram** — scraped via `t.me/s/<handle>` (public web preview, ~20 latest posts)
 > - **RSS** — standard Atom/RSS feed URL
-> - **Web** — any public HTTPS page (anchor-text parser, or full article with Readability)
+> - **Web** — any public HTTPS page (anchor-text parser only; full-article extraction is not implemented)
 > - **X** — @handle only; requires paid API, currently unsupported in the ingest pipeline
 
 ---
@@ -94,8 +94,9 @@
 ## Web Sources (Scrapable Articles)
 
 > [!NOTE]
-> Web sources use the anchor-text parser by default. For full-article extraction,
-> these sources benefit most from the Readability-based parser described in `improvements2.md §1-B`.
+> Web sources use the anchor-text parser, which captures link text rather than article
+> bodies. Full-article extraction is proposed but not implemented — see
+> `improvements2.md §1-B` and `improvements3.md §1.7`.
 
 | ID | Name | URL | Domain | Lang | Reliability | Notes |
 |---|---|---|---|---|---|---|

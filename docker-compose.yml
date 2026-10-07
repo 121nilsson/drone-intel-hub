@@ -28,6 +28,7 @@ services:
       NVIDIA_TIER1_MODEL: ${NVIDIA_TIER1_MODEL:-}
       NVIDIA_TIER2_MODEL: ${NVIDIA_TIER2_MODEL:-}
       PROVIDER_RPM: ${PROVIDER_RPM:-}
+      PROVIDER_TIMEOUT_MS: ${PROVIDER_TIMEOUT_MS:-}
     ports:
       - "3010:3010"
     depends_on:

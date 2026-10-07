@@ -68,6 +68,7 @@ cp .env.local.example .env.local   # then paste NVIDIA_API_KEY
 | `NVIDIA_TIER1_MODEL` | Fast screening model. |
 | `NVIDIA_TIER2_MODEL` | Reasoning model used for escalation and briefings. |
 | `PROVIDER_RPM` | Requests/min the shared transport paces itself to. Defaults to 35, under the 40 RPM free-tier cap. Set `0` to disable (self-hosted endpoint). |
+| `PROVIDER_TIMEOUT_MS` | Per-request timeout. Defaults to 90 s, so a hung provider cannot stall a sync pass while holding its pacing slot. Set `0` to disable. |
 
 `.env.local` wins over anything saved in the browser's Settings page, per field.
 Clear `NVIDIA_API_KEY` to fall back to a key stored in Settings, and leave that

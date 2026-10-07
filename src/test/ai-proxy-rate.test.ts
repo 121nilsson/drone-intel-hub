@@ -251,4 +251,53 @@ describe("chatCompletionOnce request handling", () => {
 
     expect(await p).toEqual({ ok: true, content: "from reasoning" });
   });
+
+  // Regression: the provider body was embedded verbatim in the error string, which lands in
+  // dispatch `error` fields and the sources page - a place an upstream payload should not reach.
+  it("does not echo the provider response body into the error", async () => {
+    const secret = "sk-leaked-key-and-prompt-echo";
+    stubFetch([{ status: 401, body: JSON.stringify({ detail: `invalid key ${secret}` }) }]);
+    const chat = await loadTransport("0");
+
+    const p = chat(INPUT);
+    await vi.advanceTimersByTimeAsync(60_000);
+    const res = await p;
+
+    expect(res.ok).toBe(false);
+    if (!res.ok) {
+      expect(res.error).toContain("401");
+      expect(res.error).not.toContain(secret);
+    }
+  });
+
+  it("sends an abort signal so a hung provider cannot stall the pass", async () => {
+    const fn = vi.fn(async () => new Response(ok("x").body, { status: 200 }));
+    vi.stubGlobal("fetch", fn);
+    const chat = await loadTransport("0");
+
+    const p = chat(INPUT);
+    await vi.advanceTimersByTimeAsync(60_000);
+    await p;
+
+    const init = (fn.mock.calls[0] as unknown[] | undefined)?.[1] as RequestInit | undefined;
+    expect(init?.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it("retries a timed-out request", async () => {
+    const fn = vi.fn(async () => {
+      const err = new Error("The operation was aborted due to timeout");
+      err.name = "TimeoutError";
+      throw err;
+    });
+    vi.stubGlobal("fetch", fn);
+    const chat = await loadTransport("0");
+
+    const p = chat(INPUT);
+    await vi.advanceTimersByTimeAsync(120_000);
+    const res = await p;
+
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toContain("TimeoutError");
+    expect(fn).toHaveBeenCalledTimes(3);
+  });
 });
