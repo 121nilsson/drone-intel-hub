@@ -209,7 +209,7 @@ export function SourcesPage() {
               {shown.map((d) => (
                 <li key={d.id} className="py-2">
                   <div className="flex flex-wrap items-center gap-2 font-mono text-[11px] text-muted-foreground">
-                    <Tag tone={d.status === "processed" ? "primary" : undefined}>{d.status}</Tag>
+                    <Tag tone={d.status === "processed" ? "primary" : d.status === "failed" ? "danger" : "default"}>{d.status}</Tag>
                     <span>{d.sourceName}</span>
                     <span>{new Date(d.publishedAt ?? d.createdAt).toLocaleString()}</span>
                     {d.droneIds?.map((id) => (

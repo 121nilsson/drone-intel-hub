@@ -18,7 +18,7 @@ import { fetchOne } from "./fetch-posts";
  *
  * Reuses the same write-through repositories the browser uses, attached to PostgresStore,
  * so candidates and merged specs persist exactly as on a manual sync. Only the transport
- * is server-side; syncSource and the two-tier pipeline are shared with the UI.
+ * is server-side; collectSource, processPending and the two-tier pipeline are shared with the UI.
  */
 export async function fetchAllSources(): Promise<SyncReport[]> {
   if (!dbConfigured()) throw new Error("Auto-sync needs DATABASE_URL (PostgreSQL)");
