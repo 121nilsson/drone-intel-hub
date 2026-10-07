@@ -16,3 +16,4 @@
 - Persistence goes through the async DocumentStore contract (src/shared/contracts/store.ts); repositories are write-through caches that attach a store at startup — so localStorage, PostgreSQL or any DB swap without touching features.
 - PostgreSQL is selected automatically when the server has DATABASE_URL; schema lives as plain portable SQL in /migrations (also mounted by docker-compose) — keeps the DB vendor-neutral and self-hostable.
 - Server-only DB code lives in *.server.ts files and is dynamically imported inside server-function handlers — keeps the driver out of the browser bundle.
+- Ingestion is two-stage: collectors only store raw posts as pending dispatches (no AI); a bounded processor drains the queue and records provenance — keeps scraping fast and AI work resumable.
