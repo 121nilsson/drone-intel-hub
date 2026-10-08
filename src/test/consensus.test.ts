@@ -53,8 +53,8 @@ describe("consensus", () => {
         "km",
       ),
     );
-    // median 4000, max 5000 - the range is what makes the conflict visible.
-    expect(c.display).toBe("4000–5000 km");
+    // The full observed range (min–max) is what makes the conflict visible.
+    expect(c.display).toBe("1000–5000 km");
     expect(c.median).toBe(4000);
     expect(c.max).toBe(5000);
     expect(c.min).toBe(1000);

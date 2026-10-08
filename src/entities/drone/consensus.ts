@@ -41,7 +41,7 @@ export function consensus(spec: SpecAttribute): Consensus {
   // number, not genuine disagreement, so it needs corroboration to count as disputed.
   const disputed = spread >= 0.6 && sources >= 2;
   return {
-    display: disputed ? `${round(median)}–${round(max)}${u}` : `${round(median)}${u}`,
+    display: disputed ? `${round(min)}–${round(max)}${u}` : `${round(median)}${u}`,
     min,
     max,
     median,

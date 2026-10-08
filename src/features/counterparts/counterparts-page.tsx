@@ -50,11 +50,13 @@ export function CounterpartsPage({ a, b }: { a?: string | undefined; b?: string 
           onChange={(e) => set(k, e.target.value)}
           className="bg-transparent font-mono text-xs uppercase outline-none"
         >
-          {drones.map((x) => (
-            <option key={x.id} value={x.id} className="bg-card">
-              {x.name}
-            </option>
-          ))}
+          {drones
+            .filter((x) => x.id !== (k === "a" ? B.id : A.id))
+            .map((x) => (
+              <option key={x.id} value={x.id} className="bg-card">
+                {x.name}
+              </option>
+            ))}
         </select>
       }
     >
@@ -119,8 +121,15 @@ export function CounterpartsPage({ a, b }: { a?: string | undefined; b?: string 
               return (
                 <tr key={k}>
                   <td className="py-2">{(sa ?? sb)!.label}</td>
-                  <td className="py-2 text-right font-mono">{sa ? consensus(sa).display : "—"}</td>
-                  <td className="py-2 text-right font-mono">{sb ? consensus(sb).display : "—"}</td>
+                  {[sa, sb].map((s, i) => {
+                    const c = s ? consensus(s) : null;
+                    return (
+                      <td key={i} className="py-2 text-right font-mono">
+                        {c ? c.display : "—"}
+                        {c?.disputed && <Tag tone="danger" className="ml-1">Disputed</Tag>}
+                      </td>
+                    );
+                  })}
                 </tr>
               );
             })}
