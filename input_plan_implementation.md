@@ -14,17 +14,17 @@
 
 Phases are lettered A–E and executed in the order A → C → B → E → D (§7 explains why).
 
-| # | Problem | Evidence | Cost today |
-|---|---|---|---|
-| A | No fetch timeout | `fetch-posts.ts:102`, `:108` — bare `fetch(url, { headers: UA })` | One hung host serialises the whole sequential pass (`fetch-posts.server.ts:95-108`) |
-| A | Sequential collection | `fetch-posts.server.ts:95-108` — `for` loop, `await` per source | ~79 hosts × latency = minutes before stage 2 even starts |
-| C | No cross-source dedupe | `auto-ingest.ts:218` — id is `sourceId\|externalId` only | One story from Telegram + RSS + Web = 3 dispatches = 3 AI calls, and 3 claims in `consensus()` (inflating the `sources` count with one fact) |
-| B | Anchor-text-only Web parsing | `fetch-posts.ts:72-85` | 29 Web sources yield headline snippets, not article bodies |
-| D | X/Twitter unsupported | `fetch-posts.ts:96-97` | 8 seeded high-signal sources never contribute |
-| E | No yield telemetry | `sources-page.tsx:408-413` shows "N posts stored" only | Operator cannot tell that some of the 79 sources produce zero drone-related posts |
+| #   | Problem                      | Evidence                                                          | Cost today                                                                                                                                   |
+| --- | ---------------------------- | ----------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| A   | No fetch timeout             | `fetch-posts.ts:102`, `:108` — bare `fetch(url, { headers: UA })` | One hung host serialises the whole sequential pass (`fetch-posts.server.ts:95-108`)                                                          |
+| A   | Sequential collection        | `fetch-posts.server.ts:95-108` — `for` loop, `await` per source   | ~79 hosts × latency = minutes before stage 2 even starts                                                                                     |
+| C   | No cross-source dedupe       | `auto-ingest.ts:218` — id is `sourceId\|externalId` only          | One story from Telegram + RSS + Web = 3 dispatches = 3 AI calls, and 3 claims in `consensus()` (inflating the `sources` count with one fact) |
+| B   | Anchor-text-only Web parsing | `fetch-posts.ts:72-85`                                            | 29 Web sources yield headline snippets, not article bodies                                                                                   |
+| D   | X/Twitter unsupported        | `fetch-posts.ts:96-97`                                            | 8 seeded high-signal sources never contribute                                                                                                |
+| E   | No yield telemetry           | `sources-page.tsx:408-413` shows "N posts stored" only            | Operator cannot tell that some of the 79 sources produce zero drone-related posts                                                            |
 
 **The core insight for C:** duplicate ingest is not just wasted API spend. Every duplicate becomes
-a *distinct* `SpecClaim.source` value, so `consensus()`'s `sources: number`
+a _distinct_ `SpecClaim.source` value, so `consensus()`'s `sources: number`
 (`entities/drone/consensus.ts:62`) counts the same outlet three times. That silently inflates the
 `confidence: "high"` gate (`sources >= 3`, `consensus.ts:108`). Deduplication is therefore a
 **correctness fix**, not just a cost fix.
@@ -64,8 +64,7 @@ const UA = { "User-Agent": "Mozilla/5.0 (compatible; DroneINT/1.0)" };
 export const FETCH_TIMEOUT_MS = 15_000;
 
 type TextResult =
-  | { ok: true; body: string; status: number }
-  | { ok: false; error: string; status: number };
+  { ok: true; body: string; status: number } | { ok: false; error: string; status: number };
 
 async function getText(url: string, timeoutMs: number): Promise<TextResult> {
   // `0` disables the deadline, matching the PROVIDER_TIMEOUT_MS convention the README documents.
@@ -94,21 +93,28 @@ export async function fetchOne(
   opts: FetchOptions = {},
 ) {
   const timeoutMs = opts.timeoutMs ?? FETCH_TIMEOUT_MS;
-  if (source.platform === "X") { /* D */ }
+  if (source.platform === "X") {
+    /* D */
+  }
   if (source.platform === "Telegram") {
     const chan = source.handle.replace(/^@|^https?:\/\/t\.me\/(s\/)?/, "").split("/")[0] ?? "";
-    if (!/^[A-Za-z0-9_]{3,64}$/.test(chan)) return { ok: false, error: "Invalid Telegram handle" } as const;
+    if (!/^[A-Za-z0-9_]{3,64}$/.test(chan))
+      return { ok: false, error: "Invalid Telegram handle" } as const;
     const r = await getText(`https://t.me/s/${chan}`, timeoutMs);
     // Existing wording for an HTTP status; a transport failure keeps its own message rather
     // than becoming "Telegram 0".
     if (!r.ok) return { ok: false, error: r.status ? `Telegram ${r.status}` : r.error } as const;
     return { ok: true, posts: parseTelegram(r.body, chan) } as const;
   }
-  if (!/^https:\/\//.test(source.handle)) return { ok: false, error: "URL must start with https://" } as const;
+  if (!/^https:\/\//.test(source.handle))
+    return { ok: false, error: "URL must start with https://" } as const;
   const r = await getText(source.handle, timeoutMs);
   if (!r.ok) return { ok: false, error: r.error } as const;
   const isFeed = source.platform === "RSS" || /<rss|<feed/i.test(r.body.slice(0, 500));
-  return { ok: true, posts: isFeed ? parseRss(r.body) : /* B */ parseWeb(r.body, source.handle) } as const;
+  return {
+    ok: true,
+    posts: isFeed ? parseRss(r.body) : /* B */ parseWeb(r.body, source.handle),
+  } as const;
 }
 ```
 
@@ -133,7 +139,11 @@ completion legitimately takes 90 s, a source page should not.
 New file `src/shared/infra/pool.ts` (pure, no I/O — directly testable):
 
 ```ts
-export interface PoolProgress<T> { done: number; total: number; item: T | null }
+export interface PoolProgress<T> {
+  done: number;
+  total: number;
+  item: T | null;
+}
 
 /**
  * Runs `worker` over `items` with at most `limit` in flight and never lets one rejection
@@ -164,7 +174,11 @@ Also add `sourceHost` to the same file, used as the pool `key` server-side:
 /** Host a source's requests actually hit, for per-host politeness in the pool. */
 export function sourceHost(s: Pick<MonitoredSource, "platform" | "handle">): string {
   if (s.platform === "Telegram") return "t.me";
-  try { return new URL(s.handle).hostname; } catch { return "unknown"; }
+  try {
+    return new URL(s.handle).hostname;
+  } catch {
+    return "unknown";
+  }
 }
 ```
 
@@ -204,15 +218,23 @@ const fetcher = (s: MonitoredSource) =>
   });
 
 let done = 0;
-const results = await mapWithConcurrency(targets, FETCH_CONCURRENCY, async (s) => {
-  const started = Date.now();
-  const c = await collectSource(s, fetcher, dispatches);
-  sources.update(s.id, { lastFetched: new Date().toISOString(), lastError: c.error });
-  return { ...c, durationMs: Date.now() - started };
-}, {
-  key: sourceHost,
-  onSettled: ({ item }) => { done++; return report(fetchingProgress(item?.name ?? "", done, targets.length)); },
-});
+const results = await mapWithConcurrency(
+  targets,
+  FETCH_CONCURRENCY,
+  async (s) => {
+    const started = Date.now();
+    const c = await collectSource(s, fetcher, dispatches);
+    sources.update(s.id, { lastFetched: new Date().toISOString(), lastError: c.error });
+    return { ...c, durationMs: Date.now() - started };
+  },
+  {
+    key: sourceHost,
+    onSettled: ({ item }) => {
+      done++;
+      return report(fetchingProgress(item?.name ?? "", done, targets.length));
+    },
+  },
+);
 ```
 
 Concurrency safety note: `LocalSourceRepository.update` / `LocalDispatchRepository.add` are fully
@@ -257,6 +279,7 @@ buttons are untouched.
 ### A6. Tests
 
 `src/test/pool.test.ts` (new):
+
 - runs with `limit` in flight, no more (track a live counter)
 - preserves input order in results
 - a throwing worker does not reject the batch (`status: "rejected"` for that index only)
@@ -265,6 +288,7 @@ buttons are untouched.
 
 `src/test/fetch-posts.test.ts` (extend), following the abort-signal cases already in
 `ai-proxy-rate.test.ts:292-303`:
+
 - passes an `AbortSignal` to `fetch` — `expect(init?.signal).toBeInstanceOf(AbortSignal)`
 - a fetch that throws `{ name: "TimeoutError" }` returns `{ ok: false, error: "Fetch timeout" }`
   (the same classification `transportError` uses, so `providerErrorKind`'s `/timeout/i` branch
@@ -283,7 +307,7 @@ before B** (it shrinks the queue that B then feeds).
 ### C1. Why exact hashing is not enough
 
 The same story arrives as a Telegram post, an RSS title+description, and a website headline. Text
-differs (prefixes, boilerplate, truncation) while the *content* is identical. We need fuzzy
+differs (prefixes, boilerplate, truncation) while the _content_ is identical. We need fuzzy
 matching.
 
 **Choice: 64-bit SimHash over word unigrams + bigrams**, compared by Hamming distance.
@@ -295,6 +319,14 @@ matching.
 - 40 lines, directly unit-testable.
 
 ### C2. New pure module — `src/entities/dispatch/simhash.ts`
+
+> [!IMPORTANT]
+> **Shipped, with one measured change.** `DUPLICATE_TOLERANCE` is **10**, not the 3 sketched here.
+> The plan claimed "a changed sentence moves ~1 bit" and asserted reordering would leave the
+> fingerprint unchanged; both were wrong. Measured on OSINT-style samples: reworded copies land 7–8
+> bits apart, unrelated reports 23–36. Three of ten would have missed most real duplicates. The
+> tolerance is now recorded in the module next to that table — see
+> [Implementation status](#implementation-status) for the full list of deviations.
 
 ```ts
 /** Lowercase, strip URLs, drop punctuation, collapse whitespace. */
@@ -311,8 +343,8 @@ export function isNearDuplicate(a: string, b: string, tolerance = DUPLICATE_TOLE
 
 /** Below this length a fingerprint is unstable, so short posts are never deduped. */
 export const MIN_CHARS_FOR_DEDUPE = 120;
-/** Bits of the 64 that may differ and still be called the same story. */
-export const DUPLICATE_TOLERANCE = 3;
+/** Bits of the 64 that may differ and still be called the same story. Shipped value. */
+export const DUPLICATE_TOLERANCE = 10;
 ```
 
 ### C3. Model changes — `src/entities/dispatch/types.ts`
@@ -350,6 +382,7 @@ create index if not exists dispatches_content_hash_idx
 ```
 
 Then:
+
 - `PostgresStore.upsert` dispatches branch (`postgres-store.server.ts:103-111`): add
   `content_hash` to the column list and both clauses.
 - `CloudStore.row()` dispatches case (`cloud-store.server.ts:40-42`): add `content_hash: d.contentHash ?? null`.
@@ -425,7 +458,7 @@ duplicateOf(fp: string): string | null {
 Three places must keep the index honest:
 
 - `add(d)` — `if (d.text) this.hashOf(d);` after inserting. Without this, a second copy of the same
-  post *inside one batch* is not caught, because `duplicateOf` only sees what is already stored. The
+  post _inside one batch_ is not caught, because `duplicateOf` only sees what is already stored. The
   `d.text` guard is what keeps stubs out (a `duplicate` row is added with `text: ""`).
 - `update(id, patch)` — drop the id's entry from both maps. An `irrelevant` stub's text is emptied at
   `auto-ingest.ts:328`, which would otherwise leave a fingerprint indexed for text that no longer
@@ -438,16 +471,31 @@ Three places must keep the index honest:
 ```ts
 export async function collectSource(s, fetcher, dispatches) {
   const res = await fetcher(s);
-  if (!res.ok) return { source: s.name, fetched: 0, stored: 0, duplicates: 0, error: res.error, durationMs: 0 };
+  if (!res.ok)
+    return {
+      source: s.name,
+      fetched: 0,
+      stored: 0,
+      duplicates: 0,
+      error: res.error,
+      durationMs: 0,
+    };
   const now = new Date().toISOString();
-  let stored = 0, duplicates = 0;
+  let stored = 0,
+    duplicates = 0;
   for (const p of res.posts) {
-    const base = { id: dispatchId(s.id, p.id), sourceId: s.id, /* ...as today... */ };
+    const base = { id: dispatchId(s.id, p.id), sourceId: s.id /* ...as today... */ };
     const fp = p.text.length >= MIN_CHARS_FOR_DEDUPE ? simHash64(p.text) : undefined;
     const dupe = fp ? (dispatches.duplicateOf?.(fp) ?? null) : null;
     if (dupe) {
       // Kept for provenance and archive counts; text stripped so it is never analysed again.
-      dispatches.add({ ...base, status: "duplicate", text: "", duplicateOf: dupe, contentHash: fp });
+      dispatches.add({
+        ...base,
+        status: "duplicate",
+        text: "",
+        duplicateOf: dupe,
+        contentHash: fp,
+      });
       duplicates++;
       continue;
     }
@@ -476,6 +524,7 @@ export async function collectSource(s, fetcher, dispatches) {
 
   (The cast itself is the reason this is a runtime bug rather than a type error — replace it with a
   real typed initialiser while touching this line.)
+
 - **Filter tabs (line 464)** — add `"duplicate"` to the array so operators can inspect and count them.
 - **Row (line 478)** — render `duplicate of …` linking to the canonical dispatch's `url`, tone
   `default`, alongside the existing status tag. The row already keeps its own `url`, so the
@@ -525,7 +574,7 @@ runtime need, not just the test environment). Then update the lockfile (`bun.loc
 ```ts
 /** Article body extraction. Server-only: it needs a DOM, so jsdom is imported lazily and the
  *  browser never loads it. Called through FetchOptions.articleText, never imported directly. */
-export async function extractArticleText(html: string, url: string): Promise<string | null>
+export async function extractArticleText(html: string, url: string): Promise<string | null>;
 ```
 
 - `const { JSDOM } = await import("jsdom"); const { Readability } = await import("@mozilla/readability");`
@@ -564,7 +613,7 @@ async function webPosts(html: string, pageUrl: string, opts: FetchOptions): Prom
   }
   const links = parseWeb(html, pageUrl);
   const follow = Math.min(opts.maxFollows ?? MAX_FOLLOWS, MAX_FOLLOWS);
-  const budget = Math.max(0, (opts.maxRequests ?? follow + 1) - 1);   // the page itself cost 1
+  const budget = Math.max(0, (opts.maxRequests ?? follow + 1) - 1); // the page itself cost 1
   // Replace the top `budget` headlines with their article bodies; the rest stay as anchors.
   // Degradation is per-post: a failed or too-short body keeps the anchor text.
   const top = links.slice(0, budget);
@@ -638,6 +687,7 @@ Definitions (all computed from fields already on `RawDispatch`):
 `status === "failed"`.
 
 Then:
+
 - A `no signal` tag when `analysed + queued === 0 && stored >= 20` — the "worth the API cost?"
   answer, per source, at a glance. This directly serves the roadmap's source-reliability
   recommendation with zero new storage.
@@ -650,7 +700,7 @@ Then:
 
 ## 6. Phase D — X/Twitter through an operator-supplied bridge (optional)
 
-No first-party path exists without a paid API. Rather than pretend otherwise, make the *operator*
+No first-party path exists without a paid API. Rather than pretend otherwise, make the _operator_
 the one who opts in: if `X_BRIDGE_BASE` is set, `fetchOne` fetches `<base>/<handle>` and parses it
 with the existing `parseRss`; otherwise it returns today's error message.
 
@@ -669,15 +719,16 @@ them at `fetch-posts.server.ts:93`) and let the operator decide.
 
 ## 7. Sequencing
 
-| Order | Phase | Why here | Effort |
-|---|---|---|---|
-| 1 | **A** | Fixes the only live outage mode; A2/A3 are prerequisites for B | ~1 session |
-| 2 | **C** | Stops paying 3× for one fact and inflating consensus; reduces B's follow-up count | ~1.5–2 sessions |
-| 3 | **B** | Richer text for the survivors | ~1.5 sessions |
-| 4 | **E** | Cheap, and tells you which sources B/C actually mattered for | ~0.5 session |
-| 5 | **D** | Optional, operator-dependent | ~0.5 session |
+| Order | Phase | Why here                                                                          | Effort          |
+| ----- | ----- | --------------------------------------------------------------------------------- | --------------- |
+| 1     | **A** | Fixes the only live outage mode; A2/A3 are prerequisites for B                    | ~1 session      |
+| 2     | **C** | Stops paying 3× for one fact and inflating consensus; reduces B's follow-up count | ~1.5–2 sessions |
+| 3     | **B** | Richer text for the survivors                                                     | ~1.5 sessions   |
+| 4     | **E** | Cheap, and tells you which sources B/C actually mattered for                      | ~0.5 session    |
+| 5     | **D** | Optional, operator-dependent                                                      | ~0.5 session    |
 
 Suggested commit sequence (one reviewable commit per step, not per phase):
+
 1. `pool.ts` + its tests
 2. `fetch-posts.ts` timeout/`FetchOptions` + tests
 3. server + browser loop rewrites
@@ -694,16 +745,16 @@ Suggested commit sequence (one reviewable commit per step, not per phase):
 
 ## 8. Risks & mitigations
 
-| Risk | Mitigation |
-|---|---|
-| jsdom in the client bundle | Only dynamic imports inside `article.server.ts`, reached only through the injected `articleText` callback |
-| SimHash false positives merging two distinct stories | `MIN_CHARS_FOR_DEDUPE = 120`, tolerance 3/64 bits, both stories remain visible in the archive with their own URLs. There is **no un-duplicate action** (the archive has no per-dispatch delete), so recovery today is a manual delete of either row in the database — see the follow-up below |
-| Duplicate rows inflate the dispatch archive count | The filter tabs expose the breakdown and duplicates are one click from their canonical URL. The 3000-row load cap (`postgres-store.server.ts:9`) is unchanged — if it starts biting, raise it deliberately, not as part of this work |
-| `status: "duplicate"` breaks a switch somewhere | Verified safe: `DispatchStatus` is referenced only in `entities/dispatch/types.ts` (the union itself and `RawDispatch.status`). No code exhaustively switches on it — the dispatch tests compare against literals, and `LocalStorageStore.claim` / `pending()` filter on `"pending"` only. The two sites that enumerate values are `sources-page.tsx:331` (counts) and `:464` (tabs), both updated in C7 |
-| Concurrency + write-through cache | `LocalSourceRepository.update` / `LocalDispatchRepository.add` must stay `await`-free (see A4). Add a comment at both sites |
-| Bounded concurrency angers a host | Per-host `key` in the pool; one shared per-source deadline; `MAX_FOLLOWS` on follow-up requests |
-| Lockfile drift breaks the Docker build | Run `bun install` (and `npm install` if `package-lock.json` is kept) as part of B1 and commit both lockfiles. The `Dockerfile` uses `bun install --frozen-lockfile`, so `bun.lock` is the one that must be current |
-| `duplicateOf` diverges from the in-memory list after `claim()` re-attaches | `LocalDispatchRepository.claim` calls `attach()` (`local-repository.ts:224`), which replaces `this.items`. The fingerprint index is content-keyed and cleared on attach (C5), then rebuilt lazily — never reused across a reload |
+| Risk                                                                       | Mitigation                                                                                                                                                                                                                                                                                                                                                                                               |
+| -------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| jsdom in the client bundle                                                 | Only dynamic imports inside `article.server.ts`, reached only through the injected `articleText` callback                                                                                                                                                                                                                                                                                                |
+| SimHash false positives merging two distinct stories                       | `MIN_CHARS_FOR_DEDUPE = 120`, tolerance 3/64 bits, both stories remain visible in the archive with their own URLs. There is **no un-duplicate action** (the archive has no per-dispatch delete), so recovery today is a manual delete of either row in the database — see the follow-up below                                                                                                            |
+| Duplicate rows inflate the dispatch archive count                          | The filter tabs expose the breakdown and duplicates are one click from their canonical URL. The 3000-row load cap (`postgres-store.server.ts:9`) is unchanged — if it starts biting, raise it deliberately, not as part of this work                                                                                                                                                                     |
+| `status: "duplicate"` breaks a switch somewhere                            | Verified safe: `DispatchStatus` is referenced only in `entities/dispatch/types.ts` (the union itself and `RawDispatch.status`). No code exhaustively switches on it — the dispatch tests compare against literals, and `LocalStorageStore.claim` / `pending()` filter on `"pending"` only. The two sites that enumerate values are `sources-page.tsx:331` (counts) and `:464` (tabs), both updated in C7 |
+| Concurrency + write-through cache                                          | `LocalSourceRepository.update` / `LocalDispatchRepository.add` must stay `await`-free (see A4). Add a comment at both sites                                                                                                                                                                                                                                                                              |
+| Bounded concurrency angers a host                                          | Per-host `key` in the pool; one shared per-source deadline; `MAX_FOLLOWS` on follow-up requests                                                                                                                                                                                                                                                                                                          |
+| Lockfile drift breaks the Docker build                                     | Run `bun install` (and `npm install` if `package-lock.json` is kept) as part of B1 and commit both lockfiles. The `Dockerfile` uses `bun install --frozen-lockfile`, so `bun.lock` is the one that must be current                                                                                                                                                                                       |
+| `duplicateOf` diverges from the in-memory list after `claim()` re-attaches | `LocalDispatchRepository.claim` calls `attach()` (`local-repository.ts:224`), which replaces `this.items`. The fingerprint index is content-keyed and cleared on attach (C5), then rebuilt lazily — never reused across a reload                                                                                                                                                                         |
 
 **Known gap to follow up on separately:** a "retry / un-duplicate" action on a dispatch row. It is
 needed eventually for false positives, but it is UI work against the store's `remove`, and the
@@ -736,6 +787,72 @@ duplicate path is fully accounted for without it. Not part of this plan.
 
 - Two-tier relevance filtering (`DRONE_HINT` flat OR gate, `auto-ingest.ts:8`) — separate work.
 - Per-source sync intervals and error backoff (`improvements.md §1.5`).
-- Source reliability *weighting* in the pipeline (Phase E only measures it).
+- Source reliability _weighting_ in the pipeline (Phase E only measures it).
 - `processPending` performance (`pending(Number.MAX_SAFE_INTEGER)` full scans).
 - Anything in stages 2–3 of the roadmap (provenance UI, analyst workbench, alerting, spectrum map).
+
+---
+
+## 11. Implementation status
+
+All five phases (A, C, B, E, D) are implemented, tested and committed. 71 new tests
+(254 total, 183 of them pre-existing and untouched), `tsc --noEmit` clean, `vite build`
+exits 0.
+
+| Phase               | Outcome                                                                                                                                                                                                                                                                         | Commits              |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------- |
+| A � deadline + pool | `pool.ts` (6 lanes, per-host serialization, no abort-on-failure) drives both the server job and the browser's "Fetch all feeds"; every request shares one deadline per source, `FETCH_TIMEOUT_MS` (15 s, `0` disables) mirrors the `PROVIDER_TIMEOUT_MS` convention             | `12fba1a`, `d9f0ecb` |
+| C � dedupe          | `simhash.ts` + `migrations/006_dispatch_content_hash.sql`, a `duplicate` dispatch status with `contentHash`/`duplicateOf`, an in-memory fingerprint index on `LocalDispatchRepository` (lazily backfilling pre-migration documents), Reports carrying `duplicates`/`durationMs` | `12fba1a`, `d9f0ecb` |
+| B � article bodies  | `article.server.ts` (Readability) behind an injected `articleText`, article-first for Web pages, top-3 body enrichment on index pages, RSS teaser follow-ups, all per-post degradation to the anchor/history text                                                               | `d9f0ecb`, `f599434` |
+| E � yield           | Per-source `stored/waiting/analysed/queued/filtered/duplicates/failed`, a `no signal` flag, the productive-source count, timings in the activity log                                                                                                                            | `d9f0ecb`            |
+| D � X bridge        | `X_BRIDGE_BASE`, env-only, parse via the existing RSS parser                                                                                                                                                                                                                    | `d9f0ecb`            |
+
+### Deviations from the plan, and why
+
+1. **Tolerance 10, not 3 (C2).** The plan's claim that "a changed sentence moves ~1 bit" was
+   wrong. Measured: rewords 7-8 bits, reordered paragraphs 1 bit, unrelated reports 23-36 bits,
+   including at the 120-character floor. Three of ten would have missed most real duplicates.
+2. **linkedom, not jsdom (B1).** `jsdom` -> `tough-cookie` -> the deprecated `punycode/` builtin,
+   which the bundler cannot resolve, so the server build failed. Externalizing it was not an
+   option either: the Docker runtime copies only `.output`, with no `node_modules`, so the DOM
+   parser has to be bundled. `linkedom` bundles into `.output/server/_libs` and keeps the client
+   assets clean. `jsdom` remains a devDependency � the vitest environment still uses it.
+3. **Article extraction returns null when the page is navigation.** The plan asserted only a
+   400-character minimum. Readability is perfectly happy to return a 30-link nav list as an
+   "article", which on an index page would have replaced every headline with chrome. Extraction
+   now also requires at least two `<p>` elements.
+4. **Readability rewrites the document it is handed.** The heading is read from the source page
+   _before_ parsing, otherwise it disappears and the title falls back to `<title>` � on a news site
+   that is usually the site's name, not the story's.
+5. **The "article first" path must not re-fetch the page.** The first implementation fetched the
+   source URL a second time; caught by a test that counts requests.
+6. **SimHash order-insensitivity is not literal.** It holds for token features, but reordering
+   _sentences_ swaps bigrams and costs 1 bit. The tolerance is what absorbs it, and the tests say
+   so explicitly so nobody "fixes" it later.
+7. **`SyncReport` fields are optional; `CollectReport`'s are required.** Two `QUEUE_ROW` pushes
+   describe queue work and have no per-source number to report.
+
+### Bugs the tests caught, in case they are reintroduced
+
+- A `duplicate` stub was about to be registered in the exact-match index, so a third copy would
+  have resolved to the stub (whose text is gone) instead of the canonical post, chaining
+  `duplicate of` links. Stubs are now skipped by `if (!d.text)`.
+- `LocalStore`/`claim()` re-attach replaces the working set; the fingerprint index is dropped and
+  rebuilt lazily rather than trusted across the swap.
+- The Sources page `counts` object relied on an `as` cast, so a newly added status counted as `NaN`
+  in the filter tab rather than failing to compile. Now a real `Record<DispatchStatus, number>`.
+
+### Still to do before deploying
+
+1. **`bun install`** � `bun.lock` is not regenerated (no bun on the machine that wrote this), so
+   `docker compose up --build` will fail at `--frozen-lockfile` until someone with bun runs it.
+   `package-lock.json` is deliberately untouched: the Dockerfile uses bun.
+2. **Apply `migrations/006_dispatch_content_hash.sql`** to any existing database.
+3. Decide whether `.env.example` / `.env.local.example` (untracked in this working tree) should gain
+   `FETCH_TIMEOUT_MS`, `FETCH_ARTICLE_BODIES` and `X_BRIDGE_BASE`.
+
+### Next round, in the order the data suggests it
+
+Phase E now makes it visible _which_ of the 79 sources pay off; the natural follow-ups are the
+roadmap's source-reliability weighting (auto-merge thresholds per source) and, once the yield line
+has been live for a week, pruning or replacing the `no signal` ones.
