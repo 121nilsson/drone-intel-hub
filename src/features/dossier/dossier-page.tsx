@@ -16,7 +16,7 @@ export function SpecTable({ drone }: { drone: Drone }) {
           return (
             <tr key={s.key}>
               <td className="py-2">{s.label} {s.discoveredBy === "ai" && <Tag tone="accent" className="ml-1">AI-discovered</Tag>}</td>
-              <td className="py-2 font-mono text-primary">{c.display}</td>
+              <td className="py-2 font-mono text-primary">{c.display} {c.disputed && <Tag tone="danger" className="ml-1">Disputed</Tag>}</td>
               <td className="py-2 font-mono text-xs text-muted-foreground">{c.min !== undefined && c.min !== c.max ? `${c.min}–${c.max}` : "—"}</td>
               <td className="py-2 font-mono text-xs" title={s.claims.map((x) => `${x.value} (${x.source})`).join("\n")}>{c.sources}</td>
               <td className="py-2"><ConfidenceTag level={c.confidence} /></td>

@@ -37,9 +37,15 @@ function Briefing() {
     updates: drift.filter((e) => e.drone.domain === dom).length,
   }));
 
-  const context = `Window: last 7 days. New systems: ${newSystems.map((d) => d.name).join(", ") || "none"}.
+  const pendingCount = candidates.filter((c) => c.status === "pending").length;
+  const newNames = newSystems.map((d) => d.name).join(", ");
+  // Memoised so unrelated re-renders never trigger a fresh (slow, paid) summary request.
+  const context = useMemo(
+    () => `Window: last 7 days. New systems: ${newNames || "none"}.
 Spec drift events (${drift.length}): ${drift.map((e) => `${e.drone.name} [${e.kind}] ${e.description}`).join("; ")}.
-Pending queue: ${candidates.filter((c) => c.status === "pending").length}.`;
+Pending queue: ${pendingCount}.`,
+    [newNames, drift, pendingCount],
+  );
   const [summary, setSummary] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   // Summaries are slow (seconds to tens of seconds), so the context can change while one is in
