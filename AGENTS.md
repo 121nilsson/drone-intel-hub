@@ -17,3 +17,4 @@
 - PostgreSQL is selected automatically when the server has DATABASE_URL; schema lives as plain portable SQL in /migrations (also mounted by docker-compose) — keeps the DB vendor-neutral and self-hostable.
 - Server-only DB code lives in *.server.ts files and is dynamically imported inside server-function handlers — keeps the driver out of the browser bundle.
 - Ingestion is two-stage: collectors only store raw posts as pending dispatches (no AI); a bounded processor drains the queue and records provenance — keeps scraping fast and AI work resumable.
+- Shared storage selection happens in store.functions.ts: DATABASE_URL → PostgresStore, else Lovable Cloud → CloudStore (server-only, service role; tables have RLS with no client policies) — browser never talks to the DB directly.

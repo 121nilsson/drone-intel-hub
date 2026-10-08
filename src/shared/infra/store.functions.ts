@@ -20,14 +20,21 @@ const checkDoc = (d: unknown) => {
   return d;
 };
 
+/** DATABASE_URL (self-hosted PostgreSQL) wins; otherwise Lovable Cloud when configured. */
 async function store() {
-  const { PostgresStore } = await import("./postgres/postgres-store.server");
-  return new PostgresStore();
+  if (process.env["DATABASE_URL"]) {
+    const { PostgresStore } = await import("./postgres/postgres-store.server");
+    return new PostgresStore();
+  }
+  const { CloudStore } = await import("./cloud/cloud-store.server");
+  return new CloudStore();
 }
 
-/** True when the server has a PostgreSQL connection configured. */
+/** True when the server has shared storage (PostgreSQL or Lovable Cloud). */
 export const getStoreStatus = createServerFn({ method: "GET" }).handler(async () => ({
-  postgres: !!process.env["DATABASE_URL"],
+  postgres:
+    !!process.env["DATABASE_URL"] ||
+    (!!process.env["SUPABASE_URL"] && !!process.env["SUPABASE_SERVICE_ROLE_KEY"]),
 }));
 
 export const storeLoad = createServerFn({ method: "POST" })
