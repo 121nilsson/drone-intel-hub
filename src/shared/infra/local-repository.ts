@@ -1,5 +1,6 @@
 import type { Candidate, Drone } from "@/entities/drone/types";
 import { SEED_DRONES } from "@/entities/drone/seed";
+import { isNearDuplicate, simHash64 } from "@/entities/dispatch/simhash";
 import type { MonitoredSource } from "@/entities/source/types";
 import { SEED_SOURCES } from "@/entities/source/seed";
 import type { RawDispatch } from "@/entities/dispatch/types";
@@ -13,8 +14,17 @@ import {
   type StoredTaxonomyTerm,
   type TaxonomyCandidate,
 } from "@/entities/normalization/taxonomy";
-import { detectProtocols, effectiveIeeeBands, effectiveNatoBands, linkIsFiber } from "@/entities/normalization/rf";
-import type { TaxonomyCandidateRepository, TaxonomyRepository, TaxonomySourceRef } from "@/shared/contracts/taxonomy";
+import {
+  detectProtocols,
+  effectiveIeeeBands,
+  effectiveNatoBands,
+  linkIsFiber,
+} from "@/entities/normalization/rf";
+import type {
+  TaxonomyCandidateRepository,
+  TaxonomyRepository,
+  TaxonomySourceRef,
+} from "@/shared/contracts/taxonomy";
 import type {
   DispatchRepository,
   SourceRepository,
@@ -26,6 +36,9 @@ import type {
 import type { Collection, CollectionMap, DocumentStore } from "@/shared/contracts/store";
 
 const norm = (s: string) => s.toLowerCase().normalize("NFKD");
+
+/** Newest dispatches only: a duplicate almost always lands in the current or the next sync. */
+const DUP_SCAN_WINDOW = 2000;
 
 export function droneHaystack(d: Drone) {
   return norm(
@@ -125,8 +138,16 @@ export class LocalDroneRepository extends CachedRepository<"drones"> implements 
       if (f.operators?.length && !d.operators.some((o) => f.operators!.includes(o))) return false;
       if (f.bands?.length && !d.rf.some((r) => f.bands!.includes(r.band))) return false;
       if (f.propulsion?.length && !f.propulsion.includes(d.propulsion)) return false;
-      if (f.ieeeBands?.length && !d.rf.some((r) => effectiveIeeeBands(r).some((b) => f.ieeeBands!.includes(b)))) return false;
-      if (f.natoBands?.length && !d.rf.some((r) => effectiveNatoBands(r).some((b) => f.natoBands!.includes(b)))) return false;
+      if (
+        f.ieeeBands?.length &&
+        !d.rf.some((r) => effectiveIeeeBands(r).some((b) => f.ieeeBands!.includes(b)))
+      )
+        return false;
+      if (
+        f.natoBands?.length &&
+        !d.rf.some((r) => effectiveNatoBands(r).some((b) => f.natoBands!.includes(b)))
+      )
+        return false;
       if (f.propulsionIds?.length) {
         const id = effectivePropulsionId(d);
         if (!id || !f.propulsionIds.includes(id)) return false;
@@ -135,10 +156,16 @@ export class LocalDroneRepository extends CachedRepository<"drones"> implements 
         const id = effectiveInstallationId(d);
         if (!id || !f.installationIds.includes(id)) return false;
       }
-      if (f.protocols?.length && !d.rf.some((r) => {
-        const ids = r.protocols?.length ? r.protocols : detectProtocols(`${r.band} ${r.notes ?? ""}`);
-        return ids.some((p) => f.protocols!.includes(p));
-      })) return false;
+      if (
+        f.protocols?.length &&
+        !d.rf.some((r) => {
+          const ids = r.protocols?.length
+            ? r.protocols
+            : detectProtocols(`${r.band} ${r.notes ?? ""}`);
+          return ids.some((p) => f.protocols!.includes(p));
+        })
+      )
+        return false;
       if (f.fiberOnly && !d.rf.some((r) => linkIsFiber(r))) return false;
       return true;
     });
@@ -196,6 +223,18 @@ export class LocalDispatchRepository
   extends CachedRepository<"dispatches">
   implements DispatchRepository
 {
+  /**
+   * Near-duplicate index. A dispatch's text is fingerprinted the first time it is looked at, so
+   * documents stored before the fingerprint column existed need no backfill, and the check stays
+   * a memory lookup rather than a query against every store.
+   *
+   * In-memory is enough because this repository already holds the working set (the stores cap the
+   * dispatches they return), and because the cache is refreshed on attach(), which is where a
+   * stale index would otherwise survive.
+   */
+  private fingerprints = new Map<string, string>();
+  private fingerprintIds = new Map<string, string>();
+
   constructor() {
     super("dispatches", []);
   }
@@ -205,19 +244,72 @@ export class LocalDispatchRepository
   add(d: RawDispatch) {
     if (this.has(d.id)) return false;
     this.items = [d, ...this.items];
+    // Registering here is what catches a second copy of the same post *within one batch*:
+    // duplicateOf() only sees what is already stored.
+    this.fingerprint(d);
     this.save(d);
     return true;
   }
   update(id: string, patch: Partial<RawDispatch>) {
     this.items = this.items.map((x) => (x.id === id ? { ...x, ...patch } : x));
     const doc = this.items.find((x) => x.id === id);
-    if (doc) this.save(doc);
+    if (!doc) return;
+    // dropped first, re-registered below if the document still has text.
+    this.forget(id);
+    this.fingerprint(doc);
+    this.save(doc);
   }
   pending(limit: number) {
     return this.items
       .filter((d) => d.status === "pending")
       .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
       .slice(0, limit);
+  }
+
+  /**
+   * Fingerprint a document and index it. Stubs are skipped on purpose: an `irrelevant` dispatch has
+   * its text stripped (auto-ingest) and a `duplicate` row has no text at all, so indexing one would
+   * let an exact match resolve to the stub instead of the canonical post behind it.
+   */
+  private fingerprint(d: RawDispatch): string | null {
+    if (!d.text) return null;
+    const fp = d.contentHash ?? simHash64(d.text);
+    this.fingerprints.set(fp, d.id);
+    this.fingerprintIds.set(d.id, fp);
+    return fp;
+  }
+
+  private forget(id: string) {
+    const fp = this.fingerprintIds.get(id);
+    if (fp === undefined) return;
+    this.fingerprintIds.delete(id);
+    this.fingerprints.delete(fp);
+  }
+
+  /**
+   * Find the already-stored dispatch this fingerprint duplicates.
+   *
+   * Exact fingerprints win first (an identical repost or a channel forward), then the near match:
+   * the newest dispatches first, because a duplicate almost always lands in the same or the next
+   * sync. The scan is capped so a large archive cannot make collection O(n) per post forever.
+   */
+  duplicateOf(fingerprint: string): string | null {
+    const exact = this.fingerprints.get(fingerprint);
+    if (exact !== undefined) return exact;
+    for (const d of this.items.slice(0, DUP_SCAN_WINDOW)) {
+      if (!d.text) continue;
+      const fp = this.fingerprint(d);
+      if (fp && isNearDuplicate(fingerprint, fp)) return d.id;
+    }
+    return null;
+  }
+
+  override async attach(store: DocumentStore) {
+    await super.attach(store);
+    // attach() replaces the whole working set (claim() relies on that), so the index is rebuilt
+    // lazily against the new one rather than trusted across the swap.
+    this.fingerprints.clear();
+    this.fingerprintIds.clear();
   }
   /**
    * Delegates the exclusive claim to storage. The lease deliberately lives in the store, not
@@ -237,9 +329,15 @@ export class LocalDispatchRepository
   }
 }
 
-export class LocalTaxonomyRepository extends CachedRepository<"taxonomies"> implements TaxonomyRepository {
+export class LocalTaxonomyRepository
+  extends CachedRepository<"taxonomies">
+  implements TaxonomyRepository
+{
   constructor() {
-    super("taxonomies", SEEDED_TERMS.map((t) => storedTerm(t)));
+    super(
+      "taxonomies",
+      SEEDED_TERMS.map((t) => storedTerm(t)),
+    );
   }
 
   /** Stored edits replace the seed with the same id. Seeds missing from the store stay available. */
@@ -262,7 +360,8 @@ export class LocalTaxonomyRepository extends CachedRepository<"taxonomies"> impl
 
   upsertTerm(term: StoredTaxonomyTerm) {
     const i = this.items.findIndex((t) => t.id === term.id);
-    this.items = i >= 0 ? this.items.map((t) => (t.id === term.id ? term : t)) : [...this.items, term];
+    this.items =
+      i >= 0 ? this.items.map((t) => (t.id === term.id ? term : t)) : [...this.items, term];
     this.save(term);
   }
 }
@@ -319,7 +418,12 @@ export class LocalTaxonomyCandidateRepository
   resolve(id: string, to: "mapped" | "promoted" | "rejected", target?: string) {
     this.items = this.items.map((c) =>
       c.id === id
-        ? { ...c, status: to, ...(target ? { resolvedCanonicalId: target } : {}), lastSeen: new Date().toISOString() }
+        ? {
+            ...c,
+            status: to,
+            ...(target ? { resolvedCanonicalId: target } : {}),
+            lastSeen: new Date().toISOString(),
+          }
         : c,
     );
     const doc = this.items.find((c) => c.id === id);

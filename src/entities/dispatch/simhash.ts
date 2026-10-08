@@ -98,7 +98,9 @@ export function simHash64(text: string): string {
     for (let w = 0; w < 2; w++) {
       const bits = words[w]!;
       for (let b = 0; b < 32; b++) {
-        counts[w * 32 + b] += ((bits >>> b) & 1) === 1 ? 1 : -1;
+        const at = w * 32 + b;
+        const delta = ((bits >>> b) & 1) === 1 ? 1 : -1;
+        counts[at] = (counts[at] ?? 0) + delta;
       }
     }
   }

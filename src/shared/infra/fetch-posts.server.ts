@@ -21,13 +21,19 @@ import {
   type SyncReport,
   type WorkProgress,
 } from "@/features/sources/auto-ingest";
-import { fetchOne } from "./fetch-posts";
+import { fetchOne, FETCH_CONCURRENCY, sourceHost } from "./fetch-posts";
+import { mapWithConcurrency } from "./pool";
 
 /** AI time per run. Under the 10-minute cron period so a run never overlaps the next tick. */
 const AI_WINDOW_MS = 8 * 60_000;
 const CALLS_PER_DISPATCH = 1.5;
 /** How many dispatches one run may lease, also when pacing is off and only the deadline binds. */
 const MAX_BATCH = 400;
+/**
+ * Deadline for one source's requests. `0` disables, matching the PROVIDER_TIMEOUT_MS convention in
+ * the README; the default lives in fetch-posts.ts so the browser button shares it.
+ */
+const FETCH_TIMEOUT_MS = Number(process.env["FETCH_TIMEOUT_MS"] ?? 15_000);
 
 /**
  * Server-side auto-ingest: the body the scheduled task invokes.
@@ -92,18 +98,55 @@ export async function fetchAllSources(
   // Opt-out rather than opt-in: sources without the flag predate it and keep being polled.
   const targets = sources.list().filter((s) => s.platform !== "X" && s.autoSync !== false);
   const reports: SyncReport[] = [];
-  for (let i = 0; i < targets.length; i++) {
-    const s = targets[i]!;
-    await report?.(fetchingProgress(s.name, i + 1, targets.length));
-    const c = await collectSource(s, fetchOne, dispatches);
-    sources.update(s.id, { lastFetched: new Date().toISOString(), lastError: c.error });
+
+  // Article bodies need a DOM, so the extractor is server-only and injected into the shared
+  // transport. Imported once per run, not once per source.
+  const articleText =
+    process.env["FETCH_ARTICLE_BODIES"] !== "0"
+      ? (await import("./article.server")).extractArticleText
+      : undefined;
+
+  // Collected in parallel lanes rather than one source at a time: ~79 hosts fetched sequentially
+  // paid the sum of every latency, which ran to minutes before stage 2 even began. Same-host
+  // sources are still serialised (see the pool's `key`) and each request shares one deadline, so a
+  // single dead endpoint can no longer hold the whole pass open.
+  const fetcher = (s: (typeof targets)[number]) =>
+    fetchOne(s, {
+      timeoutMs: FETCH_TIMEOUT_MS,
+      ...(process.env["X_BRIDGE_BASE"] ? { xBridgeBase: process.env["X_BRIDGE_BASE"] } : {}),
+      ...(articleText ? { articleText } : {}),
+    });
+
+  const collected = await mapWithConcurrency(
+    targets,
+    FETCH_CONCURRENCY,
+    async (s) => {
+      const c = await collectSource(s, fetcher, dispatches);
+      sources.update(s.id, { lastFetched: new Date().toISOString(), lastError: c.error });
+      return c;
+    },
+    {
+      // One in-flight request per host: parallel requests to one host trip its rate limit.
+      key: sourceHost,
+      onSettled: (p) => {
+        void report?.(fetchingProgress(p.item?.name ?? "", p.done, p.total));
+      },
+    },
+  );
+
+  for (const result of collected) {
+    // collectSource reports failures as a value, so a rejected worker is a bug (or a store
+    // serialisation failure) rather than an unreachable source - either way it must be reported.
+    const c = result.status === "fulfilled" ? result.value : null;
     reports.push({
-      source: s.name,
-      fetched: c.stored,
+      source: c?.source ?? "Unknown",
+      fetched: c?.fetched ?? 0,
       relevant: 0,
       merged: 0,
       queued: 0,
-      ...(c.error ? { error: c.error } : {}),
+      duplicates: c?.duplicates ?? 0,
+      durationMs: c?.durationMs ?? 0,
+      ...(c ? (c.error ? { error: c.error } : {}) : { error: "Collection failed" }),
     });
   }
   if (opts.cooldownUntil) {
@@ -130,7 +173,7 @@ export async function fetchAllSources(
   // from running the job into the next tick. With pacing off (self-hosted) the deadline alone
   // bounds the run. The lease scales with the batch (leaseFor) so it outlives the run.
   const rpm = providerRpm();
-  const limit = rpm ? Math.ceil((AI_WINDOW_MS / 60_000) * rpm / CALLS_PER_DISPATCH) : MAX_BATCH;
+  const limit = rpm ? Math.ceil(((AI_WINDOW_MS / 60_000) * rpm) / CALLS_PER_DISPATCH) : MAX_BATCH;
   // Assigned only inside onItem, which control-flow analysis cannot see; the cast keeps it
   // from being narrowed to `null` for the rest of the function.
   let lastItem = null as WorkProgress | null;

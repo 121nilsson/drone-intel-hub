@@ -59,4 +59,12 @@ export interface DispatchRepository {
   claim?(limit: number, leaseMs: number, owner: string): Promise<string[] | null>;
   /** Release leases held by `owner`. */
   release?(ids: string[], owner: string): Promise<void>;
+  /**
+   * Id of the already-stored dispatch this fingerprint duplicates, or null. Suppresses the
+   * copies of one story that reach the pipeline from several sources at once: they cost an
+   * extraction each and would each be recorded as a separate claim source in consensus().
+   *
+   * Optional, so a store or test double without dedupe support simply never suppresses one.
+   */
+  duplicateOf?(fingerprint: string): string | null;
 }

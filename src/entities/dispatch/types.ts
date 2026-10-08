@@ -2,7 +2,16 @@
  * A raw post/article captured from a monitored source, stored before any AI work.
  * Collection (network) and processing (AI) are decoupled through this record.
  */
-export type DispatchStatus = "pending" | "processed" | "irrelevant" | "failed";
+export type DispatchStatus =
+  | "pending"
+  | "processed"
+  | "irrelevant"
+  | "failed"
+  /**
+   * A near-duplicate of a post already stored: text stripped, kept only so the archive still
+   * shows that this source carried the same story. See entities/dispatch/simhash.ts.
+   */
+  | "duplicate";
 
 export interface RawDispatch {
   /** `${sourceId}|${externalId}` — the dedupe key, stable across syncs. */
@@ -23,6 +32,13 @@ export interface RawDispatch {
   candidateIds?: string[];
   droneIds?: string[];
   outcome?: "auto-merged" | "auto-promoted" | "auto-discarded" | "queued" | undefined;
+  /**
+   * SimHash fingerprint of `text`, written at collection time. Undefined on documents stored
+   * before dedupe existed; those are fingerprinted lazily on read instead.
+   */
+  contentHash?: string | undefined;
+  /** For `status: "duplicate"`: the canonical dispatch this post duplicates. */
+  duplicateOf?: string | undefined;
 }
 
 export const MAX_ATTEMPTS = 3;

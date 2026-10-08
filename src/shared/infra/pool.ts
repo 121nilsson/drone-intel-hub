@@ -63,21 +63,23 @@ export async function mapWithConcurrency<T, R>(
       const key = opts.key?.(item);
       active++;
       if (key !== undefined) activeKeys.add(key);
-      void worker(item, index).then(
-        (value) => {
-          results[index] = { status: "fulfilled", value };
-        },
-        (reason: unknown) => {
-          results[index] = { status: "rejected", reason };
-        },
-      ).then(() => {
-        active--;
-        if (key !== undefined) activeKeys.delete(key);
-        settled++;
-        opts.onSettled?.({ done: settled, total, item });
-        // A resolve here is redundant with the one in pump() for the last lane, but harmless.
-        pump();
-      });
+      void worker(item, index)
+        .then(
+          (value) => {
+            results[index] = { status: "fulfilled", value };
+          },
+          (reason: unknown) => {
+            results[index] = { status: "rejected", reason };
+          },
+        )
+        .then(() => {
+          active--;
+          if (key !== undefined) activeKeys.delete(key);
+          settled++;
+          opts.onSettled?.({ done: settled, total, item });
+          // A resolve here is redundant with the one in pump() for the last lane, but harmless.
+          pump();
+        });
     };
 
     pump();

@@ -34,7 +34,14 @@ function row<C extends Collection>(c: C, doc: CollectionMap[C]): Record<string, 
   switch (c) {
     case "drones": {
       const d = doc as CollectionMap["drones"];
-      return { id: d.id, name: d.name, domain: d.domain, origin: d.origin, data: doc, updated_at: new Date().toISOString() };
+      return {
+        id: d.id,
+        name: d.name,
+        domain: d.domain,
+        origin: d.origin,
+        data: doc,
+        updated_at: new Date().toISOString(),
+      };
     }
     case "candidates": {
       const d = doc as CollectionMap["candidates"];
@@ -43,28 +50,59 @@ function row<C extends Collection>(c: C, doc: CollectionMap[C]): Record<string, 
     case "dispatches": {
       const d = doc as CollectionMap["dispatches"];
       // Lease columns deliberately omitted - only claim/release touch them.
-      return { id: d.id, source_id: d.sourceId, status: d.status, created_at: d.createdAt, processed_at: d.processedAt ?? null, data: doc };
+      // content_hash is mirrored for the same reason as source_id/status: dedupe reads it.
+      return {
+        id: d.id,
+        source_id: d.sourceId,
+        status: d.status,
+        created_at: d.createdAt,
+        processed_at: d.processedAt ?? null,
+        content_hash: d.contentHash ?? null,
+        data: doc,
+      };
     }
     case "procurements": {
       const d = doc as CollectionMap["procurements"];
       return {
-        id: d.id, company: d.company, country: d.country ?? "", amount: d.amount ?? null, currency: d.currency ?? null,
-        program: d.program ?? null, product: d.product ?? null, customer: d.customer ?? null, announced_at: d.announcedAt ?? null,
-        source: d.source, source_url: d.sourceUrl ?? null, notes: d.notes ?? null, created_at: d.createdAt, data: doc,
+        id: d.id,
+        company: d.company,
+        country: d.country ?? "",
+        amount: d.amount ?? null,
+        currency: d.currency ?? null,
+        program: d.program ?? null,
+        product: d.product ?? null,
+        customer: d.customer ?? null,
+        announced_at: d.announcedAt ?? null,
+        source: d.source,
+        source_url: d.sourceUrl ?? null,
+        notes: d.notes ?? null,
+        created_at: d.createdAt,
+        data: doc,
       };
     }
     case "taxonomies": {
       const d = doc as CollectionMap["taxonomies"];
       return {
-        id: d.id, taxonomy: d.taxonomy, canonical_id: d.canonicalId, label: d.label,
-        parent_id: d.parentId ?? null, data: doc, updated_at: new Date().toISOString(),
+        id: d.id,
+        taxonomy: d.taxonomy,
+        canonical_id: d.canonicalId,
+        label: d.label,
+        parent_id: d.parentId ?? null,
+        data: doc,
+        updated_at: new Date().toISOString(),
       };
     }
     case "taxonomy_candidates": {
       const d = doc as CollectionMap["taxonomy_candidates"];
       return {
-        id: d.id, taxonomy: d.taxonomy, raw_term: d.rawTerm, status: d.status, occurrences: d.occurrences,
-        first_seen: d.firstSeen, last_seen: d.lastSeen, data: doc,
+        id: d.id,
+        taxonomy: d.taxonomy,
+        raw_term: d.rawTerm,
+        status: d.status,
+        occurrences: d.occurrences,
+        first_seen: d.firstSeen,
+        last_seen: d.lastSeen,
+        data: doc,
       };
     }
     case "sources": {
@@ -99,7 +137,8 @@ export class CloudStore implements DocumentStore {
     const r = await db.from("collection_meta").insert({ name: c });
     if (r.error) return;
     const rows = [...items].reverse().map((d) => row(c, d));
-    for (let i = 0; i < rows.length; i += 200) check(await db.from(c).upsert(rows.slice(i, i + 200)));
+    for (let i = 0; i < rows.length; i += 200)
+      check(await db.from(c).upsert(rows.slice(i, i + 200)));
   }
 
   async put<C extends Collection>(c: C, doc: CollectionMap[C]) {
@@ -114,11 +153,17 @@ export class CloudStore implements DocumentStore {
 
   async claim(c: Collection, opts: { limit: number; leaseMs: number; owner: string }) {
     if (c !== "dispatches") return null;
-    const r = await (await client()).rpc("claim_dispatches", {
-      p_limit: opts.limit, p_lease_ms: opts.leaseMs, p_owner: opts.owner,
+    const r = await (
+      await client()
+    ).rpc("claim_dispatches", {
+      p_limit: opts.limit,
+      p_lease_ms: opts.leaseMs,
+      p_owner: opts.owner,
     });
     if (r.error) return null;
-    return (r.data as (string | { claim_dispatches: string })[]).map((x) => (typeof x === "string" ? x : x.claim_dispatches));
+    return (r.data as (string | { claim_dispatches: string })[]).map((x) =>
+      typeof x === "string" ? x : x.claim_dispatches,
+    );
   }
 
   async release(c: Collection, ids: string[], owner: string) {

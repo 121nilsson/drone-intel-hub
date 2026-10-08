@@ -1,12 +1,14 @@
 import { useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DOMAINS, type Domain } from "@/entities/drone/types";
 import { PLATFORMS, type MonitoredSource, type SourcePlatform } from "@/entities/source/types";
 import { sampleDispatch } from "@/entities/source/seed";
 import { useDispatches, useServices, useSources } from "@/shared/infra/services";
 import type { DispatchStatus } from "@/entities/dispatch/types";
 import { fetchSourcePosts } from "@/shared/infra/source-fetch.functions";
+import { FETCH_CONCURRENCY, sourceHost } from "@/shared/infra/fetch-posts";
+import { mapWithConcurrency } from "@/shared/infra/pool";
 import { getSyncState, type SyncState } from "@/shared/infra/source-sync.functions";
 import { getStoreStatus } from "@/shared/infra/store.functions";
 import { translateText } from "@/shared/infra/ai-proxy.functions";
@@ -22,7 +24,7 @@ import {
 } from "./auto-ingest";
 
 const field =
-  "w-full border border-border bg-background px-2 py-1.5 font-mono text-xs outline-none focus:border-primary";
+  "w-full min-w-0 max-w-full border border-border bg-background px-2 py-1.5 font-mono text-xs outline-none focus:border-primary";
 /** Matches the cron in vite.config.ts. */
 const AUTO_MIN = 10;
 
@@ -30,8 +32,10 @@ function ExpandableText({ text, className = "" }: { text: string; className?: st
   const [expanded, setExpanded] = useState(false);
   const isLong = text.length > 200;
   return (
-    <div>
-      <p className={`${className} ${!expanded && isLong ? "line-clamp-3" : ""}`}>{text}</p>
+    <div className="min-w-0">
+      <p className={`break-words ${className} ${!expanded && isLong ? "line-clamp-3" : ""}`}>
+        {text}
+      </p>
       {isLong && (
         <button
           type="button"
@@ -76,17 +80,17 @@ function DispatchTranslateButton({
 
   if (translated) {
     return (
-      <div className="mt-1 border-l-2 border-primary/30 pl-3">
+      <div className="mt-1 min-w-0 border-l-2 border-primary/30 pl-3">
         <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
           English translation
         </p>
-        <p className="mt-0.5 text-sm">{translated}</p>
+        <p className="mt-0.5 break-words text-sm">{translated}</p>
       </div>
     );
   }
 
   return (
-    <div className="mt-1 flex items-center gap-2">
+    <div className="mt-1 flex flex-wrap items-center gap-2">
       <Btn
         variant="ghost"
         onClick={handleTranslate}
@@ -196,6 +200,7 @@ export function SourcesPage() {
   const [syncState, setSyncState] = useState<SyncState | null>(null);
   const [postgres, setPostgres] = useState(false);
   const [filter, setFilter] = useState<DispatchStatus | "all">("all");
+  const [archiveLimit, setArchiveLimit] = useState(20);
   const dispatches = useDispatches();
   const svcRef = useRef(svc);
   svcRef.current = svc;
@@ -219,7 +224,7 @@ export function SourcesPage() {
       say(
         c.error
           ? `${s.name}: ${c.error}`
-          : `${s.name}: ${c.fetched} fetched · ${c.stored} new stored`,
+          : `${s.name}: ${c.fetched} fetched · ${c.stored} new · ${c.duplicates} duplicates · ${c.durationMs}ms`,
       );
       return c;
     },
@@ -275,11 +280,12 @@ export function SourcesPage() {
     setBusy("all");
     const list = svcRef.current.sources.list().filter((x) => x.platform !== "X");
     try {
-      for (let i = 0; i < list.length; i++) {
-        const s = list[i]!;
-        setWork(fetchingProgress(s.name, i + 1, list.length));
-        await collectOne(s);
-      }
+      // Parallel lanes, one in-flight request per host: the same shape as the server's collection
+      // pass, so a slow source no longer queues up behind 78 others before the queue is touched.
+      await mapWithConcurrency(list, FETCH_CONCURRENCY, collectOne, {
+        key: sourceHost,
+        onSettled: (p) => setWork(fetchingProgress(p.item.name, p.done, p.total)),
+      });
     } finally {
       setWork(null);
       setBusy(null);
@@ -336,12 +342,62 @@ export function SourcesPage() {
     });
     setF({ ...f, name: "", handle: "", notes: "" });
   };
-  const counts = { pending: 0, processed: 0, irrelevant: 0, failed: 0 } as Record<
-    DispatchStatus,
-    number
-  >;
+  // Every status is listed explicitly. The object literal used to lean on an `as` cast, which meant
+  // a status added to the union later counted as NaN in this tab instead of failing to compile.
+  const counts: Record<DispatchStatus, number> = {
+    pending: 0,
+    processed: 0,
+    irrelevant: 0,
+    failed: 0,
+    duplicate: 0,
+  };
   for (const d of dispatches) counts[d.status]++;
-  const shown = dispatches.filter((d) => filter === "all" || d.status === filter).slice(0, 50);
+
+  /**
+   * Per-source dispatch breakdown. Computed once for the whole archive rather than per source row,
+   * which would rescan every dispatch for each of ~79 sources on every render.
+   */
+  const yieldBySource = useMemo(() => {
+    type Yield = {
+      stored: number;
+      waiting: number;
+      analysed: number;
+      queued: number;
+      filtered: number;
+      duplicates: number;
+      failed: number;
+    };
+    const empty = (): Yield => ({
+      stored: 0,
+      waiting: 0,
+      analysed: 0,
+      queued: 0,
+      filtered: 0,
+      duplicates: 0,
+      failed: 0,
+    });
+    const bySource = new Map<string, Yield>();
+    for (const d of dispatches) {
+      const y = bySource.get(d.sourceId) ?? empty();
+      y.stored++;
+      if (d.status === "processed") y.analysed++;
+      else if (d.status === "irrelevant") y.filtered++;
+      else if (d.status === "duplicate") y.duplicates++;
+      else if (d.status === "failed") y.failed++;
+      else if (d.status === "pending") y.waiting++;
+      if (d.outcome === "queued") y.queued++;
+      bySource.set(d.sourceId, y);
+    }
+    return bySource;
+  }, [dispatches]);
+
+  /** Sources that have produced at least one drone-related post - the "worth polling" answer. */
+  const productiveSources = sources.filter((s) => {
+    const y = yieldBySource.get(s.id);
+    return !!y && y.analysed + y.queued > 0;
+  }).length;
+  const filtered = dispatches.filter((d) => filter === "all" || d.status === filter);
+  const shown = filtered.slice(0, archiveLimit);
   const remote = syncState?.progress ?? null;
   const workingIds = new Set<string>();
   if (work?.phase === "analysing" && work.currentId) workingIds.add(work.currentId);
@@ -352,140 +408,180 @@ export function SourcesPage() {
   const translateFn = useServerFn(translateText);
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
-      <div className="space-y-6">
-        <Panel title={`Monitored sources · ${sources.length}`}>
-          <div className="mb-3 flex flex-wrap items-center gap-3">
-            <Btn onClick={syncAll} disabled={!!busy}>
-              {busy === "all" ? "Fetching…" : "Fetch all feeds"}
-            </Btn>
-            <Btn
-              variant="ghost"
-              disabled={!!busy || counts.pending === 0}
-              onClick={async () => {
-                setBusy("queue");
-                try {
-                  await processQueue();
-                } finally {
-                  setBusy(null);
-                }
-              }}
-            >
-              {busy === "queue" ? "Analysing…" : `Analyse queue (${counts.pending})`}
-            </Btn>
-            <Btn
-              variant="ghost"
-              onClick={() => {
-                const count = svc.sources.addMissingDefaults?.() ?? 0;
-                if (count > 0) {
-                  say(`Added ${count} default sources`);
-                }
-              }}
-            >
-              Load default sources
-            </Btn>
-            <span className="font-mono text-xs text-muted-foreground">
-              Auto-sync runs server-side every {AUTO_MIN} minutes
-              {!postgres
-                ? " · needs PostgreSQL"
-                : syncState?.lastSync
-                  ? ` · last run ${new Date(syncState.lastSync).toLocaleString()}`
-                  : " · not yet run"}
+    <div className="grid gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
+      <Panel title={`Monitored sources · ${sources.length}`}>
+        <div className="mb-3 flex flex-wrap items-center gap-3">
+          <Btn onClick={syncAll} disabled={!!busy}>
+            {busy === "all" ? "Fetching…" : "Fetch all feeds"}
+          </Btn>
+          <Btn
+            variant="ghost"
+            disabled={!!busy || counts.pending === 0}
+            onClick={async () => {
+              setBusy("queue");
+              try {
+                await processQueue();
+              } finally {
+                setBusy(null);
+              }
+            }}
+          >
+            {busy === "queue" ? "Analysing…" : `Analyse queue (${counts.pending})`}
+          </Btn>
+          <Btn
+            variant="ghost"
+            onClick={() => {
+              const count = svc.sources.addMissingDefaults?.() ?? 0;
+              if (count > 0) {
+                say(`Added ${count} default sources`);
+              }
+            }}
+          >
+            Load default sources
+          </Btn>
+          <span className="font-mono text-xs text-muted-foreground">
+            Auto-sync runs server-side every {AUTO_MIN} minutes
+            {!postgres
+              ? " · needs PostgreSQL"
+              : syncState?.lastSync
+                ? ` · last run ${new Date(syncState.lastSync).toLocaleString()}`
+                : " · not yet run"}
+          </span>
+          {syncState?.cooldownUntil && (
+            <span className="font-mono text-xs text-destructive">
+              Rate-limited · AI analysis paused until{" "}
+              {new Date(syncState.cooldownUntil).toLocaleTimeString()}
             </span>
-            {syncState?.cooldownUntil && (
-              <span className="font-mono text-xs text-destructive">
-                Rate-limited · AI analysis paused until{" "}
-                {new Date(syncState.cooldownUntil).toLocaleTimeString()}
-              </span>
-            )}
-          </div>
-          <WorkStatus local={work} remote={remote} pending={counts.pending} stopped={stopped} />
-          <ul className="divide-y divide-border">
-            {sources.map((s) => (
-              <li key={s.id} className="flex flex-wrap items-start gap-3 py-3">
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-medium">{s.name}</span>
-                    <Tag tone="primary">{s.platform}</Tag>
-                    <Tag>{s.domain}</Tag>
-                  </div>
-                  <p className="mt-1 break-all font-mono text-xs text-muted-foreground">
-                    {s.handle}
-                  </p>
-                  {s.notes && <p className="mt-1 text-sm text-muted-foreground">{s.notes}</p>}
-                  {s.lastFetched && (
-                    <p className="mt-1 font-mono text-[11px] text-muted-foreground">
-                      Last synced {new Date(s.lastFetched).toLocaleString()} ·{" "}
-                      {dispatches.filter((d) => d.sourceId === s.id).length} posts stored
-                    </p>
-                  )}
-                  {s.lastError && (
-                    <p className="mt-1 font-mono text-[11px] text-destructive">{s.lastError}</p>
-                  )}
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <label
-                    className="flex items-center gap-1 font-mono text-xs text-muted-foreground"
-                    title="Include this source in the scheduled server-side auto-sync"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={s.autoSync !== false}
-                      disabled={s.platform === "X"}
-                      onChange={(e) => svc.sources.update(s.id, { autoSync: e.target.checked })}
-                    />
-                    Auto
-                  </label>
-                  <Btn
-                    disabled={!!busy || s.platform === "X"}
-                    onClick={async () => {
-                      setBusy(s.id);
-                      try {
-                        await syncOne(s);
-                      } finally {
-                        setBusy(null);
-                      }
-                    }}
-                  >
-                    {busy === s.id ? "Syncing…" : "Sync"}
-                  </Btn>
-                  <Btn variant="ghost" onClick={() => sample(s)}>
-                    Sample
-                  </Btn>
-                  <Btn variant="danger" onClick={() => svc.sources.remove(s.id)}>
-                    Remove
-                  </Btn>
-                </div>
-              </li>
-            ))}
-          </ul>
-          <p className="mt-3 text-xs text-muted-foreground">
-            Fetching only saves new posts (public Telegram channels, RSS feeds, website headlines)
-            to the archive — no AI yet. Analysing then works through the waiting posts in small
-            batches: drone-related ones keep their full text and are linked to the systems they
-            mention; others are reduced to a stub so they are never fetched again. X needs a paid
-            API and is not supported.
+          )}
+        </div>
+        <WorkStatus local={work} remote={remote} pending={counts.pending} stopped={stopped} />
+        {sources.length > 0 && (
+          <p className="mb-3 font-mono text-xs text-muted-foreground">
+            <span className="text-primary">{productiveSources}</span> of {sources.length} sources
+            produced drone-related posts
           </p>
-        </Panel>
+        )}
+        <ul className="divide-y divide-border">
+          {sources.map((s) => (
+            <li
+              key={s.id}
+              className="flex min-w-0 flex-col gap-3 py-3 sm:flex-row sm:flex-wrap sm:items-start"
+            >
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-medium">{s.name}</span>
+                  <Tag tone="primary">{s.platform}</Tag>
+                  <Tag>{s.domain}</Tag>
+                  {(() => {
+                    // Collected plenty, produced nothing: the fetch works, the source is just
+                    // noise, and this is the only place that says so.
+                    const y = yieldBySource.get(s.id);
+                    return y && y.analysed + y.queued === 0 && y.stored >= 20 ? (
+                      <Tag
+                        tone="danger"
+                        title="Posts are collected but none turn out to be drone-related"
+                      >
+                        no signal
+                      </Tag>
+                    ) : null;
+                  })()}
+                </div>
+                <p className="mt-1 break-all font-mono text-xs text-muted-foreground">{s.handle}</p>
+                {s.notes && <p className="mt-1 text-sm text-muted-foreground">{s.notes}</p>}
+                {s.lastFetched && (
+                  <p className="mt-1 font-mono text-[11px] text-muted-foreground">
+                    Last synced {new Date(s.lastFetched).toLocaleString()} ·{" "}
+                    {(() => {
+                      const y = yieldBySource.get(s.id);
+                      if (!y) return "0 posts stored";
+                      return [
+                        `${y.stored} stored`,
+                        y.waiting ? `${y.waiting} waiting` : "",
+                        `${y.analysed} analysed`,
+                        y.queued ? `${y.queued} queued` : "",
+                        y.filtered ? `${y.filtered} filtered` : "",
+                        y.duplicates ? `${y.duplicates} duplicates` : "",
+                        y.failed ? `${y.failed} failed` : "",
+                      ]
+                        .filter(Boolean)
+                        .join(" · ");
+                    })()}
+                  </p>
+                )}
+                {s.lastError && (
+                  <p className="mt-1 font-mono text-[11px] text-destructive">{s.lastError}</p>
+                )}
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <label
+                  className="flex items-center gap-1 font-mono text-xs text-muted-foreground"
+                  title="Include this source in the scheduled server-side auto-sync"
+                >
+                  <input
+                    type="checkbox"
+                    checked={s.autoSync !== false}
+                    disabled={s.platform === "X"}
+                    onChange={(e) => svc.sources.update(s.id, { autoSync: e.target.checked })}
+                  />
+                  Auto
+                </label>
+                <Btn
+                  disabled={!!busy || s.platform === "X"}
+                  onClick={async () => {
+                    setBusy(s.id);
+                    try {
+                      await syncOne(s);
+                    } finally {
+                      setBusy(null);
+                    }
+                  }}
+                >
+                  {busy === s.id ? "Syncing…" : "Sync"}
+                </Btn>
+                <Btn variant="ghost" onClick={() => sample(s)}>
+                  Sample
+                </Btn>
+                <Btn variant="danger" onClick={() => svc.sources.remove(s.id)}>
+                  Remove
+                </Btn>
+              </div>
+            </li>
+          ))}
+        </ul>
+        <p className="mt-3 text-xs text-muted-foreground">
+          Fetching only saves new posts (public Telegram channels, RSS feeds, website headlines) to
+          the archive — no AI yet. Analysing then works through the waiting posts in small batches:
+          drone-related ones keep their full text and are linked to the systems they mention; others
+          are reduced to a stub so they are never fetched again. A post that repeats a story already
+          stored is kept as a stub too, so one story is analysed once however many sources carried
+          it. X needs a paid API or an RSS bridge (X_BRIDGE_BASE) and is not supported by default.
+        </p>
+      </Panel>
+      <div className="min-w-0 space-y-6">
         <Panel title={`Dispatch archive · ${dispatches.length}`}>
           <div className="mb-3 flex flex-wrap gap-2 font-mono text-xs">
-            {(["all", "pending", "processed", "irrelevant", "failed"] as const).map((k) => (
-              <button
-                key={k}
-                onClick={() => setFilter(k)}
-                className={`border px-2 py-1 ${filter === k ? "border-primary text-primary" : "border-border text-muted-foreground"}`}
-              >
-                {k} {k === "all" ? dispatches.length : counts[k]}
-              </button>
-            ))}
+            {(["all", "pending", "processed", "irrelevant", "failed", "duplicate"] as const).map(
+              (k) => (
+                <button
+                  key={k}
+                  onClick={() => {
+                    setFilter(k);
+                    setArchiveLimit(20);
+                  }}
+                  className={`border px-2 py-1 ${filter === k ? "border-primary text-primary" : "border-border text-muted-foreground"}`}
+                >
+                  {k} {k === "all" ? dispatches.length : counts[k]}
+                </button>
+              ),
+            )}
           </div>
           {shown.length === 0 ? (
             <p className="text-sm text-muted-foreground">Nothing here yet — fetch some feeds.</p>
           ) : (
             <ul className="divide-y divide-border">
               {shown.map((d) => (
-                <li key={d.id} className="py-2">
-                  <div className="flex flex-wrap items-center gap-2 font-mono text-[11px] text-muted-foreground">
+                <li key={d.id} className="min-w-0 break-words py-2">
+                  <div className="flex min-w-0 flex-wrap items-center gap-2 font-mono text-[11px] text-muted-foreground">
                     <Tag
                       tone={
                         d.status === "processed"
@@ -509,6 +605,15 @@ export function SourcesPage() {
                       <a href="/intake" className="text-primary underline">
                         in intake queue
                       </a>
+                    )}
+                    {d.status === "duplicate" && d.duplicateOf && (
+                      // Kept for provenance: the story was already stored from this source, so the
+                      // row shows which one it duplicated rather than a second copy of the text.
+                      <span className="text-accent underline">
+                        duplicate of{" "}
+                        {dispatches.find((x) => x.id === d.duplicateOf)?.sourceName ??
+                          d.duplicateOf}
+                      </span>
                     )}
                   </div>
                   {d.text && <ExpandableText text={d.text} className="mt-1 text-sm" />}
@@ -536,6 +641,62 @@ export function SourcesPage() {
               ))}
             </ul>
           )}
+          {filtered.length > shown.length && (
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              <Btn variant="ghost" onClick={() => setArchiveLimit((n) => n + 20)}>
+                Show {Math.min(20, filtered.length - shown.length)} more
+              </Btn>
+              <span className="font-mono text-xs text-muted-foreground">
+                {shown.length} of {filtered.length}
+              </span>
+            </div>
+          )}
+        </Panel>
+        <Panel title="Add source">
+          <div className="min-w-0 space-y-3">
+            <input
+              className={field}
+              placeholder="Name"
+              value={f.name}
+              onChange={(e) => setF({ ...f, name: e.target.value })}
+            />
+            <div className="grid grid-cols-2 gap-2">
+              <select
+                className={field}
+                value={f.platform}
+                onChange={(e) => setF({ ...f, platform: e.target.value as SourcePlatform })}
+              >
+                {PLATFORMS.map((p) => (
+                  <option key={p}>{p}</option>
+                ))}
+              </select>
+              <select
+                className={field}
+                value={f.domain}
+                onChange={(e) => setF({ ...f, domain: e.target.value as Domain })}
+              >
+                {DOMAINS.map((d) => (
+                  <option key={d}>{d}</option>
+                ))}
+              </select>
+            </div>
+            <input
+              className={field}
+              placeholder="URL or @handle"
+              value={f.handle}
+              onChange={(e) => setF({ ...f, handle: e.target.value })}
+            />
+            <textarea
+              className={field}
+              rows={3}
+              placeholder="Notes"
+              value={f.notes}
+              onChange={(e) => setF({ ...f, notes: e.target.value })}
+            />
+            <Btn onClick={add} disabled={!f.name.trim() || !f.handle.trim()}>
+              Add to watchlist
+            </Btn>
+          </div>
         </Panel>
         {log.length > 0 && (
           <Panel title="Activity log">
@@ -547,52 +708,6 @@ export function SourcesPage() {
           </Panel>
         )}
       </div>
-      <Panel title="Add source">
-        <div className="space-y-3">
-          <input
-            className={field}
-            placeholder="Name"
-            value={f.name}
-            onChange={(e) => setF({ ...f, name: e.target.value })}
-          />
-          <div className="grid grid-cols-2 gap-2">
-            <select
-              className={field}
-              value={f.platform}
-              onChange={(e) => setF({ ...f, platform: e.target.value as SourcePlatform })}
-            >
-              {PLATFORMS.map((p) => (
-                <option key={p}>{p}</option>
-              ))}
-            </select>
-            <select
-              className={field}
-              value={f.domain}
-              onChange={(e) => setF({ ...f, domain: e.target.value as Domain })}
-            >
-              {DOMAINS.map((d) => (
-                <option key={d}>{d}</option>
-              ))}
-            </select>
-          </div>
-          <input
-            className={field}
-            placeholder="URL or @handle"
-            value={f.handle}
-            onChange={(e) => setF({ ...f, handle: e.target.value })}
-          />
-          <textarea
-            className={field}
-            rows={3}
-            placeholder="Notes"
-            value={f.notes}
-            onChange={(e) => setF({ ...f, notes: e.target.value })}
-          />
-          <Btn onClick={add} disabled={!f.name.trim() || !f.handle.trim()}>
-            Add to watchlist
-          </Btn>
-        </div>
-      </Panel>
     </div>
   );
 }

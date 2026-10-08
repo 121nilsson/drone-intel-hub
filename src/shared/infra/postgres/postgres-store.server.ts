@@ -106,9 +106,12 @@ export class PostgresStore implements DocumentStore {
       // data, and the caller may be holding a stale cached copy - letting it stamp lease_until
       // would either extend a dead worker's lease or clear a live one. Only claim/release
       // touch them, which is what keeps claiming exclusive.
-      await db`insert into dispatches (id, source_id, status, created_at, processed_at, data)
-        values (${d.id}, ${d.sourceId}, ${d.status}, ${d.createdAt}, ${d.processedAt ?? null}, ${data})
-        on conflict (id) do update set status = excluded.status, processed_at = excluded.processed_at, data = excluded.data`;
+      //
+      // content_hash is mirrored because dedupe reads it (it is produced by collectSource, so a
+      // document that has never been re-collected simply keeps whatever it was written with).
+      await db`insert into dispatches (id, source_id, status, created_at, processed_at, content_hash, data)
+        values (${d.id}, ${d.sourceId}, ${d.status}, ${d.createdAt}, ${d.processedAt ?? null}, ${d.contentHash ?? null}, ${data})
+        on conflict (id) do update set status = excluded.status, processed_at = excluded.processed_at, content_hash = excluded.content_hash, data = excluded.data`;
     } else if (c === "procurements") {
       const d = doc as CollectionMap["procurements"];
       await db`insert into procurements (id, company, country, amount, currency, program, product, customer, announced_at, source, source_url, notes, created_at, data)

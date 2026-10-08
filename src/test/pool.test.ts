@@ -61,8 +61,14 @@ describe("mapWithConcurrency", () => {
     });
 
     expect(completed).toBe(2);
-    expect(results.map((r) => r.status)).toEqual(["fulfilled", "rejected", "fulfilled", "rejected"]);
-    if (results[1]!.status === "rejected") expect(results[1].reason).toBeInstanceOf(Error);
+    expect(results.map((r) => r.status)).toEqual([
+      "fulfilled",
+      "rejected",
+      "fulfilled",
+      "rejected",
+    ]);
+    const boom = results[1];
+    if (boom?.status === "rejected") expect(boom.reason).toBeInstanceOf(Error);
   });
 
   it("serialises items sharing a key while other keys run concurrently", async () => {
