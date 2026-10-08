@@ -1,5 +1,21 @@
-import { normalizeQuantity } from "@/entities/normalization/units";
+import { canonicalUnitForSemantic, semanticKeyFor } from "@/entities/normalization/semantic";
+import { convert, normalizeQuantity } from "@/entities/normalization/units";
 import type { SpecAttribute, SpecClaim } from "./types";
+
+function targetUnit(spec: SpecAttribute): string | undefined {
+  if (spec.canonicalUnit) return spec.canonicalUnit;
+  if (spec.semantic) return canonicalUnitForSemantic(spec.semantic);
+  const inferred = semanticKeyFor(spec.key, spec.label);
+  if (inferred.startsWith("dimension.")) return canonicalUnitForSemantic(inferred);
+  return undefined;
+}
+
+function alignUnit(value: number, unit: string, spec: SpecAttribute): { value: number; unit: string } {
+  const target = targetUnit(spec);
+  if (!target || unit === target) return { value, unit };
+  const converted = convert(value, unit, target);
+  return converted !== undefined ? { value: converted, unit: target } : { value, unit };
+}
 
 export interface Consensus {
   display: string;
@@ -33,13 +49,19 @@ function measurement(spec: SpecAttribute, claim: SpecClaim, claimIndex: number):
   if (parsed) {
     const qual = parsed.range?.qualifier ?? "exact";
     if ((qual === "exact" || qual === "approximate") && parsed.canonicalValue !== undefined) {
-      return { value: parsed.canonicalValue, ...(parsed.canonicalUnit ? { unit: parsed.canonicalUnit } : {}), claimIndex };
+      const unit = parsed.canonicalUnit ?? "";
+      const aligned = unit ? alignUnit(parsed.canonicalValue, unit, spec) : { value: parsed.canonicalValue, unit: "" };
+      return { value: aligned.value, ...(aligned.unit ? { unit: aligned.unit } : {}), claimIndex };
     }
     if (parsed.range && (parsed.range.min !== undefined || parsed.range.max !== undefined)) {
+      const unit = parsed.canonicalUnit ?? "";
+      const min = parsed.range.min !== undefined && unit ? alignUnit(parsed.range.min, unit, spec).value : parsed.range.min;
+      const max = parsed.range.max !== undefined && unit ? alignUnit(parsed.range.max, unit, spec).value : parsed.range.max;
+      const displayUnit = unit ? alignUnit(parsed.range.min ?? parsed.range.max ?? 0, unit, spec).unit : unit;
       return {
-        ...(parsed.range.min !== undefined ? { min: parsed.range.min } : {}),
-        ...(parsed.range.max !== undefined ? { max: parsed.range.max } : {}),
-        ...(parsed.canonicalUnit ? { unit: parsed.canonicalUnit } : {}),
+        ...(min !== undefined ? { min } : {}),
+        ...(max !== undefined ? { max } : {}),
+        ...(displayUnit ? { unit: displayUnit } : {}),
       };
     }
   }
@@ -47,9 +69,11 @@ function measurement(spec: SpecAttribute, claim: SpecClaim, claimIndex: number):
   if (spec.unit) {
     const converted = normalizeQuantity(`${claim.value} ${spec.unit}`);
     if (converted?.canonicalValue !== undefined) {
+      const unit = converted.canonicalUnit ?? "";
+      const aligned = unit ? alignUnit(converted.canonicalValue, unit, spec) : { value: converted.canonicalValue, unit: "" };
       return {
-        value: converted.canonicalValue,
-        ...(converted.canonicalUnit ? { unit: converted.canonicalUnit } : {}),
+        value: aligned.value,
+        ...(aligned.unit ? { unit: aligned.unit } : {}),
         claimIndex,
       };
     }
@@ -115,7 +139,7 @@ export function consensus(spec: SpecAttribute): Consensus {
   const envelopeMax = Math.max(maxPoint, ...bounds.flatMap((b) => (b.max !== undefined ? [b.max] : [])));
   const confidence =
     sources >= 3 && spread < 0.25 ? "high" : sources >= 2 && spread < 0.6 ? "medium" : "low";
-  const unit = points.find((p) => p.unit)?.unit ?? spec.unit;
+  const unit = targetUnit(spec) ?? points.find((p) => p.unit)?.unit ?? spec.unit;
   const u = unit ? ` ${unit}` : "";
   const disputed = spread >= 0.6 && sources >= 2;
   const outliers = points.filter((p) => median !== 0 && Math.abs(p.value - median) / Math.abs(median) >= 0.6).map((p) => p.claimIndex);

@@ -68,22 +68,22 @@ export function AppShell({ children }: { children: ReactNode }) {
           <Link to="/" className="flex items-center gap-2 font-mono text-sm font-bold tracking-widest text-primary">
             <Radar className="h-5 w-5" /> DRONE//INT
           </Link>
-          <nav className="hidden flex-1 items-center gap-5 md:flex">
+          <nav className="hidden flex-1 items-center gap-4 lg:flex">
             {NAV.map((n) => <Link key={n.to} to={n.to} className={linkCls} activeProps={active} activeOptions={{ exact: n.to === "/" }}>{n.label}</Link>)}
           </nav>
           <div className="ml-auto flex items-center gap-2">
-            <button onClick={() => setCmd(true)} className="hidden items-center gap-2 border border-border px-2 py-1 font-mono text-xs text-muted-foreground hover:text-foreground sm:flex">
+            <button onClick={() => setCmd(true)} className="hidden items-center gap-2 border border-border px-2 py-1 font-mono text-xs text-muted-foreground hover:text-foreground lg:flex">
               <Search className="h-3.5 w-3.5" /> Search <kbd className="text-[10px]">⌘K</kbd>
             </button>
             <Link to="/intake" className="inline-flex items-center gap-1 bg-primary px-3 py-1.5 font-mono text-xs uppercase text-primary-foreground hover:bg-primary/85">
               <Plus className="h-3.5 w-3.5" /> Ingest
             </Link>
-            <button className="md:hidden" onClick={() => setDrawer(true)} aria-label="Open menu"><Menu className="h-5 w-5" /></button>
+            <button className="lg:hidden" onClick={() => setDrawer(true)} aria-label="Open menu"><Menu className="h-5 w-5" /></button>
           </div>
         </div>
       </header>
       {drawer && (
-        <div className="fixed inset-0 z-50 bg-background/80 md:hidden" onClick={() => setDrawer(false)}>
+        <div className="fixed inset-0 z-50 bg-background/80 lg:hidden" onClick={() => setDrawer(false)}>
           <aside className="ml-auto flex h-full w-64 flex-col gap-4 border-l border-border bg-card p-5" onClick={(e) => e.stopPropagation()}>
             <button className="self-end" onClick={() => setDrawer(false)} aria-label="Close menu"><X className="h-5 w-5" /></button>
             <button onClick={() => { setDrawer(false); setCmd(true); }} className="flex items-center gap-2 border border-border px-2 py-2 font-mono text-xs"><Search className="h-4 w-4" /> Search</button>

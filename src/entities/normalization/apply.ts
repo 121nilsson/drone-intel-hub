@@ -1,9 +1,9 @@
 import type { ExtractedSpec, Extraction, RFLink, RFRole } from "@/entities/drone/types";
 import { parseMoney } from "./currency";
 import { normalizeRF, intersectBands, type NormalizedRFLink, type NormalizedRFRole } from "./rf";
-import { semanticKeyFor } from "./semantic";
+import { canonicalUnitForSemantic, semanticKeyFor } from "./semantic";
 import { resolveTerm, SEEDED_TERMS, type TaxonomyTerm } from "./taxonomy";
-import { normalizeQuantity } from "./units";
+import { normalizeQuantity, rebaseQuantity } from "./units";
 
 export interface UnknownTerm {
   taxonomy: string;
@@ -71,15 +71,18 @@ export function mergeLinks(existing: RFLink[], incoming: RFLink[]): RFLink[] {
 function normalizeSpec(spec: ExtractedSpec): ExtractedSpec {
   const semantic = semanticKeyFor(spec.key, spec.label);
   const money = semantic === "cost.unit" && typeof spec.value === "string" ? parseMoney(spec.value) : undefined;
-  const measured =
+  const targetUnit = canonicalUnitForSemantic(semantic);
+  let measured =
     typeof spec.value === "string"
       ? normalizeQuantity(spec.value)
       : spec.unit
         ? normalizeQuantity(`${spec.value} ${spec.unit}`)
         : undefined;
+  if (measured && targetUnit) measured = rebaseQuantity(measured, targetUnit);
   return {
     ...spec,
     semantic,
+    ...(targetUnit ? { canonicalUnit: targetUnit } : {}),
     ...(typeof spec.value === "string" ? { raw: spec.value } : {}),
     ...(measured ? { normalized: measured } : {}),
     ...(money ? { money } : {}),

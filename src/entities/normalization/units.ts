@@ -94,6 +94,34 @@ export function canonicalUnitFor(rawUnit: string): string | undefined {
   return hit ? CANONICAL_UNIT[hit.dimension] : undefined;
 }
 
+/** Re-express a normalized quantity in another unit of the same dimension (e.g. km → m for hull length). */
+export function rebaseQuantity(q: NormalizedQuantity, toUnit: string): NormalizedQuantity {
+  const from = q.canonicalUnit;
+  if (!from || from === toUnit) return q;
+  const next: NormalizedQuantity = { ...q, canonicalUnit: toUnit };
+  if (q.canonicalValue !== undefined) {
+    const v = convert(q.canonicalValue, from, toUnit);
+    if (v !== undefined) next.canonicalValue = v;
+  }
+  if (q.range) {
+    const r = { ...q.range };
+    if (r.min !== undefined) {
+      const v = convert(r.min, from, toUnit);
+      if (v !== undefined) r.min = v;
+    }
+    if (r.max !== undefined) {
+      const v = convert(r.max, from, toUnit);
+      if (v !== undefined) r.max = v;
+    }
+    if (r.value !== undefined) {
+      const v = convert(r.value, from, toUnit);
+      if (v !== undefined) r.value = v;
+    }
+    next.range = r;
+  }
+  return next;
+}
+
 function scale(n: number, factor: number): number {
   return n * factor;
 }

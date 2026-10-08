@@ -30,10 +30,19 @@ export function semanticKeyFor(key: string, label = ""): string {
   if (k === "unit_cost" || k === "cost" || /unit cost|price/i.test(lab)) return "cost.unit";
   if (k === "endurance" || k === "flight_time" || /endurance|flight time/i.test(lab)) return "endurance.flight";
 
+  if (k === "length" || k === "loa" || /^length$/i.test(lab) || /overall length/i.test(lab)) return "dimension.length";
+  if (k === "diameter" || /^diameter$/i.test(lab)) return "dimension.diameter";
+  if (k === "wingspan" || k === "span" || /wingspan|wing span/i.test(lab)) return "dimension.wingspan";
+  if (k === "height" || /^height$/i.test(lab) || /overall height/i.test(lab)) return "dimension.height";
+  if (k === "width" || /^width$/i.test(lab)) return "dimension.width";
+  if (k === "beam" && /beam/i.test(lab)) return "dimension.width";
+  if (k === "draft" || /^draft$/i.test(lab)) return "dimension.depth";
+
   return key;
 }
 
 export function canonicalUnitForSemantic(semantic: string): string | undefined {
+  if (semantic.startsWith("dimension.")) return "m";
   if (semantic.startsWith("range.") || semantic.startsWith("altitude.")) return "km";
   if (semantic.startsWith("speed.")) return "km/h";
   if (semantic.startsWith("payload.") || semantic.startsWith("weight.")) return "kg";

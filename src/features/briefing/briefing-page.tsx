@@ -2,6 +2,15 @@ import { Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { DOMAINS, flag } from "@/entities/drone/types";
 import { useCandidates, useDrones, useServices } from "@/shared/infra/services";
+import {
+  BRIEFING_SUMMARY_TTL_MS,
+  readBriefingSummaryCache,
+  writeBriefingSummaryCache,
+} from "@/features/briefing/briefing-summary-cache";
+import {
+  fetchBriefingExecutiveSummary,
+  storeBriefingExecutiveSummary,
+} from "@/shared/infra/briefing.functions";
 import { Panel, Tag } from "@/shared/ui/primitives";
 
 const WEEK = 7 * 86400000;
@@ -46,29 +55,66 @@ Spec drift events (${drift.length}): ${drift.map((e) => `${e.drone.name} [${e.ki
 Pending queue: ${pendingCount}.`,
     [newNames, drift, pendingCount],
   );
-  const [summary, setSummary] = useState<string | null>(null);
+  const [summary, setSummary] = useState<string | null>(() => readBriefingSummaryCache()?.summary ?? null);
+  const [summaryAt, setSummaryAt] = useState<number | null>(
+    () => readBriefingSummaryCache()?.generatedAt ?? null,
+  );
+  const [summaryShared, setSummaryShared] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const summarizerRef = useRef(summarizer);
+  summarizerRef.current = summarizer;
   // Summaries are slow (seconds to tens of seconds), so the context can change while one is in
   // flight. Without a guard the older response can land last and overwrite a newer one.
   const reqId = useRef(0);
   useEffect(() => {
     const id = ++reqId.current;
-    setSummary(null);
     setErr(null);
-    summarizer
-      .summarize(context)
-      .then((s) => {
-        if (id === reqId.current) setSummary(s);
-      })
-      .catch((e: Error) => {
-        if (id === reqId.current) setErr(e.message);
-      });
+
+    const apply = (s: string, generatedAt: number, shared: boolean) => {
+      if (id !== reqId.current) return;
+      writeBriefingSummaryCache({ summary: s, generatedAt });
+      setSummary(s);
+      setSummaryAt(generatedAt);
+      setSummaryShared(shared);
+    };
+
+    (async () => {
+      try {
+        const remote = await fetchBriefingExecutiveSummary({ data: { context } });
+        if (remote.status === "hit") {
+          apply(remote.summary, remote.generatedAt, true);
+          return;
+        }
+
+        const cached = readBriefingSummaryCache();
+        if (cached) {
+          apply(cached.summary, cached.generatedAt, false);
+          return;
+        }
+
+        if (id !== reqId.current) return;
+        setSummary(null);
+        setSummaryAt(null);
+        setSummaryShared(false);
+
+        const s = await summarizerRef.current.summarize(context);
+        if (id !== reqId.current) return;
+        const generatedAt = Date.now();
+        apply(s, generatedAt, false);
+        if (remote.status === "miss") {
+          void storeBriefingExecutiveSummary({
+            data: { context, summary: s, generatedAt },
+          });
+        }
+      } catch (e) {
+        if (id === reqId.current) setErr(e instanceof Error ? e.message : String(e));
+      }
+    })();
+
     return () => {
-      // On unmount or dependency change, invalidate this id so a late response is dropped
-      // rather than written to a component that has moved on.
       reqId.current = id + 1;
     };
-  }, [summarizer, context]);
+  }, [context]);
 
   return (
     <div className="space-y-6">
@@ -92,7 +138,16 @@ Pending queue: ${pendingCount}.`,
         {err ? (
           <p className="text-sm text-destructive">{err}</p>
         ) : summary ? (
-          <p className="whitespace-pre-line leading-relaxed">{summary}</p>
+          <>
+            <p className="whitespace-pre-line leading-relaxed">{summary}</p>
+            {summaryAt && (
+              <p className="mt-3 font-mono text-[11px] text-muted-foreground">
+                {summaryShared ? "Shared summary" : "Summary"} cached until{" "}
+                {new Date(summaryAt + BRIEFING_SUMMARY_TTL_MS).toLocaleString()} (refreshes about
+                twice per day)
+              </p>
+            )}
+          </>
         ) : (
           <p className="animate-pulse font-mono text-sm text-muted-foreground">
             Compiling briefing…

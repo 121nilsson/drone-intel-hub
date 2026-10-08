@@ -11,8 +11,8 @@ function ExpandableText({ text, className = "" }: { text: string; className?: st
   const [expanded, setExpanded] = useState(false);
   const isLong = text.length > 200;
   return (
-    <div>
-      <p className={`${className} ${!expanded && isLong ? "line-clamp-3" : ""}`}>{text}</p>
+    <div className="min-w-0">
+      <p className={`break-words ${className} ${!expanded && isLong ? "line-clamp-3" : ""}`}>{text}</p>
       {isLong && (
         <button
           type="button"
@@ -27,6 +27,8 @@ function ExpandableText({ text, className = "" }: { text: string; className?: st
 }
 
 const SAMPLE = `Telegram dispatch: Russia launched Geran-5 jet drones, one intercepted by a STING S interceptor. 4 jammers onboard and new 1575 MHz CRPA. Cruise 600 km/h, range 1000 km, 90 kg warhead. Unit cost $15,000-$20,000.`;
+
+const PAGE = 20;
 
 function CandidateRow({ c }: { c: Candidate }) {
   const svc = useServices();
@@ -57,21 +59,21 @@ function CandidateRow({ c }: { c: Candidate }) {
   };
 
   return (
-    <li className="border border-border bg-background/50 p-4">
+    <li className="min-w-0 break-words border border-border bg-background/50 p-4">
       <div className="flex flex-wrap items-center gap-2">
         <Tag tone={c.tier === 2 ? "accent" : "default"}>Tier {c.tier}</Tag>
         <Tag tone={e.confidence > 0.75 ? "primary" : e.confidence > 0.5 ? "accent" : "danger"}>conf {Math.round(e.confidence * 100)}%</Tag>
         {e.domain && <Tag>{e.domain}</Tag>}
         {c.resolvedBy === "auto" && <Tag tone="accent">auto</Tag>}
-        <span className="ml-auto font-mono text-xs text-muted-foreground">{c.source}</span>
+        <span className="ml-auto max-w-full break-all font-mono text-xs text-muted-foreground">{c.source}</span>
       </div>
-      <h3 className="mt-2 text-lg font-semibold">{e.name ?? "Unnamed system"}</h3>
+      <h3 className="mt-2 break-words text-lg font-semibold">{e.name ?? "Unnamed system"}</h3>
       {systems.length > 0 && (
         <div className="mt-1 flex flex-wrap items-center gap-1.5">
           <span className="font-mono text-[11px] uppercase text-muted-foreground">Detected:</span>
           {systems.map((s) => (
             <button key={s.name} type="button" disabled={c.status !== "pending"} onClick={() => { setName(s.name); if (s.matchId) setTarget(s.matchId); }}
-              className="border border-border px-2 py-0.5 font-mono text-xs hover:border-primary">
+              className="max-w-full break-words border border-border px-2 py-0.5 font-mono text-xs hover:border-primary">
               {s.name}{s.matchId ? ` = ${s.matchId}` : s.variantOf ? ` · new variant of ${s.variantOf}` : " · new"}
             </button>
           ))}
@@ -85,22 +87,22 @@ function CandidateRow({ c }: { c: Candidate }) {
         {translateError && <span className="font-mono text-xs text-destructive">{translateError}</span>}
       </div>
       {translated && (
-        <div className="mt-2 border-l-2 border-primary/30 pl-3">
+        <div className="mt-2 min-w-0 border-l-2 border-primary/30 pl-3">
           <p className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">English translation</p>
-          <p className="mt-1 text-sm">{translated}</p>
+          <p className="mt-1 break-words text-sm">{translated}</p>
         </div>
       )}
       <div className="mt-2 flex flex-wrap gap-1.5">
         {e.specs.map((s, i) => <Tag key={i} tone="primary">{s.label}: {String(s.value)}{s.unit ? ` ${s.unit}` : ""}</Tag>)}
         {e.rfBands.map((b) => <Tag key={b}>{b}</Tag>)}
       </div>
-      <p className="mt-2 font-mono text-xs text-muted-foreground">{e.rationale}</p>
+      <p className="mt-2 break-words font-mono text-xs text-muted-foreground">{e.rationale}</p>
       {c.status === "pending" ? (
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <input value={name} onChange={(ev) => setName(ev.target.value)} placeholder="System name"
-            className="w-48 border border-border bg-card px-2 py-1.5 font-mono text-xs outline-none focus:border-primary" aria-label="Candidate name" />
-          <Btn onClick={() => { promote(c, svc, name); svc.candidates.update(c.id, { resolvedBy: "analyst" }); }} disabled={!name.trim()}>Promote</Btn>
-          <select value={target} onChange={(ev) => setTarget(ev.target.value)} className="border border-border bg-card px-2 py-1.5 font-mono text-xs" aria-label="Merge target">
+            className="w-full min-w-0 max-w-full border border-border bg-card px-2 py-2 font-mono text-xs outline-none focus:border-primary sm:w-48" aria-label="Candidate name" />
+          <Btn className="px-4 py-2" onClick={() => { promote(c, svc, name); svc.candidates.update(c.id, { resolvedBy: "analyst" }); }} disabled={!name.trim()}>Promote</Btn>
+          <select value={target} onChange={(ev) => setTarget(ev.target.value)} className="max-w-full flex-1 border border-border bg-card px-2 py-2 font-mono text-xs sm:flex-none" aria-label="Merge target">
             <option value="">-- Select system to merge into --</option>
             {drones.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
           </select>
@@ -123,6 +125,7 @@ export function IntakePage({ draft, draftSource }: { draft?: string | undefined;
   const [source, setSource] = useState("Analyst paste");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  const [visible, setVisible] = useState(PAGE);
   useEffect(() => { if (draft) { setRaw(draft); if (draftSource) setSource(draftSource); } }, [draft, draftSource]);
 
   const submit = async () => {
@@ -146,22 +149,28 @@ export function IntakePage({ draft, draftSource }: { draft?: string | undefined;
   const resolved = candidates.filter((c) => c.status !== "pending");
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[1fr_1.2fr]">
-      <Panel title="Quick-paste intake" right={<Tag>{svc.tier1.label} → {svc.tier2.label}</Tag>}>
+    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
+      <Panel title="Quick-paste intake" className="min-w-0" right={<Tag className="hidden max-w-full break-all sm:inline-flex">{svc.tier1.label} → {svc.tier2.label}</Tag>}>
         <textarea value={raw} onChange={(e) => setRaw(e.target.value)} rows={9} placeholder="Paste a dispatch, link, or raw text…"
           className="w-full border border-border bg-background p-3 font-mono text-sm outline-none focus:border-primary" />
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          <input value={source} onChange={(e) => setSource(e.target.value)} className="flex-1 border border-border bg-background px-2 py-1.5 font-mono text-xs" placeholder="Source" />
+          <input value={source} onChange={(e) => setSource(e.target.value)} className="min-w-40 flex-1 border border-border bg-background px-2 py-2 font-mono text-xs" placeholder="Source" />
           <Btn variant="ghost" onClick={() => setRaw(SAMPLE)}>Sample</Btn>
           <Btn onClick={submit} disabled={busy || !raw.trim()}>{busy ? "Analyzing…" : "Ingest"}</Btn>
         </div>
-        {msg && <p className="mt-3 font-mono text-xs text-accent">{msg}</p>}
-        <p className="mt-4 text-xs text-muted-foreground">Tier 1 screens and extracts. Below {Math.round(svc.settings.escalationThreshold * 100)}% confidence or without a catalog match, Tier 2 reasoning re-analyzes. Matches above {Math.round(svc.settings.autoMergeThreshold * 100)}% auto-merge; new, uniquely named systems above {Math.round(svc.settings.autoPromoteThreshold * 100)}% auto-promote; anything below {Math.round(svc.settings.autoDiscardThreshold * 100)}% is auto-discarded.</p>
+        {msg && <p className="mt-3 break-words font-mono text-xs text-accent">{msg}</p>}
+        <p className="mt-4 break-words text-xs text-muted-foreground">Tier 1 screens and extracts. Below {Math.round(svc.settings.escalationThreshold * 100)}% confidence or without a catalog match, Tier 2 reasoning re-analyzes. Matches above {Math.round(svc.settings.autoMergeThreshold * 100)}% auto-merge; new, uniquely named systems above {Math.round(svc.settings.autoPromoteThreshold * 100)}% auto-promote; anything below {Math.round(svc.settings.autoDiscardThreshold * 100)}% is auto-discarded.</p>
       </Panel>
-      <div className="space-y-6">
+      <div className="min-w-0 space-y-6">
         <Panel title={`Triage queue · ${pending.length}`}>
-          <ul className="space-y-3">{pending.map((c) => <CandidateRow key={c.id} c={c} />)}</ul>
+          <ul className="space-y-3">{pending.slice(0, visible).map((c) => <CandidateRow key={c.id} c={c} />)}</ul>
           {!pending.length && <p className="text-sm text-muted-foreground">Queue clear.</p>}
+          {pending.length > visible && (
+            <div className="mt-4 flex items-center gap-3">
+              <Btn variant="ghost" onClick={() => setVisible((v) => v + PAGE)}>Show {Math.min(PAGE, pending.length - visible)} more</Btn>
+              <span className="font-mono text-xs text-muted-foreground">{visible} of {pending.length}</span>
+            </div>
+          )}
         </Panel>
         {resolved.length > 0 && <Panel title="Resolved"><ul className="space-y-3">{resolved.slice(0, 10).map((c) => <CandidateRow key={c.id} c={c} />)}</ul></Panel>}
       </div>
