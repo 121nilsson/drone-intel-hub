@@ -566,8 +566,8 @@ first means we are not paying to fetch three copies of the same article.
 ### B1. Dependency
 
 Add `@mozilla/readability` and move `jsdom` from devDependencies to **dependencies** (it is now a
-runtime need, not just the test environment). Then update the lockfile (`bun.lock` /
-`package-lock.json`) so `bun install --frozen-lockfile` in the `Dockerfile` still works.
+runtime need, not just the test environment). Then update the lockfile so `npm ci` in the
+`Dockerfile` stays in sync with `package.json`.
 
 ### B2. New server-only module — `src/shared/infra/article.server.ts`
 
@@ -753,7 +753,7 @@ Suggested commit sequence (one reviewable commit per step, not per phase):
 | `status: "duplicate"` breaks a switch somewhere                            | Verified safe: `DispatchStatus` is referenced only in `entities/dispatch/types.ts` (the union itself and `RawDispatch.status`). No code exhaustively switches on it — the dispatch tests compare against literals, and `LocalStorageStore.claim` / `pending()` filter on `"pending"` only. The two sites that enumerate values are `sources-page.tsx:331` (counts) and `:464` (tabs), both updated in C7 |
 | Concurrency + write-through cache                                          | `LocalSourceRepository.update` / `LocalDispatchRepository.add` must stay `await`-free (see A4). Add a comment at both sites                                                                                                                                                                                                                                                                              |
 | Bounded concurrency angers a host                                          | Per-host `key` in the pool; one shared per-source deadline; `MAX_FOLLOWS` on follow-up requests                                                                                                                                                                                                                                                                                                          |
-| Lockfile drift breaks the Docker build                                     | Run `bun install` (and `npm install` if `package-lock.json` is kept) as part of B1 and commit both lockfiles. The `Dockerfile` uses `bun install --frozen-lockfile`, so `bun.lock` is the one that must be current                                                                                                                                                                                       |
+| Lockfile drift breaks the Docker build                                     | Run `npm install --package-lock-only` and commit `package-lock.json`. The `Dockerfile` runs `npm ci`, which fails when the lockfile and `package.json` disagree, rather than silently resolving something newer as `npm install` would                                                                                                                                                                   |
 | `duplicateOf` diverges from the in-memory list after `claim()` re-attaches | `LocalDispatchRepository.claim` calls `attach()` (`local-repository.ts:224`), which replaces `this.items`. The fingerprint index is content-keyed and cleared on attach (C5), then rebuilt lazily — never reused across a reload                                                                                                                                                                         |
 
 **Known gap to follow up on separately:** a "retry / un-duplicate" action on a dispatch row. It is
@@ -801,11 +801,11 @@ exits 0.
 
 | Phase               | Outcome                                                                                                                                                                                                                                                                         | Commits              |
 | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------- |
-| A � deadline + pool | `pool.ts` (6 lanes, per-host serialization, no abort-on-failure) drives both the server job and the browser's "Fetch all feeds"; every request shares one deadline per source, `FETCH_TIMEOUT_MS` (15 s, `0` disables) mirrors the `PROVIDER_TIMEOUT_MS` convention             | `12fba1a`, `d9f0ecb` |
-| C � dedupe          | `simhash.ts` + `migrations/006_dispatch_content_hash.sql`, a `duplicate` dispatch status with `contentHash`/`duplicateOf`, an in-memory fingerprint index on `LocalDispatchRepository` (lazily backfilling pre-migration documents), Reports carrying `duplicates`/`durationMs` | `12fba1a`, `d9f0ecb` |
-| B � article bodies  | `article.server.ts` (Readability) behind an injected `articleText`, article-first for Web pages, top-3 body enrichment on index pages, RSS teaser follow-ups, all per-post degradation to the anchor/history text                                                               | `d9f0ecb`, `f599434` |
-| E � yield           | Per-source `stored/waiting/analysed/queued/filtered/duplicates/failed`, a `no signal` flag, the productive-source count, timings in the activity log                                                                                                                            | `d9f0ecb`            |
-| D � X bridge        | `X_BRIDGE_BASE`, env-only, parse via the existing RSS parser                                                                                                                                                                                                                    | `d9f0ecb`            |
+| A — deadline + pool | `pool.ts` (6 lanes, per-host serialization, no abort-on-failure) drives both the server job and the browser's "Fetch all feeds"; every request shares one deadline per source, `FETCH_TIMEOUT_MS` (15 s, `0` disables) mirrors the `PROVIDER_TIMEOUT_MS` convention             | `12fba1a`, `d9f0ecb` |
+| C — dedupe          | `simhash.ts` + `migrations/006_dispatch_content_hash.sql`, a `duplicate` dispatch status with `contentHash`/`duplicateOf`, an in-memory fingerprint index on `LocalDispatchRepository` (lazily backfilling pre-migration documents), Reports carrying `duplicates`/`durationMs` | `12fba1a`, `d9f0ecb` |
+| B — article bodies  | `article.server.ts` (Readability) behind an injected `articleText`, article-first for Web pages, top-3 body enrichment on index pages, RSS teaser follow-ups, all per-post degradation to the anchor/history text                                                               | `d9f0ecb`, `f599434` |
+| E — yield           | Per-source `stored/waiting/analysed/queued/filtered/duplicates/failed`, a `no signal` flag, the productive-source count, timings in the activity log                                                                                                                            | `d9f0ecb`            |
+| D — X bridge        | `X_BRIDGE_BASE`, env-only, parse via the existing RSS parser                                                                                                                                                                                                                    | `d9f0ecb`            |
 
 ### Deviations from the plan, and why
 
@@ -816,13 +816,13 @@ exits 0.
    which the bundler cannot resolve, so the server build failed. Externalizing it was not an
    option either: the Docker runtime copies only `.output`, with no `node_modules`, so the DOM
    parser has to be bundled. `linkedom` bundles into `.output/server/_libs` and keeps the client
-   assets clean. `jsdom` remains a devDependency � the vitest environment still uses it.
+   assets clean. `jsdom` remains a devDependency — the vitest environment still uses it.
 3. **Article extraction returns null when the page is navigation.** The plan asserted only a
    400-character minimum. Readability is perfectly happy to return a 30-link nav list as an
    "article", which on an index page would have replaced every headline with chrome. Extraction
    now also requires at least two `<p>` elements.
 4. **Readability rewrites the document it is handed.** The heading is read from the source page
-   _before_ parsing, otherwise it disappears and the title falls back to `<title>` � on a news site
+   _before_ parsing, otherwise it disappears and the title falls back to `<title>` — on a news site
    that is usually the site's name, not the story's.
 5. **The "article first" path must not re-fetch the page.** The first implementation fetched the
    source URL a second time; caught by a test that counts requests.
@@ -842,12 +842,23 @@ exits 0.
 - The Sources page `counts` object relied on an `as` cast, so a newly added status counted as `NaN`
   in the filter tab rather than failing to compile. Now a real `Record<DispatchStatus, number>`.
 
+### Verified on a real run
+
+`docker compose up --build` (now npm-based: `node:22-alpine`, `npm ci`, `npm run build`) and
+`npm run dev` were both exercised end to end. One live pipeline run reported
+`Collected 67 sources, 12 unreachable, 0 failed, 2 pending`: 495 posts fetched, **37 suppressed as
+duplicates**, 0 fetch timeouts, slowest source 3.4 s against the 15 s deadline. All 67 source rows in
+the persisted report carried the new `duplicates`/`durationMs` fields; the 68th is the queue row,
+which omits them by design.
+
 ### Still to do before deploying
 
-1. **`bun install`** � `bun.lock` is not regenerated (no bun on the machine that wrote this), so
-   `docker compose up --build` will fail at `--frozen-lockfile` until someone with bun runs it.
-   `package-lock.json` is deliberately untouched: the Dockerfile uses bun.
-2. **Apply `migrations/006_dispatch_content_hash.sql`** to any existing database.
+1. ~~`bun install`~~ — resolved: the `Dockerfile` now uses npm (`node:22-alpine` → `npm ci` →
+   `npm run build`) and `package-lock.json` is regenerated and in sync. `npm ci` fails loudly on
+   drift, so the lockfile must be committed with any dependency change from now on.
+2. **Apply `migrations/006_dispatch_content_hash.sql`** to any existing database. Done by hand on the
+   local one during verification — the volume pre-dated the migration, so the entrypoint's automatic
+   run never saw it. A fresh volume picks it up on first boot.
 3. Decide whether `.env.example` / `.env.local.example` (untracked in this working tree) should gain
    `FETCH_TIMEOUT_MS`, `FETCH_ARTICLE_BODIES` and `X_BRIDGE_BASE`.
 
