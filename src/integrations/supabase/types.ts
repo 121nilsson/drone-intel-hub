@@ -14,13 +14,211 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      candidates: {
+        Row: {
+          created_at: string
+          data: Json
+          id: string
+          status: string
+          tier: number
+        }
+        Insert: {
+          created_at: string
+          data: Json
+          id: string
+          status: string
+          tier: number
+        }
+        Update: {
+          created_at?: string
+          data?: Json
+          id?: string
+          status?: string
+          tier?: number
+        }
+        Relationships: []
+      }
+      collection_meta: {
+        Row: {
+          name: string
+          seeded_at: string
+        }
+        Insert: {
+          name: string
+          seeded_at?: string
+        }
+        Update: {
+          name?: string
+          seeded_at?: string
+        }
+        Relationships: []
+      }
+      dispatches: {
+        Row: {
+          created_at: string
+          data: Json
+          id: string
+          lease_by: string | null
+          lease_until: string | null
+          processed_at: string | null
+          source_id: string
+          status: string
+        }
+        Insert: {
+          created_at?: string
+          data: Json
+          id: string
+          lease_by?: string | null
+          lease_until?: string | null
+          processed_at?: string | null
+          source_id: string
+          status?: string
+        }
+        Update: {
+          created_at?: string
+          data?: Json
+          id?: string
+          lease_by?: string | null
+          lease_until?: string | null
+          processed_at?: string | null
+          source_id?: string
+          status?: string
+        }
+        Relationships: []
+      }
+      drones: {
+        Row: {
+          data: Json
+          domain: string
+          id: string
+          name: string
+          origin: string
+          updated_at: string
+        }
+        Insert: {
+          data: Json
+          domain: string
+          id: string
+          name: string
+          origin: string
+          updated_at?: string
+        }
+        Update: {
+          data?: Json
+          domain?: string
+          id?: string
+          name?: string
+          origin?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      procurements: {
+        Row: {
+          amount: string | null
+          announced_at: string | null
+          company: string
+          country: string
+          created_at: string
+          currency: string | null
+          customer: string | null
+          data: Json
+          id: string
+          notes: string | null
+          product: string | null
+          program: string | null
+          source: string
+          source_url: string | null
+        }
+        Insert: {
+          amount?: string | null
+          announced_at?: string | null
+          company: string
+          country?: string
+          created_at?: string
+          currency?: string | null
+          customer?: string | null
+          data: Json
+          id: string
+          notes?: string | null
+          product?: string | null
+          program?: string | null
+          source: string
+          source_url?: string | null
+        }
+        Update: {
+          amount?: string | null
+          announced_at?: string | null
+          company?: string
+          country?: string
+          created_at?: string
+          currency?: string | null
+          customer?: string | null
+          data?: Json
+          id?: string
+          notes?: string | null
+          product?: string | null
+          program?: string | null
+          source?: string
+          source_url?: string | null
+        }
+        Relationships: []
+      }
+      sources: {
+        Row: {
+          data: Json
+          handle: string
+          id: string
+          platform: string
+          position: number
+        }
+        Insert: {
+          data: Json
+          handle: string
+          id: string
+          platform: string
+          position?: number
+        }
+        Update: {
+          data?: Json
+          handle?: string
+          id?: string
+          platform?: string
+          position?: number
+        }
+        Relationships: []
+      }
+      sync_state: {
+        Row: {
+          last_result: Json | null
+          last_sync: string
+          name: string
+        }
+        Insert: {
+          last_result?: Json | null
+          last_sync: string
+          name: string
+        }
+        Update: {
+          last_result?: Json | null
+          last_sync?: string
+          name?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      claim_dispatches: {
+        Args: { p_lease_ms: number; p_limit: number; p_owner: string }
+        Returns: string[]
+      }
+      release_dispatches: {
+        Args: { p_ids: string[]; p_owner: string }
+        Returns: undefined
+      }
     }
     Enums: {
       [_ in never]: never
