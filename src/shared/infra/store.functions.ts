@@ -1,14 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
-import type { Collection } from "@/shared/contracts/store";
+import { COLLECTIONS, type Collection } from "@/shared/contracts/store";
 import { MAX_LEASE_MS } from "@/features/sources/auto-ingest";
 
-const COLLECTIONS: Collection[] = [
-  "drones",
-  "candidates",
-  "sources",
-  "dispatches",
-  "procurements",
-];
 const checkCollection = (c: unknown): Collection => {
   if (!COLLECTIONS.includes(c as Collection)) throw new Error("Invalid collection");
   return c as Collection;
@@ -30,12 +23,16 @@ async function store() {
   return new CloudStore();
 }
 
-/** True when the server has shared storage (PostgreSQL or Lovable Cloud). */
-export const getStoreStatus = createServerFn({ method: "GET" }).handler(async () => ({
-  postgres:
-    !!process.env["DATABASE_URL"] ||
-    (!!process.env["SUPABASE_URL"] && !!process.env["SUPABASE_SERVICE_ROLE_KEY"]),
-}));
+/** Storage backend plus non-secret inference settings for the Settings UI. */
+export const getStoreStatus = createServerFn({ method: "POST" }).handler(async () => {
+  const { readProviderEnvConfig } = await import("./provider-env.server");
+  return {
+    postgres:
+      !!process.env["DATABASE_URL"] ||
+      (!!process.env["SUPABASE_URL"] && !!process.env["SUPABASE_SERVICE_ROLE_KEY"]),
+    provider: readProviderEnvConfig(),
+  };
+});
 
 export const storeLoad = createServerFn({ method: "POST" })
   .validator((d: { c: Collection }) => ({ c: checkCollection(d?.c) }))
@@ -95,7 +92,9 @@ export const storeClaim = createServerFn({ method: "POST" })
     // A store without claim support (or a collection that is not the queue) must not look
     // like "claimed everything" - signal the caller to fall back.
     if (!s.claim) return { ids: [], ok: false };
-    return { ids: await s.claim(data.c, data), ok: true };
+    const ids = await s.claim(data.c, data);
+    if (ids === null) return { ids: [], ok: false };
+    return { ids, ok: true };
   });
 
 export const storeRelease = createServerFn({ method: "POST" })

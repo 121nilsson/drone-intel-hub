@@ -139,7 +139,7 @@ export const SEED_DRONES: Drone[] = [
     counterpartIds: ["magura-v5"], createdAt: ago(2), updatedAt: ago(2),
   },
   {
-    id: "courier-ugv", name: "Kur'er UGV", cyrillic: "Курьер", aliases: ["Courier"], domain: "Land", origin: "RU", operators: ["RU"], propulsion: "Electric tracked",
+    id: "courier-ugv", name: "Kur'er UGV", cyrillic: "Курьер", aliases: ["Courier"], domain: "Land", origin: "RU", operators: ["RU"], propulsion: "Electric", installation: "Tracked",
     summary: "Small tracked UGV for logistics and mine-laying; seen with AGS-17 mount.",
     specs: [s("speed", "Max speed", "km/h", [[15, "TASS", 90], [12, "OSINT", 10]]), s("payload", "Payload", "kg", [[200, "TASS", 90]]), s("jammers", "Onboard jammers", undefined, [[1, "OSINT", 3]])],
     rf: [{ role: "uplink", band: "ISM 900", freqMHz: [900, 930] }, { role: "video", band: "S", freqMHz: [2400, 2483] }],
@@ -148,7 +148,7 @@ export const SEED_DRONES: Drone[] = [
     counterpartIds: ["termit"], createdAt: ago(80), updatedAt: ago(3),
   },
   {
-    id: "termit", name: "Termit UGV", cyrillic: "Терміт", aliases: [], domain: "Land", origin: "UA", operators: ["UA"], propulsion: "Electric tracked",
+    id: "termit", name: "Termit UGV", cyrillic: "Терміт", aliases: [], domain: "Land", origin: "UA", operators: ["UA"], propulsion: "Electric", installation: "Tracked",
     summary: "Ukrainian tracked UGV for casualty evacuation and logistics.",
     specs: [s("speed", "Max speed", "km/h", [[20, "Brave1", 60]]), s("payload", "Payload", "kg", [[300, "Brave1", 60]]), s("range", "Range", "km", [[20, "Brave1", 60]])],
     rf: [{ role: "uplink", band: "ISM 900", freqMHz: [868, 928] }, { role: "video", band: "S", freqMHz: [2400, 2483] }],

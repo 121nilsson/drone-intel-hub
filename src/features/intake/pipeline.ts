@@ -1,8 +1,10 @@
 import type { Candidate, Drone, Extraction, SpecAttribute } from "@/entities/drone/types";
 import type { IntelExtractor } from "@/shared/contracts/ai";
 import type { CandidateRepository, DroneRepository } from "@/shared/contracts/repository";
+import type { TaxonomyCandidateRepository } from "@/shared/contracts/taxonomy";
 import type { Procurement } from "@/entities/procurement/types";
-import { mergeSpecs } from "@/features/dynamic-specs/spec-engine";
+import { mergeLinks, normalizeExtraction, toRFLink } from "@/entities/normalization/apply";
+import { attributeSemantic, mergeSpecs } from "@/features/dynamic-specs/spec-engine";
 import { counterpartIdsFor, linkCounterparts } from "@/entities/drone/relations";
 import { chatCompletionOnce } from "@/shared/infra/ai-proxy.server";
 
@@ -11,6 +13,8 @@ export interface PipelineDeps {
   tier2: IntelExtractor;
   drones: DroneRepository;
   candidates: CandidateRepository;
+  /** When set, unknown propulsion terms are queued for an analyst. Absent in tests and older callers. */
+  taxonomyCandidates?: TaxonomyCandidateRepository;
   escalationThreshold: number;
   autoMergeThreshold: number;
   /** Unset disables auto-promotion; every new system then waits for review. */
@@ -26,6 +30,22 @@ export type PipelineResult =
   | { kind: "queued"; candidate: Candidate };
 
 const norm = (s: string) => s.trim().toLowerCase();
+
+/** A parser bug must not burn a dispatch attempt. The raw extraction is kept when normalization throws. */
+function applyNormalization(extraction: Extraction): ReturnType<typeof normalizeExtraction> {
+  try {
+    return normalizeExtraction(extraction);
+  } catch (err) {
+    console.error("[normalize]", err);
+    return { extraction, unknowns: [] };
+  }
+}
+
+function withNormalizedRf(drone: Drone, extraction: Extraction): Drone {
+  const links = (extraction.rf ?? []).map(toRFLink);
+  if (!links.length) return drone;
+  return { ...drone, rf: mergeLinks(drone.rf, links) };
+}
 
 /** True when any of the extraction's names is already a catalog name or alias. */
 function collidesWithCatalog(e: Extraction, catalog: Drone[]): boolean {
@@ -50,6 +70,11 @@ export async function runTwoTier(
     tier = 2;
     extraction = await d.tier2.extract(raw, catalog);
   }
+  const normalized = applyNormalization(extraction);
+  extraction = normalized.extraction;
+  for (const unknown of normalized.unknowns) {
+    d.taxonomyCandidates?.record(unknown.rawTerm, unknown.taxonomy, { source });
+  }
   const candidate: Candidate = {
     id: crypto.randomUUID(),
     raw,
@@ -61,7 +86,10 @@ export async function runTwoTier(
   };
   if (extraction.matchId && extraction.confidence >= d.autoMergeThreshold) {
     const target = d.drones.get(extraction.matchId)!;
-    const merged = mergeSpecs(target, extraction.specs, source);
+    const merged = withNormalizedRf(
+      mergeSpecs(target, extraction.specs, source, { extractionConfidence: extraction.confidence }),
+      extraction,
+    );
     d.drones.upsert(merged);
     // The extraction already reports systems[] and variantOf; persist those as catalog
     // relations so counterpart links come from ingest instead of being hand-maintained.
@@ -111,7 +139,7 @@ export function promote(
   d: Pick<PipelineDeps, "drones" | "candidates">,
   nameOverride?: string,
 ): Drone {
-  const e = c.extraction;
+  const e = applyNormalization(c.extraction).extraction;
   const name =
     nameOverride?.trim() ||
     e.name ||
@@ -132,9 +160,12 @@ export function promote(
     ...(e.manufacturer ? { manufacturer: e.manufacturer } : {}),
     operators: e.operators,
     propulsion: e.propulsion ?? "Unknown",
+    ...(e.propulsionId ? { propulsionId: e.propulsionId } : {}),
+    ...(e.installation?.trim() ? { installation: e.installation.trim() } : {}),
+    ...(e.installationId ? { installationId: e.installationId } : {}),
     summary: c.raw.slice(0, 200),
     specs: [],
-    rf: e.rfBands.map((b) => ({ role: "uplink" as const, band: b })),
+    rf: (e.rf ?? []).map(toRFLink),
     components: [],
     evolution: [
       { date: now, kind: "other", description: "Promoted from intake queue", source: c.source },
@@ -186,10 +217,10 @@ export function mergeDrones(
   // 2. Merge specs preserving all claims and provenance
   const specsMap = new Map<string, SpecAttribute>();
   for (const s of keep.specs) {
-    specsMap.set(s.key, { ...s, claims: [...s.claims] });
+    specsMap.set(attributeSemantic(s), { ...s, claims: [...s.claims] });
   }
   for (const s of merge.specs) {
-    const existing = specsMap.get(s.key);
+    const existing = specsMap.get(attributeSemantic(s));
     if (existing) {
       for (const claim of s.claims) {
         const isDuplicate = existing.claims.some(
@@ -200,18 +231,12 @@ export function mergeDrones(
         }
       }
     } else {
-      specsMap.set(s.key, { ...s, claims: [...s.claims] });
+      specsMap.set(attributeSemantic(s), { ...s, semantic: attributeSemantic(s), claims: [...s.claims] });
     }
   }
 
   // 3. Merge RF links
-  const rf = [...keep.rf];
-  for (const link of merge.rf) {
-    const exists = rf.some(
-      (r) => r.role === link.role && r.band.toLowerCase() === link.band.toLowerCase()
-    );
-    if (!exists) rf.push(link);
-  }
+  const rf = mergeLinks(keep.rf, merge.rf);
 
   // 4. Merge supply components
   const components = [...keep.components];
@@ -308,7 +333,8 @@ export function mergeInto(
 ) {
   const target = d.drones.get(droneId);
   if (!target) return;
-  const merged = mergeSpecs(target, c.extraction.specs, c.source);
+  const extracted = applyNormalization(c.extraction).extraction;
+  const merged = withNormalizedRf(mergeSpecs(target, extracted.specs, c.source, { extractionConfidence: extracted.confidence }), extracted);
   merged.evolution = [
     ...merged.evolution,
     {

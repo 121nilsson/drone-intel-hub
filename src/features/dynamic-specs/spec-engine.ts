@@ -1,13 +1,53 @@
-import type { Drone, ExtractedSpec, SpecAttribute } from "@/entities/drone/types";
+import type { Drone, ExtractedSpec, SpecAttribute, SpecClaim } from "@/entities/drone/types";
+import { canonicalUnitForSemantic, semanticKeyFor } from "@/entities/normalization/semantic";
 
-/** Merge extracted key-values into a drone's schema-less spec list; novel keys are created on the fly. */
-export function mergeSpecs(drone: Drone, specs: ExtractedSpec[], source: string): Drone {
+export interface SpecSourceRef {
+  sourceId?: string;
+  extractionConfidence?: number;
+  evidence?: string;
+}
+
+export function attributeSemantic(spec: { key: string; label: string; semantic?: string }): string {
+  return spec.semantic ?? semanticKeyFor(spec.key, spec.label);
+}
+
+function claimFor(spec: ExtractedSpec, source: string, date: string, ref?: SpecSourceRef): SpecClaim {
+  return {
+    value: spec.value,
+    source,
+    date,
+    ...(spec.raw ? { raw: spec.raw } : {}),
+    ...(spec.normalized ? { normalized: spec.normalized, normalizationConfidence: spec.normalized.confidence } : {}),
+    ...(ref?.sourceId ? { sourceId: ref.sourceId } : {}),
+    ...(ref?.evidence ? { evidence: ref.evidence } : {}),
+    ...(ref?.extractionConfidence !== undefined ? { extractionConfidence: ref.extractionConfidence } : {}),
+  };
+}
+
+/** Merge extracted key-values. Attributes that measure the same thing share a semantic id; the first key and label stay. */
+export function mergeSpecs(drone: Drone, specs: ExtractedSpec[], source: string, ref?: SpecSourceRef): Drone {
   const date = new Date().toISOString();
   const next: SpecAttribute[] = drone.specs.map((s) => ({ ...s, claims: [...s.claims] }));
   for (const e of specs) {
-    const hit = next.find((s) => s.key === e.key);
-    if (hit) hit.claims.push({ value: e.value, source, date });
-    else next.push({ key: e.key, label: e.label, ...(e.unit ? { unit: e.unit } : {}), discoveredBy: "ai", claims: [{ value: e.value, source, date }] });
+    const semantic = attributeSemantic(e);
+    const hit = next.find((s) => attributeSemantic(s) === semantic);
+    const claim = claimFor(e, source, date, ref);
+    if (hit) {
+      if (!hit.semantic) hit.semantic = semantic;
+      if (!hit.canonicalUnit && e.normalized?.canonicalUnit) hit.canonicalUnit = e.normalized.canonicalUnit;
+      hit.claims.push(claim);
+    } else {
+      const canonicalUnit = e.normalized?.canonicalUnit ?? canonicalUnitForSemantic(semantic);
+      next.push({
+        key: e.key,
+        label: e.label,
+        semantic,
+        ...(e.unit ? { unit: e.unit } : canonicalUnit ? { unit: canonicalUnit } : {}),
+        ...(canonicalUnit ? { canonicalUnit } : {}),
+        discoveredBy: "ai",
+        claims: [claim],
+      });
+    }
   }
   return { ...drone, specs: next, updatedAt: date };
 }

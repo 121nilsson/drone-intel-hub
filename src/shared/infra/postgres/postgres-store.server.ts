@@ -8,6 +8,8 @@ const ORDER: Record<Collection, string> = {
   // Newest first; capped so the browser cache stays bounded as the archive grows.
   dispatches: "created_at desc limit 3000",
   procurements: "created_at desc",
+  taxonomies: "taxonomy asc, canonical_id asc",
+  taxonomy_candidates: "last_seen desc",
 };
 
 /** PostgreSQL implementation. Schema lives in /migrations (plain SQL, portable). */
@@ -112,11 +114,26 @@ export class PostgresStore implements DocumentStore {
       await db`insert into procurements (id, company, country, amount, currency, program, product, customer, announced_at, source, source_url, notes, created_at, data)
         values (${d.id}, ${d.company}, ${d.country ?? ""}, ${d.amount ?? null}, ${d.currency ?? null}, ${d.program ?? null}, ${d.product ?? null}, ${d.customer ?? null}, ${d.announcedAt ?? null}, ${d.source}, ${d.sourceUrl ?? null}, ${d.notes ?? null}, ${d.createdAt}, ${data})
         on conflict (id) do update set company = excluded.company, country = excluded.country, amount = excluded.amount, currency = excluded.currency, program = excluded.program, product = excluded.product, customer = excluded.customer, announced_at = excluded.announced_at, source = excluded.source, source_url = excluded.source_url, notes = excluded.notes, data = excluded.data`;
-    } else {
+    } else if (c === "taxonomies") {
+      const d = doc as CollectionMap["taxonomies"];
+      await db`insert into taxonomies (id, taxonomy, canonical_id, label, parent_id, data, updated_at)
+        values (${d.id}, ${d.taxonomy}, ${d.canonicalId}, ${d.label}, ${d.parentId ?? null}, ${data}, now())
+        on conflict (id) do update set taxonomy = excluded.taxonomy, canonical_id = excluded.canonical_id,
+          label = excluded.label, parent_id = excluded.parent_id, data = excluded.data, updated_at = now()`;
+    } else if (c === "taxonomy_candidates") {
+      const d = doc as CollectionMap["taxonomy_candidates"];
+      await db`insert into taxonomy_candidates (id, taxonomy, raw_term, status, occurrences, first_seen, last_seen, data)
+        values (${d.id}, ${d.taxonomy}, ${d.rawTerm}, ${d.status}, ${d.occurrences}, ${d.firstSeen}, ${d.lastSeen}, ${data})
+        on conflict (id) do update set status = excluded.status, occurrences = excluded.occurrences,
+          last_seen = excluded.last_seen, data = excluded.data`;
+    } else if (c === "sources") {
       const d = doc as CollectionMap["sources"];
       await db`insert into sources (id, platform, handle, data)
         values (${d.id}, ${d.platform}, ${d.handle}, ${data})
         on conflict (id) do update set platform = excluded.platform, handle = excluded.handle, data = excluded.data`;
+    } else {
+      const _exhaustive: never = c;
+      throw new Error(`No column layout for ${String(_exhaustive)}`);
     }
   }
 }

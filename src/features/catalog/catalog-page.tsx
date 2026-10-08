@@ -1,6 +1,9 @@
 import { Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { DOMAINS, flag, type Domain, type Drone } from "@/entities/drone/types";
+import { ieeeLabel } from "@/entities/normalization/bands";
+import { effectiveInstallationId, effectivePropulsionId } from "@/entities/normalization/taxonomy";
+import { effectiveIeeeBands, linkIsFiber } from "@/entities/normalization/rf";
 import { useDrones, useServices } from "@/shared/infra/services";
 import type { CatalogFacets } from "@/shared/contracts/repository";
 import { Btn, Tag } from "@/shared/ui/primitives";
@@ -27,13 +30,25 @@ export function CatalogPage() {
   const svc = useServices();
   const { drones: repo } = svc;
   const [q, setQ] = useState("");
-  const [f, setF] = useState<Required<CatalogFacets>>({ domains: [], origin: [], operators: [], bands: [], propulsion: [] });
+  const [f, setF] = useState<Required<CatalogFacets>>({
+    domains: [], origin: [], operators: [], bands: [], propulsion: [],
+    ieeeBands: [], natoBands: [], propulsionIds: [], installationIds: [], protocols: [], fiberOnly: false,
+  });
   const [mergeTargets, setMergeTargets] = useState<Record<string, string>>({});
   const opts = useMemo(() => ({
     origin: [...new Set(drones.map((d) => d.origin))],
     operators: [...new Set(drones.flatMap((d) => d.operators))],
     bands: [...new Set(drones.flatMap((d) => d.rf.map((r) => r.band)))],
     propulsion: [...new Set(drones.map((d) => d.propulsion))],
+    ieee: [...new Set(drones.flatMap((d) => d.rf.flatMap((r) => effectiveIeeeBands(r))))],
+    families: [...new Set(drones.flatMap((d) => {
+      const id = effectivePropulsionId(d);
+      return id ? [id] : [];
+    }))],
+    installations: [...new Set(drones.flatMap((d) => {
+      const id = effectiveInstallationId(d);
+      return id ? [id] : [];
+    }))],
   }), [drones]);
   const results = useMemo(() => repo.search(q, f), [repo, q, f, drones]);
   const duplicates = useMemo(() => {
@@ -62,7 +77,11 @@ export function CatalogPage() {
         <Facet label="Country of origin" options={opts.origin} value={f.origin} onChange={(v) => setF({ ...f, origin: v })} render={flag} />
         <Facet label="Battlefield operator" options={opts.operators} value={f.operators} onChange={(v) => setF({ ...f, operators: v })} render={flag} />
         <Facet label="RF band" options={opts.bands} value={f.bands} onChange={(v) => setF({ ...f, bands: v })} />
+        <Facet label="IEEE band" options={opts.ieee} value={f.ieeeBands} onChange={(v) => setF({ ...f, ieeeBands: v })} render={(o) => ieeeLabel(o)} />
         <Facet label="Propulsion" options={opts.propulsion} value={f.propulsion} onChange={(v) => setF({ ...f, propulsion: v })} />
+        <Facet label="Propulsion family" options={opts.families} value={f.propulsionIds} onChange={(v) => setF({ ...f, propulsionIds: v })} />
+        <Facet label="Installation" options={opts.installations} value={f.installationIds} onChange={(v) => setF({ ...f, installationIds: v })} />
+        <button type="button" onClick={() => setF({ ...f, fiberOnly: !f.fiberOnly })} className={cn("border px-2 py-0.5 font-mono text-xs", f.fiberOnly ? "border-primary bg-primary/15 text-primary" : "border-border text-muted-foreground")}>Fiber link</button>
         {duplicates.length > 0 && (
           <div className="border-t border-border pt-4">
             <p className="mb-2 font-mono text-[11px] uppercase tracking-widest text-accent">Duplicate Systems ({duplicates.length})</p>

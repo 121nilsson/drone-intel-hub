@@ -20,6 +20,8 @@ const ORDER: Record<Collection, { col: string; asc: boolean; limit?: number }> =
   sources: { col: "position", asc: false },
   dispatches: { col: "created_at", asc: false, limit: 3000 },
   procurements: { col: "created_at", asc: false },
+  taxonomies: { col: "taxonomy", asc: true },
+  taxonomy_candidates: { col: "last_seen", asc: false },
 };
 
 function check<T>(r: { data: T; error: { message: string } | null }): T {
@@ -29,23 +31,50 @@ function check<T>(r: { data: T; error: { message: string } | null }): T {
 
 /** Hot columns mirrored from the document, same layout as /migrations. */
 function row<C extends Collection>(c: C, doc: CollectionMap[C]): Record<string, unknown> {
-  const d = doc as never as Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
   switch (c) {
-    case "drones":
+    case "drones": {
+      const d = doc as CollectionMap["drones"];
       return { id: d.id, name: d.name, domain: d.domain, origin: d.origin, data: doc, updated_at: new Date().toISOString() };
-    case "candidates":
+    }
+    case "candidates": {
+      const d = doc as CollectionMap["candidates"];
       return { id: d.id, status: d.status, tier: d.tier, created_at: d.createdAt, data: doc };
-    case "dispatches":
+    }
+    case "dispatches": {
+      const d = doc as CollectionMap["dispatches"];
       // Lease columns deliberately omitted - only claim/release touch them.
       return { id: d.id, source_id: d.sourceId, status: d.status, created_at: d.createdAt, processed_at: d.processedAt ?? null, data: doc };
-    case "procurements":
+    }
+    case "procurements": {
+      const d = doc as CollectionMap["procurements"];
       return {
         id: d.id, company: d.company, country: d.country ?? "", amount: d.amount ?? null, currency: d.currency ?? null,
         program: d.program ?? null, product: d.product ?? null, customer: d.customer ?? null, announced_at: d.announcedAt ?? null,
         source: d.source, source_url: d.sourceUrl ?? null, notes: d.notes ?? null, created_at: d.createdAt, data: doc,
       };
-    default:
+    }
+    case "taxonomies": {
+      const d = doc as CollectionMap["taxonomies"];
+      return {
+        id: d.id, taxonomy: d.taxonomy, canonical_id: d.canonicalId, label: d.label,
+        parent_id: d.parentId ?? null, data: doc, updated_at: new Date().toISOString(),
+      };
+    }
+    case "taxonomy_candidates": {
+      const d = doc as CollectionMap["taxonomy_candidates"];
+      return {
+        id: d.id, taxonomy: d.taxonomy, raw_term: d.rawTerm, status: d.status, occurrences: d.occurrences,
+        first_seen: d.firstSeen, last_seen: d.lastSeen, data: doc,
+      };
+    }
+    case "sources": {
+      const d = doc as CollectionMap["sources"];
       return { id: d.id, platform: d.platform, handle: d.handle, data: doc };
+    }
+    default: {
+      const _exhaustive: never = c;
+      throw new Error(`No column layout for ${String(_exhaustive)}`);
+    }
   }
 }
 

@@ -24,14 +24,11 @@ services:
       - path: .env.local
         required: false
     environment:
+      # Keep DATABASE_URL on the internal hostname. Provider settings come from env_file
+      # (.env / .env.local) — do not re-list them here with ${VAR:-} or Compose will inject
+      # empty strings and wipe values that env_file already loaded.
       DATABASE_URL: postgres://droneint:${POSTGRES_PASSWORD:-droneint}@db:5432/droneint
       PORT: 3010
-      NVIDIA_API_KEY: ${NVIDIA_API_KEY:-}
-      NVIDIA_BASE_URL: ${NVIDIA_BASE_URL:-}
-      NVIDIA_TIER1_MODEL: ${NVIDIA_TIER1_MODEL:-}
-      NVIDIA_TIER2_MODEL: ${NVIDIA_TIER2_MODEL:-}
-      PROVIDER_RPM: ${PROVIDER_RPM:-}
-      PROVIDER_TIMEOUT_MS: ${PROVIDER_TIMEOUT_MS:-}
     ports:
       - "3010:3010"
     depends_on:

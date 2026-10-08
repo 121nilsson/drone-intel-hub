@@ -16,6 +16,7 @@ import { Route as IntakeRouteImport } from './routes/intake'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as SourcesRouteImport } from './routes/sources'
 import { Route as SpecsRouteImport } from './routes/specs'
+import { Route as TaxonomyRouteImport } from './routes/taxonomy'
 import { Route as SystemsIdRouteImport } from './routes/systems/$id'
 
 const IndexRoute = IndexRouteImport.update({
@@ -53,6 +54,11 @@ const SpecsRoute = SpecsRouteImport.update({
   path: '/specs',
   getParentRoute: () => rootRouteImport,
 } as any)
+const TaxonomyRoute = TaxonomyRouteImport.update({
+  id: '/taxonomy',
+  path: '/taxonomy',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SystemsIdRoute = SystemsIdRouteImport.update({
   id: '/systems/$id',
   path: '/systems/$id',
@@ -67,6 +73,7 @@ export interface FileRoutesByFullPath {
   '/settings': typeof SettingsRoute
   '/sources': typeof SourcesRoute
   '/specs': typeof SpecsRoute
+  '/taxonomy': typeof TaxonomyRoute
   '/systems/$id': typeof SystemsIdRoute
 }
 export interface FileRoutesByTo {
@@ -77,6 +84,7 @@ export interface FileRoutesByTo {
   '/settings': typeof SettingsRoute
   '/sources': typeof SourcesRoute
   '/specs': typeof SpecsRoute
+  '/taxonomy': typeof TaxonomyRoute
   '/systems/$id': typeof SystemsIdRoute
 }
 export interface FileRoutesById {
@@ -88,6 +96,7 @@ export interface FileRoutesById {
   '/settings': typeof SettingsRoute
   '/sources': typeof SourcesRoute
   '/specs': typeof SpecsRoute
+  '/taxonomy': typeof TaxonomyRoute
   '/systems/$id': typeof SystemsIdRoute
 }
 export interface FileRouteTypes {
@@ -100,6 +109,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/sources'
     | '/specs'
+    | '/taxonomy'
     | '/systems/$id'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -110,6 +120,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/sources'
     | '/specs'
+    | '/taxonomy'
     | '/systems/$id'
   id:
     | '__root__'
@@ -120,6 +131,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/sources'
     | '/specs'
+    | '/taxonomy'
     | '/systems/$id'
   fileRoutesById: FileRoutesById
 }
@@ -131,6 +143,7 @@ export interface RootRouteChildren {
   SettingsRoute: typeof SettingsRoute
   SourcesRoute: typeof SourcesRoute
   SpecsRoute: typeof SpecsRoute
+  TaxonomyRoute: typeof TaxonomyRoute
   SystemsIdRoute: typeof SystemsIdRoute
 }
 
@@ -185,6 +198,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SpecsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/taxonomy': {
+      id: '/taxonomy'
+      path: '/taxonomy'
+      fullPath: '/taxonomy'
+      preLoaderRoute: typeof TaxonomyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/systems/$id': {
       id: '/systems/$id'
       path: '/systems/$id'
@@ -203,6 +223,7 @@ const rootRouteChildren: RootRouteChildren = {
   SettingsRoute: SettingsRoute,
   SourcesRoute: SourcesRoute,
   SpecsRoute: SpecsRoute,
+  TaxonomyRoute: TaxonomyRoute,
   SystemsIdRoute: SystemsIdRoute,
 }
 export const routeTree = rootRouteImport

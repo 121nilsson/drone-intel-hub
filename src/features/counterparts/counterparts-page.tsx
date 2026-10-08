@@ -1,5 +1,6 @@
 import { useNavigate } from "@tanstack/react-router";
 import { consensus } from "@/entities/drone/consensus";
+import { intersectBands, linkIsFiber } from "@/entities/normalization/rf";
 import { flag, type Drone } from "@/entities/drone/types";
 import { useDrones } from "@/shared/infra/services";
 import { Panel, Tag } from "@/shared/ui/primitives";
@@ -8,11 +9,10 @@ function overlap(a: Drone, b: Drone) {
   const shared: string[] = [];
   for (const x of a.rf)
     for (const y of b.rf) {
-      if (
-        x.band === y.band ||
-        (x.freqMHz && y.freqMHz && x.freqMHz[0] <= y.freqMHz[1] && y.freqMHz[0] <= x.freqMHz[1])
-      )
-        shared.push(`${x.role}/${y.role} · ${x.band}`);
+      if (linkIsFiber(x) || linkIsFiber(y)) continue;
+      const hit = x.freqMHz && y.freqMHz ? intersectBands(x.freqMHz, y.freqMHz) : undefined;
+      if (hit) shared.push(`${x.role}/${y.role} · ${hit[0]}–${hit[1]} MHz`);
+      else if (!x.freqMHz && !y.freqMHz && x.band === y.band) shared.push(`${x.role}/${y.role} · ${x.band}`);
     }
   return [...new Set(shared)];
 }
@@ -38,7 +38,7 @@ export function CounterpartsPage({ a, b }: { a?: string | undefined; b?: string 
     drones.find((d) => d.id !== A.id)!;
   const keys = [...new Set([...A.specs, ...B.specs].map((s) => s.key))];
   const shared = overlap(A, B);
-  const fiberImmune = [A, B].filter((d) => d.rf.some((r) => r.band.startsWith("Fiber")));
+  const fiberLinked = [A, B].filter((d) => d.rf.some((r) => linkIsFiber(r)));
   const set = (k: "a" | "b", v: string) =>
     nav({ to: "/counterparts", search: { a: k === "a" ? v : A.id, b: k === "b" ? v : B.id } });
 
@@ -87,7 +87,7 @@ export function CounterpartsPage({ a, b }: { a?: string | undefined; b?: string 
         <Card d={A} k="a" />
         <Card d={B} k="b" />
       </div>
-      <Panel title="Shared RF bands / mutual EW vulnerability">
+      <Panel title="Potential frequency overlap">
         {shared.length ? (
           <ul className="flex flex-wrap gap-2">
             {shared.map((s) => (
@@ -97,11 +97,11 @@ export function CounterpartsPage({ a, b }: { a?: string | undefined; b?: string 
             ))}
           </ul>
         ) : (
-          <p className="text-sm text-muted-foreground">No shared RF bands detected.</p>
+          <p className="text-sm text-muted-foreground">No overlapping frequencies in the recorded links.</p>
         )}
-        {fiberImmune.length > 0 && (
+        {fiberLinked.length > 0 && (
           <p className="mt-3 text-sm text-accent">
-            {fiberImmune.map((d) => d.name).join(", ")}: fiber-optic link — immune to RF jamming.
+            {fiberLinked.map((d) => d.name).join(", ")} {fiberLinked.length > 1 ? "use" : "uses"} a fiber-optic link, so that link has no radio frequency to compare.
           </p>
         )}
       </Panel>

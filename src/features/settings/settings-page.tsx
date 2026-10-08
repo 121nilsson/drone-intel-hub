@@ -3,7 +3,7 @@ import { DEFAULT_SETTINGS, useServices } from "@/shared/infra/services";
 import { Btn, Panel } from "@/shared/ui/primitives";
 
 export function SettingsPage() {
-  const { settings, saveSettings, aiKeyFromEnv } = useServices();
+  const { settings, saveSettings, aiKeyFromEnv, aiFromEnv } = useServices();
   const [s, setS] = useState(settings);
   const [saved, setSaved] = useState(false);
   useEffect(() => setS(settings), [settings]);
@@ -29,7 +29,9 @@ export function SettingsPage() {
           <p className="text-xs text-muted-foreground">
             {aiKeyFromEnv
               ? "NVIDIA_API_KEY is set in .env.local — it overrides the fields above and stays on the server. Leave the key blank to fall back to a key saved in this browser."
-              : "Key is kept in this browser only and forwarded per request. Leave empty to use the built-in local extraction engine."}
+              : aiFromEnv
+                ? "Model and URL values above come from the server environment (.env / .env.local). Save a key in this browser or set NVIDIA_API_KEY on the server to enable remote inference."
+                : "Key is kept in this browser only and forwarded per request. Leave empty to use the built-in local extraction engine."}
           </p>
           <div className="flex gap-2">
             <Btn onClick={() => { saveSettings(s); setSaved(true); setTimeout(() => setSaved(false), 1500); }}>{saved ? "Saved" : "Save"}</Btn>

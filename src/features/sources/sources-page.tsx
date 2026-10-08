@@ -8,6 +8,7 @@ import { useDispatches, useServices, useSources } from "@/shared/infra/services"
 import type { DispatchStatus } from "@/entities/dispatch/types";
 import { fetchSourcePosts } from "@/shared/infra/source-fetch.functions";
 import { getSyncState, type SyncState } from "@/shared/infra/source-sync.functions";
+import { getStoreStatus } from "@/shared/infra/store.functions";
 import { translateText } from "@/shared/infra/ai-proxy.functions";
 import { Btn, Panel, Tag } from "@/shared/ui/primitives";
 import {
@@ -193,6 +194,7 @@ export function SourcesPage() {
   const [stopped, setStopped] = useState<string | null>(null);
   const [log, setLog] = useState<string[]>([]);
   const [syncState, setSyncState] = useState<SyncState | null>(null);
+  const [postgres, setPostgres] = useState(false);
   const [filter, setFilter] = useState<DispatchStatus | "all">("all");
   const dispatches = useDispatches();
   const svcRef = useRef(svc);
@@ -290,6 +292,12 @@ export function SourcesPage() {
   }, [collectOne, stateFn]);
 
   useEffect(() => {
+    getStoreStatus()
+      .then((s) => setPostgres(s.postgres))
+      .catch(() => setPostgres(false));
+  }, []);
+
+  useEffect(() => {
     let stop = false;
     const tick = () => {
       stateFn()
@@ -378,11 +386,11 @@ export function SourcesPage() {
             </Btn>
             <span className="font-mono text-xs text-muted-foreground">
               Auto-sync runs server-side every {AUTO_MIN} minutes
-              {syncState?.configured
-                ? syncState.lastSync
+              {!postgres
+                ? " · needs PostgreSQL"
+                : syncState?.lastSync
                   ? ` · last run ${new Date(syncState.lastSync).toLocaleString()}`
-                  : " · not yet run"
-                : " · needs PostgreSQL"}
+                  : " · not yet run"}
             </span>
             {syncState?.cooldownUntil && (
               <span className="font-mono text-xs text-destructive">

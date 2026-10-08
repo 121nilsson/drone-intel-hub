@@ -1,3 +1,4 @@
+import { parseNumber } from "@/entities/normalization/numeric";
 import type {
   DetectedSystem,
   Domain,
@@ -7,19 +8,9 @@ import type {
 } from "@/entities/drone/types";
 import type { BriefingSummarizer, IntelExtractor } from "@/shared/contracts/ai";
 
-/**
- * Parse a number that may use either a decimal comma ("1,5") or thousands grouping ("1,500").
- * `replace(",", ".")` swaps only the first comma, so "1,500" became 1.5 and "1,234" became 1.234.
- *
- * Grouping is assumed only when the text is a well-formed grouped number: every group after
- * the first is exactly three digits, and the first group has no leading zero. That last rule is
- * what settles the genuinely ambiguous cases in favour of a decimal comma, since a grouped
- * number never starts with "0" - so "0,500" is 0.5 (European decimal) and "1,500" is 1500.
- */
+/** Same grouping rules as the normalization parser, so intake and consensus agree. */
 function num(s: string): number {
-  const t = s.trim();
-  if (/^[1-9]\d{0,2}(?:[.,]\d{3})+$/.test(t)) return parseFloat(t.replace(/,/g, ""));
-  return parseFloat(t.replace(",", "."));
+  return parseNumber(s) ?? Number.NaN;
 }
 const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 

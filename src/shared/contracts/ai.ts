@@ -11,6 +11,15 @@ export interface BriefingSummarizer {
   summarize(context: string): Promise<string>;
 }
 
+/** Non-secret inference fields resolved from the server environment. */
+export interface ProviderEnvConfig {
+  hasKey: boolean;
+  baseUrl?: string;
+  tier1Model?: string;
+  tier2Model?: string;
+  translateModel?: string;
+}
+
 export interface AIProviderSettings {
   baseUrl: string;
   apiKey: string;

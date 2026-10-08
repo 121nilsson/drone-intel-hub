@@ -8,29 +8,24 @@ import {
   type WorkProgress,
 } from "@/features/sources/auto-ingest";
 import { db, dbConfigured } from "./postgres/db.server";
+import {
+  parseSyncCooldown,
+  parseSyncProgress,
+  readSyncState,
+  SYNC_COOLDOWN_SLOT,
+  SYNC_PROGRESS_SLOT,
+  SYNC_SLOT,
+} from "./sync-state-read.server";
 
-/** Single global throttle slot for the auto-ingest job. */
-const SLOT = "sources:auto";
-/**
- * Live auto-sync heartbeat. Its own row, so writing progress never touches the throttle slot.
- * `last_result` holds a WorkProgress object. A database created before this row simply has no
- * progress until the next run writes one.
- */
-const PROGRESS_SLOT = "sources:progress";
-/**
- * Rate-limit cooldown, persisted so it survives across ticks and restarts: the in-process
- * pacer forgets a 429 the moment the run ends. `last_result` holds a Cooldown object.
- */
-const COOLDOWN_SLOT = "sources:cooldown";
+export type { SyncState } from "./sync-state-read.server";
+export { readSyncState };
+
+const SLOT = SYNC_SLOT;
+const PROGRESS_SLOT = SYNC_PROGRESS_SLOT;
+const COOLDOWN_SLOT = SYNC_COOLDOWN_SLOT;
 
 function parseCooldown(raw: unknown): Cooldown | null {
-  const value = typeof raw === "string" ? safeJson(raw) : raw;
-  if (!value || typeof value !== "object") return null;
-  const c = value as Record<string, unknown>;
-  const level = num(c["level"]);
-  const until = c["until"];
-  if (level === null || typeof until !== "string" || Number.isNaN(Date.parse(until))) return null;
-  return { level, until };
+  return parseSyncCooldown(raw);
 }
 
 async function readCooldown(): Promise<Cooldown | null> {
@@ -52,64 +47,8 @@ async function clearCooldown() {
   await db()`delete from sync_state where name = ${COOLDOWN_SLOT}`;
 }
 
-function num(value: unknown): number | null {
-  return typeof value === "number" && Number.isFinite(value) ? value : null;
-}
-
-/** Accept only a complete heartbeat. A corrupt blob is "no progress", not a thrown read. */
 function parseProgress(raw: unknown): WorkProgress | null {
-  const value = typeof raw === "string" ? safeJson(raw) : raw;
-  if (!value || typeof value !== "object") return null;
-  const p = value as Record<string, unknown>;
-  const phase = p["phase"];
-  if (phase !== "fetching" && phase !== "analysing" && phase !== "done") return null;
-  if (typeof p["current"] !== "string" || typeof p["updatedAt"] !== "string") return null;
-  const index = num(p["index"]);
-  const total = num(p["total"]);
-  const processed = num(p["processed"]);
-  const irrelevant = num(p["irrelevant"]);
-  const merged = num(p["merged"]);
-  const queued = num(p["queued"]);
-  const failed = num(p["failed"]);
-  const remaining = num(p["remaining"]);
-  if (
-    index === null ||
-    total === null ||
-    processed === null ||
-    irrelevant === null ||
-    merged === null ||
-    queued === null ||
-    failed === null ||
-    remaining === null
-  )
-    return null;
-  const currentId = p["currentId"];
-  const promoted = num(p["promoted"]);
-  const discarded = num(p["discarded"]);
-  return {
-    phase,
-    current: p["current"],
-    ...(typeof currentId === "string" ? { currentId } : {}),
-    index,
-    total,
-    processed,
-    irrelevant,
-    merged,
-    ...(promoted !== null ? { promoted } : {}),
-    ...(discarded !== null ? { discarded } : {}),
-    queued,
-    failed,
-    remaining,
-    updatedAt: p["updatedAt"],
-  };
-}
-
-function safeJson(raw: string): unknown {
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return null;
-  }
+  return parseSyncProgress(raw);
 }
 
 async function writeProgress(progress: WorkProgress) {
@@ -159,44 +98,6 @@ async function releaseSlot() {
     await db()`delete from sync_state where name = ${SLOT}`;
   } catch {
     /* nothing to release */
-  }
-}
-
-export interface SyncState {
-  lastSync: string | null;
-  configured: boolean;
-  /** Heartbeat of the background auto-sync, or null when it has never reported. */
-  progress: WorkProgress | null;
-  /** While in the future, auto-sync collects but skips AI work after a provider rate limit. */
-  cooldownUntil: string | null;
-}
-
-/** Throttle state for the UI. Never throws: a missing table just means "no auto-sync yet". */
-export async function readSyncState(): Promise<SyncState> {
-  const none: SyncState = { lastSync: null, configured: false, progress: null, cooldownUntil: null };
-  if (!dbConfigured()) return none;
-  try {
-    const rows = await db()`
-      select name, last_sync, last_result from sync_state
-      where name in (${SLOT}, ${PROGRESS_SLOT}, ${COOLDOWN_SLOT})`;
-    let lastSync: string | null = null;
-    let progress: WorkProgress | null = null;
-    let cooldownUntil: string | null = null;
-    for (const row of rows) {
-      if (row["name"] === SLOT) {
-        const raw = row["last_sync"];
-        lastSync = raw ? new Date(raw as Date).toISOString() : null;
-      } else if (row["name"] === PROGRESS_SLOT) {
-        progress = parseProgress(row["last_result"]);
-      } else if (row["name"] === COOLDOWN_SLOT) {
-        const c = parseCooldown(row["last_result"]);
-        if (c && Date.parse(c.until) > Date.now()) cooldownUntil = c.until;
-      }
-    }
-    return { lastSync, configured: true, progress, cooldownUntil };
-  } catch (e) {
-    console.error("[sync-state]", e);
-    return none;
   }
 }
 

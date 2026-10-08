@@ -1,5 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { consensus } from "@/entities/drone/consensus";
+import { ieeeLabel, natoLabel } from "@/entities/normalization/bands";
+import { effectiveIeeeBands, effectiveNatoBands, linkIsFiber } from "@/entities/normalization/rf";
 import { flag, type Drone } from "@/entities/drone/types";
 import { useDrones } from "@/shared/infra/services";
 import { ConfidenceTag, Panel, Tag } from "@/shared/ui/primitives";
@@ -18,7 +20,7 @@ export function SpecTable({ drone }: { drone: Drone }) {
               <td className="py-2">{s.label} {s.discoveredBy === "ai" && <Tag tone="accent" className="ml-1">AI-discovered</Tag>}</td>
               <td className="py-2 font-mono text-primary">{c.display} {c.disputed && <Tag tone="danger" className="ml-1">Disputed</Tag>}</td>
               <td className="py-2 font-mono text-xs text-muted-foreground">{c.min !== undefined && c.min !== c.max ? `${c.min}–${c.max}` : "—"}</td>
-              <td className="py-2 font-mono text-xs" title={s.claims.map((x) => `${x.value} (${x.source})`).join("\n")}>{c.sources}</td>
+              <td className="py-2 font-mono text-xs" title={s.claims.map((x) => `${x.raw ?? x.value}${x.normalized?.canonicalValue !== undefined && x.raw ? ` → ${x.normalized.canonicalValue} ${x.normalized.canonicalUnit ?? ""}` : ""} (${x.source})`).join("\n")}>{c.sources}</td>
               <td className="py-2"><ConfidenceTag level={c.confidence} /></td>
             </tr>
           );
@@ -54,12 +56,22 @@ export function DossierPage({ id }: { id: string }) {
         </Panel>
         <Panel title="RF spectrum">
           <ul className="space-y-2">
-            {d.rf.map((r, i) => (
-              <li key={i} className="flex items-start justify-between gap-2 text-sm">
-                <Tag tone={r.role === "antijam" ? "accent" : "default"}>{r.role}</Tag>
-                <div className="flex-1 text-right"><span className="font-mono">{r.band}</span>{r.freqMHz && <span className="font-mono text-xs text-muted-foreground"> {r.freqMHz[0]}–{r.freqMHz[1]} MHz</span>}{r.notes && <p className="text-xs text-muted-foreground">{r.notes}</p>}</div>
+            {d.rf.map((r, i) => {
+              const ieee = effectiveIeeeBands(r).map(ieeeLabel);
+              const nato = effectiveNatoBands(r).map(natoLabel);
+              const fiber = linkIsFiber(r);
+              return (
+              <li key={i} className="flex items-start justify-between gap-2 text-sm" title={r.band}>
+                <Tag tone={r.role === "antijam" ? "accent" : fiber ? "accent" : "default"}>{fiber ? "tether" : r.role}</Tag>
+                <div className="flex-1 text-right">
+                  <span className="font-mono">{r.freqMHz ? `${r.freqMHz[0]}–${r.freqMHz[1]} MHz` : r.band}</span>
+                  {(ieee.length > 0 || nato.length > 0) && <p className="font-mono text-xs text-muted-foreground">{[...ieee, ...nato].join(" · ")}</p>}
+                  {r.protocols?.length ? <p className="font-mono text-xs text-muted-foreground">{r.protocols.join(", ")}</p> : null}
+                  {r.notes && <p className="text-xs text-muted-foreground">{r.notes}</p>}
+                </div>
               </li>
-            ))}
+              );
+            })}
           </ul>
         </Panel>
         <Panel title="Supply chain">

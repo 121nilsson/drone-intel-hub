@@ -8,6 +8,12 @@ export interface CatalogFacets {
   operators?: string[];
   bands?: string[];
   propulsion?: string[];
+  ieeeBands?: string[];
+  natoBands?: string[];
+  propulsionIds?: string[];
+  installationIds?: string[];
+  protocols?: string[];
+  fiberOnly?: boolean;
 }
 
 /** Persistence contract — swap localStorage for any DB without touching features. */

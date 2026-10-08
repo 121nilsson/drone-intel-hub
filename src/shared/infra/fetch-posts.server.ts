@@ -5,6 +5,8 @@ import {
   LocalDispatchRepository,
   LocalDroneRepository,
   LocalSourceRepository,
+  LocalTaxonomyCandidateRepository,
+  LocalTaxonomyRepository,
 } from "./local-repository";
 import { OpenAICompatibleExtractor } from "./openai-compatible-ai";
 import { dbConfigured } from "./postgres/db.server";
@@ -48,11 +50,15 @@ export async function fetchAllSources(
   const drones = new LocalDroneRepository();
   const candidates = new LocalCandidateRepository();
   const dispatches = new LocalDispatchRepository();
+  const taxonomies = new LocalTaxonomyRepository();
+  const taxonomyCandidates = new LocalTaxonomyCandidateRepository();
   await Promise.all([
     sources.attach(store),
     drones.attach(store),
     candidates.attach(store),
     dispatches.attach(store),
+    taxonomies.attach(store),
+    taxonomyCandidates.attach(store),
   ]);
 
   const useRemote = !!process.env["NVIDIA_API_KEY"];
@@ -69,6 +75,7 @@ export async function fetchAllSources(
   const deps = {
     drones,
     candidates,
+    taxonomyCandidates,
     tier1: useRemote
       ? new OpenAICompatibleExtractor(1, cfg, chatCompletionOnce)
       : new HeuristicExtractor(1),

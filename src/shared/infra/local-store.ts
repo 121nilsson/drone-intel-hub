@@ -6,6 +6,8 @@ const KEYS: Record<Collection, string> = {
   sources: "dti.sources.v1",
   dispatches: "dti.dispatches.v1",
   procurements: "dti.procurements.v1",
+  taxonomies: "dti.taxonomies.v1",
+  taxonomy_candidates: "dti.taxonomy_candidates.v1",
 };
 
 /** Browser-only store: one JSON array per collection in localStorage. */

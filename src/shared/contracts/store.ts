@@ -3,7 +3,20 @@ import type { MonitoredSource } from "@/entities/source/types";
 import type { RawDispatch } from "@/entities/dispatch/types";
 import type { Procurement } from "@/entities/procurement/types";
 
-export type Collection = "drones" | "candidates" | "sources" | "dispatches" | "procurements";
+import type { StoredTaxonomyTerm, TaxonomyCandidate } from "@/entities/normalization/taxonomy";
+
+/** One list so a new collection fails the build until every store handles it. */
+export const COLLECTIONS = [
+  "drones",
+  "candidates",
+  "sources",
+  "dispatches",
+  "procurements",
+  "taxonomies",
+  "taxonomy_candidates",
+] as const;
+
+export type Collection = (typeof COLLECTIONS)[number];
 
 export interface CollectionMap {
   drones: Drone;
@@ -11,6 +24,8 @@ export interface CollectionMap {
   sources: MonitoredSource;
   dispatches: RawDispatch;
   procurements: Procurement;
+  taxonomies: StoredTaxonomyTerm;
+  taxonomy_candidates: TaxonomyCandidate;
 }
 
 export interface Snapshot {
@@ -19,6 +34,8 @@ export interface Snapshot {
   sources: MonitoredSource[];
   dispatches: RawDispatch[];
   procurements: Procurement[];
+  taxonomies: StoredTaxonomyTerm[];
+  taxonomy_candidates: TaxonomyCandidate[];
 }
 
 /**

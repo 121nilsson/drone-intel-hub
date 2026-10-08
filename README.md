@@ -52,6 +52,29 @@ scratch, drop the volume: `docker compose down -v`.
 `.env` is gitignored; `.env.example` is the committed template. `DATABASE_URL`
 must use the published host port (`5435`), not the container port (`5432`).
 
+### Running a migration manually
+
+Migrations in `migrations/` only run automatically on a fresh volume. To apply a
+new one to an already-initialised database, pipe the file into `psql`:
+
+```bash
+# bash / zsh
+docker compose exec -T db psql -U droneint -d droneint -v ON_ERROR_STOP=1 \
+  < migrations/005_normalization.sql
+```
+
+```powershell
+# Windows PowerShell (the `<` redirect isn't supported there)
+Get-Content migrations/005_normalization.sql -Raw |
+  docker compose exec -T db psql -U droneint -d droneint -v ON_ERROR_STOP=1
+```
+
+- `ON_ERROR_STOP=1` makes `psql` abort on the first failing statement instead of
+  carrying on and reporting success.
+- The scripts use `create table/index if not exists`, so re-running one is safe.
+- `-T` disables TTY allocation — required when piping stdin through
+  `docker compose exec`.
+
 ## Inference provider
 
 The app runs a built-in heuristic engine when no provider is configured. To use
@@ -118,4 +141,4 @@ the old double-processing behaviour rather than an error.
 
 To change the cadence, edit the cron in `vite.config.ts`. Migrations only run on a fresh
 volume, so apply `002_sync_state.sql` and `004_dispatch_lease.sql` by hand on an existing
-database.
+database — see [Running a migration manually](#running-a-migration-manually).

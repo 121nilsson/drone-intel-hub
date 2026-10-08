@@ -1,10 +1,11 @@
 import { createServerFn } from "@tanstack/react-start";
-import { readSyncState, runAutoSync, type SyncState } from "./source-sync.server";
+import { readSyncState, type SyncState } from "./sync-state-read.server";
+import { runAutoSync } from "./source-sync.server";
 
-export type { SyncState } from "./source-sync.server";
+export type { SyncState } from "./sync-state-read.server";
 
 /** Throttle state for the UI, and a manual trigger for the same job the cron runs. */
-export const getSyncState = createServerFn({ method: "GET" }).handler(
+export const getSyncState = createServerFn({ method: "POST" }).handler(
   async (): Promise<SyncState> => readSyncState(),
 );
 

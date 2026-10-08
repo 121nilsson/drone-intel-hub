@@ -10,5 +10,5 @@ export const Route = createFileRoute("/settings")({
     { property: "og:type", content: "website" },
     { name: "twitter:card", content: "summary" },
   ] }),
-  component: () => <SettingsPage />,
+  component: SettingsPage,
 });

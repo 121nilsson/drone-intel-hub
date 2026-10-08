@@ -21,13 +21,10 @@ export const chatCompletion = createServerFn({ method: "POST" })
  * Non-secret provider config resolved from the server environment (.env.local).
  * The API key itself is deliberately never returned - it stays on the server.
  */
-export const getEnvProviderConfig = createServerFn({ method: "GET" }).handler(async () => ({
-  hasKey: !!process.env["NVIDIA_API_KEY"]?.trim(),
-  baseUrl: process.env["NVIDIA_BASE_URL"]?.trim() || undefined,
-  tier1Model: process.env["NVIDIA_TIER1_MODEL"]?.trim() || undefined,
-  tier2Model: process.env["NVIDIA_TIER2_MODEL"]?.trim() || undefined,
-  translateModel: process.env["NVIDIA_TRANSLATE_MODEL"]?.trim() || undefined,
-}));
+export const getEnvProviderConfig = createServerFn({ method: "POST" }).handler(async () => {
+  const { readProviderEnvConfig } = await import("./provider-env.server");
+  return readProviderEnvConfig();
+});
 
 /**
  * Translate text to English using a small translation model.
