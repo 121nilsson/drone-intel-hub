@@ -88,6 +88,7 @@ export async function fetchAllSources(
     tier2: useRemote
       ? new OpenAICompatibleExtractor(2, cfg, chatCompletionOnce)
       : new HeuristicExtractor(2),
+    fallback: new HeuristicExtractor(1),
     escalationThreshold: DEFAULT_SETTINGS.escalationThreshold,
     autoMergeThreshold: DEFAULT_SETTINGS.autoMergeThreshold,
     autoPromoteThreshold: DEFAULT_SETTINGS.autoPromoteThreshold,

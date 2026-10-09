@@ -11,6 +11,8 @@ import { chatCompletionOnce } from "@/shared/infra/ai-proxy.server";
 export interface PipelineDeps {
   tier1: IntelExtractor;
   tier2: IntelExtractor;
+  /** Local heuristic engine used when an AI tier throws (provider outage), so ingestion never hard-fails. */
+  fallback?: IntelExtractor;
   drones: DroneRepository;
   candidates: CandidateRepository;
   /** When set, unknown propulsion terms are queued for an analyst. Absent in tests and older callers. */
@@ -30,6 +32,13 @@ export type PipelineResult =
   | { kind: "queued"; candidate: Candidate };
 
 const norm = (s: string) => s.trim().toLowerCase();
+
+/** Mark an extraction with why it came from a degraded tier, visible to the analyst in triage. */
+function annotate(extraction: Extraction, note: string): Extraction {
+  return extraction.rationale
+    ? { ...extraction, rationale: `${extraction.rationale} · ${note}` }
+    : { ...extraction, rationale: note };
+}
 
 /** A parser bug must not burn a dispatch attempt. The raw extraction is kept when normalization throws. */
 function applyNormalization(extraction: Extraction): ReturnType<typeof normalizeExtraction> {
@@ -65,10 +74,29 @@ export async function runTwoTier(
 ): Promise<PipelineResult> {
   const catalog = d.drones.list();
   let tier: 1 | 2 = 1;
-  let extraction = await d.tier1.extract(raw, catalog);
+  // A provider outage must not hard-fail ingestion: tier 1 falls back to the built-in
+  // heuristic engine, and a failing tier 2 keeps the tier-1 result. Either way the paste
+  // still lands in triage, marked as degraded so the analyst can trust it less blindly.
+  let extraction: Extraction;
+  try {
+    extraction = await d.tier1.extract(raw, catalog);
+  } catch (err) {
+    if (!d.fallback) throw err;
+    console.error("[pipeline] tier-1 call failed, using heuristic engine", (err as Error).message);
+    extraction = annotate(
+      await d.fallback.extract(raw, catalog),
+      "tier-1 AI unavailable — heuristic",
+    );
+  }
   if (extraction.confidence < d.escalationThreshold || !extraction.matchId) {
     tier = 2;
-    extraction = await d.tier2.extract(raw, catalog);
+    try {
+      extraction = await d.tier2.extract(raw, catalog);
+    } catch (err) {
+      tier = 1;
+      console.error("[pipeline] tier-2 call failed, keeping tier-1 result", (err as Error).message);
+      extraction = annotate(extraction, "tier-2 AI unavailable — kept tier 1");
+    }
   }
   const normalized = applyNormalization(extraction);
   extraction = normalized.extraction;
@@ -211,8 +239,11 @@ export function mergeDrones(
   const manufacturer = keep.manufacturer || merge.manufacturer;
   const operators = [...new Set([...keep.operators, ...merge.operators])];
   const propulsion =
-    keep.propulsion && keep.propulsion !== "Unknown" ? keep.propulsion : merge.propulsion || "Unknown";
-  const summary = (keep.summary?.length ?? 0) >= (merge.summary?.length ?? 0) ? keep.summary : merge.summary;
+    keep.propulsion && keep.propulsion !== "Unknown"
+      ? keep.propulsion
+      : merge.propulsion || "Unknown";
+  const summary =
+    (keep.summary?.length ?? 0) >= (merge.summary?.length ?? 0) ? keep.summary : merge.summary;
 
   // 2. Merge specs preserving all claims and provenance
   const specsMap = new Map<string, SpecAttribute>();
@@ -224,14 +255,18 @@ export function mergeDrones(
     if (existing) {
       for (const claim of s.claims) {
         const isDuplicate = existing.claims.some(
-          (c) => String(c.value) === String(claim.value) && c.source === claim.source
+          (c) => String(c.value) === String(claim.value) && c.source === claim.source,
         );
         if (!isDuplicate) {
           existing.claims.push(claim);
         }
       }
     } else {
-      specsMap.set(attributeSemantic(s), { ...s, semantic: attributeSemantic(s), claims: [...s.claims] });
+      specsMap.set(attributeSemantic(s), {
+        ...s,
+        semantic: attributeSemantic(s),
+        claims: [...s.claims],
+      });
     }
   }
 
@@ -244,7 +279,7 @@ export function mergeDrones(
     const exists = components.some(
       (c) =>
         c.part.toLowerCase() === comp.part.toLowerCase() &&
-        c.manufacturer.toLowerCase() === comp.manufacturer.toLowerCase()
+        c.manufacturer.toLowerCase() === comp.manufacturer.toLowerCase(),
     );
     if (!exists) components.push(comp);
   }
@@ -252,14 +287,17 @@ export function mergeDrones(
   // 5. Merge evolution history (sorted by date)
   const mergeEvolution = merge.evolution.map((e) => ({
     ...e,
-    description: e.description.includes(merge.name) ? e.description : `[${merge.name}] ${e.description}`,
+    description: e.description.includes(merge.name)
+      ? e.description
+      : `[${merge.name}] ${e.description}`,
   }));
   const evolution = [
     ...keep.evolution,
     {
       date: new Date().toISOString(),
       kind: "other" as const,
-      description: reason || `Merged duplicate system '${merge.name}' (${mergeId}) into '${name}' (${keepId})`,
+      description:
+        reason || `Merged duplicate system '${merge.name}' (${mergeId}) into '${name}' (${keepId})`,
       source: "catalog-merge",
     },
     ...mergeEvolution,
@@ -267,7 +305,7 @@ export function mergeDrones(
 
   // 6. Merge counterpart IDs (cleaning up references to self and merged id)
   const counterpartIds = [...new Set([...keep.counterpartIds, ...merge.counterpartIds])].filter(
-    (id) => id !== keepId && id !== mergeId
+    (id) => id !== keepId && id !== mergeId,
   );
 
   const createdAt =
@@ -305,7 +343,11 @@ export function mergeDrones(
     if (other.id === keepId || other.id === mergeId) continue;
     if (other.counterpartIds.includes(mergeId)) {
       const updated = [
-        ...new Set(other.counterpartIds.map((cId) => (cId === mergeId ? keepId : cId)).filter((cId) => cId !== other.id)),
+        ...new Set(
+          other.counterpartIds
+            .map((cId) => (cId === mergeId ? keepId : cId))
+            .filter((cId) => cId !== other.id),
+        ),
       ];
       d.drones.upsert({ ...other, counterpartIds: updated, updatedAt: new Date().toISOString() });
     }
@@ -334,7 +376,10 @@ export function mergeInto(
   const target = d.drones.get(droneId);
   if (!target) return;
   const extracted = applyNormalization(c.extraction).extraction;
-  const merged = withNormalizedRf(mergeSpecs(target, extracted.specs, c.source, { extractionConfidence: extracted.confidence }), extracted);
+  const merged = withNormalizedRf(
+    mergeSpecs(target, extracted.specs, c.source, { extractionConfidence: extracted.confidence }),
+    extracted,
+  );
   merged.evolution = [
     ...merged.evolution,
     {
