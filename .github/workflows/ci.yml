@@ -28,6 +28,14 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      # Advisory: surfaces formatting drift from Lovable/Bun-generated code without
+      # blocking the build. eslint reports the same drift as warnings. Make this blocking
+      # by removing continue-on-error — ideally after a one-time `npx prettier --write .`
+      # commit has formatted the whole tree.
+      - name: Prettier drift (advisory)
+        run: npx prettier --check .
+        continue-on-error: true
+
       # The project's tsconfig is already strict with noEmit; this catches type
       # errors the vitest/eslint passes do not (e.g. untested code paths).
       - name: Typecheck

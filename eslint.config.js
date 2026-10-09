@@ -37,4 +37,13 @@ export default tseslint.config(
     },
   },
   eslintPluginPrettier,
+  {
+    // Formatting drift is a warning, not an error. The codebase is largely generated and
+    // maintained through tooling (Lovable/Bun) that does not run prettier, so hard errors
+    // would block lint on hundreds of unrelated formatting violations and make the lint
+    // signal useless. CI reports drift separately (and advisory) via `prettier --check .`.
+    // To make formatting blocking again, run `npx prettier --write .` once, commit, and
+    // remove this override.
+    rules: { "prettier/prettier": "warn" },
+  },
 );
