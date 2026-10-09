@@ -1,14 +1,17 @@
 import { Link } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useServerFn } from "@tanstack/react-start";
+import { useMemo, useRef, useState } from "react";
 import { DOMAINS, flag, type Domain, type Drone } from "@/entities/drone/types";
 import { ieeeLabel } from "@/entities/normalization/bands";
 import { effectiveInstallationId, effectivePropulsionId } from "@/entities/normalization/taxonomy";
 import { effectiveIeeeBands, linkIsFiber } from "@/entities/normalization/rf";
 import { useDrones, useServices } from "@/shared/infra/services";
+import { fetchWikipediaReference } from "@/shared/infra/wikipedia.functions";
 import type { CatalogFacets } from "@/shared/contracts/repository";
 import { Btn, Tag } from "@/shared/ui/primitives";
 import { cn } from "@/lib/utils";
 import { mergeDrones } from "@/features/intake/pipeline";
+import { applyReference } from "@/features/catalog/reference-import";
 
 function Facet({ label, options, value, onChange, render }: { label: string; options: string[]; value: string[]; onChange: (v: string[]) => void; render?: (o: string) => string }) {
   return (
@@ -35,6 +38,10 @@ export function CatalogPage() {
     ieeeBands: [], natoBands: [], propulsionIds: [], installationIds: [], protocols: [], fiberOnly: false,
   });
   const [mergeTargets, setMergeTargets] = useState<Record<string, string>>({});
+  const [importing, setImporting] = useState(false);
+  const [importNote, setImportNote] = useState<string | null>(null);
+  const importingRef = useRef(false);
+  const fetchReference = useServerFn(fetchWikipediaReference);
   const opts = useMemo(() => ({
     origin: [...new Set(drones.map((d) => d.origin))],
     operators: [...new Set(drones.flatMap((d) => d.operators))],
@@ -51,6 +58,32 @@ export function CatalogPage() {
     }))],
   }), [drones]);
   const results = useMemo(() => repo.search(q, f), [repo, q, f, drones]);
+
+  async function importReference() {
+    if (importingRef.current) return;
+    importingRef.current = true;
+    setImporting(true);
+    setImportNote(null);
+    try {
+      const res = await fetchReference();
+      if (!res.ok) {
+        setImportNote(res.error);
+        return;
+      }
+      const report = applyReference(repo.list(), res.cards);
+      for (const drone of report.changed) repo.upsert(drone);
+      const skipped = report.skipped + res.skipped;
+      const tail = res.truncated ? ", truncated" : "";
+      setImportNote(
+        `created ${report.created}, enriched ${report.enriched}, linked ${report.linked}, skipped ${skipped}${tail}`,
+      );
+    } catch (e) {
+      setImportNote(e instanceof Error ? e.message : "Reference import failed");
+    } finally {
+      importingRef.current = false;
+      setImporting(false);
+    }
+  }
   const duplicates = useMemo(() => {
     const byKey = new Map<string, Drone[]>();
     for (const d of drones) {
@@ -145,7 +178,13 @@ export function CatalogPage() {
       <div>
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search Geran, Герань, Shahed, Kometa, NVIDIA…"
           className="w-full border border-border bg-card px-3 py-2.5 font-mono text-sm outline-none focus:border-primary" />
-        <p className="my-3 font-mono text-xs text-muted-foreground">{results.length} systems</p>
+        <div className="my-3 flex flex-wrap items-center justify-between gap-2">
+          <p className="font-mono text-xs text-muted-foreground">{results.length} systems</p>
+          <Btn type="button" variant="ghost" disabled={importing} onClick={() => void importReference()}>
+            {importing ? "Importing…" : "Import reference catalog"}
+          </Btn>
+        </div>
+        {importNote && <p className="mb-3 font-mono text-xs text-muted-foreground">{importNote}</p>}
         <div className="grid gap-3 md:grid-cols-2">
           {results.map((d) => (
             <Link key={d.id} to="/systems/$id" params={{ id: d.id }} className="block border border-border bg-card/80 p-4 transition-colors hover:border-primary">

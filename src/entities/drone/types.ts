@@ -62,6 +62,38 @@ export interface EvolutionEvent {
   source: string;
 }
 
+/** Wikipedia/Wikidata identity attached by the reference import. Not a spec claim. */
+export interface DroneReference {
+  wikidataId: string;
+  alsoIds: string[];
+  lang: "en" | "ru" | "uk";
+  title: string;
+  revisionId: number;
+  url: string;
+  license: "CC BY-SA 4.0";
+  importedAt: string;
+}
+
+/**
+ * One Wikidata item, already resolved to catalog fields. The server returns these;
+ * `applyReference` decides whether each one fills an existing drone or becomes a new card.
+ */
+export interface ReferenceCard {
+  wikidataId: string;
+  name: string;
+  cyrillic?: string;
+  aliases: string[];
+  domain: Domain;
+  origin: string;
+  manufacturer?: string;
+  operators: string[];
+  summary: string;
+  lang: "en" | "ru" | "uk";
+  title: string;
+  revisionId: number;
+  url: string;
+}
+
 export interface Drone {
   id: string;
   name: string;
@@ -83,6 +115,7 @@ export interface Drone {
   components: SupplyComponent[];
   evolution: EvolutionEvent[];
   counterpartIds: string[];
+  reference?: DroneReference;
   createdAt: string;
   updatedAt: string;
 }

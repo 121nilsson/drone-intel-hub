@@ -41,6 +41,13 @@ export function DossierPage({ id }: { id: string }) {
         <div className="flex flex-wrap gap-2"><Tag tone="primary">{d.domain}</Tag><Tag>Origin {flag(d.origin)}</Tag>{d.manufacturer && <Tag tone="accent">{d.manufacturer}</Tag>}{d.operators.map((o) => <Tag key={o} tone="accent">Operator {flag(o)}</Tag>)}<Tag>{d.propulsion}</Tag></div>
         <h1 className="mt-3 text-3xl font-semibold md:text-4xl">{d.name} {d.cyrillic && <span className="text-muted-foreground">{d.cyrillic}</span>}</h1>
         <p className="mt-2 max-w-3xl text-muted-foreground">{d.summary}</p>
+        {d.reference && (
+          <p className="mt-2 font-mono text-xs text-muted-foreground">
+            <a href={d.reference.url} target="_blank" rel="noreferrer" className="underline">
+              {d.reference.url.includes("wikipedia.org") ? "Wikipedia, CC BY-SA 4.0" : "Wikidata"}
+            </a>
+          </p>
+        )}
         {(() => { const cost = d.specs.find((s) => s.key === "unit_cost"); return cost ? (
           <p className="mt-3 inline-flex items-center gap-2 border border-accent/40 px-3 py-1.5 font-mono text-sm"><span className="text-xs uppercase text-muted-foreground">Unit cost</span><span className="text-accent">{consensus(cost).display}</span><span className="text-xs text-muted-foreground">({cost.claims.length} src)</span></p>
         ) : null; })()}
