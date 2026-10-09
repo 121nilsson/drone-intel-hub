@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as CatalogRouteImport } from './routes/catalog'
 import { Route as CounterpartsRouteImport } from './routes/counterparts'
+import { Route as DispatchesRouteImport } from './routes/dispatches'
 import { Route as IntakeRouteImport } from './routes/intake'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as SourcesRouteImport } from './routes/sources'
@@ -32,6 +33,11 @@ const CatalogRoute = CatalogRouteImport.update({
 const CounterpartsRoute = CounterpartsRouteImport.update({
   id: '/counterparts',
   path: '/counterparts',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DispatchesRoute = DispatchesRouteImport.update({
+  id: '/dispatches',
+  path: '/dispatches',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IntakeRoute = IntakeRouteImport.update({
@@ -69,6 +75,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/catalog': typeof CatalogRoute
   '/counterparts': typeof CounterpartsRoute
+  '/dispatches': typeof DispatchesRoute
   '/intake': typeof IntakeRoute
   '/settings': typeof SettingsRoute
   '/sources': typeof SourcesRoute
@@ -80,6 +87,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/catalog': typeof CatalogRoute
   '/counterparts': typeof CounterpartsRoute
+  '/dispatches': typeof DispatchesRoute
   '/intake': typeof IntakeRoute
   '/settings': typeof SettingsRoute
   '/sources': typeof SourcesRoute
@@ -92,6 +100,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/catalog': typeof CatalogRoute
   '/counterparts': typeof CounterpartsRoute
+  '/dispatches': typeof DispatchesRoute
   '/intake': typeof IntakeRoute
   '/settings': typeof SettingsRoute
   '/sources': typeof SourcesRoute
@@ -105,6 +114,7 @@ export interface FileRouteTypes {
     | '/'
     | '/catalog'
     | '/counterparts'
+    | '/dispatches'
     | '/intake'
     | '/settings'
     | '/sources'
@@ -116,6 +126,7 @@ export interface FileRouteTypes {
     | '/'
     | '/catalog'
     | '/counterparts'
+    | '/dispatches'
     | '/intake'
     | '/settings'
     | '/sources'
@@ -127,6 +138,7 @@ export interface FileRouteTypes {
     | '/'
     | '/catalog'
     | '/counterparts'
+    | '/dispatches'
     | '/intake'
     | '/settings'
     | '/sources'
@@ -139,6 +151,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   CatalogRoute: typeof CatalogRoute
   CounterpartsRoute: typeof CounterpartsRoute
+  DispatchesRoute: typeof DispatchesRoute
   IntakeRoute: typeof IntakeRoute
   SettingsRoute: typeof SettingsRoute
   SourcesRoute: typeof SourcesRoute
@@ -168,6 +181,13 @@ declare module '@tanstack/react-router' {
       path: '/counterparts'
       fullPath: '/counterparts'
       preLoaderRoute: typeof CounterpartsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/dispatches': {
+      id: '/dispatches'
+      path: '/dispatches'
+      fullPath: '/dispatches'
+      preLoaderRoute: typeof DispatchesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/intake': {
@@ -219,6 +239,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   CatalogRoute: CatalogRoute,
   CounterpartsRoute: CounterpartsRoute,
+  DispatchesRoute: DispatchesRoute,
   IntakeRoute: IntakeRoute,
   SettingsRoute: SettingsRoute,
   SourcesRoute: SourcesRoute,

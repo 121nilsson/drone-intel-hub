@@ -1,4 +1,4 @@
-import { useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DOMAINS, type Domain } from "@/entities/drone/types";
@@ -11,13 +11,11 @@ import { FETCH_CONCURRENCY, sourceHost } from "@/shared/infra/fetch-posts";
 import { mapWithConcurrency } from "@/shared/infra/pool";
 import { getSyncState, type SyncState } from "@/shared/infra/source-sync.functions";
 import { getStoreStatus } from "@/shared/infra/store.functions";
-import { translateText } from "@/shared/infra/ai-proxy.functions";
 import { Btn, Panel, Tag } from "@/shared/ui/primitives";
 import {
   collectSource,
   fetchingProgress,
-  formatProviderError,
-  processPending,
+    processPending,
   progressFromItem,
   WORK_STALE_MS,
   type WorkProgress,
@@ -28,81 +26,6 @@ const field =
 /** Matches the cron in vite.config.ts. */
 const AUTO_MIN = 10;
 
-function ExpandableText({ text, className = "" }: { text: string; className?: string }) {
-  const [expanded, setExpanded] = useState(false);
-  const isLong = text.length > 200;
-  return (
-    <div className="min-w-0">
-      <p className={`break-words ${className} ${!expanded && isLong ? "line-clamp-3" : ""}`}>
-        {text}
-      </p>
-      {isLong && (
-        <button
-          type="button"
-          onClick={() => setExpanded(!expanded)}
-          className="mt-1 font-mono text-[11px] text-muted-foreground hover:text-primary"
-        >
-          {expanded ? "Show less" : "Show more"}
-        </button>
-      )}
-    </div>
-  );
-}
-
-function DispatchTranslateButton({
-  text,
-  model,
-  translateFn,
-}: {
-  text: string;
-  model: string;
-  translateFn: ReturnType<typeof useServerFn<typeof translateText>>;
-}) {
-  const [translating, setTranslating] = useState(false);
-  const [translated, setTranslated] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  const handleTranslate = async () => {
-    setTranslating(true);
-    setError(null);
-    try {
-      const res = await translateFn({ data: { text, model } });
-      if (res.ok) {
-        setTranslated(res.translated);
-      } else {
-        setError(res.error);
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Translation failed");
-    }
-    setTranslating(false);
-  };
-
-  if (translated) {
-    return (
-      <div className="mt-1 min-w-0 border-l-2 border-primary/30 pl-3">
-        <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-          English translation
-        </p>
-        <p className="mt-0.5 break-words text-sm">{translated}</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="mt-1 flex flex-wrap items-center gap-2">
-      <Btn
-        variant="ghost"
-        onClick={handleTranslate}
-        disabled={translating}
-        className="px-2 py-0.5 text-xs"
-      >
-        {translating ? "Translating…" : "Translate"}
-      </Btn>
-      {error && <span className="font-mono text-[11px] text-destructive">{error}</span>}
-    </div>
-  );
-}
 
 function progressAge(progress: WorkProgress): number | null {
   const age = Date.now() - Date.parse(progress.updatedAt);
@@ -199,8 +122,8 @@ export function SourcesPage() {
   const [log, setLog] = useState<string[]>([]);
   const [syncState, setSyncState] = useState<SyncState | null>(null);
   const [postgres, setPostgres] = useState(false);
-  const [filter, setFilter] = useState<DispatchStatus | "all">("all");
-  const [archiveLimit, setArchiveLimit] = useState(20);
+  const [query, setQuery] = useState("");
+  const [showAdd, setShowAdd] = useState(false);
   const dispatches = useDispatches();
   const svcRef = useRef(svc);
   svcRef.current = svc;
@@ -396,8 +319,9 @@ export function SourcesPage() {
     const y = yieldBySource.get(s.id);
     return !!y && y.analysed + y.queued > 0;
   }).length;
-  const filtered = dispatches.filter((d) => filter === "all" || d.status === filter);
-  const shown = filtered.slice(0, archiveLimit);
+  const visibleSources = sources.filter((s) =>
+    `${s.name} ${s.handle} ${s.platform} ${s.domain}`.toLowerCase().includes(query.trim().toLowerCase()),
+  );
   const remote = syncState?.progress ?? null;
   const workingIds = new Set<string>();
   if (work?.phase === "analysing" && work.currentId) workingIds.add(work.currentId);
@@ -405,17 +329,20 @@ export function SourcesPage() {
     workingIds.add(remote.currentId);
   const sample = (s: MonitoredSource) =>
     nav({ to: "/intake", search: { draft: sampleDispatch(s.domain), source: s.name } });
-  const translateFn = useServerFn(translateText);
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
+    <div className="grid gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
       <Panel title={`Monitored sources · ${sources.length}`}>
-        <div className="mb-3 flex flex-wrap items-center gap-3">
-          <Btn onClick={syncAll} disabled={!!busy}>
+        <Link to="/dispatches" className="mb-3 flex items-center justify-between border border-primary/40 px-3 py-2.5 font-mono text-xs uppercase text-primary">
+          <span>Intel feed · {dispatches.length} posts · {counts.pending} waiting</span><span>→</span>
+        </Link>
+        <div className="mb-3 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center sm:gap-3">
+          <Btn className="justify-center py-2.5" onClick={syncAll} disabled={!!busy}>
             {busy === "all" ? "Fetching…" : "Fetch all feeds"}
           </Btn>
           <Btn
             variant="ghost"
+            className="justify-center py-2.5"
             disabled={!!busy || counts.pending === 0}
             onClick={async () => {
               setBusy("queue");
@@ -430,6 +357,14 @@ export function SourcesPage() {
           </Btn>
           <Btn
             variant="ghost"
+            className="justify-center py-2.5"
+            onClick={() => setShowAdd((v) => !v)}
+          >
+            {showAdd ? "Close form" : "+ Add source"}
+          </Btn>
+          <Btn
+            variant="ghost"
+            className="justify-center py-2.5"
             onClick={() => {
               const count = svc.sources.addMissingDefaults?.() ?? 0;
               if (count > 0) {
@@ -439,7 +374,7 @@ export function SourcesPage() {
           >
             Load default sources
           </Btn>
-          <span className="font-mono text-xs text-muted-foreground">
+          <span className="col-span-2 font-mono text-xs text-muted-foreground">
             Auto-sync runs server-side every {AUTO_MIN} minutes
             {!postgres
               ? " · needs PostgreSQL"
@@ -461,8 +396,14 @@ export function SourcesPage() {
             produced drone-related posts
           </p>
         )}
+        <input
+          className={field + " mb-2 py-2 text-sm"}
+          placeholder={`Filter ${sources.length} sources…`}
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+        />
         <ul className="divide-y divide-border">
-          {sources.map((s) => (
+          {visibleSources.map((s) => (
             <li
               key={s.id}
               className="flex min-w-0 flex-col gap-3 py-3 sm:flex-row sm:flex-wrap sm:items-start"
@@ -512,7 +453,7 @@ export function SourcesPage() {
                   <p className="mt-1 font-mono text-[11px] text-destructive">{s.lastError}</p>
                 )}
               </div>
-              <div className="flex flex-wrap items-center gap-2">
+              <div className="grid grid-cols-4 items-center gap-2 sm:flex sm:flex-wrap">
                 <label
                   className="flex items-center gap-1 font-mono text-xs text-muted-foreground"
                   title="Include this source in the scheduled server-side auto-sync"
@@ -558,101 +499,7 @@ export function SourcesPage() {
         </p>
       </Panel>
       <div className="min-w-0 space-y-6">
-        <Panel title={`Dispatch archive · ${dispatches.length}`}>
-          <div className="mb-3 flex flex-wrap gap-2 font-mono text-xs">
-            {(["all", "pending", "processed", "irrelevant", "failed", "duplicate"] as const).map(
-              (k) => (
-                <button
-                  key={k}
-                  onClick={() => {
-                    setFilter(k);
-                    setArchiveLimit(20);
-                  }}
-                  className={`border px-2 py-1 ${filter === k ? "border-primary text-primary" : "border-border text-muted-foreground"}`}
-                >
-                  {k} {k === "all" ? dispatches.length : counts[k]}
-                </button>
-              ),
-            )}
-          </div>
-          {shown.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Nothing here yet — fetch some feeds.</p>
-          ) : (
-            <ul className="divide-y divide-border">
-              {shown.map((d) => (
-                <li key={d.id} className="min-w-0 break-words py-2">
-                  <div className="flex min-w-0 flex-wrap items-center gap-2 font-mono text-[11px] text-muted-foreground">
-                    <Tag
-                      tone={
-                        d.status === "processed"
-                          ? "primary"
-                          : d.status === "failed"
-                            ? "danger"
-                            : "default"
-                      }
-                    >
-                      {d.status}
-                    </Tag>
-                    {workingIds.has(d.id) && <Tag tone="primary">working</Tag>}
-                    <span>{d.sourceName}</span>
-                    <span>{new Date(d.publishedAt ?? d.createdAt).toLocaleString()}</span>
-                    {d.droneIds?.map((id) => (
-                      <a key={id} href={`/systems/${id}`} className="text-primary underline">
-                        {id}
-                      </a>
-                    ))}
-                    {d.outcome === "queued" && (
-                      <a href="/intake" className="text-primary underline">
-                        in intake queue
-                      </a>
-                    )}
-                    {d.status === "duplicate" && d.duplicateOf && (
-                      // Kept for provenance: the story was already stored from this source, so the
-                      // row shows which one it duplicated rather than a second copy of the text.
-                      <span className="text-accent underline">
-                        duplicate of{" "}
-                        {dispatches.find((x) => x.id === d.duplicateOf)?.sourceName ??
-                          d.duplicateOf}
-                      </span>
-                    )}
-                  </div>
-                  {d.text && <ExpandableText text={d.text} className="mt-1 text-sm" />}
-                  {d.text && (
-                    <DispatchTranslateButton
-                      text={d.text}
-                      model={svc.settings.translateModel}
-                      translateFn={translateFn}
-                    />
-                  )}
-                  {d.error && (
-                    <p className="mt-1 font-mono text-[11px] text-destructive">
-                      {formatProviderError(d.error)}
-                    </p>
-                  )}
-                  <a
-                    href={d.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="mt-1 block break-all font-mono text-[11px] text-muted-foreground underline"
-                  >
-                    {d.url}
-                  </a>
-                </li>
-              ))}
-            </ul>
-          )}
-          {filtered.length > shown.length && (
-            <div className="mt-3 flex flex-wrap items-center gap-3">
-              <Btn variant="ghost" onClick={() => setArchiveLimit((n) => n + 20)}>
-                Show {Math.min(20, filtered.length - shown.length)} more
-              </Btn>
-              <span className="font-mono text-xs text-muted-foreground">
-                {shown.length} of {filtered.length}
-              </span>
-            </div>
-          )}
-        </Panel>
-        <Panel title="Add source">
+        <Panel title="Add source" className={showAdd ? "" : "hidden lg:block"}>
           <div className="min-w-0 space-y-3">
             <input
               className={field}
