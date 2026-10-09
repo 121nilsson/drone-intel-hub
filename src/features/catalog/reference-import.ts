@@ -56,17 +56,33 @@ export function applyReference(
   return report;
 }
 
+function referenceKeys(values: string[]): Set<string> {
+  const keys = new Set<string>();
+  for (const value of values) {
+    const key = referenceKey(value);
+    if (key) keys.add(key);
+  }
+  return keys;
+}
+
 function find(catalog: Drone[], card: ReferenceCard): { index: number; drone: Drone } | null {
   const byId = catalog.findIndex(
     (d) =>
       d.reference?.wikidataId === card.wikidataId || d.reference?.alsoIds.includes(card.wikidataId),
   );
   if (byId >= 0) return { index: byId, drone: catalog[byId]! };
-  const key = referenceKey(card.name);
-  if (!key) return null;
-  const byLabel = catalog.findIndex((d) =>
-    [d.name, d.cyrillic ?? "", ...d.aliases].some((field) => referenceKey(field) === key),
-  );
+  const labelKey = referenceKey(card.name);
+  const keys = referenceKeys([card.name, card.cyrillic ?? "", ...card.aliases]);
+  if (keys.size === 0) return null;
+  // The canonical label may match an existing alias ("Shahed 136" / "Shahed-136").
+  // Incoming aliases may match an existing name or Cyrillic form ("Geran-2" on the
+  // Shahed-136 item). Alias-to-alias overlap stays unmatched, so a shared "Shahed"
+  // alias does not pull Shahed-238 onto Geran-2.
+  const byLabel = catalog.findIndex((d) => {
+    if (keys.has(referenceKey(d.name))) return true;
+    if (d.cyrillic && keys.has(referenceKey(d.cyrillic))) return true;
+    return labelKey !== "" && d.aliases.some((alias) => referenceKey(alias) === labelKey);
+  });
   if (byLabel >= 0) return { index: byLabel, drone: catalog[byLabel]! };
   return null;
 }

@@ -6,6 +6,7 @@ import {
   buildReferenceCards,
   classSparql,
   parseSparqlIds,
+  REFERENCE_LIMIT,
   truncateSummary,
 } from "@/shared/infra/wikipedia";
 import { fetchReferenceCatalog } from "@/shared/infra/wikipedia.server";
@@ -67,6 +68,27 @@ describe("applyReference", () => {
     expect(again.skipped).toBe(2);
     expect(again.changed).toEqual([]);
     expect(next.updatedAt).toBe(NOW);
+  });
+
+  it("links the Wikidata label HESA Shahed 136 through its Geran-2 alias", () => {
+    const report = applyReference(
+      [geran],
+      [
+        card({
+          wikidataId: "Q109044360",
+          name: "HESA Shahed 136",
+          cyrillic: "Шахед 136",
+          aliases: ["Shahed-136", "Geran-2", "Shahed"],
+          summary: "Encyclopedia lead that must not replace the seed summary.",
+        }),
+      ],
+      NOW,
+    );
+    expect(report.created).toBe(0);
+    expect(report.enriched).toBe(1);
+    expect(report.changed[0]!.id).toBe("geran-2");
+    expect(report.changed[0]!.summary).toBe(geran.summary);
+    expect(report.changed[0]!.reference?.wikidataId).toBe("Q109044360");
   });
 
   it("keeps Shahed-238 separate when the only overlap is the shared alias Shahed", () => {
@@ -219,13 +241,50 @@ describe("wikipedia reference parser", () => {
     expect(parsed.rejected).toBe(3);
   });
 
-  it("pins each vehicle class behind the Ukraine and Russia operator filter", () => {
+  it("selects Ukraine and Russia vehicles by operator, origin, or country", () => {
     const query = classSparql("Q484000");
     expect(query).toContain("wd:Q484000");
     expect(query).toContain("wd:Q212");
     expect(query).toContain("wd:Q159");
-    expect(query).toContain("LIMIT 200");
+    expect(query).toContain("wdt:P137");
+    expect(query).toContain("wdt:P495");
+    expect(query).toContain("wdt:P17");
+    expect(query).toContain("wdt:P279");
+    expect(query).toContain(`LIMIT ${REFERENCE_LIMIT}`);
     expect(() => classSparql("nope")).toThrow();
+  });
+
+  it("skips a Wikipedia category item", () => {
+    const built = buildReferenceCards({
+      entities: {
+        entities: {
+          Q9: {
+            labels: { en: { value: "Category:Supercam S350" } },
+            claims: {
+              P31: [{ rank: "normal", mainsnak: { datavalue: { value: { id: "Q4167836" } } } }],
+            },
+          },
+        },
+      },
+    });
+    expect(built.cards).toEqual([]);
+    expect(built.skipped).toBe(1);
+  });
+
+  it("uses the item country when country of origin is absent", () => {
+    const built = buildReferenceCards({
+      entities: {
+        entities: {
+          Q5: {
+            labels: { en: { value: "Supercam" } },
+            claims: {
+              P17: [{ rank: "normal", mainsnak: { datavalue: { value: { id: "Q159" } } } }],
+            },
+          },
+        },
+      },
+    });
+    expect(built.cards[0]!.origin).toBe("RU");
   });
 
   it("truncates a long lead on a word boundary", () => {

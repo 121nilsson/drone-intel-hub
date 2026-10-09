@@ -12,7 +12,7 @@ export const REFERENCE_CLASSES: { qid: string; label: string; domain: Domain }[]
   { qid: "Q2031473", label: "unmanned ground vehicle", domain: "Land" },
 ];
 
-export const REFERENCE_LIMIT = 200;
+export const REFERENCE_LIMIT = 400;
 export const SUMMARY_MAX = 600;
 
 export const REFERENCE_HOSTS = [
@@ -136,17 +136,36 @@ export function qidFromUri(uri: string): string | null {
 
 export function classSparql(classQid: string): string {
   if (!isQid(classQid)) throw new Error("Invalid class");
-  // Operator first: Ukraine (Q212) or Russia (Q159), either as the operator or as its country.
+  // Ukraine (Q212) or Russia (Q159). Operator statements are sparse: Shahed-136 is operated by
+  // the Russian Armed Forces, while Beaver and Italmas only record a country of origin, and
+  // Supercam only records P17. The vehicle class is often P279. A direct P31 of "loitering
+  // munition" on Shahed-136 is deprecated, so P31/P279* never sees it. Two subclass steps
+  // cover attack drone → UCAV → UAV without walking the whole missile taxonomy.
   return `SELECT DISTINCT ?item WHERE {
   {
-    ?operator wdt:P17 wd:Q212 .
+    ?item wdt:P137 ?operator .
+    {
+      ?operator wdt:P17 wd:Q212 .
+    } UNION {
+      ?operator wdt:P17 wd:Q159 .
+    } UNION {
+      VALUES ?operator { wd:Q212 wd:Q159 }
+    }
   } UNION {
-    ?operator wdt:P17 wd:Q159 .
-  } UNION {
-    VALUES ?operator { wd:Q212 wd:Q159 }
+    VALUES ?country { wd:Q212 wd:Q159 }
+    {
+      ?item wdt:P495 ?country .
+    } UNION {
+      ?item wdt:P17 ?country .
+    }
   }
-  ?item wdt:P137 ?operator .
-  ?item wdt:P31/wdt:P279* wd:${classQid} .
+  {
+    ?item (wdt:P31|wdt:P279) wd:${classQid} .
+  } UNION {
+    ?item (wdt:P31|wdt:P279)/wdt:P279 wd:${classQid} .
+  } UNION {
+    ?item (wdt:P31|wdt:P279)/wdt:P279/wdt:P279 wd:${classQid} .
+  }
 }
 LIMIT ${REFERENCE_LIMIT}`;
 }
@@ -248,7 +267,7 @@ function cardFromEntity(
   classes: Record<string, Domain[]> | undefined,
 ): ReferenceCard | null {
   const named = pickName(entity);
-  if (!named) return null;
+  if (!named || isCategory(named.name, entity)) return null;
   const cyrillic = pickCyrillic(entity);
   const sitelink = pickSitelink(entity);
   const extract = sitelink ? extracts[sitelink.lang].get(sitelink.title) : undefined;
@@ -276,6 +295,11 @@ function cardFromEntity(
     revisionId: extract?.revid ?? 0,
     url,
   };
+}
+
+function isCategory(name: string, entity: RawEntity): boolean {
+  if (/^category:/i.test(name.trim())) return true;
+  return claimIds(entity, "P31").includes("Q4167836");
 }
 
 function pickName(entity: RawEntity): { name: string; lang: WikiLang } | null {
@@ -343,9 +367,11 @@ function domainOf(
 }
 
 function originOf(entity: RawEntity): string {
-  for (const id of claimIds(entity, "P495")) {
-    const iso = COUNTRY_ISO[id];
-    if (iso) return iso;
+  for (const prop of ["P495", "P17"] as const) {
+    for (const id of claimIds(entity, prop)) {
+      const iso = COUNTRY_ISO[id];
+      if (iso) return iso;
+    }
   }
   return "??";
 }
