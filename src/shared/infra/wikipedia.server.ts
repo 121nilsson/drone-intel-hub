@@ -102,7 +102,7 @@ async function getEntities(fetchImpl: FetchImpl, ids: string[]): Promise<unknown
     url.searchParams.set("languages", "en|ru|uk");
     url.searchParams.set("format", "json");
     const body = await getJson(fetchImpl, url.toString());
-    const entities = asRecord(body)?.entities;
+    const entities = asRecord(body)?.["entities"];
     if (!entities || typeof entities !== "object") continue;
     Object.assign(merged, entities);
   }
@@ -110,10 +110,10 @@ async function getEntities(fetchImpl: FetchImpl, ids: string[]): Promise<unknown
 }
 
 function titlesByLang(entitiesPayload: unknown): Partial<Record<WikiLang, string[]>> {
-  const entities = asRecord(asRecord(entitiesPayload)?.entities) ?? {};
+  const entities = asRecord(asRecord(entitiesPayload)?.["entities"]) ?? {};
   const out: Partial<Record<WikiLang, string[]>> = {};
   for (const entity of Object.values(entities)) {
-    const sitelinks = asRecord(asRecord(entity)?.sitelinks);
+    const sitelinks = asRecord(asRecord(entity)?.["sitelinks"]);
     const picked = preferredSite(sitelinks);
     if (!picked) continue;
     const list = out[picked.lang] ?? [];
@@ -133,7 +133,7 @@ function preferredSite(
     ["ruwiki", "ru"],
     ["ukwiki", "uk"],
   ] as const) {
-    const title = asRecord(sitelinks[site])?.title;
+    const title = asRecord(sitelinks[site])?.["title"];
     if (
       typeof title === "string" &&
       title.trim() &&
@@ -166,10 +166,13 @@ async function getExtracts(
     url.searchParams.set("format", "json");
     url.searchParams.set("formatversion", "2");
     url.searchParams.set("titles", batch.join("|"));
-    const query = asRecord(asRecord(await getJson(fetchImpl, url.toString()))?.query);
-    if (Array.isArray(query?.pages)) pages.push(...query.pages);
-    if (Array.isArray(query?.normalized)) normalized.push(...query.normalized);
-    if (Array.isArray(query?.redirects)) redirects.push(...query.redirects);
+    const query = asRecord(asRecord(await getJson(fetchImpl, url.toString()))?.["query"]);
+    const queryPages = query?.["pages"];
+    if (Array.isArray(queryPages)) pages.push(...queryPages);
+    const queryNormalized = query?.["normalized"];
+    if (Array.isArray(queryNormalized)) normalized.push(...queryNormalized);
+    const queryRedirects = query?.["redirects"];
+    if (Array.isArray(queryRedirects)) redirects.push(...queryRedirects);
   }
   return { query: { pages, normalized, redirects } };
 }

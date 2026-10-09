@@ -109,18 +109,21 @@ describe("applyReference", () => {
   });
 
   it("fills an empty summary and leaves a written summary in place", () => {
+    // exactOptionalPropertyTypes forbids explicit `undefined` on optional properties, so
+    // the three fields are destructured out of the seed instead of overridden.
+    const { cyrillic, manufacturer, reference, ...geranBase } = geran;
+    void cyrillic;
+    void manufacturer;
+    void reference;
     const empty: Drone = {
-      ...geran,
+      ...geranBase,
       id: "blank",
       name: "Blank",
-      cyrillic: undefined,
       aliases: [],
       summary: "  ",
       operators: [],
       origin: "??",
-      manufacturer: undefined,
       specs: [],
-      reference: undefined,
     };
     const filled = applyReference(
       [empty],

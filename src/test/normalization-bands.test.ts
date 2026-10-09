@@ -112,21 +112,21 @@ describe("NATO bands", () => {
 describe("band definitions", () => {
   it("IEEE_BANDS has the correct structure and order", () => {
     expect(IEEE_BANDS.length).toBe(9);
-    expect(IEEE_BANDS[0].id).toBe("VHF");
-    expect(IEEE_BANDS[0].minMHz).toBe(30);
-    expect(IEEE_BANDS[0].maxMHz).toBe(300);
-    expect(IEEE_BANDS[8].id).toBe("Ka");
-    expect(IEEE_BANDS[8].minMHz).toBe(27_000);
-    expect(IEEE_BANDS[8].maxMHz).toBe(40_000);
+    expect(IEEE_BANDS[0]!.id).toBe("VHF");
+    expect(IEEE_BANDS[0]!.minMHz).toBe(30);
+    expect(IEEE_BANDS[0]!.maxMHz).toBe(300);
+    expect(IEEE_BANDS[8]!.id).toBe("Ka");
+    expect(IEEE_BANDS[8]!.minMHz).toBe(27_000);
+    expect(IEEE_BANDS[8]!.maxMHz).toBe(40_000);
   });
 
   it("NATO_BANDS has the correct structure and order", () => {
     expect(NATO_BANDS.length).toBe(13);
-    expect(NATO_BANDS[0].id).toBe("A");
-    expect(NATO_BANDS[0].minMHz).toBe(0);
-    expect(NATO_BANDS[0].maxMHz).toBe(250);
-    expect(NATO_BANDS[12].id).toBe("M");
-    expect(NATO_BANDS[12].minMHz).toBe(60_000);
-    expect(NATO_BANDS[12].maxMHz).toBe(100_000);
+    expect(NATO_BANDS[0]!.id).toBe("A");
+    expect(NATO_BANDS[0]!.minMHz).toBe(0);
+    expect(NATO_BANDS[0]!.maxMHz).toBe(250);
+    expect(NATO_BANDS[12]!.id).toBe("M");
+    expect(NATO_BANDS[12]!.minMHz).toBe(60_000);
+    expect(NATO_BANDS[12]!.maxMHz).toBe(100_000);
   });
 });

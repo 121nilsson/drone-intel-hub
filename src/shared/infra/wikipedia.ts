@@ -184,13 +184,13 @@ export type ReferenceFetchResult =
   | { ok: false; error: string };
 
 export function parseSparqlIds(payload: unknown): { ids: string[]; rejected: number } {
-  const bindings = asRecord(payload)?.results;
-  const rows = asRecord(bindings)?.bindings;
+  const bindings = asRecord(payload)?.["results"];
+  const rows = asRecord(bindings)?.["bindings"];
   if (!Array.isArray(rows)) return { ids: [], rejected: 0 };
   const ids: string[] = [];
   let rejected = 0;
   for (const row of rows) {
-    const value = asRecord(asRecord(row)?.item)?.value;
+    const value = asRecord(asRecord(row)?.["item"])?.["value"];
     if (typeof value !== "string") {
       rejected++;
       continue;
@@ -431,11 +431,13 @@ interface WikiExtract {
 function claimIds(entity: RawEntity, prop: string): string[] {
   const claims = entity.claims?.[prop];
   if (!Array.isArray(claims)) return [];
-  const usable = claims.filter((c) => asRecord(c)?.rank !== "deprecated");
-  const preferred = usable.filter((c) => asRecord(c)?.rank === "preferred");
+  const usable = claims.filter((c) => asRecord(c)?.["rank"] !== "deprecated");
+  const preferred = usable.filter((c) => asRecord(c)?.["rank"] === "preferred");
   const ids: string[] = [];
   for (const claim of preferred.length ? preferred : usable) {
-    const id = asRecord(asRecord(asRecord(asRecord(claim)?.mainsnak)?.datavalue)?.value)?.id;
+    const id = asRecord(
+      asRecord(asRecord(asRecord(claim)?.["mainsnak"])?.["datavalue"])?.["value"],
+    )?.["id"];
     if (typeof id === "string" && isQid(id) && !ids.includes(id)) ids.push(id);
   }
   return ids;
@@ -450,7 +452,7 @@ function aliasValues(raw: unknown): string[] {
   if (!Array.isArray(raw)) return [];
   const out: string[] = [];
   for (const item of raw) {
-    const value = asRecord(item)?.value;
+    const value = asRecord(item)?.["value"];
     if (typeof value === "string" && value.trim()) out.push(value.trim());
   }
   return out;
@@ -458,7 +460,8 @@ function aliasValues(raw: unknown): string[] {
 
 function readEntities(payload: unknown): Record<string, RawEntity> {
   const body = asRecord(payload);
-  const bag = asRecord(body?.entities) ?? (body && !body.results && !body.query ? body : {});
+  const bag =
+    asRecord(body?.["entities"]) ?? (body && !body["results"] && !body["query"] ? body : {});
   const out: Record<string, RawEntity> = {};
   for (const [key, value] of Object.entries(bag)) {
     if (value && typeof value === "object") out[key] = value as RawEntity;
@@ -468,8 +471,8 @@ function readEntities(payload: unknown): Record<string, RawEntity> {
 
 function indexExtracts(payload: unknown): Map<string, WikiExtract> {
   const map = new Map<string, WikiExtract>();
-  const query = asRecord(asRecord(payload)?.query);
-  const pages = query?.pages;
+  const query = asRecord(asRecord(payload)?.["query"]);
+  const pages = query?.["pages"];
   const list = Array.isArray(pages)
     ? pages
     : pages && typeof pages === "object"
@@ -477,14 +480,14 @@ function indexExtracts(payload: unknown): Map<string, WikiExtract> {
       : [];
   for (const page of list) {
     const row = asRecord(page);
-    if (!row || row.missing !== undefined) continue;
-    const title = typeof row.title === "string" ? row.title : "";
+    if (!row || row["missing"] !== undefined) continue;
+    const title = typeof row["title"] === "string" ? row["title"] : "";
     if (!title) continue;
-    const revisions = Array.isArray(row.revisions) ? row.revisions : [];
-    const revid = asRecord(revisions[0])?.revid;
+    const revisions = Array.isArray(row["revisions"]) ? row["revisions"] : [];
+    const revid = asRecord(revisions[0])?.["revid"];
     map.set(title, {
       title,
-      extract: typeof row.extract === "string" ? row.extract : "",
+      extract: typeof row["extract"] === "string" ? row["extract"] : "",
       revid: typeof revid === "number" ? revid : 0,
     });
   }
@@ -493,8 +496,8 @@ function indexExtracts(payload: unknown): Map<string, WikiExtract> {
     const rows = query?.[key];
     if (!Array.isArray(rows)) continue;
     for (const row of rows) {
-      const from = asRecord(row)?.from;
-      const to = asRecord(row)?.to;
+      const from = asRecord(row)?.["from"];
+      const to = asRecord(row)?.["to"];
       if (typeof from === "string" && typeof to === "string") hop.set(from, to);
     }
   }
