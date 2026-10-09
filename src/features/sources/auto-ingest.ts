@@ -104,6 +104,14 @@ export function providerErrorKind(message: string): string | null {
   return null;
 }
 
+/**
+ * Provider-level failure kinds that will also fail every remaining document in the batch:
+ * the run stops and the cooldown backoff takes over. Any other failure (a parse bug, an
+ * unexpected extraction shape, a timeout on one oversized post) says nothing about the next
+ * document, so the batch continues and only that document is retried.
+ */
+export const PROVIDER_OUTAGE_KINDS = new Set(["rate limit", "credits", "auth", "unavailable"]);
+
 /** Short line for the status strip, activity log, and dispatch row. Status codes are kept. */
 export function formatProviderError(message: string): string {
   const kind = providerErrorKind(message);
@@ -115,9 +123,9 @@ export function formatProviderError(message: string): string {
 const COOLDOWN_BASE_MS = 5 * 60_000;
 export const COOLDOWN_MAX_MS = 60 * 60_000;
 
-/** Backoff after a run stopped on a provider rate limit. */
+/** Backoff after a run stopped on a provider-level outage (rate limit, credits, auth, provider down). */
 export interface Cooldown {
-  /** Consecutive rate-limited runs, so each repeat waits twice as long. */
+  /** Consecutive stopped runs, so each repeat waits twice as long. */
   level: number;
   until: string;
 }
@@ -446,9 +454,17 @@ export async function processPending(
           status: attempts >= MAX_ATTEMPTS ? "failed" : "pending",
         });
         rep.failed++;
-        rep.stopReason = formatProviderError(error);
-        // Stop the batch on errors (rate limits, credits, provider down) — next run retries.
-        break;
+        // Stop the batch only on provider-level outages (rate limit, credits, auth, provider
+        // down): those will fail every remaining document too, so retrying after a cooldown is
+        // cheaper than burning the window one rejection at a time. A document-specific failure
+        // only skips that one post — one bad document must not starve the rest of the queue.
+        // stopReason is set only when the batch actually stops; it is what the cooldown logic
+        // in source-sync keys off, so a skipped document must not read as a stopped run.
+        const kind = providerErrorKind(error);
+        if (kind && PROVIDER_OUTAGE_KINDS.has(kind)) {
+          rep.stopReason = formatProviderError(error);
+          break;
+        }
       }
     }
   } finally {
