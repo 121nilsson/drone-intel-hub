@@ -171,34 +171,43 @@ Pending queue: ${pendingCount}.`,
 
       <div className="grid gap-6 lg:grid-cols-3">
         <Panel title="Spec drift feed" className="lg:col-span-2">
-          <ul className="divide-y divide-border">
-            {drift.map((e, i) => (
-              <li key={i} className="flex flex-wrap items-start gap-3 py-2.5">
-                <span className="w-14 font-mono text-xs text-muted-foreground">
-                  {e.date.slice(5, 10)}
-                </span>
-                <Tag
-                  className="w-24 justify-center"
-                  tone={
-                    e.kind === "frequency" ? "accent" : e.kind === "payload" ? "danger" : "primary"
-                  }
+          <ul className="space-y-2.5">
+            {drift.map((e, i) => {
+              const tone =
+                e.kind === "frequency" ? "accent" : e.kind === "payload" ? "danger" : "primary";
+              const edge =
+                tone === "accent"
+                  ? "border-l-accent"
+                  : tone === "danger"
+                    ? "border-l-destructive"
+                    : "border-l-primary";
+              return (
+                <li
+                  key={i}
+                  className={`rounded-md border border-border border-l-4 ${edge} bg-card/40 p-3`}
                 >
-                  {e.kind}
-                </Tag>
-                <div className="min-w-0 flex-1">
-                  <Link
-                    to="/systems/$id"
-                    params={{ id: e.drone.id }}
-                    className="font-medium hover:text-primary"
-                  >
-                    {e.drone.name}
-                  </Link>
-                  <p className="text-sm text-muted-foreground">
-                    {e.description} <span className="font-mono text-xs">— {e.source}</span>
+                  <div className="flex items-start justify-between gap-3">
+                    <Link
+                      to="/systems/$id"
+                      params={{ id: e.drone.id }}
+                      className="min-w-0 break-words text-base font-semibold leading-snug hover:text-primary"
+                    >
+                      {e.drone.name}
+                    </Link>
+                    <span className="shrink-0 font-mono text-xs text-muted-foreground">
+                      {e.date.slice(5, 10)}
+                    </span>
+                  </div>
+                  <div className="mt-1.5">
+                    <Tag tone={tone}>{e.kind}</Tag>
+                  </div>
+                  <p className="mt-2 text-sm leading-relaxed text-foreground/90">{e.description}</p>
+                  <p className="mt-1 text-right font-mono text-xs text-muted-foreground">
+                    — {e.source}
                   </p>
-                </div>
-              </li>
-            ))}
+                </li>
+              );
+            })}
             {!drift.length && (
               <li className="py-2 text-sm text-muted-foreground">No drift recorded this week.</li>
             )}
