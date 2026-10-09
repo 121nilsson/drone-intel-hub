@@ -1,5 +1,6 @@
 import type { JSONValue } from "postgres";
 import {
+  PROVIDER_OUTAGE_KINDS,
   QUEUE_ROW,
   nextCooldown,
   providerErrorKind,
@@ -144,8 +145,12 @@ export async function runAutoSync(opts?: {
     });
     await storeResult(reports);
     try {
-      if (stopReason && providerErrorKind(stopReason) === "rate limit")
-        await writeCooldown(nextCooldown(cooldown));
+      // Any provider-level outage that stopped the batch (rate limit, exhausted credits, auth,
+      // provider down) gets the backoff treatment: without a cooldown, each cron tick claims a
+      // batch and burns its window on the first call. Document-specific failures never stop the
+      // batch, so they do not trigger a cooldown either.
+      const kind = stopReason ? providerErrorKind(stopReason) : null;
+      if (kind && PROVIDER_OUTAGE_KINDS.has(kind)) await writeCooldown(nextCooldown(cooldown));
       else if (!cooling && cooldown) await clearCooldown();
     } catch (e) {
       console.error("[auto-sync] cooldown", e);
