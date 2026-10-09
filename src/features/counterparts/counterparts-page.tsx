@@ -20,7 +20,7 @@ function overlap(a: Drone, b: Drone) {
 export function CounterpartsPage({ a, b }: { a?: string | undefined; b?: string | undefined }) {
   const drones = useDrones();
   const nav = useNavigate();
-  // Comparison is meaningless - and the fallbacks below throw - with fewer than two systems.
+  // Comparison is meaningless with fewer than two systems.
   if (drones.length < 2)
     return (
       <div className="space-y-6">
@@ -30,12 +30,14 @@ export function CounterpartsPage({ a, b }: { a?: string | undefined; b?: string 
         </p>
       </div>
     );
-  const A = drones.find((d) => d.id === a) ?? drones[0]!;
+  const A = drones.find((d) => d.id === a) ?? drones[0];
+  if (!A) return null;
   // Must exclude A, or the "no b in the URL" case can resolve to the same system twice.
   const B =
     drones.find((d) => d.id === b && d.id !== A.id) ??
     drones.find((d) => d.id !== A.id && A.counterpartIds.includes(d.id)) ??
-    drones.find((d) => d.id !== A.id)!;
+    drones.find((d) => d.id !== A.id);
+  if (!B) return null;
   const keys = [...new Set([...A.specs, ...B.specs].map((s) => s.key))];
   const shared = overlap(A, B);
   const fiberLinked = [A, B].filter((d) => d.rf.some((r) => linkIsFiber(r)));
