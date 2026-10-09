@@ -58,6 +58,13 @@ export type PipelineResult = PipelinePrimaryResult & {
 
 const norm = (s: string) => s.trim().toLowerCase();
 
+/**
+ * Collision keys strip punctuation and spacing, not just case: to a source document
+ * "Shahed-136" and "Shahed 136" are the same system, and auto-promotion must not create a
+ * duplicate catalog entry just because the source hyphenated differently than the catalog did.
+ */
+const collisionKey = (s: string) => norm(s).replace(/[\s\-_./]+/g, "");
+
 /** Mark an extraction with why it came from a degraded tier, visible to the analyst in triage. */
 function annotate(extraction: Extraction, note: string): Extraction {
   return extraction.rationale
@@ -85,11 +92,11 @@ function withNormalizedRf(drone: Drone, extraction: Extraction): Drone {
 function collidesWithCatalog(e: Extraction, catalog: Drone[]): boolean {
   const known = new Set<string>();
   for (const d of catalog) {
-    known.add(norm(d.name));
-    if (d.cyrillic) known.add(norm(d.cyrillic));
-    for (const a of d.aliases) known.add(norm(a));
+    if (d.name) known.add(collisionKey(d.name));
+    if (d.cyrillic) known.add(collisionKey(d.cyrillic));
+    for (const a of d.aliases) known.add(collisionKey(a));
   }
-  return [e.name ?? "", ...e.aliases].some((n) => n.trim() && known.has(norm(n)));
+  return [e.name ?? "", ...e.aliases].some((n) => n.trim() && known.has(collisionKey(n)));
 }
 
 function extractionForSystem(parent: Extraction, s: SystemExtraction): Extraction {
@@ -278,6 +285,15 @@ export async function runTwoTier(
   for (const unknown of normalized.unknowns) {
     d.taxonomyCandidates?.record(unknown.rawTerm, unknown.taxonomy, { source });
   }
+  // An auto-merge must never crash the dispatch. The extractor matched against a catalog
+  // snapshot; the target can since have been merged away by a concurrent analyst run (or the
+  // id was hallucinated). Clear the stale match and let the promote/queue/discard gates decide
+  // below — throwing here would burn the dispatch's retry budget for a transient state.
+  if (extraction.matchId && !d.drones.get(extraction.matchId)) {
+    const { matchId: stale, ...rest } = extraction;
+    void stale;
+    extraction = rest;
+  }
   const candidate: Candidate = {
     id: crypto.randomUUID(),
     raw,
@@ -288,6 +304,7 @@ export async function runTwoTier(
     status: "pending",
   };
   if (extraction.matchId && extraction.confidence >= d.autoMergeThreshold) {
+    // The guard above (re-checked synchronously, no awaits since) guarantees this exists.
     const target = d.drones.get(extraction.matchId)!;
     const withSpecs = mergeSpecs(target, extraction.specs, source, {
       ...(context.dispatchId ? { sourceId: context.dispatchId } : {}),
