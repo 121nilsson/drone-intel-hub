@@ -105,6 +105,10 @@ export const SEED_SOURCES: MonitoredSource[] = [
   { id: "c4isrnet", name: "C4ISRNET", platform: "RSS", handle: "https://www.c4isrnet.com/arc/outboundfeeds/rss/", domain: "Multi", notes: "EW, RF spectrum, jammers and counter-drone procurement.", autoSync: true },
   { id: "kiber-boroshno", name: "KiberBoroshno", platform: "Telegram", handle: "@kiber_boroshno", domain: "Air", notes: "UA technical OSINT: launch sites, wreckage and telemetry hardware." },
   { id: "warspotting", name: "WarSpotting", platform: "Web", handle: "https://warspotting.net/", domain: "Multi", notes: "Photo-verified loss database with exact variant identification." },
+
+  // --- Reddit RSS Feeds ---
+  { id: "reddit-war-in-ukraine", name: "Reddit: WarInUkraine", platform: "RSS", handle: "https://www.reddit.com/r/WarInUkraine/new/.rss", domain: "Multi", notes: "Community aggregation of frontline drone/UGV footage and technical analysis. High volume, filter aggressively.", autoSync: true },
+  { id: "reddit-ukraine", name: "Reddit: Ukraine", platform: "RSS", handle: "https://www.reddit.com/r/ukraine/new/.rss", domain: "Multi", notes: "Broader Ukraine conflict discussion. High noise-to-signal ratio, filter with DRONE_HINT.", autoSync: false },
 ];
 
 const SAMPLES: Record<Domain, string[]> = {
