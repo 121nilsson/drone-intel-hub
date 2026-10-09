@@ -24,8 +24,12 @@ export const Route = createFileRoute("/counterparts")({
       { name: "twitter:card", content: "summary" },
     ],
   }),
-  component: () => {
-    const { a, b } = Route.useSearch();
-    return <CounterpartsPage a={a} b={b} />;
-  },
+  component: CounterpartsRoute,
 });
+
+// Named (uppercase) so eslint's react-hooks rule recognizes it as a component —
+// hooks like Route.useSearch() may only be called from a component or a hook.
+function CounterpartsRoute() {
+  const { a, b } = Route.useSearch();
+  return <CounterpartsPage a={a} b={b} />;
+}

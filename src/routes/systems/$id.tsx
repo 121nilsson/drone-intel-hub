@@ -16,8 +16,12 @@ export const Route = createFileRoute("/systems/$id")({
       { name: "twitter:card", content: "summary" },
     ],
   }),
-  component: () => {
-    const { id } = Route.useParams();
-    return <DossierPage id={id} />;
-  },
+  component: SystemDossierRoute,
 });
+
+// Named (uppercase) so eslint's react-hooks rule recognizes it as a component —
+// hooks like Route.useParams() may only be called from a component or a hook.
+function SystemDossierRoute() {
+  const { id } = Route.useParams();
+  return <DossierPage id={id} />;
+}
