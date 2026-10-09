@@ -67,4 +67,18 @@ export interface DispatchRepository {
    * Optional, so a store or test double without dedupe support simply never suppresses one.
    */
   duplicateOf?(fingerprint: string): string | null;
+  /**
+   * Id of the already-stored dispatch carrying this exact article URL, or null.
+   *
+   * The deterministic companion to `duplicateOf`. A site-wide feed and its category feed, or an
+   * index page and the article's permalink, republish one article under different `sourceId`s, so
+   * the `${sourceId}|${externalId}` key does not collide and both copies are analysed. Text
+   * similarity catches that only when the copies happen to read alike - and a feed serving a
+   * teaser next to one serving the full body guarantees they do not. URL identity is exact.
+   *
+   * Optional, like `duplicateOf`, so a store or test double without it simply never suppresses one.
+   * Implementations must ignore the document being added (pass its id as `excludeId`), since the
+   * caller has usually already inserted it, and must resolve a duplicate stub to its canonical post.
+   */
+  duplicateOfUrl?(url: string | undefined, excludeId?: string): string | null;
 }

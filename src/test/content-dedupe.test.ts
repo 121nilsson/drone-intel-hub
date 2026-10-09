@@ -31,6 +31,14 @@ function fetcherFor(postsBySource: Record<string, FetchedPost[]>) {
     });
 }
 
+/**
+ * A post as a feed serves it.
+ *
+ * `url` is derived from `id`, which is what a real feed does: a guid/link is per article, so two
+ * different articles never share one. Tests that compare *different* stories must therefore pass
+ * different ids - otherwise they collide on canonical URL and are (correctly) deduped. Tests that
+ * compare copies of *one* story pass the same id, which is exactly the overlap being tested.
+ */
 const post = (id: string, text: string): FetchedPost => ({ id, text, url: `https://t.test/${id}` });
 
 /** The real repository, left unattached: writes go nowhere, so no store double is needed. */
@@ -109,10 +117,11 @@ describe("collectSource cross-source dedupe", () => {
 
   it("stores genuinely different stories from different sources", async () => {
     const dispatches = repo();
+    // Distinct ids, so distinct URLs: these are two articles, not two copies of one.
     await collectSource(source("a", "A"), fetcherFor({ a: [post("1", REPORT_A)] }), dispatches);
     const rep = await collectSource(
       source("b", "B"),
-      fetcherFor({ b: [post("1", REPORT_B)] }),
+      fetcherFor({ b: [post("2", REPORT_B)] }),
       dispatches,
     );
 
@@ -154,8 +163,11 @@ describe("collectSource cross-source dedupe", () => {
   it("never dedupes a post below the length floor", async () => {
     const dispatches = repo();
     const short = "Geran-2 sighted over Odesa last night, air defences engaged";
+    // Distinct ids: the floor exists because a short text's *fingerprint* is unstable, so the
+    // check being exercised is the fingerprint. Sharing a URL would test canonical-URL identity
+    // instead, which is exact and has no length floor - see the URL dedupe suite for that.
     await collectSource(source("a", "A"), fetcherFor({ a: [post("1", short)] }), dispatches);
-    await collectSource(source("b", "B"), fetcherFor({ b: [post("1", short)] }), dispatches);
+    await collectSource(source("b", "B"), fetcherFor({ b: [post("2", short)] }), dispatches);
 
     expect(short.length).toBeLessThan(MIN_CHARS_FOR_DEDUPE);
     expect(dispatches.list().filter((d) => d.status === "pending")).toHaveLength(2);

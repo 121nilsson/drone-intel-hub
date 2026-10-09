@@ -38,7 +38,11 @@ export const SEED_SOURCES: MonitoredSource[] = [
   { id: "defense-one", name: "Defense One", platform: "RSS", handle: "https://www.defenseone.com/rss/all/", domain: "Multi", notes: "Policy and technology focus. US DoD drone strategy and counterdrone procurement.", autoSync: true },
   { id: "rusi-rss", name: "RUSI", platform: "RSS", handle: "https://www.rusi.org/rss/whats-new.xml", domain: "Multi", notes: "Royal United Services Institute. Authoritative analytical papers on drone warfare, EW, and supply chains.", autoSync: true },
   { id: "bellingcat", name: "Bellingcat", platform: "RSS", handle: "https://www.bellingcat.com/feed/", domain: "Multi", notes: "Gold standard OSINT verification. Investigations into drone component origins, supply chain tracking, and sanctions evasion.", autoSync: true },
-  { id: "bellingcat-news", name: "Bellingcat News", platform: "RSS", handle: "https://www.bellingcat.com/news/feed/", domain: "Multi", notes: "Bellingcat news category feed — frequent updates on conflict investigations." },
+  // The /news/ category feed was removed: it is a strict subset of the site-wide feed above
+  // (measured 2026-10-09: 9 of its 10 items also appear in /feed/, same guid and same link), so
+  // every article it carried was already collected. Collection now dedupes on canonical URL as well
+  // as on text, which would have caught the overlap anyway - but polling one site twice costs a
+  // request and a parse for nothing. Existing installs keep the old row; see RETIRED_SOURCE_IDS.
   { id: "ukrinform-war", name: "Ukrinform (War)", platform: "RSS", handle: "https://www.ukrinform.net/rss/rubric-war", domain: "Multi", notes: "Official Ukrainian state news agency war section. MoD announcements, strike reports, new system deployments." },
   { id: "defence-blog-rss", name: "Defence Blog (RSS)", platform: "RSS", handle: "https://defence-blog.com/feed/", domain: "Multi", notes: "International defence news. Global UAV developments, new platform announcements, captured hardware analysis.", autoSync: true },
   { id: "militarnyi-rss", name: "Militarnyi (UA RSS)", platform: "RSS", handle: "https://mil.in.ua/uk/news/feed/", domain: "Multi", notes: "Ukrainian-language news feed from Militarnyi. High-frequency technical articles." },
@@ -110,6 +114,23 @@ export const SEED_SOURCES: MonitoredSource[] = [
   { id: "reddit-war-in-ukraine", name: "Reddit: WarInUkraine", platform: "RSS", handle: "https://www.reddit.com/r/WarInUkraine/new/.rss", domain: "Multi", notes: "Community aggregation of frontline drone/UGV footage and technical analysis. High volume, filter aggressively.", autoSync: true },
   { id: "reddit-ukraine", name: "Reddit: Ukraine", platform: "RSS", handle: "https://www.reddit.com/r/ukraine/new/.rss", domain: "Multi", notes: "Broader Ukraine conflict discussion. High noise-to-signal ratio, filter with DRONE_HINT.", autoSync: false },
 ];
+
+/**
+ * Seeded sources that have been removed because they duplicate another source's content.
+ *
+ * SEED_SOURCES only ever *adds* rows (see LocalSourceRepository.addMissingDefaults), so an install
+ * that already stored a retired source keeps polling it. This list lets such an install drop them;
+ * it is deliberately a separate list rather than inferred from the seed, so removing an entry from
+ * SEED_SOURCES is never silently treated as a delete.
+ *
+ * A retired id must not come back through addMissingDefaults, hence ACTIVE_SEED_SOURCES below.
+ */
+export const RETIRED_SOURCE_IDS = ["bellingcat-news"] as const;
+
+/** Seed rows that are still wanted, i.e. the seed minus anything retired. */
+export const ACTIVE_SEED_SOURCES: MonitoredSource[] = SEED_SOURCES.filter(
+  (s) => !(RETIRED_SOURCE_IDS as readonly string[]).includes(s.id),
+);
 
 const SAMPLES: Record<Domain, string[]> = {
   Air: [

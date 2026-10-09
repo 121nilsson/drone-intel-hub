@@ -256,15 +256,22 @@ export async function collectSource(
   let stored = 0;
   let duplicates = 0;
   for (const p of res.posts) {
-    // Only long enough posts are fingerprinted: below MIN_CHARS_FOR_DEDUPE a fingerprint is noise,
-    // and short posts are cheap to re-analyse anyway.
-    const fingerprint = p.text.length >= MIN_CHARS_FOR_DEDUPE ? simHash64(p.text) : undefined;
+    const id = dispatchId(s.id, p.id);
+    // URL identity first: the same article republished by another source is one story regardless
+    // of how much text each feed served, which is not something the fingerprint below can decide.
+    // Checked before the row exists, so the document's own id is not yet in the index.
     const duplicateOf =
-      fingerprint === undefined ? null : (dispatches.duplicateOf?.(fingerprint) ?? null);
+      dispatches.duplicateOfUrl?.(p.url, id) ??
+      // Only long enough posts are fingerprinted: below MIN_CHARS_FOR_DEDUPE a fingerprint is
+      // noise, and short posts are cheap to re-analyse anyway.
+      (p.text.length >= MIN_CHARS_FOR_DEDUPE
+        ? (dispatches.duplicateOf?.(simHash64(p.text)) ?? null)
+        : null);
+    const fingerprint = p.text.length >= MIN_CHARS_FOR_DEDUPE ? simHash64(p.text) : undefined;
 
     const d: RawDispatch = duplicateOf
       ? {
-          id: dispatchId(s.id, p.id),
+          id,
           sourceId: s.id,
           sourceName: s.name,
           externalId: p.id,
@@ -277,7 +284,7 @@ export async function collectSource(
           duplicateOf,
         }
       : {
-          id: dispatchId(s.id, p.id),
+          id,
           sourceId: s.id,
           sourceName: s.name,
           externalId: p.id,

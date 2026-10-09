@@ -1,8 +1,9 @@
 import type { Candidate, Drone } from "@/entities/drone/types";
 import { SEED_DRONES } from "@/entities/drone/seed";
 import { isNearDuplicate, simHash64 } from "@/entities/dispatch/simhash";
+import { canonicalUrl } from "@/entities/dispatch/url-key";
 import type { MonitoredSource } from "@/entities/source/types";
-import { SEED_SOURCES } from "@/entities/source/seed";
+import { ACTIVE_SEED_SOURCES, SEED_SOURCES } from "@/entities/source/seed";
 import type { RawDispatch } from "@/entities/dispatch/types";
 import type { Procurement } from "@/entities/procurement/types";
 import {
@@ -209,7 +210,7 @@ export class LocalSourceRepository extends CachedRepository<"sources"> implement
   }
   addMissingDefaults(): number {
     const existingIds = new Set(this.items.map((s) => s.id));
-    const missing = SEED_SOURCES.filter((s) => !existingIds.has(s.id));
+    const missing = ACTIVE_SEED_SOURCES.filter((s) => !existingIds.has(s.id));
     for (const s of missing) {
       this.items = [...this.items, s];
       this.save(s);
@@ -235,6 +236,22 @@ export class LocalDispatchRepository
   private fingerprints = new Map<string, string>();
   private fingerprintIds = new Map<string, string>();
 
+  /**
+   * Canonical-URL index, the deterministic half of dedupe.
+   *
+   * SimHash answers "are these the same story?" by comparing text, which is the right question for
+   * a reprint but the wrong one for the same article arriving from two feeds: those copies can
+   * differ in length and wording, and the near-match tolerance decides it by luck. A shared URL is
+   * identity, not resemblance, so it gets its own exact index.
+   *
+   * Keyed on `canonicalUrl` (see entities/dispatch/url-key.ts). Only documents that still carry a
+   * URL are indexed; a stub has its text stripped but keeps its URL, which is the point - a
+   * duplicate stub must keep pointing at the same article so a third copy resolves to the
+   * canonical post rather than to another stub.
+   */
+  private urlKeys = new Map<string, string>();
+  private urlKeyIds = new Map<string, string>();
+
   constructor() {
     super("dispatches", []);
   }
@@ -247,6 +264,7 @@ export class LocalDispatchRepository
     // Registering here is what catches a second copy of the same post *within one batch*:
     // duplicateOf() only sees what is already stored.
     this.fingerprint(d);
+    this.indexUrl(d);
     this.save(d);
     return true;
   }
@@ -257,6 +275,7 @@ export class LocalDispatchRepository
     // dropped first, re-registered below if the document still has text.
     this.forget(id);
     this.fingerprint(doc);
+    this.indexUrl(doc);
     this.save(doc);
   }
   pending(limit: number) {
@@ -279,11 +298,61 @@ export class LocalDispatchRepository
     return fp;
   }
 
+  /**
+   * Index a document's canonical URL. Unlike the text fingerprint this keeps stubs: a `duplicate`
+   * row has no text but does carry the URL of the article it points at, and re-indexing it is what
+   * makes a third copy resolve to the canonical post rather than to a stub. `duplicateOfUrl`
+   * therefore resolves through a stub to whatever the stub duplicates.
+   */
+  private indexUrl(d: RawDispatch): string | null {
+    const key = canonicalUrl(d.url);
+    if (!key) return null;
+    this.urlKeys.set(key, d.id);
+    this.urlKeyIds.set(d.id, key);
+    return key;
+  }
+
   private forget(id: string) {
+    const key = this.urlKeyIds.get(id);
+    if (key !== undefined) {
+      this.urlKeyIds.delete(id);
+      // Only drop the key if this document is still the one holding it, so two documents
+      // sharing a URL cannot leave the index pointing at the one being forgotten.
+      if (this.urlKeys.get(key) === id) this.urlKeys.delete(key);
+    }
     const fp = this.fingerprintIds.get(id);
     if (fp === undefined) return;
     this.fingerprintIds.delete(id);
     this.fingerprints.delete(fp);
+  }
+
+  /**
+   * Find the already-stored dispatch for this URL, ignoring the document's own id.
+   *
+   * `excludeId` is what makes this safe to call from `add`: the row being added is already in
+   * `this.items`, so without it every dispatch would find itself.
+   *
+   * A document whose text has been stripped does not suppress. `irrelevant` is the case that
+   * matters: the gate rejects on the text it was given, and one feed serving a teaser while
+   * another serves the full body is the normal shape of an overlap. If the teaser copy is allowed
+   * to suppress, the copy with the actual report in it is dropped and the article is never
+   * analysed. The fingerprint path has always had this rule (see `fingerprint`), and URL identity
+   * has to keep it.
+   *
+   * A `duplicate` stub is the exception: it has no text either, but it names the canonical post
+   * that does, so resolution follows the link rather than stopping.
+   */
+  duplicateOfUrl(url: string | undefined | null, excludeId?: string): string | null {
+    const key = canonicalUrl(url);
+    if (!key) return null;
+    const hit = this.urlKeys.get(key);
+    if (hit === undefined || hit === excludeId) return null;
+    const doc = this.items.find((d) => d.id === hit);
+    if (!doc) return null;
+    if (doc.status === "duplicate") {
+      return doc.duplicateOf && doc.duplicateOf !== excludeId ? doc.duplicateOf : null;
+    }
+    return doc.text ? hit : null;
   }
 
   /**
@@ -310,6 +379,8 @@ export class LocalDispatchRepository
     // lazily against the new one rather than trusted across the swap.
     this.fingerprints.clear();
     this.fingerprintIds.clear();
+    this.urlKeys.clear();
+    this.urlKeyIds.clear();
   }
   /**
    * Delegates the exclusive claim to storage. The lease deliberately lives in the store, not
