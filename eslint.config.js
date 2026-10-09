@@ -6,7 +6,18 @@ import reactRefresh from "eslint-plugin-react-refresh";
 import tseslint from "typescript-eslint";
 
 export default tseslint.config(
-  { ignores: ["dist", ".output", ".vinxi"] },
+  {
+    ignores: [
+      "dist",
+      ".output",
+      ".vinxi",
+      // Lovable-generated integration glue, marked "automatically generated — do not edit".
+      // Editing it by hand gets overwritten on the next generation round, so lint findings
+      // there are not actionable: exclude the area instead (same policy as routeTree.gen.ts
+      // in .prettierignore).
+      "src/integrations",
+    ],
+  },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     files: ["**/*.{ts,tsx}"],
