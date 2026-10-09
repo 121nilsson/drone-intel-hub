@@ -10,16 +10,16 @@
 
 The draft was written against a generic FSD layout. These are the mismatches this plan corrects.
 
-| Draft assumption | This repository actually has | Consequence for the plan |
-|---|---|---|
-| `src/pages/`, `src/features/extraction/`, `src/features/consensus/` | `src/features/{intake,dynamic-specs,sources,catalog,dossier,counterparts,briefing,settings}/` | No new feature slices for parsing. Normalizers live in `src/entities/`, the write path stays in `features/intake/pipeline.ts` and `features/dynamic-specs/spec-engine.ts` |
-| Relational tables `taxonomies` / `taxonomy_aliases` / `taxonomy_candidates` | A **document store** abstraction (`DocumentStore`) with 5 JSONB collections, mirrored into 4 backends | Taxonomy becomes one new collection (`taxonomies`) plus one (`taxonomy_candidates`) — registered in 8 places, §7.3 |
-| "Dynamic taxonomies must be persisted in Lovable Cloud" | `DATABASE_URL` → `PostgresStore`; else Lovable Cloud `CloudStore`; browser → `LocalStorageStore`. All behind one contract | Same code path everywhere. No feature ever names a backend |
-| Consensus is a feature-level `consensus.ts` to be "upgraded" | `src/entities/drone/consensus.ts`, a pure function over `SpecAttribute` | Consensus is *extended in place*, not rewritten — §8.4 |
-| `RFRole` includes `telemetry`/`tether`/`unknown` | `RFRole = "uplink" \| "downlink" \| "video" \| "gnss" \| "antijam"` only | Type must be widened first; `promote()` also hardcodes `role: "uplink"` for every raw band string — a real bug, §5.2 |
-| Tests co-located as `*.test.ts` next to sources | All tests in `src/test/*.test.ts`, run by `vitest run` | New suites follow `src/test/normalization-*.test.ts` |
-| Unknown taxonomy terms are an ingestion-time problem | Ingestion is already two-stage and lease-guarded (`collectSource` → `processPending`) | Normalization runs **inside** `runTwoTier`, and must never throw, §6 |
-| Currency conversion is "domain logic" | No FX provider exists; the only network egress is the AI proxy (`*.server.ts`) | Currency parsing is deterministic; USD estimation is opt-in and snapshot-based, §5.5 |
+| Draft assumption                                                            | This repository actually has                                                                                              | Consequence for the plan                                                                                                                                                  |
+| --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/pages/`, `src/features/extraction/`, `src/features/consensus/`         | `src/features/{intake,dynamic-specs,sources,catalog,dossier,counterparts,briefing,settings}/`                             | No new feature slices for parsing. Normalizers live in `src/entities/`, the write path stays in `features/intake/pipeline.ts` and `features/dynamic-specs/spec-engine.ts` |
+| Relational tables `taxonomies` / `taxonomy_aliases` / `taxonomy_candidates` | A **document store** abstraction (`DocumentStore`) with 5 JSONB collections, mirrored into 4 backends                     | Taxonomy becomes one new collection (`taxonomies`) plus one (`taxonomy_candidates`) — registered in 8 places, §7.3                                                        |
+| "Dynamic taxonomies must be persisted in Lovable Cloud"                     | `DATABASE_URL` → `PostgresStore`; else Lovable Cloud `CloudStore`; browser → `LocalStorageStore`. All behind one contract | Same code path everywhere. No feature ever names a backend                                                                                                                |
+| Consensus is a feature-level `consensus.ts` to be "upgraded"                | `src/entities/drone/consensus.ts`, a pure function over `SpecAttribute`                                                   | Consensus is _extended in place_, not rewritten — §8.4                                                                                                                    |
+| `RFRole` includes `telemetry`/`tether`/`unknown`                            | `RFRole = "uplink" \| "downlink" \| "video" \| "gnss" \| "antijam"` only                                                  | Type must be widened first; `promote()` also hardcodes `role: "uplink"` for every raw band string — a real bug, §5.2                                                      |
+| Tests co-located as `*.test.ts` next to sources                             | All tests in `src/test/*.test.ts`, run by `vitest run`                                                                    | New suites follow `src/test/normalization-*.test.ts`                                                                                                                      |
+| Unknown taxonomy terms are an ingestion-time problem                        | Ingestion is already two-stage and lease-guarded (`collectSource` → `processPending`)                                     | Normalization runs **inside** `runTwoTier`, and must never throw, §6                                                                                                      |
+| Currency conversion is "domain logic"                                       | No FX provider exists; the only network egress is the AI proxy (`*.server.ts`)                                            | Currency parsing is deterministic; USD estimation is opt-in and snapshot-based, §5.5                                                                                      |
 
 Two more findings that change the design:
 
@@ -29,7 +29,7 @@ Two more findings that change the design:
    crosses three IEEE bands. Band labels must therefore be **recomputed from `freqMHz`**, with the
    stored `band` kept as raw evidence only.
 2. **`LocalStorageStore.KEYS`, `postgres-store.server.ts` and `cloud-store.server.ts` all have
-   non-exhaustive fallbacks.** `PostgresStore.upsert` ends in an `else` that writes the *sources*
+   non-exhaustive fallbacks.** `PostgresStore.upsert` ends in an `else` that writes the _sources_
    column layout; `CloudStore.row()` has the same `default:` branch. A new collection registered
    without an explicit case in both will silently write wrong columns. This is called out as a
    mandatory checklist item in §7.3.
@@ -93,20 +93,20 @@ src/
 
 **Boundary rules enforced by review, not by tooling:**
 
-* `src/entities/normalization/**` imports nothing from `features/`, `shared/infra/`, or React.
+- `src/entities/normalization/**` imports nothing from `features/`, `shared/infra/`, or React.
   It is the only place with regexes for quantities.
-* `shared/contracts/taxonomy.ts` declares `TaxonomyRegistry`; `shared/infra/**` implements it.
+- `shared/contracts/taxonomy.ts` declares `TaxonomyRegistry`; `shared/infra/**` implements it.
   `entities/normalization/apply.ts` receives a registry — it never touches a store.
-* UI components in `features/**` and `routes/**` call `normalizeExtraction`-derived data or the
+- UI components in `features/**` and `routes/**` call `normalizeExtraction`-derived data or the
   precomputed facets. No parsing in JSX. (The existing `catalog-page.tsx` facet derivation is
-  about *reading* already-normalized values, which stays.)
+  about _reading_ already-normalized values, which stays.)
 
 ---
 
 ## 2. Guiding principles (unchanged from the draft, restated against real types)
 
 1. **Raw is never overwritten.** `SpecClaim.value`, `RFLink.band` and the entire `RawDispatch.text`
-   are append-only evidence. Normalized values are *additive, optional fields*.
+   are append-only evidence. Normalized values are _additive, optional fields_.
 2. **Deterministic core is pure and unit-tested.** Unit conversion, frequency parsing, band
    lookup: no randomness, no clock, no network. Same input → same output, forever.
 3. **Living taxonomies are data, seeded in code, overridable in the store.** A new alias must not
@@ -120,7 +120,7 @@ src/
 6. **Unknown input degrades, never throws.** Ingestion already has a failure budget
    (`MAX_ATTEMPTS = 3`, batch `break` on provider error). A parser crash must not consume it.
 7. **Read-time tolerance.** Anything written after this change is normalized at write time, but
-   everything seeded or previously stored is normalized *lazily on read*. No backfill is a
+   everything seeded or previously stored is normalized _lazily on read_. No backfill is a
    prerequisite for the feature working.
 
 ---
@@ -139,9 +139,9 @@ export type RFRole =
   | "video"
   | "gnss"
   | "antijam"
-  | "telemetry"   // NEW
-  | "tether"      // NEW — fiber-optic / wired control
-  | "unknown";    // NEW
+  | "telemetry" // NEW
+  | "tether" // NEW — fiber-optic / wired control
+  | "unknown"; // NEW
 
 export interface RFLink {
   role: RFRole;
@@ -151,7 +151,7 @@ export interface RFLink {
   /** NEW — canonical, derived from freqMHz. Empty when freqMHz is absent. */
   ieeeBands?: string[];
   natoBands?: string[];
-  protocols?: string[];        // NEW — ExpressLRS, OcuSync, Starlink, CRPA…
+  protocols?: string[]; // NEW — ExpressLRS, OcuSync, Starlink, CRPA…
   /** NEW — true for fiber-optic / wire-guided control. */
   isFiberOptic?: boolean;
   /** NEW — 0..1, from role inference only. */
@@ -174,8 +174,8 @@ export interface SpecClaim {
   /** NEW — deterministic parser confidence, 0..1. */
   normalizationConfidence?: number;
 
-  source: string;   // existing display string, e.g. "GUR briefing" or "Telegram · https://…"
-  sourceId?: string;   // NEW — RawDispatch.id when ingested, for provenance joins
+  source: string; // existing display string, e.g. "GUR briefing" or "Telegram · https://…"
+  sourceId?: string; // NEW — RawDispatch.id when ingested, for provenance joins
   /** NEW — the exact substring matched. */
   evidence?: string;
   /** NEW — extraction confidence at ingest time. */
@@ -207,8 +207,8 @@ fields are optional.
 ```ts
 export interface Extraction {
   // … unchanged …
-  rfBands: string[];              // KEEP as raw evidence (heuristic emits "900 MHZ", AI emits anything)
-  rf?: NormalizedRFLink[];        // NEW — output of the RF normalizer, derived from rfBands + raw text
+  rfBands: string[]; // KEEP as raw evidence (heuristic emits "900 MHZ", AI emits anything)
+  rf?: NormalizedRFLink[]; // NEW — output of the RF normalizer, derived from rfBands + raw text
   // …
 }
 ```
@@ -228,14 +228,30 @@ Add `src/entities/normalization/semantic.ts`:
 
 ```ts
 export type SemanticKey =
-  | "range.max" | "range.operational" | "range.combat_radius" | "range.link" | "range.fiber_spool"
-  | "speed.cruise" | "speed.max" | "speed.dive"
-  | "altitude.max" | "altitude.service_ceiling" | "altitude.recommended"
-  | "payload.warhead" | "payload.capacity"
+  | "range.max"
+  | "range.operational"
+  | "range.combat_radius"
+  | "range.link"
+  | "range.fiber_spool"
+  | "speed.cruise"
+  | "speed.max"
+  | "speed.dive"
+  | "altitude.max"
+  | "altitude.service_ceiling"
+  | "altitude.recommended"
+  | "payload.warhead"
+  | "payload.capacity"
   | "endurance.flight"
-  | "cost.unit" | "cost.program"
-  | "freq.control" | "freq.video" | "freq.gnss" | "freq.other"
-  | "power.source" | "weight.total" | "dimensions.length" | "unknown";
+  | "cost.unit"
+  | "cost.program"
+  | "freq.control"
+  | "freq.video"
+  | "freq.gnss"
+  | "freq.other"
+  | "power.source"
+  | "weight.total"
+  | "dimensions.length"
+  | "unknown";
 
 /** Deterministic, seeded, and identity-preserving: unknown keys map to themselves. */
 export function semanticKeyFor(key: string, label: string): SemanticKey;
@@ -281,7 +297,8 @@ export interface QuantityRange {
   value?: number;
   min?: number;
   max?: number;
-  qualifier: "exact" | "approximate" | "up_to" | "at_least" | "less_than" | "greater_than" | "range";
+  qualifier:
+    "exact" | "approximate" | "up_to" | "at_least" | "less_than" | "greater_than" | "range";
 }
 ```
 
@@ -290,15 +307,20 @@ export interface QuantityRange {
 
 ### 4.2 `units.ts` — one canonical unit per dimension
 
-| Dimension | Canonical | Accepted (draft §6.1, extended) |
-|---|---|---|
-| distance / range / altitude | `km` | `m, meter(s), метр, метры`, `mi, mile(s)`, `nm, nmi, nautical mile(s)` |
-| speed | `km/h` | `m/s, м/с`, `mph`, `knots, knot, kts, уз` |
-| mass | `kg` | `g, gram(s), гр`, `oz`, `lb, lbs, pound(s), фунт` |
-| duration | `min` | `s, sec, second(s), сек`, `min, minute(s), мин`, `h, hr, hrs, hour(s), час` |
+| Dimension                   | Canonical | Accepted (draft §6.1, extended)                                             |
+| --------------------------- | --------- | --------------------------------------------------------------------------- |
+| distance / range / altitude | `km`      | `m, meter(s), метр, метры`, `mi, mile(s)`, `nm, nmi, nautical mile(s)`      |
+| speed                       | `km/h`    | `m/s, м/с`, `mph`, `knots, knot, kts, уз`                                   |
+| mass                        | `kg`      | `g, gram(s), гр`, `oz`, `lb, lbs, pound(s), фунт`                           |
+| duration                    | `min`     | `s, sec, second(s), сек`, `min, minute(s), мин`, `h, hr, hrs, hour(s), час` |
 
 ```ts
-export const CANONICAL_UNIT = { distance: "km", speed: "km/h", mass: "kg", duration: "min" } as const;
+export const CANONICAL_UNIT = {
+  distance: "km",
+  speed: "km/h",
+  mass: "kg",
+  duration: "min",
+} as const;
 
 /** Pure conversion table. Adding a unit is data, never a code path. */
 export function convert(value: number, from: string, to: string): number | undefined;
@@ -308,14 +330,14 @@ export function normalizeQuantity(raw: string): NormalizedQuantity | undefined;
 
 ```ts
 export interface NormalizedQuantity {
-  raw: string;              // "80 miles" — always kept
-  value?: number;           // 80 in the raw unit
-  unit?: string;            // "mi" as written
+  raw: string; // "80 miles" — always kept
+  value?: number; // 80 in the raw unit
+  unit?: string; // "mi" as written
   // canonical representation
   canonicalValue?: number;
-  canonicalUnit?: string;   // "km"
-  range?: QuantityRange;    // present when the raw text was a range / qualified
-  confidence: number;       // deterministic: 1.0 for an exact single parse, <1 for inferred ones
+  canonicalUnit?: string; // "km"
+  range?: QuantityRange; // present when the raw text was a range / qualified
+  confidence: number; // deterministic: 1.0 for an exact single parse, <1 for inferred ones
 }
 ```
 
@@ -333,8 +355,8 @@ export function parseFrequencies(raw: string): Array<[number, number]>;
 export function ieeeBandsFor(mhz: [number, number]): string[];
 export function natoBandsFor(mhz: [number, number]): string[];
 
-export function detectProtocols(raw: string): string[];   // ExpressLRS, ELRS, Crossfire, OcuSync, CRPA…
-export function isFiberOptic(raw: string): boolean;       // fiber optic, FOCL, optical tether, wire guided…
+export function detectProtocols(raw: string): string[]; // ExpressLRS, ELRS, Crossfire, OcuSync, CRPA…
+export function isFiberOptic(raw: string): boolean; // fiber optic, FOCL, optical tether, wire guided…
 export function inferRole(raw: string): { role: RFRole; confidence: number };
 
 export function normalizeRF(raw: string): NormalizedRFLink;
@@ -342,9 +364,9 @@ export function normalizeRF(raw: string): NormalizedRFLink;
 
 Two rules the draft got exactly right and that are preserved as hard invariants with tests:
 
-* **Protocols never imply a frequency.** `"ExpressLRS"` alone produces `protocols: ["expresslrs"]`
+- **Protocols never imply a frequency.** `"ExpressLRS"` alone produces `protocols: ["expresslrs"]`
   and `freqMHz: undefined`. No 915 MHz is invented.
-* **Fiber produces no frequency.** `"fiber-optic controlled"` produces `isFiberOptic: true`,
+- **Fiber produces no frequency.** `"fiber-optic controlled"` produces `isFiberOptic: true`,
   `role: "tether"`, `freqMHz: undefined`.
 
 Role inference is keyword-driven and returns its confidence: `"control link"` → `uplink` at 0.9,
@@ -356,8 +378,8 @@ nothing matched → `unknown` at 0.3.
 Two exported tables, each entry `{ id, label, minMHz, maxMHz }`, each with a pinned standard in a
 doc comment:
 
-* `IEEE_BANDS` — VHF 30–300, UHF 300–1000, L 1–2 GHz, S 2–4, C 4–8, X 8–12, Ku 12–18, K/Ka 18–40.
-* `NATO_BANDS` — A 0–250, B 250–500, C 500–1000, D 1–2k, E 2–3k, F 3–4k, G 4–6k, H 6–8k, I 8–10k,
+- `IEEE_BANDS` — VHF 30–300, UHF 300–1000, L 1–2 GHz, S 2–4, C 4–8, X 8–12, Ku 12–18, K/Ka 18–40.
+- `NATO_BANDS` — A 0–250, B 250–500, C 500–1000, D 1–2k, E 2–3k, F 3–4k, G 4–6k, H 6–8k, I 8–10k,
   J 10–20k, K 20–40k, L 40–60k, M 60–100k (MHz). The doc comment pins **NATO STANAG / MIL-STD-2401**
   and explicitly warns that the older "G 4–6, H 6–8, I 8–10" variant exists, so mixing is a bug.
 
@@ -373,14 +395,14 @@ lands in exactly one band and `natoBandsFor([600, 600])` returns `["C"]` without
 
 ```ts
 export interface Money {
-  amount: number;          // 25000, from "25k" / "2.5M" / "25 000"
-  currency: string;        // ISO 4217, from the symbol
+  amount: number; // 25000, from "25k" / "2.5M" / "25 000"
+  currency: string; // ISO 4217, from the symbol
   raw: string;
   /** Only present when a rate snapshot was supplied by the caller. */
   usd?: { value: number; rate: number; rateAsOf: string; rateSource: string };
 }
 
-export function parseMoney(raw: string): Money | undefined;   // "$25k", "€25k", "₽500000", "£10000"
+export function parseMoney(raw: string): Money | undefined; // "$25k", "€25k", "₽500000", "£10000"
 export function toUSD(m: Money, rate: number, asOf: string, source: string): Money;
 ```
 
@@ -389,10 +411,10 @@ one would (a) make a "deterministic" function non-deterministic, (b) put a third
 dependency in the browser path, and (c) break the rule that only AI calls leave the browser via the
 proxy. Instead:
 
-* `parseMoney` is deterministic and always available.
-* `toUSD` is explicit, arguments-in, and stores `rate` + `rateAsOf` + `rateSource` — so the
+- `parseMoney` is deterministic and always available.
+- `toUSD` is explicit, arguments-in, and stores `rate` + `rateAsOf` + `rateSource` — so the
   conversion is auditable and reproducible.
-* If no rate has been supplied, `usd` is **absent**, and the UI shows the original currency. A
+- If no rate has been supplied, `usd` is **absent**, and the UI shows the original currency. A
   missing rate is rendered as "no rate snapshot", never as a fabricated number.
 
 Currency inference covers the symbols the platform actually needs (`$ € £ ₽ ₴ ₺ ¥`) plus ISO codes,
@@ -412,9 +434,9 @@ export interface TaxonomyTerm {
   taxonomy: string;
   /** stable slug: "piston", "fixed-wing", "expresslrs" */
   canonicalId: string;
-  label: string;                      // "Piston"
-  parentId?: string;                  // hierarchy: piston → piston.2-stroke
-  aliases: string[];                  // ["turbo jet", "jet engine", …]
+  label: string; // "Piston"
+  parentId?: string; // hierarchy: piston → piston.2-stroke
+  aliases: string[]; // ["turbo jet", "jet engine", …]
   status: "active" | "rejected" | "candidate";
   /** Seeded terms are the shipped defaults; store edits produce `origin: "db"`. */
   origin: "seed" | "db";
@@ -466,8 +488,14 @@ not one category.
 ### 5.3 Resolution order and the ambiguity rule
 
 ```ts
-export function resolveTerm(raw: string, taxonomy: string, reg: TaxonomyRegistry): {
-  canonicalId?: string; candidate?: TaxonomyCandidate; confidence: number
+export function resolveTerm(
+  raw: string,
+  taxonomy: string,
+  reg: TaxonomyRegistry,
+): {
+  canonicalId?: string;
+  candidate?: TaxonomyCandidate;
+  confidence: number;
 };
 ```
 
@@ -501,16 +529,16 @@ five. Seeded terms are provided at construction so the registry works offline wi
 Adding `taxonomies` and `taxonomy_candidates` is mechanical but easy to half-do. All of these are
 required, and each is a one-or-two-line change:
 
-| # | File | Change |
-|---|---|---|
-| 1 | `src/shared/contracts/store.ts` | add to `Collection`, `CollectionMap`, `Snapshot` |
-| 2 | `src/shared/infra/local-store.ts` | add `dti.taxonomies.v1` / `dti.taxonomy_candidates.v1` to `KEYS` |
-| 3 | `src/shared/infra/postgres/postgres-store.server.ts` | `ORDER` entries + an explicit `else if` branch in `upsert` (**otherwise it falls into the sources column layout**) |
-| 4 | `src/shared/infra/cloud/cloud-store.server.ts` | `ORDER` entry + an explicit `case` in `row()` (**same trap**) |
-| 5 | `src/shared/infra/store.functions.ts` | add both to the `COLLECTIONS` allow-list |
-| 6 | `migrations/005_normalization.sql` | new migration, §7 |
-| 7 | `src/shared/infra/local-repository.ts` | `LocalTaxonomyRepository` + `LocalTaxonomyCandidateRepository` |
-| 8 | `src/shared/infra/services.tsx` | construct, attach, expose |
+| #   | File                                                 | Change                                                                                                             |
+| --- | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| 1   | `src/shared/contracts/store.ts`                      | add to `Collection`, `CollectionMap`, `Snapshot`                                                                   |
+| 2   | `src/shared/infra/local-store.ts`                    | add `dti.taxonomies.v1` / `dti.taxonomy_candidates.v1` to `KEYS`                                                   |
+| 3   | `src/shared/infra/postgres/postgres-store.server.ts` | `ORDER` entries + an explicit `else if` branch in `upsert` (**otherwise it falls into the sources column layout**) |
+| 4   | `src/shared/infra/cloud/cloud-store.server.ts`       | `ORDER` entry + an explicit `case` in `row()` (**same trap**)                                                      |
+| 5   | `src/shared/infra/store.functions.ts`                | add both to the `COLLECTIONS` allow-list                                                                           |
+| 6   | `migrations/005_normalization.sql`                   | new migration, §7                                                                                                  |
+| 7   | `src/shared/infra/local-repository.ts`               | `LocalTaxonomyRepository` + `LocalTaxonomyCandidateRepository`                                                     |
+| 8   | `src/shared/infra/services.tsx`                      | construct, attach, expose                                                                                          |
 
 `taxonomies` is small enough (tens of documents) that it is seeded from code on first attach and
 therefore needs no special load ordering. `taxonomy_candidates` is append-mostly and grows with
@@ -624,7 +652,12 @@ this repo's reality: a throw inside `processPending` sets `status: "pending"` an
 `src/features/dynamic-specs/spec-engine.ts`:
 
 ```ts
-export function mergeSpecs(drone: Drone, specs: ExtractedSpec[], source: string, ref?: SourceRef): Drone {
+export function mergeSpecs(
+  drone: Drone,
+  specs: ExtractedSpec[],
+  source: string,
+  ref?: SourceRef,
+): Drone {
   // match on `normalized?.semantic ?? key`; preserve first-seen key/label;
   // claims now carry {raw, normalized, normalizationConfidence, sourceId, evidence, extractionConfidence}
 }
@@ -659,18 +692,18 @@ one canonical value", applied to RF.
 
 ```ts
 // src/entities/drone/consensus.ts
-export function consensus(spec: SpecAttribute): Consensus
+export function consensus(spec: SpecAttribute): Consensus;
 ```
 
-* If any claim has `normalized.canonicalValue`, those are the values aggregated (already in
+- If any claim has `normalized.canonicalValue`, those are the values aggregated (already in
   `canonicalUnit`). Mixed-unit claims (`80 miles` + `130 km`) now land on `128.75` and `130` km
   instead of being compared as 80 vs 130. **This is the draft's headline example, and it works with
   zero backfill.**
-* Claims without `normalized` keep today's behaviour — so all seed data and every existing
+- Claims without `normalized` keep today's behaviour — so all seed data and every existing
   assertion in `src/test/consensus.test.ts` still pass unchanged.
-* `Consensus` gains `spreadPct` and `outliers: number[]` (indices), which the dossier's "Spread"
+- `Consensus` gains `spreadPct` and `outliers: number[]` (indices), which the dossier's "Spread"
   column can show without the page doing arithmetic.
-* String-valued claims keep the existing modal-string path. `"$15,000 - $20,000"` is *not* forced
+- String-valued claims keep the existing modal-string path. `"$15,000 - $20,000"` is _not_ forced
   into a number; it is displayed as reported, with the parsed `Money` available separately.
 
 Confidence bands stay `high | medium | low` because `ConfidenceTag` in
@@ -687,12 +720,18 @@ that union.
 
 ```ts
 export interface CatalogFacets {
-  domains?: Domain[]; origin?: string[]; operators?: string[];
+  domains?: Domain[];
+  origin?: string[];
+  operators?: string[];
   /** Legacy, raw band strings — kept for backwards compatibility. */
   bands?: string[];
   /** NEW */
-  ieeeBands?: string[]; natoBands?: string[]; propulsionIds?: string[];
-  airframeIds?: string[]; protocols?: string[]; fiberOnly?: boolean;
+  ieeeBands?: string[];
+  natoBands?: string[];
+  propulsionIds?: string[];
+  airframeIds?: string[];
+  protocols?: string[];
+  fiberOnly?: boolean;
 }
 ```
 
@@ -711,7 +750,10 @@ and the "L" facet does not.
 
 ```ts
 /** Intersection in MHz, or undefined when the bands do not overlap. */
-export function intersectBands(a: [number, number], b: [number, number]): [number, number] | undefined;
+export function intersectBands(
+  a: [number, number],
+  b: [number, number],
+): [number, number] | undefined;
 ```
 
 and the panel relabels the result **"Potential frequency overlap"** with the intersection shown
@@ -725,12 +767,21 @@ drone currently has a band starting with "Fiber", so that branch is dead code to
 ### 7.3 Spec drift
 
 `evolution[]` already exists on `Drone` with `kind: "frequency" | "motor" | "payload" | "airframe" |
-"other"`. Drift detection is a pure function over the *claim dates* rather than new storage:
+"other"`. Drift detection is a pure function over the _claim dates_ rather than new storage:
 
 ```ts
 // src/entities/normalization/drift.ts
-export interface DriftPoint { date: string; canonicalValue: number; canonicalUnit: string; source: string; }
-export function detectDrift(spec: SpecAttribute): { changed: boolean; points: DriftPoint[]; spreadPct: number };
+export interface DriftPoint {
+  date: string;
+  canonicalValue: number;
+  canonicalUnit: string;
+  source: string;
+}
+export function detectDrift(spec: SpecAttribute): {
+  changed: boolean;
+  points: DriftPoint[];
+  spreadPct: number;
+};
 ```
 
 The dossier timeline renders `Observed change`, not `Confirmed hardware change`, and each point
@@ -741,19 +792,19 @@ is a read-path feature with **no migration**.
 
 ## 8. UI surfaces
 
-| Route | File | What it does |
-|---|---|---|
-| `/taxonomy` (new) | `routes/taxonomy.tsx` → `features/taxonomy/taxonomy-page.tsx` | Candidate queue: unknown term, occurrences, where seen, "map to existing" / "promote to canonical" / "reject". Alias editor for existing terms |
-| `/catalog` | extend `features/catalog/catalog-page.tsx` | Add IEEE / NATO / protocol / propulsion-canonical / fiber facets. Bare band letters are always prefixed |
-| `/intake` | extend `features/intake/intake-page.tsx` | Show the normalized value next to the raw one on each candidate spec tag (`Range: 1000 km` + `≈621 mi`) so the analyst sees the conversion, not just the raw |
-| `/systems/$id` | extend `features/dossier/dossier-page.tsx` | RF panel shows `role · canonical MHz · IEEE/NATO · protocols`; spec table shows canonical consensus with a "reported" tooltip listing the raw strings |
-| `/counterparts` | extend `counterparts-page.tsx` | §7.2 |
-| `/` (briefing) | `features/briefing/briefing-page.tsx` | Optional: a "new taxonomy terms this week" card driven by `taxonomy_candidates` |
+| Route             | File                                                          | What it does                                                                                                                                                 |
+| ----------------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `/taxonomy` (new) | `routes/taxonomy.tsx` → `features/taxonomy/taxonomy-page.tsx` | Candidate queue: unknown term, occurrences, where seen, "map to existing" / "promote to canonical" / "reject". Alias editor for existing terms               |
+| `/catalog`        | extend `features/catalog/catalog-page.tsx`                    | Add IEEE / NATO / protocol / propulsion-canonical / fiber facets. Bare band letters are always prefixed                                                      |
+| `/intake`         | extend `features/intake/intake-page.tsx`                      | Show the normalized value next to the raw one on each candidate spec tag (`Range: 1000 km` + `≈621 mi`) so the analyst sees the conversion, not just the raw |
+| `/systems/$id`    | extend `features/dossier/dossier-page.tsx`                    | RF panel shows `role · canonical MHz · IEEE/NATO · protocols`; spec table shows canonical consensus with a "reported" tooltip listing the raw strings        |
+| `/counterparts`   | extend `counterparts-page.tsx`                                | §7.2                                                                                                                                                         |
+| `/` (briefing)    | `features/briefing/briefing-page.tsx`                         | Optional: a "new taxonomy terms this week" card driven by `taxonomy_candidates`                                                                              |
 
 Nav entry in `shared/ui/app-shell.tsx` `NAV` array. Adding a route under `src/routes/` requires the
 TanStack route tree to regenerate (`routeTree.gen.ts` is generated by the router plugin on
-dev/build), so the doc notes: *run `npm run dev` once after adding the route file, then commit the
-regenerated tree*.
+dev/build), so the doc notes: _run `npm run dev` once after adding the route file, then commit the
+regenerated tree_.
 
 All new UI consumes normalized values. The only new "logic" in JSX is formatting, and the rule from
 the draft stands: no parsing components.
@@ -812,12 +863,14 @@ merge.
 Each phase is independently mergeable and leaves the app running. No phase depends on a later one.
 
 ### Phase 1 — Deterministic core (no schema change, no UI change)
+
 `numeric.ts`, `units.ts`, `currency.ts`, `bands.ts`, `rf.ts` + four test suites.
 Refactor `heuristic-ai.ts`'s `num()` to call `numeric.parseNumber`.
 **Done when:** the three test suites pass and `npm run test` is green, including all pre-existing
 tests; `lint` and `build` pass.
 
 ### Phase 2 — Taxonomy model & store
+
 `entities/normalization/{propulsion,airframe,taxonomy,semantic}.ts`,
 `shared/contracts/taxonomy.ts`, the 8-point collection checklist, `migrations/005_normalization.sql`,
 `LocalTaxonomyRepository`. Wire into `services.tsx`.
@@ -825,27 +878,32 @@ tests; `lint` and `build` pass.
 `PostgresStore` (docker-compose) and `CloudStore`; `taxonomy-store.test.ts` passes.
 
 ### Phase 3 — Apply to extraction (type widening)
+
 Widen `RFRole`, extend `RFLink`/`SpecClaim`/`SpecAttribute`, add `Extraction.rf`, add `apply.ts`,
 call it in `runTwoTier` with the failure guard. Keep `rfBands` as raw.
 **Done when:** `heuristic-ai.test.ts` and both relation tests still pass; a pasted dispatch now
 yields `role: "video"` / `"antijam"` instead of `"uplink"` in the queue UI.
 
 ### Phase 4 — Persist normalized claims
+
 Upgrade `mergeSpecs` (semantic grouping + claim fields), `promote()`'s RF derivation, `mergeDrones`
 RF link merge.
 **Done when:** `merge-drones.test.ts` gains the normalized-RF case and passes; a merged drone's
 specs carry `canonicalValue` and `sourceId`.
 
 ### Phase 5 — Consensus & dossier
+
 Extend `consensus()` with read-time normalization; dossier panel renders canonical + reported.
 **Done when:** `consensus-normalized.test.ts` passes and **every existing consensus assertion still
 passes unchanged**; no backfill needed for the seed data to show `129 km`.
 
 ### Phase 6 — Facets & SEO route
+
 `CatalogFacets` + `search` filters; catalog page facets; `/taxonomy` route and page.
 **Done when:** the "stored `band` lies" test passes; an analyst can resolve a candidate end-to-end.
 
 ### Phase 7 — EW overlap & drift
+
 `intersectBands`, counterparts panel relabel, `drift.ts` + dossier timeline.
 **Done when:** the overlap panel shows "Potential frequency overlap" with an explicit
 intersection and never asserts jamming capability.
@@ -854,26 +912,26 @@ intersection and never asserts jamming capability.
 
 ## 11. Definition of done
 
-* [ ] `npm run test`, `npm run lint` and `npm run build` all pass, including every pre-existing test.
-* [ ] `80 miles`, `130 km` and `125 km` aggregate to a single consensus with spread reported.
-* [ ] All frequencies resolve to MHz internally; IEEE and NATO bands are queryable; a range
+- [ ] `npm run test`, `npm run lint` and `npm run build` all pass, including every pre-existing test.
+- [ ] `80 miles`, `130 km` and `125 km` aggregate to a single consensus with spread reported.
+- [ ] All frequencies resolve to MHz internally; IEEE and NATO bands are queryable; a range
       crossing two bands returns both.
-* [ ] Stored `band` labels are never trusted: bands are recomputed from `freqMHz` and the raw
+- [ ] Stored `band` labels are never trusted: bands are recomputed from `freqMHz` and the raw
       label is preserved as evidence.
-* [ ] `role`, not `"uplink"`, is set for every promoted/merged RF link.
-* [ ] Propulsion, airframe, protocol and payload taxonomies extend by editing data — adding an
+- [ ] `role`, not `"uplink"`, is set for every promoted/merged RF link.
+- [ ] Propulsion, airframe, protocol and payload taxonomies extend by editing data — adding an
       alias needs no deploy.
-* [ ] Unknown terms become candidates with occurrences, timestamps and source references; none is
+- [ ] Unknown terms become candidates with occurrences, timestamps and source references; none is
       silently mapped or promoted.
-* [ ] Every normalized claim keeps `raw`, `normalized`, `confidence`, `source`, `sourceId`,
+- [ ] Every normalized claim keeps `raw`, `normalized`, `confidence`, `source`, `sourceId`,
       `evidence`, `date`.
-* [ ] Currency keeps the original currency; `usd` exists only with a stored rate, rate date and
+- [ ] Currency keeps the original currency; `usd` exists only with a stored rate, rate date and
       rate source.
-* [ ] Consensus never merges different semantic keys (`range.max` vs `range.operational`).
-* [ ] Unknown or malformed input degrades to the raw value and never fails ingestion.
-* [ ] Existing ingestion, auto-merge, auto-promote and the lease logic behave as before.
-* [ ] `docker-compose up` applies `migrations/005_normalization.sql` on a fresh database.
-* [ ] The UI shows "Potential frequency overlap" and "Observed change", never confirmed jamming or
+- [ ] Consensus never merges different semantic keys (`range.max` vs `range.operational`).
+- [ ] Unknown or malformed input degrades to the raw value and never fails ingestion.
+- [ ] Existing ingestion, auto-merge, auto-promote and the lease logic behave as before.
+- [ ] `docker-compose up` applies `migrations/005_normalization.sql` on a fresh database.
+- [ ] The UI shows "Potential frequency overlap" and "Observed change", never confirmed jamming or
       confirmed hardware change.
 
 ---
@@ -900,5 +958,5 @@ intersection and never asserts jamming capability.
 17. **Never let a normalization bug consume a dispatch's retry budget.**
 
 The architecture continues to favour **traceability, reversibility and evidence preservation**
-over aggressive automatic inference — every displayed fact still has to answer *where it came
-from, what the source actually said, how it was normalized, and how sure we are*.
+over aggressive automatic inference — every displayed fact still has to answer _where it came
+from, what the source actually said, how it was normalized, and how sure we are_.

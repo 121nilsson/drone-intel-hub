@@ -81,7 +81,9 @@ describe("mergeDrones", () => {
         { role: "gnss", band: "CRPA" },
       ],
       components: [{ part: "CRPA", manufacturer: "Kometa", origin: "RU" }],
-      evolution: [{ date: "2026-01-02", kind: "payload", description: "Warhead upgrade", source: "B" }],
+      evolution: [
+        { date: "2026-01-02", kind: "payload", description: "Warhead upgrade", source: "B" },
+      ],
       counterpartIds: ["warmate"],
     });
 
@@ -99,7 +101,14 @@ describe("mergeDrones", () => {
         tier: 1,
         status: "merged",
         resolvedInto: "geran-2-dup",
-        extraction: { aliases: [], operators: [], specs: [], rfBands: [], confidence: 1, rationale: "" },
+        extraction: {
+          aliases: [],
+          operators: [],
+          specs: [],
+          rfBands: [],
+          confidence: 1,
+          rationale: "",
+        },
       },
     ];
     const candidateRepo = {
@@ -111,7 +120,10 @@ describe("mergeDrones", () => {
       },
     };
 
-    const merged = mergeDrones("geran-2", "geran-2-dup", { drones: dronesRepo, candidates: candidateRepo });
+    const merged = mergeDrones("geran-2", "geran-2-dup", {
+      drones: dronesRepo,
+      candidates: candidateRepo,
+    });
 
     expect(merged).toBeDefined();
     expect(merged?.id).toBe("geran-2");
@@ -152,7 +164,11 @@ describe("mergeDrones", () => {
     const repo = createMockRepo([drone]);
     const candRepo = { list: () => [], add: () => {}, update: () => {} };
 
-    expect(mergeDrones("drone-1", "drone-1", { drones: repo, candidates: candRepo })).toBeUndefined();
-    expect(mergeDrones("drone-1", "nonexistent", { drones: repo, candidates: candRepo })).toBeUndefined();
+    expect(
+      mergeDrones("drone-1", "drone-1", { drones: repo, candidates: candRepo }),
+    ).toBeUndefined();
+    expect(
+      mergeDrones("drone-1", "nonexistent", { drones: repo, candidates: candRepo }),
+    ).toBeUndefined();
   });
 });

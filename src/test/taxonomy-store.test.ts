@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { termId } from "@/entities/normalization/taxonomy";
-import { LocalDroneRepository, LocalTaxonomyCandidateRepository, LocalTaxonomyRepository } from "@/shared/infra/local-repository";
+import {
+  LocalDroneRepository,
+  LocalTaxonomyCandidateRepository,
+  LocalTaxonomyRepository,
+} from "@/shared/infra/local-repository";
 import { LocalStorageStore } from "@/shared/infra/local-store";
 import type { Drone } from "@/entities/drone/types";
 
@@ -18,7 +22,9 @@ describe("taxonomy store", () => {
 
     const second = new LocalTaxonomyRepository();
     await second.attach(store);
-    expect(second.terms("propulsion").find((t) => t.id === termId("propulsion", "piston"))?.aliases).toContain("moped motor");
+    expect(
+      second.terms("propulsion").find((t) => t.id === termId("propulsion", "piston"))?.aliases,
+    ).toContain("moped motor");
     expect(second.terms("propulsion").some((t) => t.canonicalId === "electric")).toBe(true);
   });
 
@@ -57,7 +63,11 @@ describe("catalog facets on normalized values", () => {
     repo.upsert(drone);
     expect(repo.search("", { ieeeBands: ["UHF"] }).some((d) => d.id === "mislabeled")).toBe(true);
     expect(repo.search("", { ieeeBands: ["L"] }).some((d) => d.id === "mislabeled")).toBe(false);
-    expect(repo.search("", { propulsionIds: ["electric"], installationIds: ["tracked"] }).some((d) => d.id === "mislabeled")).toBe(true);
+    expect(
+      repo
+        .search("", { propulsionIds: ["electric"], installationIds: ["tracked"] })
+        .some((d) => d.id === "mislabeled"),
+    ).toBe(true);
     expect(repo.search("", { bands: ["L"] }).some((d) => d.id === "mislabeled")).toBe(true);
   });
 });

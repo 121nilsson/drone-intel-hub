@@ -13,16 +13,16 @@
 
 The current fetcher ([`fetch-posts.ts`](src/shared/infra/fetch-posts.ts)) handles Telegram channels, RSS/Atom feeds, and generic web scraping. Many high-signal open sources are not yet covered:
 
-| Source Type | Examples | Priority |
-|---|---|---|
-| **Reddit threads** | r/WarInUkraine, r/ukraine, r/geopolitics | High |
-| **Twitter/X** | Requires paid API — worth budgeting for | High |
-| **YouTube transcripts** | OSint channels (e.g. Defense Express) via caption API | Medium |
-| **Academic preprints** | arXiv cs.RO / eess.SP for RF/payload advances | Medium |
-| **Patent feeds** | USPTO/EPO RSS for new drone tech from known manufacturers | Medium |
-| **GitHub releases** | Flight-controller firmware tags (Betaflight, ArduPilot) | Low |
-| **Procurement portals** | NATO, Ukrainian MoD, US SAM.gov contract awards | High |
-| **Sanctions lists** | OFAC, EU, UK updates — flag newly-listed component makers | High |
+| Source Type             | Examples                                                  | Priority |
+| ----------------------- | --------------------------------------------------------- | -------- |
+| **Reddit threads**      | r/WarInUkraine, r/ukraine, r/geopolitics                  | High     |
+| **Twitter/X**           | Requires paid API — worth budgeting for                   | High     |
+| **YouTube transcripts** | OSint channels (e.g. Defense Express) via caption API     | Medium   |
+| **Academic preprints**  | arXiv cs.RO / eess.SP for RF/payload advances             | Medium   |
+| **Patent feeds**        | USPTO/EPO RSS for new drone tech from known manufacturers | Medium   |
+| **GitHub releases**     | Flight-controller firmware tags (Betaflight, ArduPilot)   | Low      |
+| **Procurement portals** | NATO, Ukrainian MoD, US SAM.gov contract awards           | High     |
+| **Sanctions lists**     | OFAC, EU, UK updates — flag newly-listed component makers | High     |
 
 **Implementation approach:** add a new `platform` variant (e.g. `"Reddit"`, `"YouTube"`) to `MonitoredSource` and a corresponding fetch adapter in `fetch-posts.ts`. Each adapter stays behind the existing `FetchResult` interface, so the pipeline needs no changes.
 
@@ -81,8 +81,8 @@ When the LLM extracts a report, it already returns a `systems[]` array and `vari
 ```ts
 // New entity
 interface SystemRelation {
-  fromId: string;          // drone id
-  toId: string;            // drone id
+  fromId: string; // drone id
+  toId: string; // drone id
   kind: RelationKind;
   confidence: number;
   source: string;
@@ -90,11 +90,11 @@ interface SystemRelation {
 }
 
 type RelationKind =
-  | "variant_of"       // Geran-3 → Geran-2
-  | "successor_of"     // Lancet-3 → Lancet-1
-  | "intercepted_by"   // Shahed-136 ← Gepard AA
-  | "jammed_by"        // Mavic 3 ← Luch EW
-  | "component_of"     // Viber-X motor → Shahed-136
+  | "variant_of" // Geran-3 → Geran-2
+  | "successor_of" // Lancet-3 → Lancet-1
+  | "intercepted_by" // Shahed-136 ← Gepard AA
+  | "jammed_by" // Mavic 3 ← Luch EW
+  | "component_of" // Viber-X motor → Shahed-136
   | "operates_alongside" // seen in same mission report
   | "manufactured_by"; // supply chain
 ```
@@ -163,13 +163,13 @@ The `consensus.ts` entity already exists — extend it to emit a `disputed: bool
 
 Today the briefing is a one-shot LLM summary. Add structured analytics computed from the raw data:
 
-| Signal | How to compute | Value |
-|---|---|---|
-| **New system rate** | Count `createdAt` by week | Detect acceleration in new drone types |
-| **Domain shift** | % Air/Land/Sea by quarter | Track if adversary pivots from air to maritime |
-| **RF band adoption** | Frequency of each band over time | Predict which frequencies will be jammed next |
-| **Origin concentration** | Component `origin` distribution | Supply-chain choke-point analysis |
-| **Candidate backlog** | Pending vs promoted over time | Pipeline health KPI |
+| Signal                   | How to compute                   | Value                                          |
+| ------------------------ | -------------------------------- | ---------------------------------------------- |
+| **New system rate**      | Count `createdAt` by week        | Detect acceleration in new drone types         |
+| **Domain shift**         | % Air/Land/Sea by quarter        | Track if adversary pivots from air to maritime |
+| **RF band adoption**     | Frequency of each band over time | Predict which frequencies will be jammed next  |
+| **Origin concentration** | Component `origin` distribution  | Supply-chain choke-point analysis              |
+| **Candidate backlog**    | Pending vs promoted over time    | Pipeline health KPI                            |
 
 Materialise these as simple SQL views or aggregation queries — no separate analytics DB needed at this scale.
 
@@ -197,8 +197,8 @@ Track per-source accuracy:
 interface SourceStats {
   sourceId: string;
   totalCandidates: number;
-  promotedCount: number;      // became new entries
-  mergedCount: number;        // enriched existing entries
+  promotedCount: number; // became new entries
+  mergedCount: number; // enriched existing entries
   discardedCount: number;
   avgConfidence: number;
 }
@@ -226,8 +226,8 @@ interface SpecClaim {
   value: number | string;
   source: string;
   date: string;
-  mediaUrl?: string;   // screenshot, video timestamp, image
-  excerpt?: string;    // quoted sentence from the source
+  mediaUrl?: string; // screenshot, video timestamp, image
+  excerpt?: string; // quoted sentence from the source
 }
 ```
 
@@ -245,11 +245,11 @@ The current `search()` on `DroneRepository` is keyword + facet only. Extend it t
 
 ## 5. Quick Wins (Low Effort, High Impact)
 
-| # | Change | Files affected |
-|---|---|---|
-| 1 | Increase Telegram fetch limit from 20 to 50 posts | [`fetch-posts.ts`](src/shared/infra/fetch-posts.ts) L32 |
-| 2 | Persist `systems[]` edges to `counterpartIds` automatically on auto-merge | [`pipeline.ts`](src/features/intake/pipeline.ts) L25 |
-| 3 | Add `contentHash` deduplication across sources | `auto-ingest.ts`, new migration |
-| 4 | Expose sync report history in the Sources UI | [`sources-page.tsx`](src/features/sources/sources-page.tsx) |
-| 5 | Add `disputed` flag to `SpecAttribute` when claims contradict | [`types.ts`](src/entities/drone/types.ts), `consensus.ts` |
-| 6 | Log per-source extraction cost (tokens used) for API spend tracking | [`openai-compatible-ai.ts`](src/shared/infra/openai-compatible-ai.ts) |
+| #   | Change                                                                    | Files affected                                                        |
+| --- | ------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| 1   | Increase Telegram fetch limit from 20 to 50 posts                         | [`fetch-posts.ts`](src/shared/infra/fetch-posts.ts) L32               |
+| 2   | Persist `systems[]` edges to `counterpartIds` automatically on auto-merge | [`pipeline.ts`](src/features/intake/pipeline.ts) L25                  |
+| 3   | Add `contentHash` deduplication across sources                            | `auto-ingest.ts`, new migration                                       |
+| 4   | Expose sync report history in the Sources UI                              | [`sources-page.tsx`](src/features/sources/sources-page.tsx)           |
+| 5   | Add `disputed` flag to `SpecAttribute` when claims contradict             | [`types.ts`](src/entities/drone/types.ts), `consensus.ts`             |
+| 6   | Log per-source extraction cost (tokens used) for API spend tracking       | [`openai-compatible-ai.ts`](src/shared/infra/openai-compatible-ai.ts) |

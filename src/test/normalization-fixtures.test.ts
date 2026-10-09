@@ -63,17 +63,22 @@ describe("fixture corpus: normalizeQuantity", () => {
       expect(got).toBeDefined();
       if (expected.value !== undefined) expect(got?.value).toBe(expected.value);
       if (expected.unit !== undefined) expect(got?.unit).toBe(expected.unit);
-      if (expected.canonicalUnit !== undefined) expect(got?.canonicalUnit).toBe(expected.canonicalUnit);
-      if (expected.canonicalValue !== undefined) expect(got?.canonicalValue).toBeCloseTo(expected.canonicalValue, 4);
+      if (expected.canonicalUnit !== undefined)
+        expect(got?.canonicalUnit).toBe(expected.canonicalUnit);
+      if (expected.canonicalValue !== undefined)
+        expect(got?.canonicalValue).toBeCloseTo(expected.canonicalValue, 4);
       // A fixture that expects a bound/range must not accidentally get a point value.
       if (expected.canonicalValue === undefined && expected.range !== undefined) {
         expect(got?.canonicalValue).toBeUndefined();
       }
       if (expected.range !== undefined) {
         expect(got?.range?.qualifier).toBe(expected.range.qualifier);
-        if (expected.range.min !== undefined) expect(got?.range?.min).toBeCloseTo(expected.range.min, 4);
-        if (expected.range.max !== undefined) expect(got?.range?.max).toBeCloseTo(expected.range.max, 4);
-        if (expected.range.value !== undefined) expect(got?.range?.value).toBeCloseTo(expected.range.value, 4);
+        if (expected.range.min !== undefined)
+          expect(got?.range?.min).toBeCloseTo(expected.range.min, 4);
+        if (expected.range.max !== undefined)
+          expect(got?.range?.max).toBeCloseTo(expected.range.max, 4);
+        if (expected.range.value !== undefined)
+          expect(got?.range?.value).toBeCloseTo(expected.range.value, 4);
       }
       if (expected.confidence !== undefined) expect(got?.confidence).toBe(expected.confidence);
     });
@@ -114,7 +119,8 @@ describe("fixture corpus: normalizeRF", () => {
       if (expected.protocols !== undefined) expect(got.protocols).toEqual(expected.protocols);
       if (expected.tacticalTag !== undefined) expect(got.tacticalTag).toBe(expected.tacticalTag);
       if (expected.isFiberOptic !== undefined) expect(got.isFiberOptic).toBe(expected.isFiberOptic);
-      if (expected.confidence !== undefined) expect(got.confidence).toBeCloseTo(expected.confidence, 2);
+      if (expected.confidence !== undefined)
+        expect(got.confidence).toBeCloseTo(expected.confidence, 2);
     });
   }
 });

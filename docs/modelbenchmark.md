@@ -23,34 +23,34 @@ pass here means a pass in production.
 
 `GET /models` lists **80** models. Only **13** can actually be invoked with this key.
 
-| Outcome | Count | Meaning |
-| --- | --- | --- |
-| 200 OK | 13 | genuinely callable |
-| 404 "Function ... Not found for account" | 55 | listed but not deployed for this account |
-| timeout at 30s | 8 | endpoint accepted it, no response (incl. `z-ai/glm-5.3*`) |
-| 400 | 1 | wrong request shape for that model (`nemotron-parse`) |
-| 503 ResourceExhausted | 1 | transient capacity |
+| Outcome                                  | Count | Meaning                                                   |
+| ---------------------------------------- | ----- | --------------------------------------------------------- |
+| 200 OK                                   | 13    | genuinely callable                                        |
+| 404 "Function ... Not found for account" | 55    | listed but not deployed for this account                  |
+| timeout at 30s                           | 8     | endpoint accepted it, no response (incl. `z-ai/glm-5.3*`) |
+| 400                                      | 1     | wrong request shape for that model (`nemotron-parse`)     |
+| 503 ResourceExhausted                    | 1     | transient capacity                                        |
 
 This is the single most useful result here: any model picker built on `GET /models` will
 offer 55 models that fail at runtime. Probe with a real completion, not the catalogue.
 
 The 13 callable models, ordered by trivial-request latency:
 
-| Latency | Model | Reasoning? | Notes |
-| --- | --- | --- | --- |
-| 154ms | `nvidia/nemotron-parse-2.0` | no | document parsing, not instruction-following |
-| 281ms | `nvidia/riva-translate-4b-instruct-v2` | no | translation |
-| 304ms | `meta/llama-3.2-11b-vision-instruct` | no | see precision table - fails schema |
-| 349ms | `nvidia/nemotron-3.5-content-safety` | no | classifier |
-| 421ms | `openai/gpt-oss-20b` | yes | 2/4 on precision |
-| 438ms | `nvidia/nemotron-3-super-120b-a12b` | yes | **4/4 - recommended** |
-| 473ms | `google/diffusiongemma-26b-a4b-it` | no | rejects `response_format` |
-| 513ms | `nvidia/nemotron-3.5-lightning-30b-a3b` | yes | current tier 1 - see below |
-| 514ms | `nvidia/ising-calibration-1.5-31b` | no | Monte Carlo solver, poor extraction |
-| 620ms | `meta/muse-glimmer-30b` | yes | current tier 2 |
-| 1376ms | `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning` | yes | omni, 2/4 |
-| 3620ms | `nvidia/nemotron-3-ultra-550b-a55b` | yes | 4/4 but slowest general model |
-| 15.7s | `meta/llama-3.2-90b-vision-instruct` | no | unusably slow |
+| Latency | Model                                           | Reasoning? | Notes                                       |
+| ------- | ----------------------------------------------- | ---------- | ------------------------------------------- |
+| 154ms   | `nvidia/nemotron-parse-2.0`                     | no         | document parsing, not instruction-following |
+| 281ms   | `nvidia/riva-translate-4b-instruct-v2`          | no         | translation                                 |
+| 304ms   | `meta/llama-3.2-11b-vision-instruct`            | no         | see precision table - fails schema          |
+| 349ms   | `nvidia/nemotron-3.5-content-safety`            | no         | classifier                                  |
+| 421ms   | `openai/gpt-oss-20b`                            | yes        | 2/4 on precision                            |
+| 438ms   | `nvidia/nemotron-3-super-120b-a12b`             | yes        | **4/4 - recommended**                       |
+| 473ms   | `google/diffusiongemma-26b-a4b-it`              | no         | rejects `response_format`                   |
+| 513ms   | `nvidia/nemotron-3.5-lightning-30b-a3b`         | yes        | current tier 1 - see below                  |
+| 514ms   | `nvidia/ising-calibration-1.5-31b`              | no         | Monte Carlo solver, poor extraction         |
+| 620ms   | `meta/muse-glimmer-30b`                         | yes        | current tier 2                              |
+| 1376ms  | `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning` | yes        | omni, 2/4                                   |
+| 3620ms  | `nvidia/nemotron-3-ultra-550b-a55b`             | yes        | 4/4 but slowest general model               |
+| 15.7s   | `meta/llama-3.2-90b-vision-instruct`            | no         | unusably slow                               |
 
 Note the trap: the trivial "reply ok" latency ranks models almost opposite to their real
 latency on a long extraction. `nemotron-3.5-lightning` answers "ok" in 513ms but takes
@@ -65,17 +65,17 @@ Four cases: two known systems named, a variant relationship, a Cyrillic-language
 a negative (no drone present, must not match). "Reasoning" is characters of
 `reasoning_content` generated - a good proxy for latency and token cost.
 
-| Model | Passed | Median | Summary | Reasoning | Verdict |
-| --- | --- | --- | --- | --- | --- |
-| **`nvidia/nemotron-3-super-120b-a12b`** | **4/4** (3/4 on rerun) | **6.6-13.6s** | 1.7-4.4s | ~4.6k | best balance |
-| `meta/muse-glimmer-30b` | 4/4 | 35.2s | 13.6s | ~5.2k | accurate, ~5x slower |
-| `nvidia/nemotron-3-ultra-550b-a55b` | 4/4 | 47.0s | 15.6s | ~8.6k | accurate, slowest |
-| `nvidia/nemotron-3.5-lightning-30b-a3b` | 2/4 | 45.3s | 16.6s | ~14k | **current tier 1 - poor** |
-| `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning` | 2/4 | 31.9s | 4.6s | ~8.9k | misses systems |
-| `openai/gpt-oss-20b` | 2/4 | 24.9s | 5.2s | ~6.2k | misses `matchId` |
-| `nvidia/ising-calibration-1.5-31b` | 2/4 | 11.9s | 3.1s | 0 | picks wrong id, false positives |
-| `meta/llama-3.2-11b-vision-instruct` | 0/4 | 33.6s | 3.7s | 0 | ignores the schema |
-| `google/diffusiongemma-26b-a4b-it` | 0/4 | - | 1.2s | 0 | rejects `response_format` |
+| Model                                           | Passed                 | Median        | Summary  | Reasoning | Verdict                         |
+| ----------------------------------------------- | ---------------------- | ------------- | -------- | --------- | ------------------------------- |
+| **`nvidia/nemotron-3-super-120b-a12b`**         | **4/4** (3/4 on rerun) | **6.6-13.6s** | 1.7-4.4s | ~4.6k     | best balance                    |
+| `meta/muse-glimmer-30b`                         | 4/4                    | 35.2s         | 13.6s    | ~5.2k     | accurate, ~5x slower            |
+| `nvidia/nemotron-3-ultra-550b-a55b`             | 4/4                    | 47.0s         | 15.6s    | ~8.6k     | accurate, slowest               |
+| `nvidia/nemotron-3.5-lightning-30b-a3b`         | 2/4                    | 45.3s         | 16.6s    | ~14k      | **current tier 1 - poor**       |
+| `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning` | 2/4                    | 31.9s         | 4.6s     | ~8.9k     | misses systems                  |
+| `openai/gpt-oss-20b`                            | 2/4                    | 24.9s         | 5.2s     | ~6.2k     | misses `matchId`                |
+| `nvidia/ising-calibration-1.5-31b`              | 2/4                    | 11.9s         | 3.1s     | 0         | picks wrong id, false positives |
+| `meta/llama-3.2-11b-vision-instruct`            | 0/4                    | 33.6s         | 3.7s     | 0         | ignores the schema              |
+| `google/diffusiongemma-26b-a4b-it`              | 0/4                    | -             | 1.2s     | 0         | rejects `response_format`       |
 
 ### Failure modes worth knowing
 
@@ -127,23 +127,23 @@ the model choice as configuration and keep it in `.env.local` rather than in cod
 
 **Yes - `nvidia/riva-translate-4b-instruct-v2` is cheap enough to be worth it, and it
 stabilises the slowest part of the pipeline.** The old `nvidia/riva-translate-4b-instruct`
-is *not* callable (404); only `-v2` is.
+is _not_ callable (404); only `-v2` is.
 
 Same three Cyrillic inputs, two paths:
 
-| Case | Direct (Cyrillic -> extractor) | Translate first | Better |
-| --- | --- | --- | --- |
-| ru-attack | 8.7s, `matchId=shahed-136` correct | 13.2s (1.0s translate), correct | direct |
-| ru-variant | 17.0s, `matchId=lancet-3` correct | 12.4s (1.0s translate), correct | translate |
+| Case                      | Direct (Cyrillic -> extractor)                  | Translate first                         | Better    |
+| ------------------------- | ----------------------------------------------- | --------------------------------------- | --------- |
+| ru-attack                 | 8.7s, `matchId=shahed-136` correct              | 13.2s (1.0s translate), correct         | direct    |
+| ru-variant                | 17.0s, `matchId=lancet-3` correct               | 12.4s (1.0s translate), correct         | translate |
 | ru-specs (no model named) | 7.7s, **`matchId=shahed-136` - false positive** | 6.2s (1.0s translate), correctly `null` | translate |
 
 Separate run, same inputs:
 
-| Case | Direct | Translate first |
-| --- | --- | --- |
-| ru-attack | 8.3s | 7.1s |
-| ru-variant | 14.9s | 15.4s |
-| ru-specs | **56.9s** | **5.8s** |
+| Case       | Direct    | Translate first |
+| ---------- | --------- | --------------- |
+| ru-attack  | 8.3s      | 7.1s            |
+| ru-variant | 14.9s     | 15.4s           |
+| ru-specs   | **56.9s** | **5.8s**        |
 
 Translation itself costs ~1.0s and retained 4/5 key terms across samples (Shahed, Lancet-2,
 2000, 185 km/h all preserved).

@@ -90,9 +90,19 @@ export interface SyncState {
 
 /** Throttle state for the UI. Never throws. */
 export async function readSyncState(): Promise<SyncState> {
-  const unavailable: SyncState = { lastSync: null, configured: false, progress: null, cooldownUntil: null };
+  const unavailable: SyncState = {
+    lastSync: null,
+    configured: false,
+    progress: null,
+    cooldownUntil: null,
+  };
   if (!dbConfigured()) return unavailable;
-  const partial: SyncState = { lastSync: null, configured: true, progress: null, cooldownUntil: null };
+  const partial: SyncState = {
+    lastSync: null,
+    configured: true,
+    progress: null,
+    cooldownUntil: null,
+  };
   try {
     const rows = await db()`
       select name, last_sync, last_result from sync_state

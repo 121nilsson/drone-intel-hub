@@ -55,7 +55,9 @@ Spec drift events (${drift.length}): ${drift.map((e) => `${e.drone.name} [${e.ki
 Pending queue: ${pendingCount}.`,
     [newNames, drift, pendingCount],
   );
-  const [summary, setSummary] = useState<string | null>(() => readBriefingSummaryCache()?.summary ?? null);
+  const [summary, setSummary] = useState<string | null>(
+    () => readBriefingSummaryCache()?.summary ?? null,
+  );
   const [summaryAt, setSummaryAt] = useState<number | null>(
     () => readBriefingSummaryCache()?.generatedAt ?? null,
   );

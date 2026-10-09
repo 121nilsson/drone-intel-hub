@@ -50,13 +50,23 @@ describe("normalizeExtraction", () => {
   });
 
   it("classifies propulsion and installation from their own fields", () => {
-    expect(normalizeExtraction(extraction({ propulsion: "Piston (MD-550)" })).extraction.propulsionId).toBe("piston");
-    const tracked = normalizeExtraction(extraction({ propulsion: "Electric", installation: "Tracked" })).extraction;
+    expect(
+      normalizeExtraction(extraction({ propulsion: "Piston (MD-550)" })).extraction.propulsionId,
+    ).toBe("piston");
+    const tracked = normalizeExtraction(
+      extraction({ propulsion: "Electric", installation: "Tracked" }),
+    ).extraction;
     expect(tracked.propulsionId).toBe("electric");
     expect(tracked.installationId).toBe("tracked");
-    expect(normalizeExtraction(extraction({ propulsion: "Electric tracked" })).extraction.installationId).toBeUndefined();
-    expect(normalizeExtraction(extraction({ propulsion: "Waterjet" })).extraction.propulsionId).toBe("waterjet");
-    expect(normalizeExtraction(extraction({ propulsion: "Outboard" })).extraction.propulsionId).toBe("outboard");
+    expect(
+      normalizeExtraction(extraction({ propulsion: "Electric tracked" })).extraction.installationId,
+    ).toBeUndefined();
+    expect(
+      normalizeExtraction(extraction({ propulsion: "Waterjet" })).extraction.propulsionId,
+    ).toBe("waterjet");
+    expect(
+      normalizeExtraction(extraction({ propulsion: "Outboard" })).extraction.propulsionId,
+    ).toBe("outboard");
   });
 
   it("recomputes the Lancet video link from its frequencies", () => {

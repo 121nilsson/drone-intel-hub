@@ -21,7 +21,10 @@ export function termId(taxonomy: string, canonicalId: string) {
   return `${taxonomy}/${canonicalId}`;
 }
 
-export function storedTerm(t: TaxonomyTerm, extra?: { updatedAt?: string; updatedBy?: string }): StoredTaxonomyTerm {
+export function storedTerm(
+  t: TaxonomyTerm,
+  extra?: { updatedAt?: string; updatedBy?: string },
+): StoredTaxonomyTerm {
   return { ...t, id: termId(t.taxonomy, t.canonicalId), ...extra };
 }
 
@@ -59,7 +62,16 @@ const term = (
 
 export const PROPULSION_TERMS: TaxonomyTerm[] = [
   term("propulsion", "electric", "Electric", ["bldc", "battery", "brushed", "electric motor"]),
-  term("propulsion", "piston", "Piston", ["2-stroke", "4-stroke", "two-stroke", "four-stroke", "md-550", "mado", "ice", "piston engine"]),
+  term("propulsion", "piston", "Piston", [
+    "2-stroke",
+    "4-stroke",
+    "two-stroke",
+    "four-stroke",
+    "md-550",
+    "mado",
+    "ice",
+    "piston engine",
+  ]),
   term("propulsion", "turbojet", "Turbojet", ["turbo jet", "jet engine", "micro turbojet"]),
   term("propulsion", "turbofan", "Turbofan", ["turbo fan"]),
   term("propulsion", "turboprop", "Turboprop", ["turbo prop"]),
@@ -127,11 +139,16 @@ function active(terms: readonly TaxonomyTerm[], taxonomy: string): TaxonomyTerm[
 }
 
 /** Every canonical id whose alias appears in the text. A broader id is dropped when a more specific one also matched. */
-export function matchTerms(raw: string, taxonomy: string, terms: readonly TaxonomyTerm[]): string[] {
+export function matchTerms(
+  raw: string,
+  taxonomy: string,
+  terms: readonly TaxonomyTerm[],
+): string[] {
   const ids: string[] = [];
   for (const t of active(terms, taxonomy)) {
     const names = [t.canonicalId, t.label, ...t.aliases];
-    if (names.some((alias) => aliasAppears(raw, alias)) && !ids.includes(t.canonicalId)) ids.push(t.canonicalId);
+    if (names.some((alias) => aliasAppears(raw, alias)) && !ids.includes(t.canonicalId))
+      ids.push(t.canonicalId);
   }
   return ids.filter((id) => !ids.some((other) => other !== id && other.startsWith(`${id}-`)));
 }
@@ -157,7 +174,11 @@ export function effectiveInstallationId(
   return resolveTerm(raw, "installation", terms).canonicalId;
 }
 
-export function resolveTerm(raw: string, taxonomy: string, terms: readonly TaxonomyTerm[]): TermResolution {
+export function resolveTerm(
+  raw: string,
+  taxonomy: string,
+  terms: readonly TaxonomyTerm[],
+): TermResolution {
   const text = raw.trim();
   if (!text) return { confidence: 0 };
   const ids = matchTerms(text, taxonomy, terms);

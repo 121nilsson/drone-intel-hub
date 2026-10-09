@@ -17,15 +17,15 @@
 Before adding new work, here is where the prior roadmaps actually stand in the
 code today.
 
-| Round 1/2 item | Status | Evidence |
-|---|---|---|
-| §2-A persist `systems[]` as `counterpartIds` | **Done** | `pipeline.ts:47-53` + `entities/drone/relations.ts` (the round-2 "highest priority" item shipped) |
-| §2-B `variantOf` promotion path | **Partial** | `promote()` seeds counterpart edges via `linkCounterparts`, but does **not** copy the parent's RF bands and does **not** log a "variant of" evolution event (`pipeline.ts:63-109`) |
-| §1-A two-tier relevance filter | **Open** | `DRONE_HINT` is still a flat OR gate (`auto-ingest.ts:7-8`) |
-| §1-B article body extraction (Readability) | **Open** | `parseWeb()` still extracts anchor text only (`fetch-posts.ts:72-85`) — see §1.7 below |
-| §1.3 cross-source content-hash dedup | **Open** | dedupe is still per-`sourceId\|externalId` (`auto-ingest.ts:22`) |
-| §3-B consensus `disputed` + date decay | **Open** | `consensus.ts` still has no `disputed` flag and never reads `SpecClaim.date` |
-| §4-A propulsion normalisation | **Open** | `propulsion` is still free text (`types.ts:49`); facets exact-match it (`local-repository.ts:59`) |
+| Round 1/2 item                               | Status      | Evidence                                                                                                                                                                           |
+| -------------------------------------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| §2-A persist `systems[]` as `counterpartIds` | **Done**    | `pipeline.ts:47-53` + `entities/drone/relations.ts` (the round-2 "highest priority" item shipped)                                                                                  |
+| §2-B `variantOf` promotion path              | **Partial** | `promote()` seeds counterpart edges via `linkCounterparts`, but does **not** copy the parent's RF bands and does **not** log a "variant of" evolution event (`pipeline.ts:63-109`) |
+| §1-A two-tier relevance filter               | **Open**    | `DRONE_HINT` is still a flat OR gate (`auto-ingest.ts:7-8`)                                                                                                                        |
+| §1-B article body extraction (Readability)   | **Open**    | `parseWeb()` still extracts anchor text only (`fetch-posts.ts:72-85`) — see §1.7 below                                                                                             |
+| §1.3 cross-source content-hash dedup         | **Open**    | dedupe is still per-`sourceId\|externalId` (`auto-ingest.ts:22`)                                                                                                                   |
+| §3-B consensus `disputed` + date decay       | **Open**    | `consensus.ts` still has no `disputed` flag and never reads `SpecClaim.date`                                                                                                       |
+| §4-A propulsion normalisation                | **Open**    | `propulsion` is still free text (`types.ts:49`); facets exact-match it (`local-repository.ts:59`)                                                                                  |
 
 ---
 
@@ -52,7 +52,10 @@ signal (§7.1).
 
 ```ts
 const A = drones.find((d) => d.id === a) ?? drones[0]!;
-const B = drones.find((d) => d.id === b) ?? drones.find((d) => A.counterpartIds.includes(d.id)) ?? drones[1]!;
+const B =
+  drones.find((d) => d.id === b) ??
+  drones.find((d) => A.counterpartIds.includes(d.id)) ??
+  drones[1]!;
 ```
 
 With an empty or single-item catalog (fresh localStorage, or after deleting
@@ -204,7 +207,7 @@ The `sync_state` CAS (`source-sync.server.ts:21-38`) protects the **scheduled**
 auto-sync, but the manual "Analyse queue" button (`sources-page.tsx:113-120`)
 and `fetchAllSources()` call `processPending()` with no claim. Two browser tabs
 (or a manual click overlapping a cron tick) both read the same
-`dispatches.pending(limit)` set — status is only updated *after* processing —
+`dispatches.pending(limit)` set — status is only updated _after_ processing —
 and produce duplicate candidates and duplicate merges. Add a per-dispatch claim
 (e.g. an `in_flight` status or a `processing_by` lease column) so exactly one
 worker owns a dispatch at a time.
@@ -241,17 +244,17 @@ There are 57 tests covering relations, the pipeline, fetch parsing, dispatch
 resilience, and the AI rate limiter — good coverage of the pure logic. But the
 following load-bearing paths have **zero** coverage:
 
-| Untested area | Why it matters |
-|---|---|
-| `heuristic-ai.ts` (the whole default engine) | It is the **default** inference path whenever no API key is configured. `mentions`, `detectNames`, `resolveSystems`, `extractPrice`, `scan` are all untested, and §1.3 shows a real parsing bug lives here. |
-| `consensus.ts` | Rendered in every dossier and the counterparts delta table; §1.1 shows a real bug. |
-| All stores (`local-store`, `remote-store`, `postgres-store`) | The persistence seam; §1.4's data-loss path is untested. |
-| All repositories (`local-repository.ts`) | `search()`/facets power the catalog page; write-through cache behaviour untested. |
-| `source-sync.server.ts` `claimSlot` CAS | The only thing preventing duplicate syncs. |
-| `services.tsx` composition root | Env-vs-browser provider/store resolution is fragile and untested. |
-| `openai-compatible-ai.ts` JSON parsing | The most fragile line in the AI path (§2.3). |
-| `mergeInto()` (manual merge path) | Only `promote()` is partially covered. |
-| All UI (8 feature pages) | No rendering/interaction tests; §1.2's crash would be caught by one. |
+| Untested area                                                | Why it matters                                                                                                                                                                                              |
+| ------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `heuristic-ai.ts` (the whole default engine)                 | It is the **default** inference path whenever no API key is configured. `mentions`, `detectNames`, `resolveSystems`, `extractPrice`, `scan` are all untested, and §1.3 shows a real parsing bug lives here. |
+| `consensus.ts`                                               | Rendered in every dossier and the counterparts delta table; §1.1 shows a real bug.                                                                                                                          |
+| All stores (`local-store`, `remote-store`, `postgres-store`) | The persistence seam; §1.4's data-loss path is untested.                                                                                                                                                    |
+| All repositories (`local-repository.ts`)                     | `search()`/facets power the catalog page; write-through cache behaviour untested.                                                                                                                           |
+| `source-sync.server.ts` `claimSlot` CAS                      | The only thing preventing duplicate syncs.                                                                                                                                                                  |
+| `services.tsx` composition root                              | Env-vs-browser provider/store resolution is fragile and untested.                                                                                                                                           |
+| `openai-compatible-ai.ts` JSON parsing                       | The most fragile line in the AI path (§2.3).                                                                                                                                                                |
+| `mergeInto()` (manual merge path)                            | Only `promote()` is partially covered.                                                                                                                                                                      |
+| All UI (8 feature pages)                                     | No rendering/interaction tests; §1.2's crash would be caught by one.                                                                                                                                        |
 
 Priority: `heuristic-ai.ts` and `consensus.ts` first — they are the default
 engine and the rendered output, and both already contain confirmed bugs.
@@ -260,50 +263,50 @@ engine and the rendered output, and both already contain confirmed bugs.
 
 ## 6. Performance
 
-| # | Issue | Location |
-|---|---|---|
-| 6.1 | **Sequential fetch of all ~79 sources**, no concurrency and no timeout — one slow source serialises the whole pass. Fetch with bounded concurrency (e.g. `Promise.all` over chunks of 5–8) plus per-request timeouts. | `fetch-posts.server.ts:65-69` |
-| 6.2 | `pending(Number.MAX_SAFE_INTEGER)` scans the entire dispatch collection every run just to compute `remaining`. Keep a count or cap the scan. | `auto-ingest.ts:93` |
-| 6.3 | Spec rename/drop performs **N sequential `upsert` calls** (one per drone). Batch into a single store operation. | `dynamic-specs/specs-page.tsx:14,17` |
-| 6.4 | The remote bridge **double-serialises**: the server `JSON.stringify`s the payload and the client `JSON.parse`s it again. Return structured data and let the server-fn layer serialise once. | `remote-store.ts:7` + `store.functions.ts:27` |
-| 6.5 | `PostgresStore.load` silently caps dispatches at **3000** (via an embedded `limit` in an `ORDER` string) while the table grows unbounded — the archive quietly diverges from what the UI/API can see. | `postgres/postgres-store.server.ts:9` |
+| #   | Issue                                                                                                                                                                                                                 | Location                                      |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- |
+| 6.1 | **Sequential fetch of all ~79 sources**, no concurrency and no timeout — one slow source serialises the whole pass. Fetch with bounded concurrency (e.g. `Promise.all` over chunks of 5–8) plus per-request timeouts. | `fetch-posts.server.ts:65-69`                 |
+| 6.2 | `pending(Number.MAX_SAFE_INTEGER)` scans the entire dispatch collection every run just to compute `remaining`. Keep a count or cap the scan.                                                                          | `auto-ingest.ts:93`                           |
+| 6.3 | Spec rename/drop performs **N sequential `upsert` calls** (one per drone). Batch into a single store operation.                                                                                                       | `dynamic-specs/specs-page.tsx:14,17`          |
+| 6.4 | The remote bridge **double-serialises**: the server `JSON.stringify`s the payload and the client `JSON.parse`s it again. Return structured data and let the server-fn layer serialise once.                           | `remote-store.ts:7` + `store.functions.ts:27` |
+| 6.5 | `PostgresStore.load` silently caps dispatches at **3000** (via an embedded `limit` in an `ORDER` string) while the table grows unbounded — the archive quietly diverges from what the UI/API can see.                 | `postgres/postgres-store.server.ts:9`         |
 
 ---
 
 ## 7. Data quality (carry-forward, still open)
 
 These were proposed in rounds 1–2 and remain open; they are the highest-value
-*feature* work because they improve every downstream summary.
+_feature_ work because they improve every downstream summary.
 
-| # | Item | Where |
-|---|---|---|
-| 7.1 | **`disputed` flag + date decay in `consensus()`** — flag claims whose spread exceeds a threshold (the data is already computed, just not surfaced), and weight `SpecClaim.date` (stored but never read) so old claims count less. | `consensus.ts` |
-| 7.2 | **Propulsion normalisation** — map synonym spellings to canonical values at the extraction boundary so `"quad"`/`"quadrotor"`/`"quadcopter"` don't fragment the catalog and the facet filter. | `openai-compatible-ai.ts`, `heuristic-ai.ts` |
-| 7.3 | **Cross-source content-hash dedup** — the same story crossing Telegram → RSS → Web is ingested three times. Add a `contentHash` (SHA-256 of normalised text) and a `seen_content_hashes` store. | `auto-ingest.ts` + new migration/collection |
-| 7.4 | **Two-tier relevance filter** — replace the flat `DRONE_HINT` OR-gate with primary (system names) / secondary (generic terms) tiers so low-signal posts don't enter the pipeline. | `auto-ingest.ts:7-8` |
+| #   | Item                                                                                                                                                                                                                              | Where                                        |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
+| 7.1 | **`disputed` flag + date decay in `consensus()`** — flag claims whose spread exceeds a threshold (the data is already computed, just not surfaced), and weight `SpecClaim.date` (stored but never read) so old claims count less. | `consensus.ts`                               |
+| 7.2 | **Propulsion normalisation** — map synonym spellings to canonical values at the extraction boundary so `"quad"`/`"quadrotor"`/`"quadcopter"` don't fragment the catalog and the facet filter.                                     | `openai-compatible-ai.ts`, `heuristic-ai.ts` |
+| 7.3 | **Cross-source content-hash dedup** — the same story crossing Telegram → RSS → Web is ingested three times. Add a `contentHash` (SHA-256 of normalised text) and a `seen_content_hashes` store.                                   | `auto-ingest.ts` + new migration/collection  |
+| 7.4 | **Two-tier relevance filter** — replace the flat `DRONE_HINT` OR-gate with primary (system names) / secondary (generic terms) tiers so low-signal posts don't enter the pipeline.                                                 | `auto-ingest.ts:7-8`                         |
 
 ---
 
 ## 8. Hygiene & dead code
 
-| # | Item | Evidence |
-|---|---|---|
+| #   | Item                                                                                                                                                                                                                                                                                                                                                                            | Evidence |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
 | 8.1 | **Dead fields/exports** — `seenIds` (`source/types.ts:15`) is never read or written (dedupe is dispatch-id based); `autoSync` (`source/types.ts:17`) is seeded but never read; `Snapshot` (`store.ts:14`) and `triggerAutoSync` (`source-sync.functions.ts:11`) are declared but unused; `useIsMobile` is only used by the unused shadcn `sidebar.tsx`. Remove or wire them up. |
-| 8.2 | **`@typescript-eslint/no-unused-vars` is off** (`eslint.config.js:36`), so dead code is never flagged. Re-enable it (warn at least) to prevent future accumulation. |
-| 8.3 | **Duplicated cron constant** — `AUTO_MIN = 15` (`sources-page.tsx:17`) mirrors the `*/15 * * * *` cron (`vite.config.ts:25`). They can drift; derive the UI label from a single shared constant. |
+| 8.2 | **`@typescript-eslint/no-unused-vars` is off** (`eslint.config.js:36`), so dead code is never flagged. Re-enable it (warn at least) to prevent future accumulation.                                                                                                                                                                                                             |
+| 8.3 | **Duplicated cron constant** — `AUTO_MIN = 15` (`sources-page.tsx:17`) mirrors the `*/15 * * * *` cron (`vite.config.ts:25`). They can drift; derive the UI label from a single shared constant.                                                                                                                                                                                |
 
 ---
 
 ## Suggested priority order
 
-| Priority | Item | Why |
-|---|---|---|
-| 1 | **§1 bugs** (1.1–1.6) | Confirmed defects, each a few lines; 1.2 and 1.4 are user-facing data loss/crashes |
-| 2 | **§2.1** apply benchmark model defaults | Free latency + accuracy win; the shipped defaults are untested models |
-| 3 | **§3 security** (3.1–3.2) | SSRF + unauthenticated store fns are real exposure for a self-hosted app |
-| 4 | **§4.1** processPending lock | Prevents duplicate merges from concurrent clicks/tabs |
-| 5 | **§5 tests** for `heuristic-ai` + `consensus` | The default engine and rendered output, both already buggy |
-| 6 | **§7 data quality** (7.1–7.4) | Improves every summary; mostly carried-forward work |
-| 7 | **§2.2** conditional translation | Bounds Cyrillic latency variance; adds a failure point, so do it after the core is solid |
-| 8 | **§6 performance** | Matters as source count and dispatch volume grow |
-| 9 | **§8 hygiene** | Cheap, prevents future drift |
+| Priority | Item                                          | Why                                                                                      |
+| -------- | --------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| 1        | **§1 bugs** (1.1–1.6)                         | Confirmed defects, each a few lines; 1.2 and 1.4 are user-facing data loss/crashes       |
+| 2        | **§2.1** apply benchmark model defaults       | Free latency + accuracy win; the shipped defaults are untested models                    |
+| 3        | **§3 security** (3.1–3.2)                     | SSRF + unauthenticated store fns are real exposure for a self-hosted app                 |
+| 4        | **§4.1** processPending lock                  | Prevents duplicate merges from concurrent clicks/tabs                                    |
+| 5        | **§5 tests** for `heuristic-ai` + `consensus` | The default engine and rendered output, both already buggy                               |
+| 6        | **§7 data quality** (7.1–7.4)                 | Improves every summary; mostly carried-forward work                                      |
+| 7        | **§2.2** conditional translation              | Bounds Cyrillic latency variance; adds a failure point, so do it after the core is solid |
+| 8        | **§6 performance**                            | Matters as source count and dispatch volume grow                                         |
+| 9        | **§8 hygiene**                                | Cheap, prevents future drift                                                             |

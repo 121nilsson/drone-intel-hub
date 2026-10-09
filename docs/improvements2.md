@@ -11,11 +11,11 @@
 
 Before listing new items, three round-1 findings are fully confirmed and remain top priority:
 
-| Finding | Evidence in code |
-|---|---|
-| `systems[]` graph edges are discarded | [`pipeline.ts:25`](src/features/intake/pipeline.ts#L25) writes `counterpartIds: []` hardcoded; `variantOf` only appears in the intake UI display, never in a write path |
-| Cross-source dedup is missing | `seenIds` lives on `MonitoredSource` ([`repository.ts:30`](src/shared/contracts/repository.ts#L30)), so the same headline ingested from Telegram and RSS creates two candidates |
-| Propulsion is uncontrolled free text | [`types.ts:49`](src/entities/drone/types.ts#L49) is `propulsion: string`; [`consensus()`](src/entities/drone/consensus.ts) only aggregates numeric claims, so "quad" vs "quadrotor" silently splinter |
+| Finding                               | Evidence in code                                                                                                                                                                                      |
+| ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `systems[]` graph edges are discarded | [`pipeline.ts:25`](src/features/intake/pipeline.ts#L25) writes `counterpartIds: []` hardcoded; `variantOf` only appears in the intake UI display, never in a write path                               |
+| Cross-source dedup is missing         | `seenIds` lives on `MonitoredSource` ([`repository.ts:30`](src/shared/contracts/repository.ts#L30)), so the same headline ingested from Telegram and RSS creates two candidates                       |
+| Propulsion is uncontrolled free text  | [`types.ts:49`](src/entities/drone/types.ts#L49) is `propulsion: string`; [`consensus()`](src/entities/drone/consensus.ts) only aggregates numeric claims, so "quad" vs "quadrotor" silently splinter |
 
 ---
 
@@ -27,6 +27,7 @@ Round 1 suggested bumping `parseTelegram()`'s `.slice(0, 20)` to 50.
 The `t.me/s/<chan>` web-preview endpoint only ever renders the last ~20 messages regardless of what the client requests. Changing the slice constant fetches nothing more.
 
 **Correct approach:**
+
 - **Telegram Bot API** (`getUpdates` / `forwardMessages`) is free for bots you control. Wire it as a new `platform: "TelegramBot"` adapter.
 - For third-party channels without bot access, scraping deeper requires a headless browser or the paid MTProto API. Neither is a quick win.
 - **Drop this item from the quick-win list entirely.**
@@ -36,11 +37,13 @@ The `t.me/s/<chan>` web-preview endpoint only ever renders the last ~20 messages
 Round 1 said "no system evaluates claims against each other" and that the dossier shows "only the most recent value." The code disagrees.
 
 [`consensus.ts`](src/entities/drone/consensus.ts) already computes:
+
 - `min`, `max`, `median` across all numeric claims
 - `spread`-based confidence (`high` / `medium` / `low`)
 - Distinct source count
 
 What is genuinely missing (and worth adding):
+
 1. **`disputed` flag** — when `spread > 0.5` the claim is contested, but nothing surfaces this in the UI. A simple `disputed: boolean` on `Consensus` is a 5-line change.
 2. **Date-weighted confidence** — [`SpecClaim.date`](src/entities/drone/types.ts#L7) is stored but never read by `consensus()`. Older claims should carry less weight in the final `confidence` rating.
 3. **String-value agreement threshold** — the current string path picks the modal value and checks if `agree > 0.6`, but there is no `disputed` output for string specs either.
@@ -49,9 +52,9 @@ The work is a targeted patch to `consensus.ts` and its callers, **not** a new sy
 
 ### ❌ §1.4 — Heuristic pre-screen before Tier 1 is redundant
 
-The round-1 suggestion to "run `HeuristicExtractor` as a gate before Tier 1" doesn't save anything. `HeuristicExtractor` *is* Tier 1 when no API key is configured ([`fetch-posts.ts:114`](src/shared/infra/fetch-posts.ts#L114)). When an LLM is configured, Tier 1 is already the cheap screening model. Adding a heuristic pre-pass only inserts a third extraction step with no cost saving.
+The round-1 suggestion to "run `HeuristicExtractor` as a gate before Tier 1" doesn't save anything. `HeuristicExtractor` _is_ Tier 1 when no API key is configured ([`fetch-posts.ts:114`](src/shared/infra/fetch-posts.ts#L114)). When an LLM is configured, Tier 1 is already the cheap screening model. Adding a heuristic pre-pass only inserts a third extraction step with no cost saving.
 
-**Correct approach:** the real gate is the existing `DRONE_HINT` regex in [`auto-ingest.ts:5`](src/features/sources/auto-ingest.ts#L5). Improving *that* filter (see §1-A below) is where relevance gains live.
+**Correct approach:** the real gate is the existing `DRONE_HINT` regex in [`auto-ingest.ts:5`](src/features/sources/auto-ingest.ts#L5). Improving _that_ filter (see §1-A below) is where relevance gains live.
 
 ### ✅ Correction — Discard button does exist
 
@@ -80,7 +83,8 @@ The single `DRONE_HINT` regex ([`auto-ingest.ts:5`](src/features/sources/auto-in
 
 ```ts
 // Tier A: system names and domain-specific terms → ingest immediately
-const PRIMARY_HINT = /shahed|geran|lancet|fpv|bpla|бпла|квадрокоптер|ланцет|герань|magura|kvn|loitering|kamikaze drone/i;
+const PRIMARY_HINT =
+  /shahed|geran|lancet|fpv|bpla|бпла|квадрокоптер|ланцет|герань|magura|kvn|loitering|kamikaze drone/i;
 
 // Tier B: generic terms → only ingest if a Tier A term is also present
 const SECONDARY_HINT = /drone|uav|ugv|usv|unmanned|jammer|РЭБ|EW\b|interceptor/i;
@@ -98,6 +102,7 @@ Also add Cyrillic-script language variants for major systems as synonyms in the 
 `parseWeb()` in [`fetch-posts.ts:47`](src/shared/infra/fetch-posts.ts#L47) extracts only anchor text (25–300 chars per link). For web sources this means passing fragments to the LLM rather than full paragraphs.
 
 **Practical path:**
+
 - Add a `mode: "article"` option to `MonitoredSource` (opt-in per source, default off).
 - Server-side only: use the [`@mozilla/readability`](https://github.com/mozilla/readability) package on the raw HTML before passing to the pipeline. It strips nav/ads and returns full article text.
 - Produces one large `FetchedPost` per URL rather than 25 tiny anchor-text snippets. The LLM extraction quality improves substantially.
@@ -150,11 +155,11 @@ Since `status: "discarded"` is already a real intake action (confirmed above), p
 ```ts
 interface SourceStats {
   totalCandidates: number;
-  promotedCount: number;   // status === "promoted"
-  mergedCount: number;     // status === "merged"
-  discardedCount: number;  // status === "discarded"
-  avgConfidence: number;   // average extraction.confidence of all candidates
-  signalRate: number;      // (promoted + merged) / total
+  promotedCount: number; // status === "promoted"
+  mergedCount: number; // status === "merged"
+  discardedCount: number; // status === "discarded"
+  avgConfidence: number; // average extraction.confidence of all candidates
+  signalRate: number; // (promoted + merged) / total
 }
 ```
 
@@ -177,8 +182,8 @@ export interface Consensus {
   median?: number;
   sources: number;
   confidence: "high" | "medium" | "low";
-  disputed: boolean;   // ADD: spread > 0.5 for numeric, agree < 0.5 for string
-  staleAt?: string;   // ADD: ISO date of oldest claim contributing to display
+  disputed: boolean; // ADD: spread > 0.5 for numeric, agree < 0.5 for string
+  staleAt?: string; // ADD: ISO date of oldest claim contributing to display
 }
 ```
 
@@ -189,6 +194,7 @@ Date decay: weight each claim's contribution to confidence by `1 / (1 + daysSinc
 The search facet for propulsion ([`local-repository.ts:58`](src/shared/infra/local-repository.ts#L58)) does an exact string match, so "Electric" and "electric" and "Electric motor" are three distinct buckets. Seed data uses: `"Piston (MD-550)"`, `"Electric"`, `"Electric tracked"`, `"Waterjet"`, `"Outboard"`.
 
 Two-step fix:
+
 1. Add a `normalisePropulsion(raw: string): string` function that maps synonyms to canonical values (e.g. `"quad" | "quadrotor" | "quadcopter" → "Electric (Quadrotor)"`).
 2. Call it in [`openai-compatible-ai.ts`](src/shared/infra/openai-compatible-ai.ts) at the point where `propulsion` is extracted, and in `heuristic-ai.ts` for consistency.
 
@@ -200,31 +206,32 @@ No schema change needed — this is pure normalisation at the extraction boundar
 
 Based on dependency chains and confirmed code reality:
 
-| Priority | Item | Why |
-|---|---|---|
-| 1 | **§2-A** — Persist `systems[]` as `counterpartIds` | Free signal, already computed, 20-line change |
-| 2 | **§1-A** — Improved relevance filter | Reduces garbage entering the pipeline, zero cost |
-| 3 | **§1-B / dedup** — `contentHash` cross-source deduplication | Confirmed duplicate problem from live run; small migration |
-| 4 | **§3-B** — `disputed` + date decay in `consensus.ts` | Data quality, contained change, no new dependencies |
-| 5 | **§4-A** — Propulsion normalisation | Prevents permanent catalog fragmentation |
-| 6 | **§2-B** — `variantOf` promotion path | Completes the relationship model for variants |
-| 7 | **§1-B** — Article body extraction | Quality jump, adds `@mozilla/readability` dependency |
-| 8 | **§3-A** — Source reliability scoring | Value grows as candidate count grows |
-| 9 | **§2.1/§2.2** — Full relation graph | After the architecture decision (Option A vs B) is made |
+| Priority | Item                                                        | Why                                                        |
+| -------- | ----------------------------------------------------------- | ---------------------------------------------------------- |
+| 1        | **§2-A** — Persist `systems[]` as `counterpartIds`          | Free signal, already computed, 20-line change              |
+| 2        | **§1-A** — Improved relevance filter                        | Reduces garbage entering the pipeline, zero cost           |
+| 3        | **§1-B / dedup** — `contentHash` cross-source deduplication | Confirmed duplicate problem from live run; small migration |
+| 4        | **§3-B** — `disputed` + date decay in `consensus.ts`        | Data quality, contained change, no new dependencies        |
+| 5        | **§4-A** — Propulsion normalisation                         | Prevents permanent catalog fragmentation                   |
+| 6        | **§2-B** — `variantOf` promotion path                       | Completes the relationship model for variants              |
+| 7        | **§1-B** — Article body extraction                          | Quality jump, adds `@mozilla/readability` dependency       |
+| 8        | **§3-A** — Source reliability scoring                       | Value grows as candidate count grows                       |
+| 9        | **§2.1/§2.2** — Full relation graph                         | After the architecture decision (Option A vs B) is made    |
 
 ### Items Removed from Round 1
 
-| Item | Reason |
-|---|---|
+| Item                          | Reason                                        |
+| ----------------------------- | --------------------------------------------- |
 | Quick win #1 (Telegram 20→50) | No-op — endpoint limitation, not a code limit |
-| §1.4 heuristic pre-screen | Redundant — replaced by §1-A improved filter |
-| §2.5 greenfield consensus | Overstated — most of this already exists |
+| §1.4 heuristic pre-screen     | Redundant — replaced by §1-A improved filter  |
+| §2.5 greenfield consensus     | Overstated — most of this already exists      |
 
 ---
 
 ## Open Architecture Decision
 
 > **Before starting the relation graph (priority 9), decide:**
+>
 > - **Option A (DocumentStore route):** Add `"relations"` to `CollectionMap`. Works in localStorage and Postgres. Requires ~6 files edited plus a migration. Maintains DB-agnosticism.
 > - **Option B (Postgres-only table):** A standalone SQL table with foreign keys. Simpler but permanently breaks the local fallback and contradicts the stated architecture.
 >

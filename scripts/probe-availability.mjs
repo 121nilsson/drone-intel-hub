@@ -24,7 +24,9 @@ const env = Object.fromEntries(
 const BASE = env.NVIDIA_BASE_URL.replace(/\/$/, "");
 
 // Small models first so the fast half of the sweep reports early.
-const { data: listed } = await (await fetch(`${BASE}/models`, { headers: { Authorization: `Bearer ${env.NVIDIA_API_KEY}` } })).json();
+const { data: listed } = await (
+  await fetch(`${BASE}/models`, { headers: { Authorization: `Bearer ${env.NVIDIA_API_KEY}` } })
+).json();
 const ids = (listed ?? []).map((m) => m.id).filter(Boolean);
 
 const probe = async (model) => {
@@ -35,7 +37,10 @@ const probe = async (model) => {
     const res = await fetch(`${BASE}/chat/completions`, {
       method: "POST",
       signal: ac.signal,
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${env.NVIDIA_API_KEY}` },
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${env.NVIDIA_API_KEY}`,
+      },
       body: JSON.stringify({
         model,
         messages: [{ role: "user", content: "Reply with exactly: ok" }],
@@ -46,7 +51,9 @@ const probe = async (model) => {
     const ms = Math.round(performance.now() - t0);
     if (!res.ok) {
       let why = text.replace(/\s+/g, " ").slice(0, 90);
-      try { why = JSON.parse(text).detail ?? JSON.parse(text).title ?? why; } catch {}
+      try {
+        why = JSON.parse(text).detail ?? JSON.parse(text).title ?? why;
+      } catch {}
       return { model, available: false, status: res.status, ms, why };
     }
     const j = JSON.parse(text);
@@ -59,7 +66,13 @@ const probe = async (model) => {
       has_reasoning: !!j.choices?.[0]?.message?.reasoning_content,
     };
   } catch (e) {
-    return { model, available: false, status: 0, ms: Math.round(performance.now() - t0), why: e.name === "AbortError" ? "timeout" : String(e.message).slice(0, 90) };
+    return {
+      model,
+      available: false,
+      status: 0,
+      ms: Math.round(performance.now() - t0),
+      why: e.name === "AbortError" ? "timeout" : String(e.message).slice(0, 90),
+    };
   } finally {
     clearTimeout(timer);
   }
@@ -76,5 +89,14 @@ for (const id of ids) {
 
 const ok = rows.filter((r) => r.available).sort((a, b) => a.ms - b.ms);
 console.log(`\n${ok.length}/${rows.length} callable`);
-console.log("fastest:", ok.slice(0, 8).map((r) => `${r.model} (${r.ms}ms)`).join(", "));
-writeFileSync(args.out ?? resolve(ROOT, "scripts", "availability-results.json"), JSON.stringify(rows, null, 2));
+console.log(
+  "fastest:",
+  ok
+    .slice(0, 8)
+    .map((r) => `${r.model} (${r.ms}ms)`)
+    .join(", "),
+);
+writeFileSync(
+  args.out ?? resolve(ROOT, "scripts", "availability-results.json"),
+  JSON.stringify(rows, null, 2),
+);

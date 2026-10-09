@@ -67,7 +67,11 @@ export const NUMBERS: NumberFixture[] = [
   { raw: "1 500", expected: 1500, note: "space grouping" },
   { raw: "1\u00a0500", expected: 1500, note: "nbsp grouping" },
   { raw: "1 234 567", expected: 1_234_567, note: "multi-group spaces" },
-  { raw: "1.234", expected: 1234, note: "dot followed by exactly three digits → German-style thousands" },
+  {
+    raw: "1.234",
+    expected: 1234,
+    note: "dot followed by exactly three digits → German-style thousands",
+  },
   { raw: "007", expected: 7 },
   { raw: "", expected: undefined },
   { raw: "—", expected: undefined, note: "em-dash placeholder" },
@@ -85,7 +89,11 @@ export const MAGNITUDES: NumberFixture[] = [
   { raw: "2.5M", expected: 2_500_000 },
   { raw: "1.5 thousand", expected: 1_500 },
   { raw: "500 млн", expected: 500_000_000, note: "Russian million" },
-  { raw: "2.5m", expected: undefined, note: "a bare lowercase m is NOT million (it is often meters)" },
+  {
+    raw: "2.5m",
+    expected: undefined,
+    note: "a bare lowercase m is NOT million (it is often meters)",
+  },
 ];
 
 /* ------------------------------------------------------------------ */
@@ -94,7 +102,11 @@ export const MAGNITUDES: NumberFixture[] = [
 
 export const RANGES: RangeFixture[] = [
   { raw: "120", expected: { value: 120, qualifier: "exact" } },
-  { raw: "up to 120", expected: { max: 120, qualifier: "up_to" }, note: "an upper bound must not become a point" },
+  {
+    raw: "up to 120",
+    expected: { max: 120, qualifier: "up_to" },
+    note: "an upper bound must not become a point",
+  },
   { raw: "80–120", expected: { min: 80, max: 120, qualifier: "range" }, note: "en dash" },
   { raw: "80—120", expected: { min: 80, max: 120, qualifier: "range" }, note: "em dash" },
   { raw: "80 - 120", expected: { min: 80, max: 120, qualifier: "range" }, note: "spaced hyphen" },
@@ -104,7 +116,11 @@ export const RANGES: RangeFixture[] = [
   { raw: "≈80", expected: { value: 80, qualifier: "approximate" } },
   { raw: "about 80", expected: { value: 80, qualifier: "approximate" } },
   { raw: "approximately 80", expected: { value: 80, qualifier: "approximate" } },
-  { raw: "более 100", expected: { min: 100, qualifier: "greater_than" }, note: "Russian 'more than'" },
+  {
+    raw: "более 100",
+    expected: { min: 100, qualifier: "greater_than" },
+    note: "Russian 'more than'",
+  },
   { raw: "не более 120", expected: { max: 120, qualifier: "up_to" }, note: "Russian 'up to'" },
   { raw: "меньше 50", expected: { max: 50, qualifier: "less_than" }, note: "Russian 'less than'" },
   { raw: "свыше 100", expected: { min: 100, qualifier: "greater_than" }, note: "Russian 'over'" },
@@ -119,24 +135,70 @@ export const RANGES: RangeFixture[] = [
 
 export const QUANTITIES: QuantityFixture[] = [
   // Settled behavior
-  { raw: "80 miles", expected: { value: 80, unit: "mi", canonicalUnit: "km", canonicalValue: 128.74752, confidence: 1 } },
-  { raw: "80\u00a0miles", expected: { value: 80, unit: "mi", canonicalValue: 128.74752 }, note: "nbsp inside the measurement" },
-  { raw: "70 nautical miles", expected: { unit: "nmi", canonicalValue: 129.64, confidence: 1 }, note: "longest unit name must win over 'miles'" },
+  {
+    raw: "80 miles",
+    expected: {
+      value: 80,
+      unit: "mi",
+      canonicalUnit: "km",
+      canonicalValue: 128.74752,
+      confidence: 1,
+    },
+  },
+  {
+    raw: "80\u00a0miles",
+    expected: { value: 80, unit: "mi", canonicalValue: 128.74752 },
+    note: "nbsp inside the measurement",
+  },
+  {
+    raw: "70 nautical miles",
+    expected: { unit: "nmi", canonicalValue: 129.64, confidence: 1 },
+    note: "longest unit name must win over 'miles'",
+  },
   { raw: "1000 m", expected: { canonicalValue: 1, canonicalUnit: "km" } },
   { raw: "130 км", expected: { canonicalValue: 130, note: "Cyrillic km" } },
   { raw: "100 mph", expected: { canonicalValue: 160.9344, canonicalUnit: "km/h" } },
-  { raw: "30 m/s", expected: { canonicalValue: 108, note: "m/s must not match the bare 'm' or 's' unit" } },
+  {
+    raw: "30 m/s",
+    expected: { canonicalValue: 108, note: "m/s must not match the bare 'm' or 's' unit" },
+  },
   { raw: "90 knots", expected: { canonicalValue: 166.68, canonicalUnit: "km/h" } },
   { raw: "2 hours", expected: { canonicalValue: 120, canonicalUnit: "min" } },
   { raw: "5400 seconds", expected: { canonicalValue: 90, canonicalUnit: "min" } },
-  { raw: "43min", expected: { value: 43, canonicalValue: 43, canonicalUnit: "min" }, note: "no space between value and unit" },
-  { raw: "2.2 lbs", expected: { value: 2.2, unit: "lb", canonicalValue: 0.997903214, canonicalUnit: "kg" } },
+  {
+    raw: "43min",
+    expected: { value: 43, canonicalValue: 43, canonicalUnit: "min" },
+    note: "no space between value and unit",
+  },
+  {
+    raw: "2.2 lbs",
+    expected: { value: 2.2, unit: "lb", canonicalValue: 0.997903214, canonicalUnit: "kg" },
+  },
   { raw: "500 г", expected: { canonicalValue: 0.5, canonicalUnit: "kg" }, note: "Cyrillic grams" },
   { raw: "1,5 kg", expected: { value: 1.5, canonicalValue: 1.5 }, note: "decimal comma" },
-  { raw: "~12 kg", expected: { value: 12, canonicalValue: 12, confidence: 0.9 }, note: "approximate keeps a point but lowers confidence" },
-  { raw: "up to 958 g", expected: { unit: "g", canonicalUnit: "kg", range: { max: 0.958, qualifier: "up_to" }, confidence: 1 }, note: "bound does not invent a canonicalValue" },
-  { raw: "80–120 km", expected: { unit: "km", canonicalUnit: "km", range: { min: 80, max: 120, qualifier: "range" } } },
-  { raw: "40-50 knots", expected: { range: { min: 74.08, max: 92.6, qualifier: "range" }, canonicalUnit: "km/h" } },
+  {
+    raw: "~12 kg",
+    expected: { value: 12, canonicalValue: 12, confidence: 0.9 },
+    note: "approximate keeps a point but lowers confidence",
+  },
+  {
+    raw: "up to 958 g",
+    expected: {
+      unit: "g",
+      canonicalUnit: "kg",
+      range: { max: 0.958, qualifier: "up_to" },
+      confidence: 1,
+    },
+    note: "bound does not invent a canonicalValue",
+  },
+  {
+    raw: "80–120 km",
+    expected: { unit: "km", canonicalUnit: "km", range: { min: 80, max: 120, qualifier: "range" } },
+  },
+  {
+    raw: "40-50 knots",
+    expected: { range: { min: 74.08, max: 92.6, qualifier: "range" }, canonicalUnit: "km/h" },
+  },
   { raw: "", expected: undefined },
   { raw: "80", expected: undefined, note: "bare number without a unit" },
   { raw: "N/A", expected: undefined },
@@ -145,11 +207,23 @@ export const QUANTITIES: QuantityFixture[] = [
 
   // Pinned gaps: current behavior is 'unrecognized'. When a parser improvement
   // changes one of these, flip the expectation in the same commit and keep the note.
-  { raw: "Approx. 2.2 lbs", expected: undefined, note: "PINNED GAP: 'Approx.' with period defeats the qualifier" },
-  { raw: "0.95 kg (2.11 lbs)", expected: undefined, note: "PINNED GAP: parenthesized duplicate unit" },
+  {
+    raw: "Approx. 2.2 lbs",
+    expected: undefined,
+    note: "PINNED GAP: 'Approx.' with period defeats the qualifier",
+  },
+  {
+    raw: "0.95 kg (2.11 lbs)",
+    expected: undefined,
+    note: "PINNED GAP: parenthesized duplicate unit",
+  },
   { raw: "2 hours 30 minutes", expected: undefined, note: "PINNED GAP: compound duration" },
   { raw: "10 км 500 м", expected: undefined, note: "PINNED GAP: compound Cyrillic distance" },
-  { raw: "5400 секунд", expected: undefined, note: "PINNED GAP: 'сек' does not match the full word 'секунд'" },
+  {
+    raw: "5400 секунд",
+    expected: undefined,
+    note: "PINNED GAP: 'сек' does not match the full word 'секунд'",
+  },
 ];
 
 /* ------------------------------------------------------------------ */
@@ -158,13 +232,33 @@ export const QUANTITIES: QuantityFixture[] = [
 
 export const MONEY: MoneyFixture[] = [
   { raw: "$19,000", expected: { amount: 19_000, currency: "USD" } },
-  { raw: "50 000 USD", expected: { amount: 50_000, currency: "USD" }, note: "space-grouped number before ISO code" },
-  { raw: "350 000 UAH", expected: { amount: 350_000, currency: "UAH" }, note: "ISO code after a space-grouped number" },
-  { raw: "UAH 350,000", expected: undefined, note: "PINNED GAP: currency-first ordering is not parsed" },
+  {
+    raw: "50 000 USD",
+    expected: { amount: 50_000, currency: "USD" },
+    note: "space-grouped number before ISO code",
+  },
+  {
+    raw: "350 000 UAH",
+    expected: { amount: 350_000, currency: "UAH" },
+    note: "ISO code after a space-grouped number",
+  },
+  {
+    raw: "UAH 350,000",
+    expected: undefined,
+    note: "PINNED GAP: currency-first ordering is not parsed",
+  },
   { raw: "€1.2 million", expected: { amount: 1_200_000, currency: "EUR" } },
   { raw: "₽4.5 million", expected: { amount: 4_500_000, currency: "RUB" } },
-  { raw: "about $50,000", expected: { amount: 50_000, currency: "USD" }, note: "prose prefix ignored" },
-  { raw: "$15,000 - $20,000", expected: undefined, note: "a price range must not collapse to one number" },
+  {
+    raw: "about $50,000",
+    expected: { amount: 50_000, currency: "USD" },
+    note: "prose prefix ignored",
+  },
+  {
+    raw: "$15,000 - $20,000",
+    expected: undefined,
+    note: "a price range must not collapse to one number",
+  },
   { raw: "on request", expected: undefined },
   { raw: "", expected: undefined },
 ];
@@ -176,12 +270,25 @@ export const MONEY: MoneyFixture[] = [
 export const RF: RfFixture[] = [
   {
     raw: "5.8 GHz analog video",
-    expected: { role: "video", freqMHz: [5800, 5800], ieeeBands: ["C"], natoBands: ["G"], confidence: 0.95 },
+    expected: {
+      role: "video",
+      freqMHz: [5800, 5800],
+      ieeeBands: ["C"],
+      natoBands: ["G"],
+      confidence: 0.95,
+    },
     note: "frequency determines bands; 'analog video' determines role",
   },
   {
     raw: "900 MHz control link",
-    expected: { role: "uplink", freqMHz: [900, 900], ieeeBands: ["UHF"], natoBands: ["C"], tacticalTag: "Sub-GHz C2", confidence: 0.9 },
+    expected: {
+      role: "uplink",
+      freqMHz: [900, 900],
+      ieeeBands: ["UHF"],
+      natoBands: ["C"],
+      tacticalTag: "Sub-GHz C2",
+      confidence: 0.9,
+    },
   },
   {
     raw: "Ku-band satellite uplink",
@@ -204,15 +311,27 @@ export const RF: RfFixture[] = [
 /* parseFrequencies — MHz extraction                                   */
 /* ------------------------------------------------------------------ */
 
-export const FREQUENCIES: Array<{ raw: string; expected: Array<[number, number]>; note?: string }> = [
-  { raw: "2.4 GHz", expected: [[2400, 2400]] },
-  { raw: "900 MHz", expected: [[900, 900]] },
-  { raw: "5.725–5.850 GHz", expected: [[5725, 5850]] },
-  { raw: "1.4 GHz – 1.6 GHz", expected: [[1400, 1600]], note: "unit repeated on both sides of the span" },
-  { raw: "300-400 MHz and 2.4 GHz", expected: [[300, 400], [2400, 2400]], note: "multiple spans in one string" },
-  { raw: "L1/L2 GPS", expected: [], note: "a protocol name contributes no frequency" },
-  { raw: "70 cm", expected: [], note: "a wavelength shorthand is not parsed as a frequency" },
-];
+export const FREQUENCIES: Array<{ raw: string; expected: Array<[number, number]>; note?: string }> =
+  [
+    { raw: "2.4 GHz", expected: [[2400, 2400]] },
+    { raw: "900 MHz", expected: [[900, 900]] },
+    { raw: "5.725–5.850 GHz", expected: [[5725, 5850]] },
+    {
+      raw: "1.4 GHz – 1.6 GHz",
+      expected: [[1400, 1600]],
+      note: "unit repeated on both sides of the span",
+    },
+    {
+      raw: "300-400 MHz and 2.4 GHz",
+      expected: [
+        [300, 400],
+        [2400, 2400],
+      ],
+      note: "multiple spans in one string",
+    },
+    { raw: "L1/L2 GPS", expected: [], note: "a protocol name contributes no frequency" },
+    { raw: "70 cm", expected: [], note: "a wavelength shorthand is not parsed as a frequency" },
+  ];
 
 /* ------------------------------------------------------------------ */
 /* semanticKeyFor — key/label routing                                  */
@@ -220,16 +339,30 @@ export const FREQUENCIES: Array<{ raw: string; expected: Array<[number, number]>
 
 export const SEMANTICS: SemanticFixture[] = [
   { key: "max_range", expected: "range.max" },
-  { key: "range", label: "Max Range", expected: "range.max", note: "bare key disambiguated by the label" },
+  {
+    key: "range",
+    label: "Max Range",
+    expected: "range.max",
+    note: "bare key disambiguated by the label",
+  },
   { key: "operational_range", expected: "range.operational" },
   { key: "combat_radius", expected: "range.combat_radius" },
   { key: "fiber_spool", expected: "range.fiber_spool" },
   { key: "speed", label: "Cruise speed", expected: "speed.cruise" },
   { key: "dive_speed", expected: "speed.dive" },
   { key: "service_ceiling", expected: "altitude.service_ceiling" },
-  { key: "payload", label: "Warhead", expected: "payload.warhead", note: "label overrides the capacity default" },
+  {
+    key: "payload",
+    label: "Warhead",
+    expected: "payload.warhead",
+    note: "label overrides the capacity default",
+  },
   { key: "unit_cost", expected: "cost.unit" },
   { key: "wingspan", expected: "dimension.wingspan" },
   { key: "beam", label: "Beam", expected: "dimension.width", note: "nautical 'beam' is width" },
-  { key: "some_unknown_key", expected: "some_unknown_key", note: "unmapped keys pass through unchanged" },
+  {
+    key: "some_unknown_key",
+    expected: "some_unknown_key",
+    note: "unmapped keys pass through unchanged",
+  },
 ];

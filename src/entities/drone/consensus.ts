@@ -10,7 +10,11 @@ function targetUnit(spec: SpecAttribute): string | undefined {
   return undefined;
 }
 
-function alignUnit(value: number, unit: string, spec: SpecAttribute): { value: number; unit: string } {
+function alignUnit(
+  value: number,
+  unit: string,
+  spec: SpecAttribute,
+): { value: number; unit: string } {
   const target = targetUnit(spec);
   if (!target || unit === target) return { value, unit };
   const converted = convert(value, unit, target);
@@ -44,20 +48,34 @@ interface Bound {
   unit?: string;
 }
 
-function measurement(spec: SpecAttribute, claim: SpecClaim, claimIndex: number): Point | Bound | undefined {
+function measurement(
+  spec: SpecAttribute,
+  claim: SpecClaim,
+  claimIndex: number,
+): Point | Bound | undefined {
   const parsed = claim.normalized;
   if (parsed) {
     const qual = parsed.range?.qualifier ?? "exact";
     if ((qual === "exact" || qual === "approximate") && parsed.canonicalValue !== undefined) {
       const unit = parsed.canonicalUnit ?? "";
-      const aligned = unit ? alignUnit(parsed.canonicalValue, unit, spec) : { value: parsed.canonicalValue, unit: "" };
+      const aligned = unit
+        ? alignUnit(parsed.canonicalValue, unit, spec)
+        : { value: parsed.canonicalValue, unit: "" };
       return { value: aligned.value, ...(aligned.unit ? { unit: aligned.unit } : {}), claimIndex };
     }
     if (parsed.range && (parsed.range.min !== undefined || parsed.range.max !== undefined)) {
       const unit = parsed.canonicalUnit ?? "";
-      const min = parsed.range.min !== undefined && unit ? alignUnit(parsed.range.min, unit, spec).value : parsed.range.min;
-      const max = parsed.range.max !== undefined && unit ? alignUnit(parsed.range.max, unit, spec).value : parsed.range.max;
-      const displayUnit = unit ? alignUnit(parsed.range.min ?? parsed.range.max ?? 0, unit, spec).unit : unit;
+      const min =
+        parsed.range.min !== undefined && unit
+          ? alignUnit(parsed.range.min, unit, spec).value
+          : parsed.range.min;
+      const max =
+        parsed.range.max !== undefined && unit
+          ? alignUnit(parsed.range.max, unit, spec).value
+          : parsed.range.max;
+      const displayUnit = unit
+        ? alignUnit(parsed.range.min ?? parsed.range.max ?? 0, unit, spec).unit
+        : unit;
       return {
         ...(min !== undefined ? { min } : {}),
         ...(max !== undefined ? { max } : {}),
@@ -70,7 +88,9 @@ function measurement(spec: SpecAttribute, claim: SpecClaim, claimIndex: number):
     const converted = normalizeQuantity(`${claim.value} ${spec.unit}`);
     if (converted?.canonicalValue !== undefined) {
       const unit = converted.canonicalUnit ?? "";
-      const aligned = unit ? alignUnit(converted.canonicalValue, unit, spec) : { value: converted.canonicalValue, unit: "" };
+      const aligned = unit
+        ? alignUnit(converted.canonicalValue, unit, spec)
+        : { value: converted.canonicalValue, unit: "" };
       return {
         value: aligned.value,
         ...(aligned.unit ? { unit: aligned.unit } : {}),
@@ -127,7 +147,14 @@ export function consensus(spec: SpecAttribute): Consensus {
           : min !== undefined
             ? `≥${round(min)}${suffix}`
             : "—";
-    return { display, ...(min !== undefined ? { min } : {}), ...(max !== undefined ? { max } : {}), sources, disputed: false, confidence: "low" };
+    return {
+      display,
+      ...(min !== undefined ? { min } : {}),
+      ...(max !== undefined ? { max } : {}),
+      sources,
+      disputed: false,
+      confidence: "low",
+    };
   }
 
   const nums = points.map((p) => p.value);
@@ -135,14 +162,22 @@ export function consensus(spec: SpecAttribute): Consensus {
   const maxPoint = nums[nums.length - 1]!;
   const median = nums[Math.floor(nums.length / 2)]!;
   const spread = median ? (maxPoint - minPoint) / median : 0;
-  const envelopeMin = Math.min(minPoint, ...bounds.flatMap((b) => (b.min !== undefined ? [b.min] : [])));
-  const envelopeMax = Math.max(maxPoint, ...bounds.flatMap((b) => (b.max !== undefined ? [b.max] : [])));
+  const envelopeMin = Math.min(
+    minPoint,
+    ...bounds.flatMap((b) => (b.min !== undefined ? [b.min] : [])),
+  );
+  const envelopeMax = Math.max(
+    maxPoint,
+    ...bounds.flatMap((b) => (b.max !== undefined ? [b.max] : [])),
+  );
   const confidence =
     sources >= 3 && spread < 0.25 ? "high" : sources >= 2 && spread < 0.6 ? "medium" : "low";
   const unit = targetUnit(spec) ?? points.find((p) => p.unit)?.unit ?? spec.unit;
   const u = unit ? ` ${unit}` : "";
   const disputed = spread >= 0.6 && sources >= 2;
-  const outliers = points.filter((p) => median !== 0 && Math.abs(p.value - median) / Math.abs(median) >= 0.6).map((p) => p.claimIndex);
+  const outliers = points
+    .filter((p) => median !== 0 && Math.abs(p.value - median) / Math.abs(median) >= 0.6)
+    .map((p) => p.claimIndex);
   return {
     display: disputed ? `${round(envelopeMin)}–${round(envelopeMax)}${u}` : `${round(median)}${u}`,
     min: envelopeMin,

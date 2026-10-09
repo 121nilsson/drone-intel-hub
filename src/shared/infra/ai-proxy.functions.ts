@@ -35,14 +35,16 @@ export const translateText = createServerFn({ method: "POST" })
     if (!d?.text?.trim()) throw new Error("Text required");
     return d;
   })
-  .handler(async ({ data }): Promise<{ ok: true; translated: string } | { ok: false; error: string }> => {
-    const result = await chatCompletionOnce({
-      model: data.model ?? "nvidia/riva-translate-4b-instruct-v2",
-      system:
-        "Translate the following text to English. If the text is already in English, return it unchanged. Preserve technical terms, numbers, and proper nouns.",
-      prompt: data.text,
-      json: false,
-    });
-    if (!result.ok) return { ok: false as const, error: result.error };
-    return { ok: true as const, translated: result.content };
-  });
+  .handler(
+    async ({ data }): Promise<{ ok: true; translated: string } | { ok: false; error: string }> => {
+      const result = await chatCompletionOnce({
+        model: data.model ?? "nvidia/riva-translate-4b-instruct-v2",
+        system:
+          "Translate the following text to English. If the text is already in English, return it unchanged. Preserve technical terms, numbers, and proper nouns.",
+        prompt: data.text,
+        json: false,
+      });
+      if (!result.ok) return { ok: false as const, error: result.error };
+      return { ok: true as const, translated: result.content };
+    },
+  );

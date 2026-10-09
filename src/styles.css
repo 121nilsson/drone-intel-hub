@@ -107,11 +107,25 @@
     background-color: var(--color-background);
     color: var(--color-foreground);
     font-family: "Work Sans", system-ui, sans-serif;
-    background-image: linear-gradient(var(--border) 1px, transparent 1px), linear-gradient(90deg, var(--border) 1px, transparent 1px);
+    background-image:
+      linear-gradient(var(--border) 1px, transparent 1px),
+      linear-gradient(90deg, var(--border) 1px, transparent 1px);
     background-size: 48px 48px;
     background-attachment: fixed;
     background-blend-mode: normal;
   }
-  body::before { content: ""; position: fixed; inset: 0; background: var(--background); opacity: 0.88; z-index: -1; pointer-events: none; }
-  .font-mono, code, kbd { font-family: "JetBrains Mono", ui-monospace, monospace; }
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    background: var(--background);
+    opacity: 0.88;
+    z-index: -1;
+    pointer-events: none;
+  }
+  .font-mono,
+  code,
+  kbd {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+  }
 }

@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { ieeeBandsFor, ieeeLabel, natoBandsFor, natoLabel, IEEE_BANDS, NATO_BANDS } from "@/entities/normalization/bands";
+import {
+  ieeeBandsFor,
+  ieeeLabel,
+  natoBandsFor,
+  natoLabel,
+  IEEE_BANDS,
+  NATO_BANDS,
+} from "@/entities/normalization/bands";
 
 describe("IEEE bands", () => {
   it("returns the correct band for single frequencies", () => {

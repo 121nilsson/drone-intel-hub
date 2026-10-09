@@ -112,11 +112,7 @@ describe("processPending error handling", () => {
       row("b", "Bravo drone post about a Geran strike"),
     ];
     const dispatches = makeDispatches(rows);
-    const rep = await processPending(
-      dispatches,
-      deps(extractor("Alpha", "Provider timeout")),
-      10,
-    );
+    const rep = await processPending(dispatches, deps(extractor("Alpha", "Provider timeout")), 10);
     expect(rep.processed).toBe(1);
     expect(rep.failed).toBe(1);
     expect(rows[1]!.status).toBe("processed");

@@ -1,11 +1,5 @@
 export type QuantityQualifier =
-  | "exact"
-  | "approximate"
-  | "up_to"
-  | "at_least"
-  | "less_than"
-  | "greater_than"
-  | "range";
+  "exact" | "approximate" | "up_to" | "at_least" | "less_than" | "greater_than" | "range";
 
 /** Numeric span in the raw unit. `value` is set only for a point (exact or approximate). */
 export interface QuantityRange {
@@ -41,8 +35,7 @@ export function parseNumber(s: string): number | undefined {
   return Number.isFinite(n) ? n : undefined;
 }
 
-const MAGNITUDE =
-  /^(.*?)\s*(k|K|thousand|тыс\.?|тис\.?|M|million|млн\.?|млрд\.?|billion|bn)$/;
+const MAGNITUDE = /^(.*?)\s*(k|K|thousand|тыс\.?|тис\.?|M|million|млн\.?|млрд\.?|billion|bn)$/;
 
 /** "25k" → 25000, "2.5M" → 2_500_000, "500 млн" → 500e6. A bare "m" is not million. */
 export function parseMagnitude(s: string): number | undefined {

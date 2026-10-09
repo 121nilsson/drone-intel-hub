@@ -12,7 +12,8 @@ function overlap(a: Drone, b: Drone) {
       if (linkIsFiber(x) || linkIsFiber(y)) continue;
       const hit = x.freqMHz && y.freqMHz ? intersectBands(x.freqMHz, y.freqMHz) : undefined;
       if (hit) shared.push(`${x.role}/${y.role} · ${hit[0]}–${hit[1]} MHz`);
-      else if (!x.freqMHz && !y.freqMHz && x.band === y.band) shared.push(`${x.role}/${y.role} · ${x.band}`);
+      else if (!x.freqMHz && !y.freqMHz && x.band === y.band)
+        shared.push(`${x.role}/${y.role} · ${x.band}`);
     }
   return [...new Set(shared)];
 }
@@ -99,11 +100,14 @@ export function CounterpartsPage({ a, b }: { a?: string | undefined; b?: string 
             ))}
           </ul>
         ) : (
-          <p className="text-sm text-muted-foreground">No overlapping frequencies in the recorded links.</p>
+          <p className="text-sm text-muted-foreground">
+            No overlapping frequencies in the recorded links.
+          </p>
         )}
         {fiberLinked.length > 0 && (
           <p className="mt-3 text-sm text-accent">
-            {fiberLinked.map((d) => d.name).join(", ")} {fiberLinked.length > 1 ? "use" : "uses"} a fiber-optic link, so that link has no radio frequency to compare.
+            {fiberLinked.map((d) => d.name).join(", ")} {fiberLinked.length > 1 ? "use" : "uses"} a
+            fiber-optic link, so that link has no radio frequency to compare.
           </p>
         )}
       </Panel>
@@ -128,7 +132,11 @@ export function CounterpartsPage({ a, b }: { a?: string | undefined; b?: string 
                     return (
                       <td key={i} className="py-2 text-right font-mono">
                         {c ? c.display : "—"}
-                        {c?.disputed && <Tag tone="danger" className="ml-1">Disputed</Tag>}
+                        {c?.disputed && (
+                          <Tag tone="danger" className="ml-1">
+                            Disputed
+                          </Tag>
+                        )}
                       </td>
                     );
                   })}

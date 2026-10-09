@@ -43,26 +43,91 @@ interface UnitDef {
 // `(?![\p{L}\p{N}])` is a Unicode-aware word end. ASCII `\b` does not treat Cyrillic as a letter.
 const UNITS: UnitDef[] = [
   { token: "nmi", dimension: "distance", toCanonical: NM_KM, pattern: /nautical\s+miles?/iu },
-  { token: "nmi", dimension: "distance", toCanonical: NM_KM, pattern: /(?:nm|nmi)(?![\p{L}\p{N}])/iu },
+  {
+    token: "nmi",
+    dimension: "distance",
+    toCanonical: NM_KM,
+    pattern: /(?:nm|nmi)(?![\p{L}\p{N}])/iu,
+  },
   { token: "km/h", dimension: "speed", toCanonical: 1, pattern: /(?:km\/h|kmh|км\/ч|км\/год)/iu },
   { token: "mph", dimension: "speed", toCanonical: MILE_KM, pattern: /mph(?![\p{L}\p{N}])/iu },
   { token: "m/s", dimension: "speed", toCanonical: 3.6, pattern: /(?:m\/s|м\/с)/iu },
-  { token: "kn", dimension: "speed", toCanonical: NM_KM, pattern: /(?:knots?|kts|уз(?:л(?:ов|а)?)?)(?![\p{L}\p{N}])/iu },
+  {
+    token: "kn",
+    dimension: "speed",
+    toCanonical: NM_KM,
+    pattern: /(?:knots?|kts|уз(?:л(?:ов|а)?)?)(?![\p{L}\p{N}])/iu,
+  },
   { token: "mi", dimension: "distance", toCanonical: MILE_KM, pattern: /miles?(?![\p{L}\p{N}])/iu },
-  { token: "mi", dimension: "distance", toCanonical: MILE_KM, pattern: /(?<![\p{L}])mi(?![\p{L}\p{N}])/iu },
+  {
+    token: "mi",
+    dimension: "distance",
+    toCanonical: MILE_KM,
+    pattern: /(?<![\p{L}])mi(?![\p{L}\p{N}])/iu,
+  },
   { token: "km", dimension: "distance", toCanonical: 1, pattern: /(?:km|км)(?![\p{L}\p{N}])/iu },
-  { token: "m", dimension: "distance", toCanonical: 0.001, pattern: /(?:meters?|metres?|метр(?:ы|ов|а)?)(?![\p{L}\p{N}])/iu },
-  { token: "m", dimension: "distance", toCanonical: 0.001, pattern: /(?<![/\p{L}])(?:m|м)(?![\p{L}\p{N}])/iu },
-  { token: "lb", dimension: "mass", toCanonical: LB_KG, pattern: /(?:lbs?|pounds?|фунт(?:ов|а)?)(?![\p{L}\p{N}])/iu },
-  { token: "oz", dimension: "mass", toCanonical: OZ_KG, pattern: /(?:oz|ounces?)(?![\p{L}\p{N}])/iu },
+  {
+    token: "m",
+    dimension: "distance",
+    toCanonical: 0.001,
+    pattern: /(?:meters?|metres?|метр(?:ы|ов|а)?)(?![\p{L}\p{N}])/iu,
+  },
+  {
+    token: "m",
+    dimension: "distance",
+    toCanonical: 0.001,
+    pattern: /(?<![/\p{L}])(?:m|м)(?![\p{L}\p{N}])/iu,
+  },
+  {
+    token: "lb",
+    dimension: "mass",
+    toCanonical: LB_KG,
+    pattern: /(?:lbs?|pounds?|фунт(?:ов|а)?)(?![\p{L}\p{N}])/iu,
+  },
+  {
+    token: "oz",
+    dimension: "mass",
+    toCanonical: OZ_KG,
+    pattern: /(?:oz|ounces?)(?![\p{L}\p{N}])/iu,
+  },
   { token: "kg", dimension: "mass", toCanonical: 1, pattern: /(?:kg|кг)(?![\p{L}\p{N}])/iu },
   { token: "g", dimension: "mass", toCanonical: 0.001, pattern: /(?:grams?|гр)(?![\p{L}\p{N}])/iu },
-  { token: "g", dimension: "mass", toCanonical: 0.001, pattern: /(?<![/\p{L}])(?:g|г)(?![\p{L}\p{N}])/iu },
-  { token: "h", dimension: "duration", toCanonical: 60, pattern: /(?:hours?|hrs?|час(?:ов|а)?)(?![\p{L}\p{N}])/iu },
-  { token: "h", dimension: "duration", toCanonical: 60, pattern: /(?<![/\p{L}])h(?![\p{L}\p{N}])/iu },
-  { token: "min", dimension: "duration", toCanonical: 1, pattern: /(?:minutes?|mins?|мин)(?![\p{L}\p{N}])/iu },
-  { token: "s", dimension: "duration", toCanonical: 1 / 60, pattern: /(?:seconds?|secs?|сек)(?![\p{L}\p{N}])/iu },
-  { token: "s", dimension: "duration", toCanonical: 1 / 60, pattern: /(?<![/\p{L}])s(?![\p{L}\p{N}])/iu },
+  {
+    token: "g",
+    dimension: "mass",
+    toCanonical: 0.001,
+    pattern: /(?<![/\p{L}])(?:g|г)(?![\p{L}\p{N}])/iu,
+  },
+  {
+    token: "h",
+    dimension: "duration",
+    toCanonical: 60,
+    pattern: /(?:hours?|hrs?|час(?:ов|а)?)(?![\p{L}\p{N}])/iu,
+  },
+  {
+    token: "h",
+    dimension: "duration",
+    toCanonical: 60,
+    pattern: /(?<![/\p{L}])h(?![\p{L}\p{N}])/iu,
+  },
+  {
+    token: "min",
+    dimension: "duration",
+    toCanonical: 1,
+    pattern: /(?:minutes?|mins?|мин)(?![\p{L}\p{N}])/iu,
+  },
+  {
+    token: "s",
+    dimension: "duration",
+    toCanonical: 1 / 60,
+    pattern: /(?:seconds?|secs?|сек)(?![\p{L}\p{N}])/iu,
+  },
+  {
+    token: "s",
+    dimension: "duration",
+    toCanonical: 1 / 60,
+    pattern: /(?<![/\p{L}])s(?![\p{L}\p{N}])/iu,
+  },
 ];
 
 function findUnit(text: string): { def: UnitDef; index: number } | undefined {
@@ -145,7 +210,9 @@ export function normalizeQuantity(raw: string): NormalizedQuantity | undefined {
 
   const factor = found.def.toCanonical;
   const canonicalUnit = CANONICAL_UNIT[found.def.dimension];
-  const usedMagnitude = /(?:k|thousand|тыс|тис|M|million|млн|млрд|billion|\bbn\b)\s*$/i.test(numeric);
+  const usedMagnitude = /(?:k|thousand|тыс|тис|M|million|млн|млрд|billion|\bbn\b)\s*$/i.test(
+    numeric,
+  );
   const point = range.qualifier === "exact" || range.qualifier === "approximate";
 
   const scaled: QuantityRange = { qualifier: range.qualifier };

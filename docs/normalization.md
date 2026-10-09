@@ -176,11 +176,7 @@ Example:
   "taxonomy": "propulsion",
   "canonicalId": "turbojet",
   "label": "Turbojet",
-  "aliases": [
-    "turbo jet",
-    "jet engine",
-    "micro turbojet"
-  ],
+  "aliases": ["turbo jet", "jet engine", "micro turbojet"],
   "status": "active"
 }
 ```
@@ -412,14 +408,7 @@ Supported roles:
 
 ```ts
 type RFRole =
-  | "uplink"
-  | "downlink"
-  | "video"
-  | "gnss"
-  | "antijam"
-  | "telemetry"
-  | "tether"
-  | "unknown";
+  "uplink" | "downlink" | "video" | "gnss" | "antijam" | "telemetry" | "tether" | "unknown";
 ```
 
 Examples:
@@ -462,13 +451,13 @@ wired control
 Output:
 
 ```ts
-isFiberOptic: true
+isFiberOptic: true;
 ```
 
 and:
 
 ```ts
-role: "tether"
+role: "tether";
 ```
 
 Do not invent an RF frequency for fiber-optic control.
@@ -481,15 +470,7 @@ Do not invent an RF frequency for fiber-optic control.
 export interface NormalizedRFLink {
   raw: string;
 
-  role:
-    | "uplink"
-    | "downlink"
-    | "video"
-    | "gnss"
-    | "antijam"
-    | "telemetry"
-    | "tether"
-    | "unknown";
+  role: "uplink" | "downlink" | "video" | "gnss" | "antijam" | "telemetry" | "tether" | "unknown";
 
   freqMHz?: [number, number];
 
@@ -723,13 +704,7 @@ interface NormalizedNumericValue {
   unit: string;
 
   qualifier?:
-    | "exact"
-    | "approximate"
-    | "up_to"
-    | "at_least"
-    | "less_than"
-    | "greater_than"
-    | "range";
+    "exact" | "approximate" | "up_to" | "at_least" | "less_than" | "greater_than" | "range";
 
   confidence: number;
 }
