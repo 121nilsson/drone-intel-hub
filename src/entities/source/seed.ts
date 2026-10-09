@@ -43,7 +43,11 @@ export const SEED_SOURCES: MonitoredSource[] = [
   // every article it carried was already collected. Collection now dedupes on canonical URL as well
   // as on text, which would have caught the overlap anyway - but polling one site twice costs a
   // request and a parse for nothing. Existing installs keep the old row; see RETIRED_SOURCE_IDS.
-  { id: "ukrinform-war", name: "Ukrinform (War)", platform: "RSS", handle: "https://www.ukrinform.net/rss/rubric-war", domain: "Multi", notes: "Official Ukrainian state news agency war section. MoD announcements, strike reports, new system deployments." },
+  // Handle corrected 2026-10-10: /rss/rubric-war 302s to a 404 page, so this source returned
+  // nothing on every run. /rss/rubric-ato is the Armed Forces rubric, which is a closer fit for
+  // this catalogue anyway (verified 200, 20 posts, 5 passing DRONE_HINT). The main /rss feed is
+  // not a subset of it and is far noisier, so it stays disabled below.
+  { id: "ukrinform-war", name: "Ukrinform (War)", platform: "RSS", handle: "https://www.ukrinform.net/rss/rubric-ato", domain: "Multi", notes: "Official Ukrainian state news agency, Armed Forces rubric. MoD announcements, strike reports, new system deployments." },
   { id: "defence-blog-rss", name: "Defence Blog (RSS)", platform: "RSS", handle: "https://defence-blog.com/feed/", domain: "Multi", notes: "International defence news. Global UAV developments, new platform announcements, captured hardware analysis.", autoSync: true },
   { id: "militarnyi-rss", name: "Militarnyi (UA RSS)", platform: "RSS", handle: "https://mil.in.ua/uk/news/feed/", domain: "Multi", notes: "Ukrainian-language news feed from Militarnyi. High-frequency technical articles." },
   { id: "ukrinform-main", name: "Ukrinform (All)", platform: "RSS", handle: "https://www.ukrinform.net/rss", domain: "Multi", notes: "Broader Ukrinform feed. Filter aggressively with DRONE_HINT — high noise-to-signal ratio.", autoSync: false },
@@ -66,9 +70,16 @@ export const SEED_SOURCES: MonitoredSource[] = [
   { id: "athlon-avia", name: "Athlon Avia", platform: "Web", handle: "https://athlon.avia.ua/", domain: "Air", notes: "Maker of A1-CM Furia artillery reconnaissance and fire correction UAV." },
 
   // --- Western & Allied Drone Manufacturers ---
-  { id: "aerovironment", name: "AeroVironment", platform: "Web", handle: "https://www.avinc.com/news/", domain: "Air", notes: "Maker of Switchblade 300/600 loitering munitions, Puma 3 AE, Raven, and LOCUST C-UAS." },
+  // Switched from the /news/ index page to /feed/ on 2026-10-10. The index page is scraped for
+  // anchor text, which returned 25 "posts" of which 1 was an article and the rest was navigation
+  // chrome ("See All Domains", "See All Solutions"). The feed returns 10 real items, 6 passing
+  // DRONE_HINT, and they are procurement-grade (LOCUST counter-UAS contract, Switchblade 600 order).
+  { id: "aerovironment", name: "AeroVironment", platform: "RSS", handle: "https://www.avinc.com/feed/", domain: "Air", notes: "Maker of Switchblade 300/600 loitering munitions, Puma 3 AE, Raven, and LOCUST C-UAS." },
   { id: "anduril", name: "Anduril Industries", platform: "Web", handle: "https://www.anduril.com/newsroom/", domain: "Multi", notes: "Maker of Ghost-X, Altius-600/700, Roadrunner jet interceptor, Dive-LD AUV, and Lattice OS." },
-  { id: "quantum-systems", name: "Quantum-Systems", platform: "Web", handle: "https://quantum-systems.com/news/", domain: "Air", notes: "German eVTOL maker. Manufacturer of Vector, Scorpion, and AI interceptor drones." },
+  // Switched from the /news/ index page to /feed/ on 2026-10-10. The index page returned 22 anchors
+  // for 5 real articles and intermittently 403s; the feed is stable (verified 3x) and returns 10
+  // items, 7 passing DRONE_HINT.
+  { id: "quantum-systems", name: "Quantum-Systems", platform: "RSS", handle: "https://quantum-systems.com/feed/", domain: "Air", notes: "German eVTOL maker. Manufacturer of Vector, Scorpion, and AI interceptor drones." },
   { id: "wb-group", name: "WB Group", platform: "Web", handle: "https://www.wbgroup.pl/en/news/", domain: "Air", notes: "Polish defense manufacturer. Maker of Warmate loitering munition and FlyEye UAV." },
   { id: "baykar", name: "Baykar Tech", platform: "Web", handle: "https://baykartech.com/en/press/", domain: "Air", notes: "Turkish unmanned aerospace manufacturer. Maker of Bayraktar TB2, TB3, Akinci, and Kizilelma." },
   { id: "stm-turkey", name: "STM Savunma", platform: "Web", handle: "https://www.stm.com.tr/en/press-releases", domain: "Multi", notes: "Maker of Kargu rotary loitering munition, Boyga mortar UAV, and Togan scout drone." },

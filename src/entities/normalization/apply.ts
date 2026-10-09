@@ -1,5 +1,5 @@
 import type { ExtractedSpec, Extraction, RFLink, RFRole } from "@/entities/drone/types";
-import { parseMoney } from "./currency";
+import { parseMoney, parseMoneyRange } from "./currency";
 import { normalizeRF, intersectBands, type NormalizedRFLink, type NormalizedRFRole } from "./rf";
 import { canonicalUnitForSemantic, semanticKeyFor } from "./semantic";
 import { resolveTerm, SEEDED_TERMS, type TaxonomyTerm } from "./taxonomy";
@@ -70,7 +70,12 @@ export function mergeLinks(existing: RFLink[], incoming: RFLink[]): RFLink[] {
 
 function normalizeSpec(spec: ExtractedSpec): ExtractedSpec {
   const semantic = semanticKeyFor(spec.key, spec.label);
-  const money = semantic === "cost.unit" && typeof spec.value === "string" ? parseMoney(spec.value) : undefined;
+  const money =
+    semantic === "cost.unit" && typeof spec.value === "string" ? parseMoney(spec.value) : undefined;
+  const moneyRange =
+    semantic === "cost.unit" && typeof spec.value === "string"
+      ? parseMoneyRange(spec.value)
+      : undefined;
   const targetUnit = canonicalUnitForSemantic(semantic);
   let measured =
     typeof spec.value === "string"
@@ -86,6 +91,7 @@ function normalizeSpec(spec: ExtractedSpec): ExtractedSpec {
     ...(typeof spec.value === "string" ? { raw: spec.value } : {}),
     ...(measured ? { normalized: measured } : {}),
     ...(money ? { money } : {}),
+    ...(moneyRange ? { moneyRange } : {}),
   };
 }
 

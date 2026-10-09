@@ -78,6 +78,10 @@ export interface ProcessReport {
   /** Documents leased exclusively by this run - 0 when another worker holds them all. */ leased: number;
   /** Why this batch stopped, when a provider or pipeline error aborted the rest. */
   stopReason?: string;
+  heuristicOnly?: number;
+  tier1Calls?: number;
+  tier2Calls?: number;
+  parseFailures?: number;
 }
 
 const PROVIDER_KINDS: [RegExp, string][] = [
@@ -339,6 +343,10 @@ export async function processPending(
     failed: 0,
     remaining: 0,
     leased: 0,
+    heuristicOnly: 0,
+    tier1Calls: 0,
+    tier2Calls: 0,
+    parseFailures: 0,
   };
 
   // Lease first, then process. Reading `pending()` directly is a read-then-write race: the
@@ -394,21 +402,36 @@ export async function processPending(
         continue;
       }
       try {
-        const r = await runTwoTier(d.text, `${d.sourceName} · ${d.url}`, deps);
+        const r = await runTwoTier(d.text, `${d.sourceName} · ${d.url}`, deps, {
+          dispatchId: d.id,
+          url: d.url,
+          ...(d.publishedAt ? { publishedAt: d.publishedAt } : {}),
+        });
         dispatches.update(d.id, {
           status: "processed",
           processedAt: now,
           outcome: r.kind,
-          candidateIds: [r.candidate.id],
-          droneIds:
-            r.kind === "auto-merged" || r.kind === "auto-promoted"
+          candidateIds: [r.candidate.id, ...(r.relatedCandidates ?? []).map((c) => c.id)],
+          droneIds: r.droneIds?.length
+            ? r.droneIds
+            : r.kind === "auto-merged" || r.kind === "auto-promoted"
               ? [r.droneId]
               : r.candidate.extraction.matchId
                 ? [r.candidate.extraction.matchId]
                 : [],
           error: undefined,
+          analysisFingerprint: [
+            d.contentHash ?? d.id,
+            r.candidate.extraction.metadata?.schemaVersion ?? 1,
+            r.candidate.extraction.metadata?.promptVersion ?? "legacy",
+            r.candidate.extraction.metadata?.model ?? "local",
+          ].join(":"),
+          ...(r.candidate.extraction.metadata ? { analysis: r.candidate.extraction.metadata } : {}),
         });
         rep.processed++;
+        if (r.candidate.extraction.metadata?.engine === "heuristic") rep.heuristicOnly!++;
+        else rep.tier1Calls!++;
+        if (r.candidate.tier === 2) rep.tier2Calls!++;
         if (r.kind === "auto-merged") rep.merged++;
         else if (r.kind === "auto-promoted") rep.promoted++;
         else if (r.kind === "auto-discarded") rep.discarded++;
@@ -416,6 +439,7 @@ export async function processPending(
       } catch (e) {
         const attempts = (d.attempts ?? 0) + 1;
         const error = e instanceof Error ? e.message : "Processing failed";
+        if (/invalid extraction json|json/i.test(error)) rep.parseFailures!++;
         dispatches.update(d.id, {
           attempts,
           error,

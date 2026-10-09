@@ -9,6 +9,13 @@ export interface Money {
   usd?: { value: number; rate: number; rateAsOf: string; rateSource: string };
 }
 
+export interface MoneyRange {
+  min: number;
+  max: number;
+  currency: string;
+  raw: string;
+}
+
 const ISO: Record<string, string> = {
   USD: "USD",
   EUR: "EUR",
@@ -81,6 +88,23 @@ export function parseMoney(raw: string): Money | undefined {
   const amount = parseMagnitude(amountText.trim()) ?? parseNumber(amountText.trim());
   if (amount === undefined) return undefined;
   return { amount, currency, raw };
+}
+
+/** Parse a closed price range without collapsing it to a misleading point estimate. */
+export function parseMoneyRange(raw: string): MoneyRange | undefined {
+  const parts = raw.split(/\s*(?:-|–|—|\bto\b)\s*/i);
+  if (parts.length !== 2) return undefined;
+  const left = parseMoney(parts[0]!);
+  const rightRaw = parts[1]!;
+  const right =
+    parseMoney(rightRaw) ?? parseMoney(left ? `${rightRaw} ${left.currency}` : rightRaw);
+  if (!left || !right || left.currency !== right.currency) return undefined;
+  return {
+    min: Math.min(left.amount, right.amount),
+    max: Math.max(left.amount, right.amount),
+    currency: left.currency,
+    raw,
+  };
 }
 
 /** Attach a USD estimate. The original amount and currency are unchanged. */

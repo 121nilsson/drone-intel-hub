@@ -5,6 +5,10 @@ import type {
   Drone,
   ExtractedSpec,
   Extraction,
+  PayloadObservation,
+  SensorObservation,
+  SupplyComponent,
+  SystemExtraction,
 } from "@/entities/drone/types";
 import type { BriefingSummarizer, IntelExtractor } from "@/shared/contracts/ai";
 
@@ -131,28 +135,240 @@ export function extractPrice(raw: string): string | undefined {
   return w ? `${w[1]}${w[2] ? ` ${w[2]}` : ""} ${w[3]!.toUpperCase()}` : undefined;
 }
 
-function scan(raw: string, catalog: Drone[], deep: boolean): Extraction {
-  const t = raw.toLowerCase();
+interface Facts {
+  specs: ExtractedSpec[];
+  payloads: PayloadObservation[];
+  sensors: SensorObservation[];
+  components: SupplyComponent[];
+  guidance: string[];
+}
+
+const NUMBER = String.raw`\d(?:[\d., ]*\d)?`;
+
+function extractFacts(raw: string): Facts {
   const specs: ExtractedSpec[] = [];
-  const grab = (re: RegExp, key: string, label: string, unit: string) => {
-    const m = raw.match(re);
-    if (m?.[1]) specs.push({ key, label, value: num(m[1]), unit });
+  const payloads: PayloadObservation[] = [];
+  const sensors: SensorObservation[] = [];
+  const components: SupplyComponent[] = [];
+  const guidance: string[] = [];
+  const seen = new Set<string>();
+  const add = (
+    key: string,
+    label: string,
+    value: number | string,
+    unit: string | undefined,
+    evidence: string,
+  ) => {
+    const token = `${key}|${String(value)}|${unit ?? ""}|${evidence}`;
+    if (seen.has(token)) return;
+    seen.add(token);
+    specs.push({ key, label, value, ...(unit ? { unit } : {}), raw: evidence, evidence });
   };
-  grab(/(\d+(?:[.,]\d+)?)\s*km\/h/i, "speed", "Cruise speed", "km/h");
-  grab(/range[^\d]{0,20}(\d+(?:[.,]\d+)?)\s*km/i, "range", "Range", "km");
-  grab(/(\d+(?:[.,]\d+)?)\s*kg\b/i, "payload", "Payload", "kg");
-  grab(
-    /(\d+(?:[.,]\d+)?)\s*km\s+(?:of\s+)?(?:fiber|fibre|spool)/i,
-    "fiber_spool",
-    "Fiber spool length",
+  const measure = (re: RegExp, key: string, label: string, unit: string, valueGroup = 1) => {
+    for (const m of raw.matchAll(re)) {
+      const value = num(m[valueGroup]!);
+      if (Number.isFinite(value)) add(key, label, value, unit, m[0]);
+    }
+  };
+
+  measure(
+    new RegExp(`(?:cruise(?:s|d)?(?: at)?\\s*)?(${NUMBER})\\s*km\\/h`, "giu"),
+    "speed",
+    "Cruise speed",
+    "km/h",
+  );
+  measure(
+    new RegExp(
+      `(?:max(?:imum)?\\s+|operational\\s+|combat\\s+)?range[^\\d]{0,24}(${NUMBER})\\s*(?:km|км)`,
+      "giu",
+    ),
+    "range",
+    "Range",
     "km",
   );
-  for (const m of raw.matchAll(/(\d+)\s+(jammers?|cameras?|missiles?|rotors?|antennas?)/gi)) {
-    const noun = m[2]!.toLowerCase().replace(/s$/, "");
-    specs.push({ key: `${noun}s`, label: `Number of ${noun}s`, value: Number(m[1]) });
+  for (const m of raw.matchAll(
+    new RegExp(
+      `(?:endurance|flight time|airborne for)[^\\d]{0,24}(${NUMBER})\\s*(hours?|hrs?|h|minutes?|mins?|min)`,
+      "giu",
+    ),
+  )) {
+    const value = num(m[1]!);
+    if (Number.isFinite(value))
+      add("endurance", "Endurance", value, /^h/i.test(m[2]!) ? "h" : "min", m[0]);
   }
+  measure(
+    new RegExp(
+      `(?:service ceiling|max(?:imum)? altitude|altitude)[^\\d]{0,24}(${NUMBER})\\s*(?:km|км)`,
+      "giu",
+    ),
+    "altitude",
+    "Maximum altitude",
+    "km",
+  );
+
+  const weights: Array<[RegExp, string, string]> = [
+    [
+      new RegExp(
+        `(?:mtow|max(?:imum)? takeoff weight)[^\\d]{0,20}(${NUMBER})\\s*(kg|кг|lb|lbs?)`,
+        "giu",
+      ),
+      "weight_mtow",
+      "Maximum takeoff weight",
+    ],
+    [
+      new RegExp(`(?:empty|dry) weight[^\\d]{0,20}(${NUMBER})\\s*(kg|кг|lb|lbs?)`, "giu"),
+      "weight_empty",
+      "Empty weight",
+    ],
+    [
+      new RegExp(`(?:launch weight|weighs?)[^\\d]{0,20}(${NUMBER})\\s*(kg|кг|lb|lbs?)`, "giu"),
+      "weight_launch",
+      "Launch weight",
+    ],
+    [
+      new RegExp(`(?:warhead|explosive charge)[^\\d]{0,20}(${NUMBER})\\s*(kg|кг|lb|lbs?)`, "giu"),
+      "warhead",
+      "Warhead weight",
+    ],
+    [
+      new RegExp(
+        `(${NUMBER})\\s*(kg|кг|lb|lbs?)[^\\d.;\\n]{0,20}(?:warhead|explosive charge)`,
+        "giu",
+      ),
+      "warhead",
+      "Warhead weight",
+    ],
+    [
+      new RegExp(
+        `(?:payload(?: capacity)?|carries)[^\\d]{0,20}(${NUMBER})\\s*(kg|кг|lb|lbs?)`,
+        "giu",
+      ),
+      "payload",
+      "Payload capacity",
+    ],
+  ];
+  for (const [re, key, label] of weights) {
+    for (const m of raw.matchAll(re)) {
+      const value = num(m[1]!);
+      if (Number.isFinite(value)) add(key, label, value, m[2]!, m[0]);
+    }
+  }
+
+  for (const [word, key, label] of [
+    ["wingspan|wing span", "wingspan", "Wingspan"],
+    ["length|long", "length", "Length"],
+    ["height|tall", "height", "Height"],
+    ["width|wide", "width", "Width"],
+    ["diameter", "diameter", "Diameter"],
+  ] as const) {
+    measure(
+      new RegExp(`(?:${word})[^\\d]{0,16}(${NUMBER})\\s*(?:m|meters?|metres?)`, "giu"),
+      key,
+      label,
+      "m",
+    );
+    measure(
+      new RegExp(`(${NUMBER})\\s*(?:m|meters?|metres?)[^.;\\n]{0,16}(?:${word})`, "giu"),
+      key,
+      label,
+      "m",
+    );
+  }
+
+  for (const m of raw.matchAll(
+    /(\d+)\s+(jammers?|cameras?|missiles?|rotors?|antennas?|bombs?)/gi,
+  )) {
+    const noun = m[2]!.toLowerCase().replace(/s$/, "");
+    add(`${noun}s`, `Number of ${noun}s`, Number(m[1]), undefined, m[0]);
+    if (noun === "camera")
+      sensors.push({
+        name: m[0],
+        category: "camera",
+        quantity: Number(m[1]),
+        evidence: m[0],
+        confidence: 0.8,
+      });
+    if (noun === "bomb" || noun === "missile")
+      payloads.push({
+        name: noun,
+        category: noun,
+        quantity: Number(m[1]),
+        evidence: m[0],
+        confidence: 0.8,
+      });
+  }
+
+  for (const m of raw.matchAll(
+    /(?:a |an )?([A-Z][\w-]*(?:\s+\d{2,4})?)\s+(thermal|EO\/IR|EO|IR|infrared)\s+camera/gi,
+  )) {
+    const category = /thermal|infrared|\bIR\b/i.test(m[2]!) ? "thermal" : "eo";
+    sensors.push({
+      name: m[0].trim(),
+      ...(m[1] ? { model: m[1] } : {}),
+      category,
+      evidence: m[0],
+      confidence: 0.85,
+    });
+  }
+  for (const term of [
+    "GPS",
+    "GNSS",
+    "INS",
+    "inertial",
+    "terrain matching",
+    "visual navigation",
+    "fiber optic",
+  ]) {
+    if (new RegExp(`\\b${term.replace(" ", "\\s+")}\\b`, "i").test(raw)) guidance.push(term);
+  }
+  if (guidance.length)
+    add(
+      "guidance",
+      "Guidance / navigation",
+      [...new Set(guidance)].join(", "),
+      undefined,
+      [...new Set(guidance)].join(", "),
+    );
+
+  for (const m of raw.matchAll(
+    /(?:powered by|engine[:\s]+|motor[:\s]+)([A-Z][A-Za-z0-9.-]+(?:\s+[A-Z0-9][A-Za-z0-9.-]+){0,2})/g,
+  )) {
+    components.push({
+      part: "Engine / motor",
+      manufacturer: "Unknown",
+      origin: "??",
+      model: m[1]!.trim(),
+      category: "propulsion",
+      evidence: m[0],
+      confidence: 0.7,
+    });
+  }
+
   const price = extractPrice(raw);
-  if (price) specs.push({ key: "unit_cost", label: "Unit Cost / Price", value: price });
+  if (price) add("unit_cost", "Unit Cost / Price", price, undefined, price);
+  return { specs, payloads, sensors, components, guidance: [...new Set(guidance)] };
+}
+
+function contextForSystem(raw: string, name: string): string {
+  const clauses = raw.split(/(?<=[.!?;\n])\s+/);
+  const hits = clauses.filter((clause) => mentions(clause, name));
+  return hits.join(" ");
+}
+
+function scan(raw: string, catalog: Drone[], deep: boolean): Extraction {
+  const t = raw.toLowerCase();
+  const facts = extractFacts(raw);
+  const specs = facts.specs;
+  const fiber = raw.match(new RegExp(`(${NUMBER})\\s*km\\s+(?:of\\s+)?(?:fiber|fibre|spool)`, "i"));
+  if (fiber?.[1])
+    specs.push({
+      key: "fiber_spool",
+      label: "Fiber spool length",
+      value: num(fiber[1]),
+      unit: "km",
+      raw: fiber[0],
+      evidence: fiber[0],
+    });
 
   const rfBands = [...raw.matchAll(/(\d+(?:[.,]\d+)?)\s*(mhz|ghz)/gi)].map(
     (m) => `${m[1]} ${m[2]!.toUpperCase()}`,
@@ -192,6 +408,30 @@ function scan(raw: string, catalog: Drone[], deep: boolean): Extraction {
   const variants = novel
     .filter((s) => s.variantOf)
     .map((s) => `${s.name} (variant of ${s.variantOf})`);
+  const systemExtractions: SystemExtraction[] = systems.map((system) => {
+    const context = contextForSystem(raw, system.name);
+    const local = context
+      ? extractFacts(context)
+      : { specs: [], payloads: [], sensors: [], components: [], guidance: [] };
+    return {
+      ...system,
+      specs: systems.length === 1 ? specs : local.specs,
+      rfBands:
+        systems.length === 1
+          ? rfBands
+          : [...context.matchAll(/(\d+(?:[.,]\d+)?)\s*(mhz|ghz)/gi)].map(
+              (m) => `${m[1]} ${m[2]!.toUpperCase()}`,
+            ),
+      payloads: systems.length === 1 ? facts.payloads : local.payloads,
+      sensors: systems.length === 1 ? facts.sensors : local.sensors,
+      components: systems.length === 1 ? facts.components : local.components,
+      guidance: systems.length === 1 ? facts.guidance : local.guidance,
+      confidence: Math.max(0.05, Math.min(0.97, confidence - (systems.length > 1 ? 0.1 : 0))),
+      rationale: context
+        ? "Facts attributed from the clause naming this system."
+        : "Identity detected; facts require attribution.",
+    };
+  });
   return {
     ...(primary ? { name: primary.name } : {}),
     aliases: [],
@@ -201,9 +441,19 @@ function scan(raw: string, catalog: Drone[], deep: boolean): Extraction {
     specs,
     rfBands,
     systems,
+    systemExtractions,
+    components: facts.components,
+    payloads: facts.payloads,
+    sensors: facts.sensors,
+    guidance: facts.guidance,
     ...(matchId ? { matchId } : {}),
     confidence,
     rationale: `${deep ? "Tier 2 reasoning" : "Tier 1 screening"}: ${systems.length} system(s) detected, ${specs.length} specs, ${rfBands.length} RF refs${matchId ? `, matched ${matchId}` : ""}${variants.length ? `; new variant: ${variants.join(", ")}` : ""}.`,
+    metadata: {
+      schemaVersion: 2,
+      engine: "heuristic",
+      analyzedAt: new Date().toISOString(),
+    },
   };
 }
 

@@ -75,6 +75,59 @@ function deps(
 const SRC = "test-source";
 
 describe("runTwoTier relation persistence", () => {
+  it("applies per-system facts independently with dispatch provenance", async () => {
+    const d = deps([drone("shahed-136"), drone("geran-2")], {
+      name: "Shahed-136",
+      matchId: "shahed-136",
+      systems: [
+        { name: "Shahed-136", matchId: "shahed-136" },
+        { name: "Geran-2", matchId: "geran-2" },
+      ],
+      systemExtractions: [
+        {
+          name: "Shahed-136",
+          matchId: "shahed-136",
+          specs: [
+            {
+              key: "speed",
+              label: "Speed",
+              value: 180,
+              unit: "km/h",
+              evidence: "Shahed-136 reached 180 km/h",
+            },
+          ],
+          rfBands: [],
+          confidence: 0.95,
+        },
+        {
+          name: "Geran-2",
+          matchId: "geran-2",
+          specs: [
+            {
+              key: "speed",
+              label: "Speed",
+              value: 220,
+              unit: "km/h",
+              evidence: "Geran-2 reached 220 km/h",
+            },
+          ],
+          rfBands: [],
+          confidence: 0.95,
+        },
+      ],
+    });
+    const result = await runTwoTier("report", SRC, d, { dispatchId: "dispatch-1" });
+    expect(result.droneIds?.sort()).toEqual(["geran-2", "shahed-136"]);
+    expect(d.drones.get("shahed-136")?.specs[0]?.claims[0]).toMatchObject({
+      value: 180,
+      sourceId: "dispatch-1",
+    });
+    expect(d.drones.get("geran-2")?.specs[0]?.claims[0]).toMatchObject({
+      value: 220,
+      sourceId: "dispatch-1",
+    });
+  });
+
   it("persists systems[] as symmetric counterpart links on auto-merge", async () => {
     const d = deps([drone("shahed-136"), drone("geran-2"), drone("gweepard")], {
       matchId: "shahed-136",

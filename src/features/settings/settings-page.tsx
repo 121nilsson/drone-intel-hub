@@ -9,9 +9,18 @@ export function SettingsPage() {
   useEffect(() => setS(settings), [settings]);
   const field = (k: keyof typeof s, label: string, type = "text") => (
     <label className="block">
-      <span className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">{label}</span>
-      <input type={type} step="0.05" value={String(s[k])} onChange={(e) => setS({ ...s, [k]: type === "number" ? Number(e.target.value) : e.target.value })}
-        className="mt-1 w-full border border-border bg-background px-3 py-2 font-mono text-sm outline-none focus:border-primary" />
+      <span className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
+        {label}
+      </span>
+      <input
+        type={type}
+        step="0.05"
+        value={String(s[k])}
+        onChange={(e) =>
+          setS({ ...s, [k]: type === "number" ? Number(e.target.value) : e.target.value })
+        }
+        className="mt-1 w-full border border-border bg-background px-3 py-2 font-mono text-sm outline-none focus:border-primary"
+      />
     </label>
   );
   return (
@@ -24,8 +33,22 @@ export function SettingsPage() {
           {field("tier1Model", "Tier 1 model (fast screening)")}
           {field("tier2Model", "Tier 2 model (reasoning escalation)")}
           {field("translateModel", "Translation model")}
-          <div className="grid grid-cols-2 gap-4">{field("escalationThreshold", "Escalate below", "number")}{field("autoMergeThreshold", "Auto-merge above", "number")}</div>
-          <div className="grid grid-cols-2 gap-4">{field("autoPromoteThreshold", "Auto-promote new system above", "number")}{field("autoDiscardThreshold", "Auto-discard below", "number")}</div>
+          <div className="grid grid-cols-2 gap-4">
+            {field("escalationThreshold", "Escalate below", "number")}
+            {field("autoMergeThreshold", "Auto-merge above", "number")}
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            {field("autoPromoteThreshold", "Auto-promote new system above", "number")}
+            {field("autoDiscardThreshold", "Auto-discard below", "number")}
+          </div>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={s.heuristicFirst}
+              onChange={(e) => setS({ ...s, heuristicFirst: e.target.checked })}
+            />
+            Run local deterministic extraction before using AI quota
+          </label>
           <p className="text-xs text-muted-foreground">
             {aiKeyFromEnv
               ? "NVIDIA_API_KEY is set in .env.local — it overrides the fields above and stays on the server. Leave the key blank to fall back to a key saved in this browser."
@@ -34,8 +57,18 @@ export function SettingsPage() {
                 : "Key is kept in this browser only and forwarded per request. Leave empty to use the built-in local extraction engine."}
           </p>
           <div className="flex gap-2">
-            <Btn onClick={() => { saveSettings(s); setSaved(true); setTimeout(() => setSaved(false), 1500); }}>{saved ? "Saved" : "Save"}</Btn>
-            <Btn variant="ghost" onClick={() => setS(DEFAULT_SETTINGS)}>Reset</Btn>
+            <Btn
+              onClick={() => {
+                saveSettings(s);
+                setSaved(true);
+                setTimeout(() => setSaved(false), 1500);
+              }}
+            >
+              {saved ? "Saved" : "Save"}
+            </Btn>
+            <Btn variant="ghost" onClick={() => setS(DEFAULT_SETTINGS)}>
+              Reset
+            </Btn>
           </div>
         </div>
       </Panel>

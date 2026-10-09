@@ -44,6 +44,7 @@ function CandidateRow({ c }: { c: Candidate }) {
   const [translating, setTranslating] = useState(false);
   const [translated, setTranslated] = useState<string | null>(null);
   const [translateError, setTranslateError] = useState<string | null>(null);
+  const [deepAnalyzing, setDeepAnalyzing] = useState(false);
 
   const handleTranslate = async () => {
     setTranslating(true);
@@ -59,6 +60,31 @@ function CandidateRow({ c }: { c: Candidate }) {
       setTranslateError(err instanceof Error ? err.message : "Translation failed");
     }
     setTranslating(false);
+  };
+
+  const handleDeepAnalysis = async () => {
+    setDeepAnalyzing(true);
+    setTranslateError(null);
+    try {
+      const result = await runTwoTier(c.raw, c.source, {
+        ...svc,
+        escalationThreshold: svc.settings.escalationThreshold,
+        autoMergeThreshold: svc.settings.autoMergeThreshold,
+        autoPromoteThreshold: svc.settings.autoPromoteThreshold,
+        autoDiscardThreshold: svc.settings.autoDiscardThreshold,
+        heuristicFirst: svc.settings.heuristicFirst,
+        forceDeepAnalysis: true,
+      });
+      svc.candidates.update(c.id, {
+        status: "discarded",
+        resolvedBy: "analyst",
+        supersededBy: result.candidate.id,
+      });
+    } catch (err) {
+      setTranslateError(err instanceof Error ? err.message : "Deep analysis failed");
+    } finally {
+      setDeepAnalyzing(false);
+    }
   };
 
   return (
@@ -104,6 +130,15 @@ function CandidateRow({ c }: { c: Candidate }) {
         <Btn variant="ghost" onClick={handleTranslate} disabled={translating || !c.raw.trim()}>
           {translating ? "Translating…" : "Translate"}
         </Btn>
+        {c.status === "pending" && (
+          <Btn
+            variant="ghost"
+            onClick={handleDeepAnalysis}
+            disabled={deepAnalyzing || !c.raw.trim()}
+          >
+            {deepAnalyzing ? "Deep analyzing…" : "Deep analyze"}
+          </Btn>
+        )}
         {translateError && (
           <span className="font-mono text-xs text-destructive">{translateError}</span>
         )}
@@ -127,6 +162,32 @@ function CandidateRow({ c }: { c: Candidate }) {
           <Tag key={b}>{b}</Tag>
         ))}
       </div>
+      {e.systemExtractions && e.systemExtractions.length > 0 && (
+        <div className="mt-3 space-y-2 border-l-2 border-accent/30 pl-3">
+          <p className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
+            Per-system attribution
+          </p>
+          {e.systemExtractions.map((system) => (
+            <div key={`${system.matchId ?? system.name}`} className="text-xs">
+              <p className="font-semibold">
+                {system.name} · {Math.round(system.confidence * 100)}%
+                {system.variantOf ? ` · variant of ${system.variantOf}` : ""}
+              </p>
+              <p className="text-muted-foreground">
+                {system.specs
+                  .map((s) => `${s.label}: ${String(s.value)}${s.unit ? ` ${s.unit}` : ""}`)
+                  .join(" · ") || "Identity only; facts need review"}
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
+      {e.metadata?.escalationReasons?.length ? (
+        <p className="mt-2 font-mono text-xs text-muted-foreground">
+          Escalated: {e.metadata.escalationReasons.join(", ")}
+          {e.metadata.model ? ` · ${e.metadata.model}` : ""}
+        </p>
+      ) : null}
       <p className="mt-2 break-words font-mono text-xs text-muted-foreground">{e.rationale}</p>
       {c.status === "pending" ? (
         <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -226,6 +287,7 @@ export function IntakePage({
         autoMergeThreshold,
         autoPromoteThreshold,
         autoDiscardThreshold,
+        heuristicFirst,
       } = svc.settings;
       let text = raw;
       if (isBareUrl(raw)) {
@@ -247,6 +309,7 @@ export function IntakePage({
         autoMergeThreshold,
         autoPromoteThreshold,
         autoDiscardThreshold,
+        heuristicFirst,
       });
       const conf = `Tier ${r.candidate.tier}, ${Math.round(r.candidate.extraction.confidence * 100)}%`;
       setMsg(
@@ -301,9 +364,10 @@ export function IntakePage({
         </div>
         {msg && <p className="mt-3 break-words font-mono text-xs text-accent">{msg}</p>}
         <p className="mt-4 break-words text-xs text-muted-foreground">
-          Pasting a bare http(s) link fetches and reads the article server-side first. Tier 1
-          screens and extracts. Below {Math.round(svc.settings.escalationThreshold * 100)}%
-          confidence or without a catalog match, Tier 2 reasoning re-analyzes. Matches above{" "}
+          Pasting a bare http(s) link fetches and reads the article server-side first. Local
+          deterministic extraction runs first; Tier 1 fills unresolved fields and Tier 2 is reserved
+          for low-confidence or ambiguous attribution below{" "}
+          {Math.round(svc.settings.escalationThreshold * 100)}%. Matches above{" "}
           {Math.round(svc.settings.autoMergeThreshold * 100)}% auto-merge; new, uniquely named
           systems above {Math.round(svc.settings.autoPromoteThreshold * 100)}% auto-promote;
           anything below {Math.round(svc.settings.autoDiscardThreshold * 100)}% is auto-discarded.

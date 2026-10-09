@@ -39,6 +39,16 @@ export interface RawDispatch {
   contentHash?: string | undefined;
   /** For `status: "duplicate"`: the canonical dispatch this post duplicates. */
   duplicateOf?: string | undefined;
+  /** Versioned analysis identity for audit/reprocessing and cache decisions. */
+  analysisFingerprint?: string;
+  analysis?: {
+    schemaVersion: number;
+    engine: string;
+    model?: string;
+    promptVersion?: string;
+    analyzedAt: string;
+    escalationReasons?: string[];
+  };
 }
 
 export const MAX_ATTEMPTS = 3;

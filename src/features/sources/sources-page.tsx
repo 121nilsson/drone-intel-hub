@@ -15,7 +15,7 @@ import { Btn, Panel, Tag } from "@/shared/ui/primitives";
 import {
   collectSource,
   fetchingProgress,
-    processPending,
+  processPending,
   progressFromItem,
   WORK_STALE_MS,
   type WorkProgress,
@@ -25,7 +25,6 @@ const field =
   "w-full min-w-0 max-w-full border border-border bg-background px-2 py-1.5 font-mono text-xs outline-none focus:border-primary";
 /** Matches the cron in vite.config.ts. */
 const AUTO_MIN = 10;
-
 
 function progressAge(progress: WorkProgress): number | null {
   const age = Date.now() - Date.parse(progress.updatedAt);
@@ -162,6 +161,7 @@ export function SourcesPage() {
       autoMergeThreshold: sv.settings.autoMergeThreshold,
       autoPromoteThreshold: sv.settings.autoPromoteThreshold,
       autoDiscardThreshold: sv.settings.autoDiscardThreshold,
+      heuristicFirst: sv.settings.heuristicFirst,
     };
     try {
       const p = await processPending(sv.dispatches, deps, 20, {
@@ -320,7 +320,9 @@ export function SourcesPage() {
     return !!y && y.analysed + y.queued > 0;
   }).length;
   const visibleSources = sources.filter((s) =>
-    `${s.name} ${s.handle} ${s.platform} ${s.domain}`.toLowerCase().includes(query.trim().toLowerCase()),
+    `${s.name} ${s.handle} ${s.platform} ${s.domain}`
+      .toLowerCase()
+      .includes(query.trim().toLowerCase()),
   );
   const remote = syncState?.progress ?? null;
   const workingIds = new Set<string>();
@@ -333,8 +335,14 @@ export function SourcesPage() {
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
       <Panel title={`Monitored sources · ${sources.length}`}>
-        <Link to="/dispatches" className="mb-3 flex items-center justify-between border border-primary/40 px-3 py-2.5 font-mono text-xs uppercase text-primary">
-          <span>Intel feed · {dispatches.length} posts · {counts.pending} waiting</span><span>→</span>
+        <Link
+          to="/dispatches"
+          className="mb-3 flex items-center justify-between border border-primary/40 px-3 py-2.5 font-mono text-xs uppercase text-primary"
+        >
+          <span>
+            Intel feed · {dispatches.length} posts · {counts.pending} waiting
+          </span>
+          <span>→</span>
         </Link>
         <div className="mb-3 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center sm:gap-3">
           <Btn className="justify-center py-2.5" onClick={syncAll} disabled={!!busy}>

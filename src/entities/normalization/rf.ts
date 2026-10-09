@@ -3,14 +3,7 @@ import { parseNumber } from "./numeric";
 import { matchTerms, PROTOCOL_TERMS } from "./taxonomy";
 
 export type NormalizedRFRole =
-  | "uplink"
-  | "downlink"
-  | "video"
-  | "gnss"
-  | "antijam"
-  | "telemetry"
-  | "tether"
-  | "unknown";
+  "uplink" | "downlink" | "video" | "gnss" | "antijam" | "telemetry" | "tether" | "unknown";
 
 export interface NormalizedRFLink {
   raw: string;
@@ -41,7 +34,11 @@ const NAMED_IEEE: Array<[RegExp, string]> = [
 
 const ROLES: Array<{ role: NormalizedRFRole; re: RegExp; confidence: number }> = [
   { role: "video", re: /analog\s+video|\bvideo\b|\bfpv\b/i, confidence: 0.95 },
-  { role: "gnss", re: /\bgps\b|glonass|глонасс|\bgalileo\b|\bgnss\b|\bl[125]\b/i, confidence: 0.95 },
+  {
+    role: "gnss",
+    re: /\bgps\b|glonass|глонасс|\bgalileo\b|\bgnss\b|\bl[125]\b/i,
+    confidence: 0.95,
+  },
   { role: "antijam", re: /\bcrpa\b|kometa|anti[-\s]?jam/i, confidence: 0.7 },
   { role: "uplink", re: /control\s+link|\bc2\b|\buplink\b|command\s+link/i, confidence: 0.9 },
   { role: "downlink", re: /\bdownlink\b/i, confidence: 0.9 },
@@ -63,6 +60,15 @@ function toMHz(n: number, unit: string): number | undefined {
   }
 }
 
+/** RF GHz notation treats `5.725` as a decimal, never as a thousands-grouped integer. */
+function parseFrequencyNumber(raw: string, unit: string): number | undefined {
+  if (unit.toLowerCase() === "ghz" && /^\d+[.,]\d+$/.test(raw)) {
+    const value = Number(raw.replace(",", "."));
+    return Number.isFinite(value) ? value : undefined;
+  }
+  return parseNumber(raw);
+}
+
 /** Every frequency or frequency span in the text, in MHz. A protocol name contributes nothing. */
 export function parseFrequencies(raw: string): Array<[number, number]> {
   const out: Array<[number, number]> = [];
@@ -71,14 +77,14 @@ export function parseFrequencies(raw: string): Array<[number, number]> {
   for (const m of raw.matchAll(re)) {
     if (m[1] && m[3] && (m[2] || m[4])) {
       const unit = (m[4] ?? m[2])!;
-      const a = parseNumber(m[1]);
-      const b = parseNumber(m[3]);
+      const a = parseFrequencyNumber(m[1], m[2] ?? unit);
+      const b = parseFrequencyNumber(m[3], unit);
       const lo = a === undefined ? undefined : toMHz(a, m[2] ?? unit);
       const hi = b === undefined ? undefined : toMHz(b, unit);
       if (lo === undefined || hi === undefined) continue;
       out.push([Math.min(lo, hi), Math.max(lo, hi)]);
     } else if (m[5] && m[6]) {
-      const n = parseNumber(m[5]);
+      const n = parseFrequencyNumber(m[5], m[6]);
       const mhz = n === undefined ? undefined : toMHz(n, m[6]);
       if (mhz === undefined) continue;
       out.push([mhz, mhz]);
@@ -151,8 +157,7 @@ export function normalizeRF(raw: string): NormalizedRFLink {
   const freq = freqs.length === 1 ? freqs[0] : undefined;
   const ieee = freqs.length ? uniq(freqs.flatMap((f) => ieeeBandsFor(f))) : namedIeee(raw);
   const nato = freqs.length ? uniq(freqs.flatMap((f) => natoBandsFor(f))) : namedNato(raw);
-  const tactical =
-    role.role === "uplink" && freq && freq[1] < 1_000 ? "Sub-GHz C2" : undefined;
+  const tactical = role.role === "uplink" && freq && freq[1] < 1_000 ? "Sub-GHz C2" : undefined;
   return {
     raw,
     role: role.role,
@@ -167,24 +172,37 @@ export function normalizeRF(raw: string): NormalizedRFLink {
 }
 
 /** Intersection in MHz, or undefined when the intervals do not overlap. */
-export function intersectBands(a: [number, number], b: [number, number]): [number, number] | undefined {
+export function intersectBands(
+  a: [number, number],
+  b: [number, number],
+): [number, number] | undefined {
   const lo = Math.max(Math.min(a[0], a[1]), Math.min(b[0], b[1]));
   const hi = Math.min(Math.max(a[0], a[1]), Math.max(b[0], b[1]));
   return lo <= hi ? [lo, hi] : undefined;
 }
 
 /** Frequencies win over a previously stored band list. */
-export function effectiveIeeeBands(link: { ieeeBands?: string[]; freqMHz?: [number, number] }): string[] {
+export function effectiveIeeeBands(link: {
+  ieeeBands?: string[];
+  freqMHz?: [number, number];
+}): string[] {
   if (link.freqMHz) return ieeeBandsFor(link.freqMHz);
   return link.ieeeBands ?? [];
 }
 
-export function effectiveNatoBands(link: { natoBands?: string[]; freqMHz?: [number, number] }): string[] {
+export function effectiveNatoBands(link: {
+  natoBands?: string[];
+  freqMHz?: [number, number];
+}): string[] {
   if (link.freqMHz) return natoBandsFor(link.freqMHz);
   return link.natoBands ?? [];
 }
 
-export function linkIsFiber(link: { isFiberOptic?: boolean; role?: string; band?: string }): boolean {
+export function linkIsFiber(link: {
+  isFiberOptic?: boolean;
+  role?: string;
+  band?: string;
+}): boolean {
   if (link.isFiberOptic || link.role === "tether") return true;
   return !!link.band && FIBER.test(link.band);
 }

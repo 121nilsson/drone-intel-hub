@@ -1,4 +1,4 @@
-import type { Money } from "@/entities/normalization/currency";
+import type { Money, MoneyRange } from "@/entities/normalization/currency";
 import type { NormalizedRFLink } from "@/entities/normalization/rf";
 import type { NormalizedQuantity } from "@/entities/normalization/units";
 
@@ -18,6 +18,8 @@ export interface SpecClaim {
   sourceId?: string;
   evidence?: string;
   extractionConfidence?: number;
+  extractionEngine?: string;
+  model?: string;
   date: string; // ISO
 }
 
@@ -33,7 +35,8 @@ export interface SpecAttribute {
   discoveredBy: "seed" | "ai" | "analyst";
 }
 
-export type RFRole = "uplink" | "downlink" | "video" | "gnss" | "antijam" | "telemetry" | "tether" | "unknown";
+export type RFRole =
+  "uplink" | "downlink" | "video" | "gnss" | "antijam" | "telemetry" | "tether" | "unknown";
 export interface RFLink {
   role: RFRole;
   /** Raw band label as written. Evidence only; bands are recomputed from freqMHz. */
@@ -52,6 +55,32 @@ export interface SupplyComponent {
   part: string;
   manufacturer: string;
   origin: string; // country code
+  category?: string;
+  model?: string;
+  evidence?: string;
+  confidence?: number;
+  sourceId?: string;
+}
+
+export interface PayloadObservation {
+  name: string;
+  category?: string;
+  quantity?: number;
+  weightKg?: number;
+  evidence?: string;
+  confidence?: number;
+  sourceId?: string;
+}
+
+export interface SensorObservation {
+  name: string;
+  category: "camera" | "eo" | "ir" | "thermal" | "radar" | "lidar" | "other";
+  model?: string;
+  manufacturer?: string;
+  quantity?: number;
+  evidence?: string;
+  confidence?: number;
+  sourceId?: string;
 }
 
 export type EvolutionKind = "frequency" | "motor" | "payload" | "airframe" | "other";
@@ -113,8 +142,13 @@ export interface Drone {
   specs: SpecAttribute[];
   rf: RFLink[];
   components: SupplyComponent[];
+  payloads?: PayloadObservation[];
+  sensors?: SensorObservation[];
   evolution: EvolutionEvent[];
   counterpartIds: string[];
+  /** Explicit family relationship. Variants are not counterparts. */
+  variantOfId?: string;
+  variantIds?: string[];
   reference?: DroneReference;
   createdAt: string;
   updatedAt: string;
@@ -129,12 +163,42 @@ export interface ExtractedSpec {
   raw?: string;
   normalized?: NormalizedQuantity;
   money?: Money;
+  moneyRange?: MoneyRange;
+  /** Verbatim clause supporting this observation. */
+  evidence?: string;
 }
 
 export interface DetectedSystem {
   name: string;
   matchId?: string;
   variantOf?: string;
+}
+
+export interface SystemExtraction extends DetectedSystem {
+  aliases?: string[];
+  domain?: Domain;
+  origin?: string;
+  manufacturer?: string;
+  operators?: string[];
+  propulsion?: string;
+  installation?: string;
+  guidance?: string[];
+  specs: ExtractedSpec[];
+  rfBands: string[];
+  components?: SupplyComponent[];
+  payloads?: PayloadObservation[];
+  sensors?: SensorObservation[];
+  confidence: number;
+  rationale?: string;
+}
+
+export interface ExtractionMetadata {
+  schemaVersion: number;
+  engine: "heuristic" | "ai" | "combined";
+  model?: string;
+  promptVersion?: string;
+  escalationReasons?: string[];
+  analyzedAt: string;
 }
 
 export interface Extraction {
@@ -153,9 +217,16 @@ export interface Extraction {
   rfBands: string[];
   rf?: NormalizedRFLink[];
   systems?: DetectedSystem[];
+  /** Per-system results prevent facts from a multi-system report being cross-attributed. */
+  systemExtractions?: SystemExtraction[];
+  components?: SupplyComponent[];
+  payloads?: PayloadObservation[];
+  sensors?: SensorObservation[];
+  guidance?: string[];
   matchId?: string;
   confidence: number; // 0..1
   rationale: string;
+  metadata?: ExtractionMetadata;
 }
 
 export type CandidateStatus = "pending" | "promoted" | "merged" | "discarded";
@@ -168,11 +239,21 @@ export interface Candidate {
   extraction: Extraction;
   status: CandidateStatus;
   resolvedInto?: string;
+  supersededBy?: string;
   /** Who resolved it; absent on candidates resolved before auto-triage existed. */
   resolvedBy?: "auto" | "analyst";
 }
 
 export const FLAGS: Record<string, string> = {
-  RU: "🇷🇺", UA: "🇺🇦", IR: "🇮🇷", CN: "🇨🇳", US: "🇺🇸", TW: "🇹🇼", KP: "🇰🇵", TR: "🇹🇷", DE: "🇩🇪", PL: "🇵🇱",
+  RU: "🇷🇺",
+  UA: "🇺🇦",
+  IR: "🇮🇷",
+  CN: "🇨🇳",
+  US: "🇺🇸",
+  TW: "🇹🇼",
+  KP: "🇰🇵",
+  TR: "🇹🇷",
+  DE: "🇩🇪",
+  PL: "🇵🇱",
 };
 export const flag = (c: string) => `${FLAGS[c] ?? "🏳"} ${c}`;

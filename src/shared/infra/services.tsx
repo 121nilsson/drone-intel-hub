@@ -46,6 +46,8 @@ interface Services {
   aiFromEnv: boolean;
   tier1: IntelExtractor;
   tier2: IntelExtractor;
+  /** Deterministic first pass; separate from outage fallback for explicit orchestration. */
+  heuristic: IntelExtractor;
   /** Built-in heuristic engine the pipeline degrades to when an AI tier throws. */
   fallback: IntelExtractor;
   summarizer: BriefingSummarizer;
@@ -154,6 +156,7 @@ export function ServicesProvider({ children }: { children: ReactNode }) {
       aiFromEnv,
       tier1: remote ? new OpenAICompatibleExtractor(1, resolved) : new HeuristicExtractor(1),
       tier2: remote ? new OpenAICompatibleExtractor(2, resolved) : new HeuristicExtractor(2),
+      heuristic: new HeuristicExtractor(1),
       fallback: new HeuristicExtractor(1),
       summarizer: remote ? new OpenAICompatibleSummarizer(resolved) : new HeuristicSummarizer(),
     };

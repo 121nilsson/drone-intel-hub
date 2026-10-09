@@ -4,7 +4,7 @@ import type { Drone, Extraction } from "@/entities/drone/types";
 export interface IntelExtractor {
   readonly tier: 1 | 2;
   readonly label: string;
-  extract(raw: string, catalog: Drone[]): Promise<Extraction>;
+  extract(raw: string, catalog: Drone[], context?: Extraction): Promise<Extraction>;
 }
 
 export interface BriefingSummarizer {
@@ -32,4 +32,6 @@ export interface AIProviderSettings {
   autoPromoteThreshold: number;
   /** Below this a candidate is discarded as noise without review. */
   autoDiscardThreshold: number;
+  /** Run deterministic extraction before spending provider quota. */
+  heuristicFirst: boolean;
 }

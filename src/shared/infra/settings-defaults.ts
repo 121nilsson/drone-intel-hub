@@ -12,4 +12,5 @@ export const DEFAULT_SETTINGS: AIProviderSettings = {
   autoMergeThreshold: 0.85,
   autoPromoteThreshold: 0.9,
   autoDiscardThreshold: 0.25,
+  heuristicFirst: true,
 };

@@ -7,6 +7,7 @@ import {
   resolveSystems,
 } from "@/shared/infra/heuristic-ai";
 import type { Drone, ExtractedSpec } from "@/entities/drone/types";
+import { parseMoneyRange } from "@/entities/normalization/currency";
 
 const drone = (id: string, over: Partial<Drone> = {}): Drone => ({
   id,
@@ -93,6 +94,14 @@ describe("extractPrice", () => {
 
   it("returns undefined when there is no price", () => {
     expect(extractPrice("a drone was seen near Kharkiv")).toBeUndefined();
+  });
+
+  it("normalizes a price range without collapsing it", () => {
+    expect(parseMoneyRange("$15,000-$20,000")).toMatchObject({
+      min: 15000,
+      max: 20000,
+      currency: "USD",
+    });
   });
 });
 
@@ -200,5 +209,35 @@ describe("HeuristicExtractor extraction", () => {
   it("records a rationale", async () => {
     const e = await t1.extract("a Geran-2 was launched", CATALOG);
     expect(e.rationale).toContain("Tier 1");
+  });
+
+  it("separates weight classes and endurance", async () => {
+    const e = await t1.extract(
+      "Geran-2 empty weight 200 kg, MTOW 250 kg, 50 kg warhead and endurance 6 hours.",
+      CATALOG,
+    );
+    expect(specOf(e.specs, "weight_empty")).toBe(200);
+    expect(specOf(e.specs, "weight_mtow")).toBe(250);
+    expect(specOf(e.specs, "warhead")).toBe(50);
+    expect(specOf(e.specs, "endurance")).toBe(6);
+  });
+
+  it("extracts dimensions, guidance and a named thermal camera", async () => {
+    const e = await t1.extract(
+      "Shahed-136 has a wingspan of 2.5 m and uses GPS/INS with a Boson 640 thermal camera.",
+      CATALOG,
+    );
+    expect(specOf(e.specs, "wingspan")).toBe(2.5);
+    expect(e.guidance).toEqual(expect.arrayContaining(["GPS", "INS"]));
+    expect(e.sensors?.[0]?.category).toBe("thermal");
+  });
+
+  it("attributes clauses independently in a multi-system report", async () => {
+    const e = await t1.extract("Geran-2 reached 600 km/h. Shahed-136 reached 220 km/h.", CATALOG);
+    expect(e.systemExtractions).toHaveLength(2);
+    const geran = e.systemExtractions?.find((s) => s.matchId === "geran-2");
+    const shahed = e.systemExtractions?.find((s) => s.matchId === "shahed-136");
+    expect(specOf(geran?.specs ?? [], "speed")).toBe(600);
+    expect(specOf(shahed?.specs ?? [], "speed")).toBe(220);
   });
 });

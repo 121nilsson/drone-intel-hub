@@ -1,4 +1,10 @@
-import type { Candidate, Drone, Extraction, SpecAttribute } from "@/entities/drone/types";
+import type {
+  Candidate,
+  Drone,
+  Extraction,
+  SpecAttribute,
+  SystemExtraction,
+} from "@/entities/drone/types";
 import type { IntelExtractor } from "@/shared/contracts/ai";
 import type { CandidateRepository, DroneRepository } from "@/shared/contracts/repository";
 import type { TaxonomyCandidateRepository } from "@/shared/contracts/taxonomy";
@@ -7,12 +13,20 @@ import { mergeLinks, normalizeExtraction, toRFLink } from "@/entities/normalizat
 import { attributeSemantic, mergeSpecs } from "@/features/dynamic-specs/spec-engine";
 import { counterpartIdsFor, linkCounterparts } from "@/entities/drone/relations";
 import { chatCompletionOnce } from "@/shared/infra/ai-proxy.server";
+import { combineExtractions, needsDeepAI, needsFastAI } from "./extraction-gates";
+import { linkVariant, mergeDroneIntelligence } from "@/entities/drone/merge-intelligence";
+import { ProcurementExtractionSchema } from "@/shared/contracts/extraction.schema";
 
 export interface PipelineDeps {
   tier1: IntelExtractor;
   tier2: IntelExtractor;
   /** Local heuristic engine used when an AI tier throws (provider outage), so ingestion never hard-fails. */
   fallback?: IntelExtractor;
+  /** Mandatory deterministic first pass in production. */
+  heuristic?: IntelExtractor;
+  heuristicFirst?: boolean;
+  /** Analyst override: spend tier-2 budget even when automatic gates are satisfied. */
+  forceDeepAnalysis?: boolean;
   drones: DroneRepository;
   candidates: CandidateRepository;
   /** When set, unknown propulsion terms are queued for an analyst. Absent in tests and older callers. */
@@ -25,11 +39,22 @@ export interface PipelineDeps {
   autoDiscardThreshold?: number;
 }
 
-export type PipelineResult =
+export interface AnalysisContext {
+  dispatchId?: string;
+  url?: string;
+  publishedAt?: string;
+}
+
+type PipelinePrimaryResult =
   | { kind: "auto-merged"; droneId: string; candidate: Candidate }
   | { kind: "auto-promoted"; droneId: string; candidate: Candidate }
   | { kind: "auto-discarded"; candidate: Candidate }
   | { kind: "queued"; candidate: Candidate };
+
+export type PipelineResult = PipelinePrimaryResult & {
+  relatedCandidates?: Candidate[];
+  droneIds?: string[];
+};
 
 const norm = (s: string) => s.trim().toLowerCase();
 
@@ -67,36 +92,186 @@ function collidesWithCatalog(e: Extraction, catalog: Drone[]): boolean {
   return [e.name ?? "", ...e.aliases].some((n) => n.trim() && known.has(norm(n)));
 }
 
+function extractionForSystem(parent: Extraction, s: SystemExtraction): Extraction {
+  return {
+    name: s.name,
+    aliases: s.aliases ?? [],
+    ...(s.domain ? { domain: s.domain } : {}),
+    ...(s.origin ? { origin: s.origin } : {}),
+    ...(s.manufacturer ? { manufacturer: s.manufacturer } : {}),
+    operators: s.operators ?? [],
+    ...(s.propulsion ? { propulsion: s.propulsion } : {}),
+    ...(s.installation ? { installation: s.installation } : {}),
+    specs: s.specs,
+    rfBands: s.rfBands,
+    systems: [
+      {
+        name: s.name,
+        ...(s.matchId ? { matchId: s.matchId } : {}),
+        ...(s.variantOf ? { variantOf: s.variantOf } : {}),
+      },
+    ],
+    components: s.components ?? [],
+    payloads: s.payloads ?? [],
+    sensors: s.sensors ?? [],
+    guidance: s.guidance ?? [],
+    ...(s.matchId ? { matchId: s.matchId } : {}),
+    confidence: s.confidence,
+    rationale: s.rationale ?? parent.rationale,
+    ...(parent.metadata ? { metadata: parent.metadata } : {}),
+  };
+}
+
+function applyRelatedSystems(
+  primary: PipelinePrimaryResult,
+  all: Extraction,
+  source: string,
+  d: PipelineDeps,
+  context: AnalysisContext,
+): PipelineResult {
+  const slices = all.systemExtractions ?? [];
+  if (slices.length < 2) return primary;
+  const primaryName = primary.candidate.extraction.name?.toLowerCase();
+  const primaryMatch = primary.candidate.extraction.matchId;
+  const relatedCandidates: Candidate[] = [];
+  const droneIds = new Set<string>(
+    primary.kind === "auto-merged" || primary.kind === "auto-promoted" ? [primary.droneId] : [],
+  );
+
+  for (const slice of slices) {
+    if (
+      (primaryMatch && slice.matchId === primaryMatch) ||
+      (!primaryMatch && primaryName && slice.name.toLowerCase() === primaryName)
+    )
+      continue;
+    const extraction = applyNormalization(extractionForSystem(all, slice)).extraction;
+    const candidate: Candidate = {
+      id: crypto.randomUUID(),
+      raw: primary.candidate.raw,
+      source,
+      createdAt: new Date().toISOString(),
+      tier: primary.candidate.tier,
+      extraction,
+      status: "pending",
+    };
+    if (extraction.matchId && extraction.confidence >= d.autoMergeThreshold) {
+      const target = d.drones.get(extraction.matchId);
+      if (target) {
+        const merged = mergeDroneIntelligence(
+          withNormalizedRf(
+            mergeSpecs(target, extraction.specs, source, {
+              ...(context.dispatchId ? { sourceId: context.dispatchId } : {}),
+              extractionConfidence: extraction.confidence,
+            }),
+            extraction,
+          ),
+          extraction,
+          context.dispatchId,
+        );
+        d.drones.upsert(merged);
+        if (slice.variantOf) {
+          const parent = d.drones.get(slice.variantOf);
+          if (parent) for (const linked of linkVariant(parent, merged)) d.drones.upsert(linked);
+        }
+        candidate.status = "merged";
+        candidate.resolvedInto = target.id;
+        candidate.resolvedBy = "auto";
+        droneIds.add(target.id);
+      }
+    } else if (
+      d.autoPromoteThreshold !== undefined &&
+      extraction.name &&
+      extraction.confidence >= d.autoPromoteThreshold &&
+      !collidesWithCatalog(extraction, d.drones.list())
+    ) {
+      d.candidates.add(candidate);
+      const promoted = promote(candidate, d);
+      candidate.status = "promoted";
+      candidate.resolvedInto = promoted.id;
+      candidate.resolvedBy = "auto";
+      droneIds.add(promoted.id);
+      relatedCandidates.push(candidate);
+      continue;
+    }
+    d.candidates.add(candidate);
+    relatedCandidates.push(candidate);
+  }
+  return {
+    ...primary,
+    ...(relatedCandidates.length ? { relatedCandidates } : {}),
+    ...(droneIds.size ? { droneIds: [...droneIds] } : {}),
+  };
+}
+
 export async function runTwoTier(
   raw: string,
   source: string,
   d: PipelineDeps,
+  context: AnalysisContext = {},
 ): Promise<PipelineResult> {
   const catalog = d.drones.list();
   let tier: 1 | 2 = 1;
-  // A provider outage must not hard-fail ingestion: tier 1 falls back to the built-in
-  // heuristic engine, and a failing tier 2 keeps the tier-1 result. Either way the paste
-  // still lands in triage, marked as degraded so the analyst can trust it less blindly.
-  let extraction: Extraction;
-  try {
-    extraction = await d.tier1.extract(raw, catalog);
-  } catch (err) {
-    if (!d.fallback) throw err;
-    console.error("[pipeline] tier-1 call failed, using heuristic engine", (err as Error).message);
-    extraction = annotate(
-      await d.fallback.extract(raw, catalog),
-      "tier-1 AI unavailable — heuristic",
-    );
+  let extraction: Extraction | undefined;
+  const heuristic = d.heuristicFirst !== false ? (d.heuristic ?? d.fallback) : undefined;
+  if (heuristic) extraction = await heuristic.extract(raw, catalog);
+
+  const fastGate = extraction
+    ? needsFastAI(extraction, d.escalationThreshold)
+    : { needed: true, reasons: ["heuristic-disabled"] };
+  const tier1IsHeuristic = heuristic && d.tier1.label === heuristic.label;
+  if (fastGate.needed && !tier1IsHeuristic) {
+    try {
+      const refined = await d.tier1.extract(raw, catalog, extraction);
+      extraction = extraction ? combineExtractions(extraction, refined) : refined;
+      if (extraction.metadata) extraction.metadata.escalationReasons = fastGate.reasons;
+    } catch (err) {
+      if (!extraction) {
+        if (!d.fallback) throw err;
+        extraction = annotate(
+          await d.fallback.extract(raw, catalog),
+          "tier-1 AI unavailable — heuristic",
+        );
+      } else {
+        extraction = annotate(extraction, "tier-1 AI unavailable — kept heuristic");
+      }
+      console.error(
+        "[pipeline] tier-1 call failed, using deterministic result",
+        (err as Error).message,
+      );
+    }
   }
-  if (extraction.confidence < d.escalationThreshold || !extraction.matchId) {
+  if (!extraction) {
+    extraction = await d.tier1.extract(raw, catalog);
+  }
+  if (!extraction) throw new Error("Extraction engine returned no result");
+
+  const deepGate = d.forceDeepAnalysis
+    ? { needed: true, reasons: ["analyst-requested-deep-analysis"] }
+    : needsDeepAI(extraction, d.escalationThreshold);
+  const tier2IsSameHeuristic = heuristic && d.tier2.label === heuristic.label;
+  if (deepGate.needed && !tier2IsSameHeuristic) {
     tier = 2;
     try {
-      extraction = await d.tier2.extract(raw, catalog);
+      extraction = combineExtractions(extraction, await d.tier2.extract(raw, catalog, extraction));
+      if (extraction.metadata) {
+        extraction.metadata.escalationReasons = [
+          ...(extraction.metadata.escalationReasons ?? []),
+          ...deepGate.reasons,
+        ];
+      }
     } catch (err) {
       tier = 1;
       console.error("[pipeline] tier-2 call failed, keeping tier-1 result", (err as Error).message);
       extraction = annotate(extraction, "tier-2 AI unavailable — kept tier 1");
     }
+  }
+  const fullExtraction: Extraction = extraction;
+  if ((fullExtraction.systemExtractions?.length ?? 0) > 1) {
+    const primary =
+      fullExtraction.systemExtractions?.find((s) => s.matchId === fullExtraction.matchId) ??
+      fullExtraction.systemExtractions?.find((s) => s.name === fullExtraction.name) ??
+      fullExtraction.systemExtractions?.[0];
+    if (primary) extraction = extractionForSystem(fullExtraction, primary);
   }
   const normalized = applyNormalization(extraction);
   extraction = normalized.extraction;
@@ -114,11 +289,25 @@ export async function runTwoTier(
   };
   if (extraction.matchId && extraction.confidence >= d.autoMergeThreshold) {
     const target = d.drones.get(extraction.matchId)!;
-    const merged = withNormalizedRf(
-      mergeSpecs(target, extraction.specs, source, { extractionConfidence: extraction.confidence }),
+    const withSpecs = mergeSpecs(target, extraction.specs, source, {
+      ...(context.dispatchId ? { sourceId: context.dispatchId } : {}),
+      extractionConfidence: extraction.confidence,
+      ...(extraction.metadata?.engine ? { extractionEngine: extraction.metadata.engine } : {}),
+      ...(extraction.metadata?.model ? { model: extraction.metadata.model } : {}),
+    });
+    const merged = mergeDroneIntelligence(
+      withNormalizedRf(withSpecs, extraction),
       extraction,
+      context.dispatchId,
     );
     d.drones.upsert(merged);
+    const variantOf = extraction.systems?.find(
+      (s) => s.matchId === target.id || s.name.toLowerCase() === target.name.toLowerCase(),
+    )?.variantOf;
+    if (variantOf) {
+      const parent = d.drones.get(variantOf);
+      if (parent) for (const linked of linkVariant(parent, merged)) d.drones.upsert(linked);
+    }
     // The extraction already reports systems[] and variantOf; persist those as catalog
     // relations so counterpart links come from ingest instead of being hand-maintained.
     for (const changed of linkCounterparts(
@@ -132,7 +321,13 @@ export async function runTwoTier(
     candidate.resolvedInto = target.id;
     candidate.resolvedBy = "auto";
     d.candidates.add(candidate);
-    return { kind: "auto-merged", droneId: target.id, candidate };
+    return applyRelatedSystems(
+      { kind: "auto-merged", droneId: target.id, candidate },
+      fullExtraction,
+      source,
+      d,
+      context,
+    );
   }
   // A name colliding with the catalog means the model missed a match; promoting it would
   // create a duplicate, so it goes to review instead.
@@ -146,20 +341,32 @@ export async function runTwoTier(
     d.candidates.add(candidate);
     const drone = promote(candidate, d);
     d.candidates.update(candidate.id, { resolvedBy: "auto" });
-    return {
-      kind: "auto-promoted",
-      droneId: drone.id,
-      candidate: { ...candidate, status: "promoted", resolvedInto: drone.id, resolvedBy: "auto" },
-    };
+    return applyRelatedSystems(
+      {
+        kind: "auto-promoted",
+        droneId: drone.id,
+        candidate: { ...candidate, status: "promoted", resolvedInto: drone.id, resolvedBy: "auto" },
+      },
+      fullExtraction,
+      source,
+      d,
+      context,
+    );
   }
   if (d.autoDiscardThreshold !== undefined && extraction.confidence < d.autoDiscardThreshold) {
     candidate.status = "discarded";
     candidate.resolvedBy = "auto";
     d.candidates.add(candidate);
-    return { kind: "auto-discarded", candidate };
+    return applyRelatedSystems(
+      { kind: "auto-discarded", candidate },
+      fullExtraction,
+      source,
+      d,
+      context,
+    );
   }
   d.candidates.add(candidate);
-  return { kind: "queued", candidate };
+  return applyRelatedSystems({ kind: "queued", candidate }, fullExtraction, source, d, context);
 }
 
 export function promote(
@@ -194,7 +401,9 @@ export function promote(
     summary: c.raw.slice(0, 200),
     specs: [],
     rf: (e.rf ?? []).map(toRFLink),
-    components: [],
+    components: e.components ?? [],
+    ...(e.payloads?.length ? { payloads: e.payloads } : {}),
+    ...(e.sensors?.length ? { sensors: e.sensors } : {}),
     evolution: [
       { date: now, kind: "other", description: "Promoted from intake queue", source: c.source },
     ],
@@ -209,6 +418,14 @@ export function promote(
   const catalog = d.drones.list();
   const changed = linkCounterparts(drone, counterpartIdsFor(e, catalog, drone.id), catalog);
   for (const c2 of changed) d.drones.upsert(c2);
+  const variantOf = e.systems?.find((s) => s.name.toLowerCase() === name.toLowerCase())?.variantOf;
+  if (variantOf) {
+    const parent = d.drones.get(variantOf);
+    const child = d.drones.get(drone.id);
+    if (parent && child) {
+      for (const linked of linkVariant(parent, child)) d.drones.upsert(linked);
+    }
+  }
   d.candidates.update(c.id, { status: "promoted", resolvedInto: drone.id });
   // Return the linked version so callers don't hold a stale copy without counterpartIds.
   return changed.find((x) => x.id === drone.id) ?? drone;
@@ -325,12 +542,40 @@ export function mergeDrones(
     ...(manufacturer ? { manufacturer } : {}),
     operators,
     propulsion,
+    ...(keep.propulsionId || merge.propulsionId
+      ? { propulsionId: keep.propulsionId ?? merge.propulsionId }
+      : {}),
+    ...(keep.installation || merge.installation
+      ? { installation: keep.installation ?? merge.installation }
+      : {}),
+    ...(keep.installationId || merge.installationId
+      ? { installationId: keep.installationId ?? merge.installationId }
+      : {}),
     summary,
     specs: Array.from(specsMap.values()),
     rf,
     components,
+    payloads: [
+      ...(keep.payloads ?? []),
+      ...(merge.payloads ?? []).filter(
+        (p) => !(keep.payloads ?? []).some((x) => x.name === p.name && x.weightKg === p.weightKg),
+      ),
+    ],
+    sensors: [
+      ...(keep.sensors ?? []),
+      ...(merge.sensors ?? []).filter(
+        (s) => !(keep.sensors ?? []).some((x) => x.name === s.name && x.model === s.model),
+      ),
+    ],
     evolution,
     counterpartIds,
+    ...(keep.variantOfId || merge.variantOfId
+      ? { variantOfId: keep.variantOfId ?? merge.variantOfId }
+      : {}),
+    variantIds: [...new Set([...(keep.variantIds ?? []), ...(merge.variantIds ?? [])])].filter(
+      (id) => id !== keepId && id !== mergeId,
+    ),
+    ...(keep.reference || merge.reference ? { reference: keep.reference ?? merge.reference } : {}),
     createdAt,
     updatedAt: new Date().toISOString(),
   };
@@ -341,7 +586,11 @@ export function mergeDrones(
   // 7. Update counterpart links on other drones pointing to mergeId
   for (const other of d.drones.list()) {
     if (other.id === keepId || other.id === mergeId) continue;
-    if (other.counterpartIds.includes(mergeId)) {
+    if (
+      other.counterpartIds.includes(mergeId) ||
+      other.variantOfId === mergeId ||
+      other.variantIds?.includes(mergeId)
+    ) {
       const updated = [
         ...new Set(
           other.counterpartIds
@@ -349,7 +598,19 @@ export function mergeDrones(
             .filter((cId) => cId !== other.id),
         ),
       ];
-      d.drones.upsert({ ...other, counterpartIds: updated, updatedAt: new Date().toISOString() });
+      d.drones.upsert({
+        ...other,
+        counterpartIds: updated,
+        ...(other.variantOfId === mergeId ? { variantOfId: keepId } : {}),
+        ...(other.variantIds
+          ? {
+              variantIds: [
+                ...new Set(other.variantIds.map((id) => (id === mergeId ? keepId : id))),
+              ],
+            }
+          : {}),
+        updatedAt: new Date().toISOString(),
+      });
     }
   }
 
@@ -376,8 +637,11 @@ export function mergeInto(
   const target = d.drones.get(droneId);
   if (!target) return;
   const extracted = applyNormalization(c.extraction).extraction;
-  const merged = withNormalizedRf(
-    mergeSpecs(target, extracted.specs, c.source, { extractionConfidence: extracted.confidence }),
+  const merged = mergeDroneIntelligence(
+    withNormalizedRf(
+      mergeSpecs(target, extracted.specs, c.source, { extractionConfidence: extracted.confidence }),
+      extracted,
+    ),
     extracted,
   );
   merged.evolution = [
@@ -413,20 +677,23 @@ export async function extractProcurement(
   });
   if (!r.ok) return null;
   try {
-    const j = JSON.parse(r.content.replace(/^```json|```$/g, "").trim()) as Record<string, unknown>;
-    if (!j || !j["company"]) return null;
+    const parsed = ProcurementExtractionSchema.safeParse(
+      JSON.parse(r.content.replace(/^```json|```$/g, "").trim()),
+    );
+    if (!parsed.success) return null;
+    const j = parsed.data;
     return {
       id: crypto.randomUUID(),
-      company: String(j["company"]),
-      country: j["country"] ? String(j["country"]) : "",
-      ...(j["amount"] ? { amount: String(j["amount"]) } : {}),
-      ...(j["currency"] ? { currency: String(j["currency"]) } : {}),
-      ...(j["program"] ? { program: String(j["program"]) } : {}),
-      ...(j["product"] ? { product: String(j["product"]) } : {}),
-      ...(j["customer"] ? { customer: String(j["customer"]) } : {}),
-      ...(j["announcedAt"] ? { announcedAt: String(j["announcedAt"]) } : {}),
+      company: j.company,
+      country: j.country,
+      ...(j.amount ? { amount: j.amount } : {}),
+      ...(j.currency ? { currency: j.currency } : {}),
+      ...(j.program ? { program: j.program } : {}),
+      ...(j.product ? { product: j.product } : {}),
+      ...(j.customer ? { customer: j.customer } : {}),
+      ...(j.announcedAt ? { announcedAt: j.announcedAt } : {}),
       source,
-      ...(j["notes"] ? { notes: String(j["notes"]) } : {}),
+      ...(j.notes ? { notes: j.notes } : {}),
       createdAt: new Date().toISOString(),
     };
   } catch {

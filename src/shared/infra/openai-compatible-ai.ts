@@ -1,16 +1,24 @@
-import type { Drone, Extraction } from "@/entities/drone/types";
+import type {
+  Drone,
+  ExtractedSpec,
+  Extraction,
+  PayloadObservation,
+  SensorObservation,
+  SupplyComponent,
+  SystemExtraction,
+} from "@/entities/drone/types";
 import type { AIProviderSettings, BriefingSummarizer, IntelExtractor } from "@/shared/contracts/ai";
 import { chatCompletion } from "./ai-proxy.functions";
 import { chatCompletionOnce, type ChatTransport } from "./ai-proxy.server";
+import {
+  AIExtractionSchema,
+  EXTRACTION_PROMPT_VERSION,
+  EXTRACTION_SCHEMA_VERSION,
+} from "@/shared/contracts/extraction.schema";
+import { mentions } from "./heuristic-ai";
+import extractionPrompt from "@/shared/contracts/extraction-prompt.json";
 
-const EXTRACT_SYS = `You are a defense technical intelligence analyst. Extract drone system data from raw reports.
-Reply in json with keys: name (string|null), aliases (string[]), domain ("Air"|"Land"|"Sea"|"Multi"|null), origin (ISO2|null), manufacturer (string|null), operators (ISO2[]), propulsion (string|null),
-specs (array of {key: snake_case, label, value: number|string, unit|null}) — include ANY novel attribute (e.g. jammers count, fiber spool length),
-rfBands (string[]), systems (array of {name, matchId: catalog id|null, variantOf: catalog id|null}) listing EVERY drone system mentioned (e.g. attacker and interceptor),
-matchId (id from catalog or null), confidence (0..1), rationale (short).
-Only match a catalog id when the name matches exactly; a different variant number (Geran-5 vs Geran-2) is a NEW system with variantOf set.
-If a price/unit cost appears, add spec {key:"unit_cost", label:"Unit Cost / Price", value:"$15,000 - $20,000"}.
-Only report system names that appear verbatim in the report. Do NOT invent, guess, or construct variant names. If a name is ambiguous, set confidence below 0.3 and explain why in the rationale.`;
+const EXTRACT_SYS = extractionPrompt.system;
 
 export class OpenAICompatibleExtractor implements IntelExtractor {
   readonly label: string;
@@ -26,8 +34,21 @@ export class OpenAICompatibleExtractor implements IntelExtractor {
   ) {
     this.label = tier === 1 ? cfg.tier1Model : cfg.tier2Model;
   }
-  async extract(raw: string, catalog: Drone[]): Promise<Extraction> {
-    const index = catalog
+  async extract(raw: string, catalog: Drone[], context?: Extraction): Promise<Extraction> {
+    const named = catalog.filter((d) =>
+      [d.name, d.cyrillic ?? "", ...d.aliases].some((name) => mentions(raw, name)),
+    );
+    const stems = new Set(
+      [...raw.matchAll(/\b([\p{L}]{3,})-\p{N}+\w*\b/giu)].map((m) => m[1]!.toLowerCase()),
+    );
+    const likely = catalog.filter((d) =>
+      [d.name, ...d.aliases].some((name) => stems.has(name.split("-")[0]!.toLowerCase())),
+    );
+    const shortlist = [...new Map([...named, ...likely].map((d) => [d.id, d])).values()].slice(
+      0,
+      30,
+    );
+    const index = shortlist
       .map((d) => `${d.id}: ${[d.name, d.cyrillic, ...d.aliases].filter(Boolean).join(" / ")}`)
       .join("\n");
     const r = await this.chat({
@@ -39,45 +60,58 @@ export class OpenAICompatibleExtractor implements IntelExtractor {
         (this.tier === 2
           ? "\nThink carefully about ambiguous aliases and transliterations before matching."
           : ""),
-      prompt: `Catalog:\n${index}\n\nReport:\n${raw}`,
+      prompt: `Catalog candidates:\n${index || "(none)"}\n\nDeterministic observations:\n${
+        context ? JSON.stringify(context) : "(none)"
+      }\n\nReport:\n${raw}`,
       json: true,
     });
     if (!r.ok) throw new Error(r.error);
-    const j = JSON.parse(r.content.replace(/^```json|```$/g, "").trim()) as Record<string, unknown>;
-    const strs = (v: unknown) => (Array.isArray(v) ? v.map(String) : []);
+    const decoded: unknown = JSON.parse(r.content.replace(/^```json|```$/g, "").trim());
+    const parsed = AIExtractionSchema.safeParse(decoded);
+    if (!parsed.success)
+      throw new Error(
+        `Invalid extraction JSON: ${parsed.error.issues[0]?.message ?? "schema mismatch"}`,
+      );
+    const j = parsed.data;
+    const validId = (id: string | null | undefined) =>
+      id && shortlist.some((d) => d.id === id) ? id : undefined;
+    const systems = j.systems.map((s) => ({
+      name: s.name,
+      ...(validId(s.matchId) ? { matchId: validId(s.matchId)! } : {}),
+      ...(validId(s.variantOf) ? { variantOf: validId(s.variantOf)! } : {}),
+    }));
+    const systemExtractions = j.systemExtractions.map(({ matchId, variantOf, ...s }) => ({
+      ...s,
+      ...(validId(matchId) ? { matchId: validId(matchId)! } : {}),
+      ...(validId(variantOf) ? { variantOf: validId(variantOf)! } : {}),
+    }));
     return {
-      ...(j["name"] ? { name: String(j["name"]) } : {}),
-      aliases: strs(j["aliases"]),
-      ...(j["domain"] ? { domain: j["domain"] as Extraction["domain"] & string } : {}),
-      ...(j["origin"] ? { origin: String(j["origin"]) } : {}),
-      ...(j["manufacturer"] ? { manufacturer: String(j["manufacturer"]) } : {}),
-      operators: strs(j["operators"]),
-      ...(j["propulsion"] ? { propulsion: String(j["propulsion"]) } : {}),
-      specs: Array.isArray(j["specs"])
-        ? (j["specs"] as Record<string, unknown>[]).map((s) => ({
-            key: String(s["key"]),
-            label: String(s["label"] ?? s["key"]),
-            value: s["value"] as number | string,
-            ...(s["unit"] ? { unit: String(s["unit"]) } : {}),
-          }))
-        : [],
-      rfBands: strs(j["rfBands"]),
-      systems: Array.isArray(j["systems"])
-        ? (j["systems"] as Record<string, unknown>[])
-            .filter((s) => s["name"])
-            .map((s) => ({
-              name: String(s["name"]),
-              ...(s["matchId"] && catalog.some((d) => d.id === s["matchId"])
-                ? { matchId: String(s["matchId"]) }
-                : {}),
-              ...(s["variantOf"] ? { variantOf: String(s["variantOf"]) } : {}),
-            }))
-        : [],
-      ...(j["matchId"] && catalog.some((d) => d.id === j["matchId"])
-        ? { matchId: String(j["matchId"]) }
-        : {}),
-      confidence: Math.max(0, Math.min(1, Number(j["confidence"]) || 0)),
-      rationale: String(j["rationale"] ?? ""),
+      ...(j.name ? { name: j.name } : {}),
+      aliases: j.aliases,
+      ...(j.domain ? { domain: j.domain } : {}),
+      ...(j.origin ? { origin: j.origin } : {}),
+      ...(j.manufacturer ? { manufacturer: j.manufacturer } : {}),
+      operators: j.operators,
+      ...(j.propulsion ? { propulsion: j.propulsion } : {}),
+      ...(j.installation ? { installation: j.installation } : {}),
+      specs: j.specs as ExtractedSpec[],
+      rfBands: j.rfBands,
+      systems,
+      systemExtractions: systemExtractions as SystemExtraction[],
+      components: j.components as SupplyComponent[],
+      payloads: j.payloads as PayloadObservation[],
+      sensors: j.sensors as SensorObservation[],
+      guidance: j.guidance,
+      ...(validId(j.matchId) ? { matchId: validId(j.matchId)! } : {}),
+      confidence: j.confidence,
+      rationale: j.rationale,
+      metadata: {
+        schemaVersion: EXTRACTION_SCHEMA_VERSION,
+        engine: "ai",
+        model: this.tier === 1 ? this.cfg.tier1Model : this.cfg.tier2Model,
+        promptVersion: EXTRACTION_PROMPT_VERSION,
+        analyzedAt: new Date().toISOString(),
+      },
     };
   }
 }
