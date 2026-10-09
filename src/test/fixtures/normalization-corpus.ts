@@ -31,13 +31,13 @@ export interface RangeFixture {
 export interface QuantityFixture {
   raw: string;
   /** Partial view of NormalizedQuantity; omitted fields are not asserted. */
-  expected?: Partial<NormalizedQuantity>;
+  expected?: Partial<NormalizedQuantity> | undefined;
   note?: string;
 }
 
 export interface MoneyFixture {
   raw: string;
-  expected?: { amount: number; currency: string };
+  expected?: { amount: number; currency: string } | undefined;
   note?: string;
 }
 
@@ -156,11 +156,12 @@ export const QUANTITIES: QuantityFixture[] = [
     note: "longest unit name must win over 'miles'",
   },
   { raw: "1000 m", expected: { canonicalValue: 1, canonicalUnit: "km" } },
-  { raw: "130 км", expected: { canonicalValue: 130, note: "Cyrillic km" } },
+  { raw: "130 км", expected: { canonicalValue: 130 }, note: "Cyrillic km" },
   { raw: "100 mph", expected: { canonicalValue: 160.9344, canonicalUnit: "km/h" } },
   {
     raw: "30 m/s",
-    expected: { canonicalValue: 108, note: "m/s must not match the bare 'm' or 's' unit" },
+    expected: { canonicalValue: 108 },
+    note: "m/s must not match the bare 'm' or 's' unit",
   },
   { raw: "90 knots", expected: { canonicalValue: 166.68, canonicalUnit: "km/h" } },
   { raw: "2 hours", expected: { canonicalValue: 120, canonicalUnit: "min" } },
