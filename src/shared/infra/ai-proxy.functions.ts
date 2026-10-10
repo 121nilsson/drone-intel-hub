@@ -43,6 +43,7 @@ export const translateText = createServerFn({ method: "POST" })
           "Translate the following text to English. If the text is already in English, return it unchanged. Preserve technical terms, numbers, and proper nouns.",
         prompt: data.text,
         json: false,
+        tier: "tier1",
       });
       if (!result.ok) return { ok: false as const, error: result.error };
       return { ok: true as const, translated: result.content };

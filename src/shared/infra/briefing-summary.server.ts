@@ -80,6 +80,7 @@ async function summarizeOnServer(context: string): Promise<string> {
     json: false,
     system: SUMMARY_SYSTEM,
     prompt: context,
+    tier: "tier2",
   });
   if (!r.ok) throw new Error(r.error);
   return r.content;

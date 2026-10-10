@@ -64,6 +64,7 @@ export class OpenAICompatibleExtractor implements IntelExtractor {
         context ? JSON.stringify(context) : "(none)"
       }\n\nReport:\n${raw}`,
       json: true,
+      tier: this.tier === 1 ? "tier1" : "tier2",
     });
     if (!r.ok) throw new Error(r.error);
     const decoded: unknown = JSON.parse(r.content.replace(/^```json|```$/g, "").trim());
@@ -130,6 +131,7 @@ export class OpenAICompatibleSummarizer implements BriefingSummarizer {
       system:
         "Write a terse 4-6 sentence executive intelligence summary of weekly drone technology shifts. No preamble.",
       prompt: context,
+      tier: "tier2",
     });
     if (!r.ok) throw new Error(r.error);
     return r.content;

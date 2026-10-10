@@ -15,6 +15,8 @@ import {
   getProviderApiKey,
   getProviderBaseUrl,
   getAvailableProviders,
+  getTier1Providers,
+  getTier2Providers,
   isMultiProviderEnabled,
   type AIProvider,
 } from "./ai-providers";
@@ -28,6 +30,8 @@ export interface ChatInput {
   json: boolean;
   /** Optional: specific provider to use (otherwise uses multi-provider fallback) */
   provider?: string;
+  /** Optional: tier to use for provider selection (tier1 or tier2) */
+  tier?: "tier1" | "tier2";
 }
 
 export type ChatResult = { ok: true; content: string; provider?: string } | { ok: false; error: string; provider?: string };
@@ -176,6 +180,11 @@ export async function chatCompletionOnce(d: ChatInput): Promise<ChatResult> {
     return callSingleProvider(d, specificProvider);
   }
   
+  // If tier is specified, use tier-aware fallback
+  if (d.tier) {
+    return callWithTierFallback(d, d.tier);
+  }
+  
   // If multi-provider, try each available provider in order
   if (multiProvider) {
     return callWithFallback(d);
@@ -286,10 +295,30 @@ async function callWithFallback(d: ChatInput): Promise<ChatResult> {
     return { ok: false, error: "No AI providers configured" };
   }
   
+  return callWithProviders(d, available);
+}
+
+/**
+ * Try providers for a specific tier until one succeeds
+ */
+async function callWithTierFallback(d: ChatInput, tier: "tier1" | "tier2"): Promise<ChatResult> {
+  const tierProviders = tier === "tier1" ? getTier1Providers() : getTier2Providers();
+  if (tierProviders.length === 0) {
+    // Fall back to all available providers if tier has none
+    return callWithFallback(d);
+  }
+  
+  return callWithProviders(d, tierProviders);
+}
+
+/**
+ * Shared implementation for trying multiple providers
+ */
+async function callWithProviders(d: ChatInput, providers: AIProvider[]): Promise<ChatResult> {
   const tried: AIProvider[] = [];
   let lastError = "All providers failed";
   
-  for (const provider of available) {
+  for (const provider of providers) {
     tried.push(provider);
     
     // Build input for this specific provider

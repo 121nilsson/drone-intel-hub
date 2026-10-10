@@ -691,6 +691,7 @@ export async function extractProcurement(
     system: PROCURE_SYS,
     prompt: raw,
     json: true,
+    tier: "tier2",
   });
   if (!r.ok) return null;
   try {
