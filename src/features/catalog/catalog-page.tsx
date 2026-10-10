@@ -1,6 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useMemo, useRef, useState } from "react";
+import { consensus } from "@/entities/drone/consensus";
 import { DOMAINS, flag, type Domain, type Drone } from "@/entities/drone/types";
 import { ieeeLabel } from "@/entities/normalization/bands";
 import { effectiveInstallationId, effectivePropulsionId } from "@/entities/normalization/taxonomy";
@@ -72,6 +73,7 @@ export function CatalogPage() {
     protocols: [],
     fiberOnly: false,
   });
+  const [showFilters, setShowFilters] = useState(false);
   const [mergeTargets, setMergeTargets] = useState<Record<string, string>>({});
   const [importing, setImporting] = useState(false);
   const [importNote, setImportNote] = useState<string | null>(null);
@@ -152,9 +154,25 @@ export function CatalogPage() {
       }));
   }, [drones]);
 
+  const activeFilters =
+    Object.values(f).reduce((n, v) => n + (Array.isArray(v) ? v.length : v ? 1 : 0), 0);
+
   return (
-    <div className="grid gap-6 lg:grid-cols-[260px_1fr]">
-      <aside className="space-y-5 border border-border bg-card/80 p-4">
+    <div className="grid gap-4 lg:grid-cols-[260px_1fr] lg:gap-6">
+      <button
+        type="button"
+        onClick={() => setShowFilters((v) => !v)}
+        className="flex items-center justify-between border border-border bg-card px-3 py-2.5 font-mono text-xs uppercase tracking-wider lg:hidden"
+      >
+        <span>Filters{activeFilters ? ` · ${activeFilters} active` : ""}</span>
+        <span className="text-primary">{showFilters ? "Hide" : "Show"}</span>
+      </button>
+      <aside
+        className={cn(
+          "space-y-5 border border-border bg-card/80 p-4",
+          !showFilters && "hidden lg:block",
+        )}
+      >
         <Facet
           label="Domain"
           options={DOMAINS}
@@ -305,35 +323,64 @@ export function CatalogPage() {
         </div>
         {importNote && <p className="mb-3 font-mono text-xs text-muted-foreground">{importNote}</p>}
         <div className="grid gap-3 md:grid-cols-2">
-          {results.map((d) => (
-            <Link
-              key={d.id}
-              to="/systems/$id"
-              params={{ id: d.id }}
-              className="block border border-border bg-card/80 p-4 transition-colors hover:border-primary"
-            >
-              <div className="flex items-start justify-between gap-2">
-                <div>
-                  <h3 className="font-semibold">{d.name}</h3>
-                  <p className="text-sm text-muted-foreground">
-                    {[d.cyrillic, ...d.aliases].filter(Boolean).join(" · ")}
-                  </p>
-                </div>
-                <Tag tone="primary">{d.domain}</Tag>
+          {results.map((d) => {
+            const top = d.specs
+              .filter((x) => x.key !== "unit_cost")
+              .slice(0, 2)
+              .map((x) => `${x.label} ${consensus(x).display}`);
+            const cp = d.counterpartIds.map((id) => drones.find((x) => x.id === id)).find(Boolean);
+            return (
+              <div
+                key={d.id}
+                className="flex flex-col border border-border bg-card/80 transition-colors hover:border-primary"
+              >
+                <Link to="/systems/$id" params={{ id: d.id }} className="block flex-1 p-4">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <h3 className="font-semibold">
+                        <span className="mr-1.5 font-mono text-xs text-muted-foreground">
+                          {flag(d.origin)}
+                        </span>
+                        {d.name}
+                      </h3>
+                      <p className="truncate text-sm text-muted-foreground">
+                        {[d.cyrillic, ...d.aliases].filter(Boolean).join(" · ")}
+                      </p>
+                    </div>
+                    <Tag tone="primary">{d.domain}</Tag>
+                  </div>
+                  {top.length > 0 && (
+                    <p className="mt-2 font-mono text-xs text-foreground/80">{top.join(" · ")}</p>
+                  )}
+                  <div className="mt-3 flex flex-wrap gap-1.5">
+                    {d.operators.map((o) => (
+                      <Tag key={o} tone="accent">
+                        Op {flag(o)}
+                      </Tag>
+                    ))}
+                    {d.rf.slice(0, 3).map((r, i) => (
+                      <Tag key={i}>
+                        {linkIsFiber(r)
+                          ? "fiber"
+                          : r.freqMHz
+                            ? `${r.role} ${r.freqMHz[0]}–${r.freqMHz[1]}`
+                            : r.band}
+                      </Tag>
+                    ))}
+                  </div>
+                </Link>
+                {cp && (
+                  <Link
+                    to="/counterparts"
+                    search={{ a: d.id, b: cp.id }}
+                    className="border-t border-border px-4 py-2.5 font-mono text-xs uppercase text-muted-foreground hover:text-primary"
+                  >
+                    Compare vs {cp.name} →
+                  </Link>
+                )}
               </div>
-              <div className="mt-3 flex flex-wrap gap-1.5">
-                <Tag>Origin {flag(d.origin)}</Tag>
-                {d.operators.map((o) => (
-                  <Tag key={o} tone="accent">
-                    Op {flag(o)}
-                  </Tag>
-                ))}
-                {d.rf.slice(0, 3).map((r, i) => (
-                  <Tag key={i}>{r.band}</Tag>
-                ))}
-              </div>
-            </Link>
-          ))}
+            );
+          })}
         </div>
       </div>
     </div>
