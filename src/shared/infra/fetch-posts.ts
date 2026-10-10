@@ -1,5 +1,6 @@
 import { mapWithConcurrency } from "./pool";
 import type { MonitoredSource } from "@/entities/source/types";
+import { getFilterForPlatform } from "./content-filters";
 
 export interface FetchedPost {
   id: string;
@@ -55,13 +56,17 @@ export function sourceHost(s: Pick<MonitoredSource, "platform" | "handle">): str
 function parseTelegram(html: string, chan: string): FetchedPost[] {
   const out: FetchedPost[] = [];
   const blocks = html.split('class="tgme_widget_message_wrap').slice(1);
+  const filter = getFilterForPlatform("Telegram");
   for (const b of blocks) {
     const post = b.match(/data-post="([^"]+)"/)?.[1];
     const txt = b.match(/class="tgme_widget_message_text[^"]*"[^>]*>([\s\S]*?)<\/div>/)?.[1];
     const date = b.match(/datetime="([^"]+)"/)?.[1];
     if (!post || !txt) continue;
-    const text = decode(txt);
-    if (text.length < 40) continue;
+    let text = decode(txt);
+    text = filter(text);
+    if (text.length < 20) continue;
+    // Additional drone-specific filter for Telegram
+    if (!/\b(drone|uav|fpv|ugv|usv|ew|rf|mhz|ghz|shahed|geran|lancet|sting|bayraktar|kargu|warmate|switchblade|jammer|crpa|gnss|gps)\b/i.test(text)) continue;
     out.push({ id: `tg:${post}`, text, url: `https://t.me/${post}`, date });
   }
   return out.reverse().slice(0, 20);
@@ -84,9 +89,11 @@ function parseRss(xml: string): FetchedPost[] {
         "";
       const guid = it.match(/<(?:guid|id)[^>]+>([^<]+)</)?.[1] ?? link ?? title;
       const date = it.match(/<(?:pubDate|published|updated)>([^<]+)</)?.[1];
+      const filter = getFilterForPlatform("RSS");
+      const filteredText = filter(`${title}. ${desc}`);
       return {
         id: `rss:${guid.trim()}`,
-        text: `${title}. ${desc}`.slice(0, 3000),
+        text: filteredText.slice(0, 3000),
         url: link.trim(),
         date,
       };
@@ -117,7 +124,7 @@ const MIN_ARTICLE_CHARS = 400;
 /** Above this a body is truncated: dispatches are stored, and the store caps a document. */
 const MAX_ARTICLE_CHARS = 8000;
 /** RSS items shorter than this are usually a teaser, and are worth following to the article. */
-const RSS_TEASER_CHARS = 200;
+const RSS_TEASER_CHARS = 500;
 
 type TextResult =
   { ok: true; body: string; status: number } | { ok: false; error: string; status: number };

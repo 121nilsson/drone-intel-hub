@@ -19,6 +19,9 @@ const MAX_CHARS = 8000;
 /** Below this many paragraphs, the page is a stub or a redirect rather than a report. */
 const MIN_PARAGRAPHS = 2;
 
+// Import content filters for post-processing
+import { filterGeneralContent } from "./content-filters";
+
 export async function extractArticleText(html: string, url: string): Promise<string | null> {
   try {
     const [{ parseHTML }, { Readability }] = await Promise.all([
@@ -53,7 +56,12 @@ export async function extractArticleText(html: string, url: string): Promise<str
     );
     const text = [heading, ...paragraphs].filter(Boolean).join("\n\n");
     if (text.length < MIN_CHARS) return null;
-    return text.length > MAX_CHARS ? text.slice(0, MAX_CHARS) : text;
+    
+    // Apply content filters to remove remaining noise (boilerplate, banners, etc.)
+    const filteredText = filterGeneralContent(text);
+    
+    if (filteredText.length < MIN_CHARS) return null;
+    return filteredText.length > MAX_CHARS ? filteredText.slice(0, MAX_CHARS) : filteredText;
   } catch {
     // A parser crash must fail the one link it belongs to, never the source that contains it.
     return null;

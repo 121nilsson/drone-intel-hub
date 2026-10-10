@@ -104,10 +104,14 @@ export async function fetchAllSources(
 
   // Article bodies need a DOM, so the extractor is server-only and injected into the shared
   // transport. Imported once per run, not once per source.
+  // Also import content filters for post-processing
   const articleText =
     process.env["FETCH_ARTICLE_BODIES"] !== "0"
       ? (await import("./article.server")).extractArticleText
       : undefined;
+  
+  // Content filters for reducing noise in extracted text
+  const { filterGeneralContent, getFilterForPlatform } = await import("./content-filters");
 
   // Collected in parallel lanes rather than one source at a time: ~79 hosts fetched sequentially
   // paid the sum of every latency, which ran to minutes before stage 2 even began. Same-host
