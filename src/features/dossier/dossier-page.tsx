@@ -1,83 +1,104 @@
 import { Link } from "@tanstack/react-router";
+import { useState } from "react";
 import { consensus } from "@/entities/drone/consensus";
 import { ieeeLabel, natoLabel } from "@/entities/normalization/bands";
 import { effectiveIeeeBands, effectiveNatoBands, linkIsFiber } from "@/entities/normalization/rf";
-import { flag, type Drone } from "@/entities/drone/types";
+import { flag, type Drone, type SpecAttribute } from "@/entities/drone/types";
+import { ClaimChip, ProvenanceSheet, type ClaimSelection } from "./provenance-sheet";
 import { useDrones } from "@/shared/infra/services";
 import { ConfidenceTag, Panel, Tag } from "@/shared/ui/primitives";
 
 export function SpecTable({ drone }: { drone: Drone }) {
+  const [sel, setSel] = useState<ClaimSelection | null>(null);
+  const chips = (s: SpecAttribute) => (
+    <div className="mt-1.5 flex flex-wrap gap-1">
+      {s.claims.map((claim, i) => (
+        <ClaimChip key={i} claim={claim} onOpen={() => setSel({ spec: s, claim })} />
+      ))}
+    </div>
+  );
   return (
-    <table className="w-full text-sm">
-      <thead>
-        <tr className="text-left font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
-          <th className="pb-2">Attribute</th>
-          <th className="pb-2">Consensus</th>
-          <th className="pb-2">Spread</th>
-          <th className="pb-2">Sources</th>
-          <th className="pb-2">Conf.</th>
-        </tr>
-      </thead>
-      <tbody className="divide-y divide-border">
+    <>
+      {/* Phone: one card per attribute */}
+      <ul className="space-y-2 sm:hidden">
         {drone.specs.map((s) => {
           const c = consensus(s);
           return (
-            <tr key={s.key}>
-              <td className="py-2">
-                {s.label}{" "}
-                {s.discoveredBy === "ai" && (
-                  <Tag tone="accent" className="ml-1">
-                    AI-discovered
-                  </Tag>
-                )}
-                {s.claims.some((claim) => claim.evidence) && (
-                  <details className="mt-1 max-w-md text-xs text-muted-foreground">
-                    <summary className="cursor-pointer font-mono">Evidence</summary>
-                    <ul className="mt-1 space-y-1">
-                      {s.claims.map((claim, i) => (
-                        <li key={i}>
-                          “{claim.evidence ?? claim.raw ?? String(claim.value)}”
-                          <span className="block font-mono">
-                            {claim.source}
-                            {claim.sourceId ? ` · dispatch ${claim.sourceId}` : ""}
-                            {claim.model ? ` · ${claim.model}` : ""}
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  </details>
-                )}
-              </td>
-              <td className="py-2 font-mono text-primary">
-                {c.display}{" "}
+            <li key={s.key} className="border border-border bg-background/40 p-3">
+              <div className="flex items-start justify-between gap-2">
+                <p className="text-sm">
+                  {s.label}
+                  {s.discoveredBy === "ai" && (
+                    <Tag tone="accent" className="ml-1.5">
+                      AI
+                    </Tag>
+                  )}
+                </p>
+                <ConfidenceTag level={c.confidence} />
+              </div>
+              <p className="mt-1 font-mono text-lg text-primary">
+                {c.display}
                 {c.disputed && (
-                  <Tag tone="danger" className="ml-1">
+                  <Tag tone="danger" className="ml-2 align-middle">
                     Disputed
                   </Tag>
                 )}
-              </td>
-              <td className="py-2 font-mono text-xs text-muted-foreground">
-                {c.min !== undefined && c.min !== c.max ? `${c.min}–${c.max}` : "—"}
-              </td>
-              <td
-                className="py-2 font-mono text-xs"
-                title={s.claims
-                  .map(
-                    (x) =>
-                      `${x.raw ?? x.value}${x.normalized?.canonicalValue !== undefined && x.raw ? ` → ${x.normalized.canonicalValue} ${x.normalized.canonicalUnit ?? ""}` : ""} (${x.source})`,
-                  )
-                  .join("\n")}
-              >
-                {c.sources}
-              </td>
-              <td className="py-2">
-                <ConfidenceTag level={c.confidence} />
-              </td>
-            </tr>
+              </p>
+              <p className="font-mono text-xs text-muted-foreground">
+                {c.min !== undefined && c.min !== c.max ? `${c.min}–${c.max} · ` : ""}
+                {c.sources} source{c.sources === 1 ? "" : "s"}
+              </p>
+              {chips(s)}
+            </li>
           );
         })}
-      </tbody>
-    </table>
+      </ul>
+      <table className="hidden w-full text-sm sm:table">
+        <thead>
+          <tr className="text-left font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
+            <th className="pb-2">Attribute</th>
+            <th className="pb-2">Consensus</th>
+            <th className="pb-2">Spread</th>
+            <th className="pb-2">Sources</th>
+            <th className="pb-2">Conf.</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-border">
+          {drone.specs.map((s) => {
+            const c = consensus(s);
+            return (
+              <tr key={s.key} className="align-top">
+                <td className="py-2">
+                  {s.label}{" "}
+                  {s.discoveredBy === "ai" && (
+                    <Tag tone="accent" className="ml-1">
+                      AI-discovered
+                    </Tag>
+                  )}
+                  {chips(s)}
+                </td>
+                <td className="py-2 font-mono text-primary">
+                  {c.display}{" "}
+                  {c.disputed && (
+                    <Tag tone="danger" className="ml-1">
+                      Disputed
+                    </Tag>
+                  )}
+                </td>
+                <td className="py-2 font-mono text-xs text-muted-foreground">
+                  {c.min !== undefined && c.min !== c.max ? `${c.min}–${c.max}` : "—"}
+                </td>
+                <td className="py-2 font-mono text-xs">{c.sources}</td>
+                <td className="py-2">
+                  <ConfidenceTag level={c.confidence} />
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+      <ProvenanceSheet selection={sel} droneName={drone.name} onClose={() => setSel(null)} />
+    </>
   );
 }
 
