@@ -5,7 +5,19 @@
  * runner as well as from a request. Server functions need a Start request context
  * (AsyncLocalStorage), which does not exist on a cron tick - calling one from a scheduled
  * task fails with "No Start context found in AsyncLocalStorage".
+ *
+ * Supports multi-provider fallback: if one provider fails or times out, automatically
+ * tries the next available provider.
  */
+
+import {
+  getNextProvider,
+  getProviderApiKey,
+  getProviderBaseUrl,
+  getAvailableProviders,
+  isMultiProviderEnabled,
+  type AIProvider,
+} from "./ai-providers";
 
 export interface ChatInput {
   baseUrl?: string;
@@ -14,9 +26,11 @@ export interface ChatInput {
   system: string;
   prompt: string;
   json: boolean;
+  /** Optional: specific provider to use (otherwise uses multi-provider fallback) */
+  provider?: string;
 }
 
-export type ChatResult = { ok: true; content: string } | { ok: false; error: string };
+export type ChatResult = { ok: true; content: string; provider?: string } | { ok: false; error: string; provider?: string };
 
 /** Injectable transport so callers choose the RPC bridge (browser) or direct (server task). */
 export type ChatTransport = (input: ChatInput) => Promise<ChatResult>;
@@ -147,10 +161,46 @@ function backoffMs(attempt: number, retryAfter?: number): number {
  *
  *  Rate-limit and transient server responses are retried internally with backoff rather than
  *  surfacing as a failed extraction: a 429 on one post should cost a second, not abandon the
- *  rest of the source. The body is built once and reused - a string body is safe to replay. */
+ *  rest of the source. The body is built once and reused - a string body is safe to replay.
+ *
+ *  When multi-provider mode is enabled (multiple AI_PROVIDER_*_KEY env vars set), automatically
+ *  falls back to the next available provider on failure or timeout.
+ */
 export async function chatCompletionOnce(d: ChatInput): Promise<ChatResult> {
-  const apiKey = d.apiKey?.trim() || env("NVIDIA_API_KEY");
-  const baseUrl = (d.baseUrl?.trim() || env("NVIDIA_BASE_URL") || "").replace(/\/$/, "");
+  // Check if multi-provider mode is requested
+  const multiProvider = isMultiProviderEnabled();
+  const specificProvider = d.provider ? getProvider(d.provider) : undefined;
+  
+  // If a specific provider is requested, use only that one
+  if (specificProvider) {
+    return callSingleProvider(d, specificProvider);
+  }
+  
+  // If multi-provider, try each available provider in order
+  if (multiProvider) {
+    return callWithFallback(d);
+  }
+  
+  // Default: single provider mode (backward compatible)
+  return callSingleProvider(d);
+}
+
+/**
+ * Call a single provider with the given input
+ */
+async function callSingleProvider(d: ChatInput, provider?: AIProvider): Promise<ChatResult> {
+  const actualProvider = provider ?? {
+    name: "nvidia",
+    baseUrl: "",
+    apiKeyEnv: "NVIDIA_API_KEY",
+    defaultModel: "",
+    priority: 0,
+    enabled: true,
+  };
+  
+  const apiKey = d.apiKey?.trim() || getProviderApiKey(actualProvider) || env("NVIDIA_API_KEY");
+  const baseUrl = (d.baseUrl?.trim() || getProviderBaseUrl(actualProvider) || env("NVIDIA_BASE_URL") || "").replace(/\/$/, "");
+  
   if (!apiKey)
     throw new Error("No API key: set NVIDIA_API_KEY in .env.local or save one in Settings");
   if (!baseUrl.startsWith("https://")) throw new Error("Base URL must be https");
@@ -214,7 +264,7 @@ export async function chatCompletionOnce(d: ChatInput): Promise<ChatResult> {
     error = statusError(res.status, res.statusText);
     // A 400/401/404 will fail identically on every retry, so surface it immediately.
     if (!RETRYABLE.has(res.status) || attempt === ATTEMPTS - 1)
-      return { ok: false as const, error };
+      return { ok: false as const, error, provider: actualProvider.name };
     const wait = backoffMs(attempt, retryAfterMs(res));
     if (res.status === 429) {
       // Paid through the shared pause, which this caller's own pace() also honours.
@@ -224,5 +274,51 @@ export async function chatCompletionOnce(d: ChatInput): Promise<ChatResult> {
       owed = wait;
     }
   }
-  return { ok: false as const, error };
+  return { ok: false as const, error, provider: actualProvider.name };
+}
+
+/**
+ * Try providers in order until one succeeds
+ */
+async function callWithFallback(d: ChatInput): Promise<ChatResult> {
+  const available = getAvailableProviders();
+  if (available.length === 0) {
+    return { ok: false, error: "No AI providers configured" };
+  }
+  
+  const tried: AIProvider[] = [];
+  let lastError = "All providers failed";
+  
+  for (const provider of available) {
+    tried.push(provider);
+    
+    // Build input for this specific provider
+    const providerInput: ChatInput = {
+      ...d,
+      baseUrl: getProviderBaseUrl(provider),
+      apiKey: getProviderApiKey(provider),
+      model: d.model || provider.defaultModel,
+    };
+    
+    try {
+      const result = await callSingleProvider(providerInput, provider);
+      if (result.ok) {
+        // Success! Return with provider info
+        return { ...result, provider: provider.name };
+      }
+      lastError = result.error;
+      console.warn(`[ai-proxy] Provider ${provider.name} failed: ${result.error}`);
+    } catch (e) {
+      const errorMsg = e instanceof Error ? e.message : "Unknown error";
+      lastError = errorMsg;
+      console.warn(`[ai-proxy] Provider ${provider.name} threw: ${errorMsg}`);
+    }
+  }
+  
+  // All providers failed
+  return {
+    ok: false,
+    error: `All providers failed. Last error: ${lastError}. Tried: ${tried.map(p => p.name).join(", ")}`,
+    provider: tried.map(p => p.name).join(", "),
+  };
 }
