@@ -109,7 +109,7 @@ export async function fetchAllSources(
     process.env["FETCH_ARTICLE_BODIES"] !== "0"
       ? (await import("./article.server")).extractArticleText
       : undefined;
-  
+
   // Content filters for reducing noise in extracted text
   const { filterGeneralContent, getFilterForPlatform } = await import("./content-filters");
 

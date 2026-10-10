@@ -34,7 +34,9 @@ export interface ChatInput {
   tier?: "tier1" | "tier2";
 }
 
-export type ChatResult = { ok: true; content: string; provider?: string } | { ok: false; error: string; provider?: string };
+export type ChatResult =
+  | { ok: true; content: string; provider?: string }
+  | { ok: false; error: string; provider?: string };
 
 /** Injectable transport so callers choose the RPC bridge (browser) or direct (server task). */
 export type ChatTransport = (input: ChatInput) => Promise<ChatResult>;
@@ -174,22 +176,22 @@ export async function chatCompletionOnce(d: ChatInput): Promise<ChatResult> {
   // Check if multi-provider mode is requested
   const multiProvider = isMultiProviderEnabled();
   const specificProvider = d.provider ? getProvider(d.provider) : undefined;
-  
+
   // If a specific provider is requested, use only that one
   if (specificProvider) {
     return callSingleProvider(d, specificProvider);
   }
-  
+
   // If tier is specified, use tier-aware fallback
   if (d.tier) {
     return callWithTierFallback(d, d.tier);
   }
-  
+
   // If multi-provider, try each available provider in order
   if (multiProvider) {
     return callWithFallback(d);
   }
-  
+
   // Default: single provider mode (backward compatible)
   return callSingleProvider(d);
 }
@@ -206,10 +208,15 @@ async function callSingleProvider(d: ChatInput, provider?: AIProvider): Promise<
     priority: 0,
     enabled: true,
   };
-  
+
   const apiKey = d.apiKey?.trim() || getProviderApiKey(actualProvider) || env("NVIDIA_API_KEY");
-  const baseUrl = (d.baseUrl?.trim() || getProviderBaseUrl(actualProvider) || env("NVIDIA_BASE_URL") || "").replace(/\/$/, "");
-  
+  const baseUrl = (
+    d.baseUrl?.trim() ||
+    getProviderBaseUrl(actualProvider) ||
+    env("NVIDIA_BASE_URL") ||
+    ""
+  ).replace(/\/$/, "");
+
   if (!apiKey)
     throw new Error("No API key: set NVIDIA_API_KEY in .env.local or save one in Settings");
   if (!baseUrl.startsWith("https://")) throw new Error("Base URL must be https");
@@ -294,7 +301,7 @@ async function callWithFallback(d: ChatInput): Promise<ChatResult> {
   if (available.length === 0) {
     return { ok: false, error: "No AI providers configured" };
   }
-  
+
   return callWithProviders(d, available);
 }
 
@@ -307,7 +314,7 @@ async function callWithTierFallback(d: ChatInput, tier: "tier1" | "tier2"): Prom
     // Fall back to all available providers if tier has none
     return callWithFallback(d);
   }
-  
+
   return callWithProviders(d, tierProviders);
 }
 
@@ -317,10 +324,10 @@ async function callWithTierFallback(d: ChatInput, tier: "tier1" | "tier2"): Prom
 async function callWithProviders(d: ChatInput, providers: AIProvider[]): Promise<ChatResult> {
   const tried: AIProvider[] = [];
   let lastError = "All providers failed";
-  
+
   for (const provider of providers) {
     tried.push(provider);
-    
+
     // Build input for this specific provider
     const providerInput: ChatInput = {
       ...d,
@@ -328,7 +335,7 @@ async function callWithProviders(d: ChatInput, providers: AIProvider[]): Promise
       apiKey: getProviderApiKey(provider),
       model: d.model || provider.defaultModel,
     };
-    
+
     try {
       const result = await callSingleProvider(providerInput, provider);
       if (result.ok) {
@@ -343,11 +350,11 @@ async function callWithProviders(d: ChatInput, providers: AIProvider[]): Promise
       console.warn(`[ai-proxy] Provider ${provider.name} threw: ${errorMsg}`);
     }
   }
-  
+
   // All providers failed
   return {
     ok: false,
-    error: `All providers failed. Last error: ${lastError}. Tried: ${tried.map(p => p.name).join(", ")}`,
-    provider: tried.map(p => p.name).join(", "),
+    error: `All providers failed. Last error: ${lastError}. Tried: ${tried.map((p) => p.name).join(", ")}`,
+    provider: tried.map((p) => p.name).join(", "),
   };
 }

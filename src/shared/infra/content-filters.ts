@@ -13,7 +13,7 @@ export const GENERAL_FILTERS = {
     /We use cookies to[\s\S]*?\n/gi,
     /By continuing to use[\s\S]*?cookies/gi,
   ],
-  
+
   // Newsletter signup forms
   newsletterForms: [
     /newsletter[\s\S]*?(subscribe|sign up|join|email)/gi,
@@ -21,18 +21,18 @@ export const GENERAL_FILTERS = {
     /get the latest[\s\S]*?in your inbox/gi,
     /enter your email[\s\S]*?to subscribe/gi,
   ],
-  
+
   // Related content / You might also like
   relatedContent: [
-    /You may also like[\s\S]*?$/gmi,
-    /You might also like[\s\S]*?$/gmi,
+    /You may also like[\s\S]*?$/gim,
+    /You might also like[\s\S]*?$/gim,
     /Related[\s\S]*?articles?/gi,
     /Read more[\s\S]*?\n/gi,
     /More from[\s\S]*?\n/gi,
     /Recommended[\s\S]*?for you/gi,
     /Trending[\s\S]*?now/gi,
   ],
-  
+
   // Social media share buttons
   socialShare: [
     /Share[\s\S]*?(Twitter|Facebook|LinkedIn|Reddit|WhatsApp|Email)/gi,
@@ -42,14 +42,14 @@ export const GENERAL_FILTERS = {
     /Share on[\s\S]*?/gi,
     /\bPrint\b[\s\S]*?\bEmail\b/gi,
   ],
-  
+
   // Author bios and bylines (keep the author name but remove the bio)
   authorBios: [
     /By[\s\S]*?\n[\s\S]*?Bio[\s\S]*?\n/gi,
     /Author:[\s\S]*?\n[\s\S]*?Follow/gi,
     /Written by[\s\S]*?\n[\s\S]*?\d+ articles?/gi,
   ],
-  
+
   // Advertisements
   advertisements: [
     /Advertisement[\s\S]*?\n/gi,
@@ -58,7 +58,7 @@ export const GENERAL_FILTERS = {
     /Paid[\s\S]*?promotion/gi,
     /\bAd\b[\s\S]*?\n/gi,
   ],
-  
+
   // Comment sections
   comments: [
     /Comments[\s\S]*?\n/gi,
@@ -66,7 +66,7 @@ export const GENERAL_FILTERS = {
     /\d+[\s\S]*?comments?/gi,
     /Join the[\s\S]*?conversation/gi,
   ],
-  
+
   // Footer content
   footers: [
     /©[\s\S]*?\d{4}[\s\S]*?All rights reserved/gi,
@@ -75,7 +75,7 @@ export const GENERAL_FILTERS = {
     /Contact[\s\S]*?Us/gi,
     /About[\s\S]*?Us/gi,
   ],
-  
+
   // Navigation elements
   navigation: [
     /Home[\s\S]*?About[\s\S]*?Contact/gi,
@@ -83,19 +83,12 @@ export const GENERAL_FILTERS = {
     /Page[\s\S]*?\d+/gi,
     /Go to[\s\S]*?top/gi,
   ],
-  
+
   // Copyright notices
-  copyright: [
-    /Copyright[\s\S]*?\d{4}/gi,
-    /All rights reserved/gi,
-  ],
-  
+  copyright: [/Copyright[\s\S]*?\d{4}/gi, /All rights reserved/gi],
+
   // Empty or placeholder content
-  placeholders: [
-    /\n{4,}/g,
-    /\s{100,}/g,
-    /&nbsp;{2,}/gi,
-  ],
+  placeholders: [/\n{4,}/g, /\s{100,}/g, /&nbsp;{2,}/gi],
 };
 
 /** Telegram-specific filters */
@@ -108,26 +101,26 @@ export const TELEGRAM_FILTERS = {
     /\d+[\s\S]*?members?/gi,
     /Forwarded from/gi,
   ],
-  
+
   // Telegram message metadata
   messageMeta: [
-    /\d{1,2}:\d{2}[\s\S]*?\n/gi,  // Timestamps like "14:30"
-    /\d{1,2}\.\d{1,2}\.\d{2,4}/gi,  // Dates like "01.01.2024"
+    /\d{1,2}:\d{2}[\s\S]*?\n/gi, // Timestamps like "14:30"
+    /\d{1,2}\.\d{1,2}\.\d{2,4}/gi, // Dates like "01.01.2024"
     /Edited[\s\S]*?\n/gi,
     /Deleted[\s\S]*?message/gi,
     /Pinned[\s\S]*?message/gi,
   ],
-  
+
   // Telegram formatting artifacts
   formatting: [
-    /#{2,}\s/gi,  // Multiple hashes
-    /\*{2,}/gi,   // Multiple asterisks
-    /_{2,}/gi,    // Multiple underscores
+    /#{2,}\s/gi, // Multiple hashes
+    /\*{2,}/gi, // Multiple asterisks
+    /_{2,}/gi, // Multiple underscores
   ],
-  
+
   // Short noisy messages
   shortNoise: [
-    /^\+\d+$/gi,  // Just a number
+    /^\+\d+$/gi, // Just a number
     /^!+$/gi,
     /^\.+$/gi,
     /^\?+$/gi,
@@ -156,7 +149,7 @@ export const REDDIT_FILTERS = {
     /Spoiler/gi,
     /Crosspost/gi,
   ],
-  
+
   // Reddit community info
   communityInfo: [
     /^subreddit[\s\S]*?r\//gi,
@@ -165,22 +158,12 @@ export const REDDIT_FILTERS = {
     /Created[\s\S]*?\d+/gi,
     /Top[\s\S]*?\d+%/gi,
   ],
-  
+
   // Reddit actions
-  actions: [
-    /Vote[\s\S]*?Comment[\s\S]*?Award/gi,
-    /Report[\s\S]*?Save/gi,
-    /Give[\s\S]*?Award/gi,
-  ],
-  
+  actions: [/Vote[\s\S]*?Comment[\s\S]*?Award/gi, /Report[\s\S]*?Save/gi, /Give[\s\S]*?Award/gi],
+
   // Reddit formatting
-  redditFormatting: [
-    /^\[deleted\]/gi,
-    /^\[removed\]/gi,
-    /^\*\*\*/gi,
-    /^>!/gi,
-    /^!</gi,
-  ],
+  redditFormatting: [/^\[deleted\]/gi, /^\[removed\]/gi, /^\*\*\*/gi, /^>!/gi, /^!</gi],
 };
 
 /** Twitter/X-specific filters (for when bridge is used) */
@@ -198,7 +181,7 @@ export const TWITTER_FILTERS = {
     /Liked[\s\S]*?by/gi,
     /\d+[\s\S]*?views?/gi,
   ],
-  
+
   // Twitter timestamps
   timestamps: [
     /\d{1,2}:\d{2}[\s\S]*?(AM|PM)/gi,
@@ -212,19 +195,19 @@ export const TWITTER_FILTERS = {
  */
 export function applyFilters(text: string, filters: Record<string, RegExp[]>): string {
   let result = text;
-  
+
   for (const [, patterns] of Object.entries(filters)) {
     for (const pattern of patterns) {
       result = result.replace(pattern, "");
     }
   }
-  
+
   // Clean up excessive whitespace left by removals
   result = result
     .replace(/\n{3,}/g, "\n\n")
     .replace(/\s{50,}/g, " ")
     .trim();
-  
+
   return result;
 }
 
@@ -266,25 +249,28 @@ export function getFilterForPlatform(platform: string): (text: string) => string
     X: filterTwitterContent,
     Twitter: filterTwitterContent,
   };
-  
+
   return filters[platform as keyof typeof filters] ?? filterGeneralContent;
 }
 
 /**
  * Create a combined filter for a specific source
  */
-export function createSourceFilter(platform: string, customFilters?: RegExp[]): (text: string) => string {
+export function createSourceFilter(
+  platform: string,
+  customFilters?: RegExp[],
+): (text: string) => string {
   const platformFilter = getFilterForPlatform(platform);
-  
+
   return (text: string) => {
     let result = platformFilter(text);
-    
+
     if (customFilters && customFilters.length > 0) {
       for (const pattern of customFilters) {
         result = result.replace(pattern, "");
       }
     }
-    
+
     return result;
   };
 }

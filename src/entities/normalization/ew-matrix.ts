@@ -26,7 +26,8 @@ export function ewEmitters(d: Drone): EwEmitter[] {
   for (const r of d.rf) {
     if (r.role === "antijam" || linkIsFiber(r)) continue;
     const text = [r.band, r.notes, r.tacticalTag].filter(Boolean).join(" ");
-    if (JAM.test(text) && !ANTI_JAM.test(text)) out.push(r.freqMHz ? { label: r.band, freqMHz: r.freqMHz } : { label: r.band });
+    if (JAM.test(text) && !ANTI_JAM.test(text))
+      out.push(r.freqMHz ? { label: r.band, freqMHz: r.freqMHz } : { label: r.band });
   }
   for (const p of d.payloads ?? []) {
     if (JAM.test(`${p.name} ${p.category ?? ""}`)) out.push({ label: p.name });
@@ -49,7 +50,11 @@ export function assessLink(link: RFLink, emitters: EwEmitter[], antiJam: boolean
     link: link.freqMHz ? `${link.freqMHz[0]}–${link.freqMHz[1]} MHz` : link.band,
   };
   if (linkIsFiber(link))
-    return { ...base, verdict: "fiber_immune", rationale: "Physical tether — immune to radio jamming" };
+    return {
+      ...base,
+      verdict: "fiber_immune",
+      rationale: "Physical tether — immune to radio jamming",
+    };
   if (link.role === "antijam")
     return { ...base, verdict: "safe", rationale: "Anti-jam receiver, not a jammable link" };
   let best: { hit: [number, number]; share: number; label: string } | undefined;
@@ -68,7 +73,12 @@ export function assessLink(link: RFLink, emitters: EwEmitter[], antiJam: boolean
   if (best) {
     const range = `${best.hit[0]}–${best.hit[1]} MHz`;
     if (best.share >= 0.8 && !gnssCrpa)
-      return { ...base, verdict: "jammed", overlapMHz: best.hit, rationale: `${best.label} covers ${range}` };
+      return {
+        ...base,
+        verdict: "jammed",
+        overlapMHz: best.hit,
+        rationale: `${best.label} covers ${range}`,
+      };
     return {
       ...base,
       verdict: "contested",
@@ -79,7 +89,11 @@ export function assessLink(link: RFLink, emitters: EwEmitter[], antiJam: boolean
     };
   }
   if (unknownEmitter)
-    return { ...base, verdict: "unknown", rationale: `${unknownEmitter} — jammer frequency not recorded` };
+    return {
+      ...base,
+      verdict: "unknown",
+      rationale: `${unknownEmitter} — jammer frequency not recorded`,
+    };
   return { ...base, verdict: "safe", rationale: "Outside every recorded jammer band" };
 }
 
@@ -90,8 +104,9 @@ export function ewMatrix(target: Drone, attacker: Drone) {
   return {
     emitters,
     antiJam,
-    rows: emitters.length || target.rf.some(linkIsFiber)
-      ? target.rf.map((l) => assessLink(l, emitters, antiJam))
-      : [],
+    rows:
+      emitters.length || target.rf.some(linkIsFiber)
+        ? target.rf.map((l) => assessLink(l, emitters, antiJam))
+        : [],
   };
 }

@@ -3,11 +3,11 @@ import type { AIProviderSettings } from "@/shared/contracts/ai";
 /**
  * Built-in defaults. Kept in its own module so server-side jobs can read them without
  *  importing services.tsx (which pulls in React).
- * 
+ *
  * These defaults align with the tiered provider configuration in ai-providers.ts:
  * - tier1 (screening): Groq with mixtral-8x7b-32768 (fast, cheap)
  * - tier2 (reasoning): NVIDIA with meta/llama-3.1-8b-instruct (accurate)
- * 
+ *
  * When multiple providers are configured via environment variables, the tiered
  * fallback system (getTier1Providers/getTier2Providers) will be used automatically.
  */

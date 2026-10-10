@@ -1,7 +1,13 @@
 import { Link } from "@tanstack/react-router";
 import type { SpecAttribute, SpecClaim } from "@/entities/drone/types";
 import { useDispatches, useServices } from "@/shared/infra/services";
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { Tag } from "@/shared/ui/primitives";
 import { TranslateButton } from "@/features/dispatches/dispatches-page";
 

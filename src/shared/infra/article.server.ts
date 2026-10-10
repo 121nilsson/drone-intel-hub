@@ -56,10 +56,10 @@ export async function extractArticleText(html: string, url: string): Promise<str
     );
     const text = [heading, ...paragraphs].filter(Boolean).join("\n\n");
     if (text.length < MIN_CHARS) return null;
-    
+
     // Apply content filters to remove remaining noise (boilerplate, banners, etc.)
     const filteredText = filterGeneralContent(text);
-    
+
     if (filteredText.length < MIN_CHARS) return null;
     return filteredText.length > MAX_CHARS ? filteredText.slice(0, MAX_CHARS) : filteredText;
   } catch {

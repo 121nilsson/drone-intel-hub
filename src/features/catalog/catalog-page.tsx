@@ -154,8 +154,10 @@ export function CatalogPage() {
       }));
   }, [drones]);
 
-  const activeFilters =
-    Object.values(f).reduce((n, v) => n + (Array.isArray(v) ? v.length : v ? 1 : 0), 0);
+  const activeFilters = Object.values(f).reduce(
+    (n, v) => n + (Array.isArray(v) ? v.length : v ? 1 : 0),
+    0,
+  );
 
   return (
     <div className="grid gap-4 lg:grid-cols-[260px_1fr] lg:gap-6">

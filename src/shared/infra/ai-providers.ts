@@ -1,9 +1,9 @@
 /**
  * Multi-provider AI configuration and fallback system.
- * 
+ *
  * Supports multiple OpenAI-compatible providers with automatic fallback
  * when one fails or times out. Providers are tried in order until one succeeds.
- * 
+ *
  * Tier structure:
  * - tier1: Fast, cheap screening models (max 2 fallbacks)
  * - tier2: Slower, more accurate reasoning models (max 2 fallbacks)
@@ -83,16 +83,14 @@ export const BUILTIN_PROVIDERS: AIProvider[] = [
  * Get enabled providers sorted by priority (lowest first)
  */
 export function getEnabledProviders(): AIProvider[] {
-  return [...BUILTIN_PROVIDERS]
-    .filter(p => p.enabled)
-    .sort((a, b) => a.priority - b.priority);
+  return [...BUILTIN_PROVIDERS].filter((p) => p.enabled).sort((a, b) => a.priority - b.priority);
 }
 
 /**
  * Get a provider by name
  */
 export function getProvider(name: string): AIProvider | undefined {
-  return BUILTIN_PROVIDERS.find(p => p.name.toLowerCase() === name.toLowerCase());
+  return BUILTIN_PROVIDERS.find((p) => p.name.toLowerCase() === name.toLowerCase());
 }
 
 /**
@@ -143,7 +141,7 @@ export const DEFAULT_TIER_CONFIG: MultiProviderConfig = {
 
 /**
  * Get tier configuration from environment or use defaults
- * 
+ *
  * Environment variables:
  * - AI_TIER1_PRIMARY: Primary tier1 provider name
  * - AI_TIER1_FALLBACKS: Comma-separated fallback provider names
@@ -152,13 +150,19 @@ export const DEFAULT_TIER_CONFIG: MultiProviderConfig = {
  */
 export function getTierConfig(): MultiProviderConfig {
   const tier1Primary = process.env["AI_TIER1_PRIMARY"]?.trim() || DEFAULT_TIER_CONFIG.tier1.primary;
-  const tier1Fallbacks = process.env["AI_TIER1_FALLBACKS"]?.split(",").map(s => s.trim()).filter(Boolean) 
-    || DEFAULT_TIER_CONFIG.tier1.fallbacks;
-  
+  const tier1Fallbacks =
+    process.env["AI_TIER1_FALLBACKS"]
+      ?.split(",")
+      .map((s) => s.trim())
+      .filter(Boolean) || DEFAULT_TIER_CONFIG.tier1.fallbacks;
+
   const tier2Primary = process.env["AI_TIER2_PRIMARY"]?.trim() || DEFAULT_TIER_CONFIG.tier2.primary;
-  const tier2Fallbacks = process.env["AI_TIER2_FALLBACKS"]?.split(",").map(s => s.trim()).filter(Boolean)
-    || DEFAULT_TIER_CONFIG.tier2.fallbacks;
-  
+  const tier2Fallbacks =
+    process.env["AI_TIER2_FALLBACKS"]
+      ?.split(",")
+      .map((s) => s.trim())
+      .filter(Boolean) || DEFAULT_TIER_CONFIG.tier2.fallbacks;
+
   return {
     tier1: {
       tier: "tier1",
@@ -179,23 +183,27 @@ export function getTierConfig(): MultiProviderConfig {
 export function getTierProviders(tier: "tier1" | "tier2"): AIProvider[] {
   const config = getTierConfig();
   const tierConfig = config[tier];
-  
+
   const providers: AIProvider[] = [];
-  
+
   // Add primary
   const primary = getProvider(tierConfig.primary);
   if (primary && hasProviderApiKey(primary)) {
     providers.push(primary);
   }
-  
+
   // Add fallbacks
   for (const fallbackName of tierConfig.fallbacks) {
     const fallback = getProvider(fallbackName);
-    if (fallback && hasProviderApiKey(fallback) && !providers.some(p => p.name === fallback.name)) {
+    if (
+      fallback &&
+      hasProviderApiKey(fallback) &&
+      !providers.some((p) => p.name === fallback.name)
+    ) {
       providers.push(fallback);
     }
   }
-  
+
   return providers;
 }
 
@@ -218,17 +226,17 @@ export function getTier2Providers(): AIProvider[] {
  */
 export function getNextTierProvider(
   tier: "tier1" | "tier2",
-  exclude: AIProvider[] = []
+  exclude: AIProvider[] = [],
 ): AIProvider | undefined {
   const providers = getTierProviders(tier);
-  const excludedNames = new Set(exclude.map(p => p.name));
-  
+  const excludedNames = new Set(exclude.map((p) => p.name));
+
   for (const provider of providers) {
     if (!excludedNames.has(provider.name)) {
       return provider;
     }
   }
-  
+
   return undefined;
 }
 
@@ -259,34 +267,37 @@ let roundRobinIndex = 0;
 export function getNextProvider(exclude?: AIProvider[]): AIProvider | undefined {
   const available = getAvailableProviders();
   if (available.length === 0) return undefined;
-  
+
   const strategy = getProviderStrategy();
-  
+
   switch (strategy) {
-    case "round-robin":
+    case "round-robin": {
       // Simple round-robin: just cycle through available providers
       const current = available[roundRobinIndex % available.length];
       roundRobinIndex++;
-      
+
       // Skip excluded providers
-      if (exclude && exclude.some(p => p.name === current.name)) {
+      if (exclude && exclude.some((p) => p.name === current.name)) {
         return getNextProvider([...exclude, current]);
       }
       return current;
-    
-    case "random":
+    }
+
+    case "random": {
       // Random selection from available providers
-      const filtered = exclude 
-        ? available.filter(p => !exclude.some(e => e.name === p.name))
+      const filtered = exclude
+        ? available.filter((p) => !exclude.some((e) => e.name === p.name))
         : available;
       if (filtered.length === 0) return undefined;
       return filtered[Math.floor(Math.random() * filtered.length)];
-    
+    }
+
     case "priority":
-    default:
+    default: {
       // Default: use priority order, but skip excluded
       const sorted = [...available].sort((a, b) => a.priority - b.priority);
-      return sorted.find(p => !exclude || !exclude.some(e => e.name === p.name));
+      return sorted.find((p) => !exclude || !exclude.some((e) => e.name === p.name));
+    }
   }
 }
 
@@ -301,7 +312,7 @@ export function resetRoundRobin(): void {
  * Get all available models from all providers
  */
 export function getAvailableModels(): { provider: string; model: string }[] {
-  return getAvailableProviders().map(p => ({
+  return getAvailableProviders().map((p) => ({
     provider: p.name,
     model: p.defaultModel,
   }));

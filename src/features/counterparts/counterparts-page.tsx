@@ -36,9 +36,7 @@ function EwColumn({ target, attacker }: { target: Drone; attacker: Drone }) {
         {m.antiJam && <span className="ml-2 text-accent">· anti-jam fitted</span>}
       </p>
       {!m.rows.length ? (
-        <p className="text-sm text-muted-foreground">
-          No jammer recorded on {attacker.name}.
-        </p>
+        <p className="text-sm text-muted-foreground">No jammer recorded on {attacker.name}.</p>
       ) : (
         <ul className="space-y-2">
           {m.rows.map((r, i) => (
@@ -58,7 +56,6 @@ function EwColumn({ target, attacker }: { target: Drone; attacker: Drone }) {
     </div>
   );
 }
-
 
 export function CounterpartsPage({ a, b }: { a?: string | undefined; b?: string | undefined }) {
   const drones = useDrones();
