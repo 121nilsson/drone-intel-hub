@@ -65,7 +65,7 @@ export const BUILTIN_PROVIDERS: AIProvider[] = [
     name: "openrouter",
     baseUrl: "https://openrouter.ai/api/v1",
     apiKeyEnv: "OPENROUTER_API_KEY",
-    defaultModel: "openai/gpt-4o-mini",
+    defaultModel: "openrouter/free",
     priority: 30,
     enabled: true,
   },
