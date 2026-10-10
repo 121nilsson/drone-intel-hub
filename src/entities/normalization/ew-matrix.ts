@@ -26,7 +26,7 @@ export function ewEmitters(d: Drone): EwEmitter[] {
   for (const r of d.rf) {
     if (r.role === "antijam" || linkIsFiber(r)) continue;
     const text = [r.band, r.notes, r.tacticalTag].filter(Boolean).join(" ");
-    if (JAM.test(text) && !ANTI_JAM.test(text)) out.push({ label: r.band, freqMHz: r.freqMHz });
+    if (JAM.test(text) && !ANTI_JAM.test(text)) out.push(r.freqMHz ? { label: r.band, freqMHz: r.freqMHz } : { label: r.band });
   }
   for (const p of d.payloads ?? []) {
     if (JAM.test(`${p.name} ${p.category ?? ""}`)) out.push({ label: p.name });

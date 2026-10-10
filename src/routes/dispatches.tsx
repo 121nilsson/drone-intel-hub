@@ -3,7 +3,7 @@ import { DispatchesPage } from "@/features/dispatches/dispatches-page";
 
 export const Route = createFileRoute("/dispatches")({
   validateSearch: (s: Record<string, unknown>): { q?: string } =>
-    typeof s.q === "string" && s.q ? { q: s.q } : {},
+    typeof s["q"] === "string" && s["q"] ? { q: s["q"] } : {},
   head: () => ({
     meta: [
       { title: "Intel Feed — DRONE//INT" },
