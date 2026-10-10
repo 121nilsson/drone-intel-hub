@@ -29,5 +29,3 @@ function DispatchesRoute() {
   const { q } = Route.useSearch();
   return <DispatchesPage key={q ?? ""} initialQuery={q ?? ""} />;
 }
-const _unused = ({
-});

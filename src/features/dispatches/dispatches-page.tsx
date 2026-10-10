@@ -74,14 +74,14 @@ export function TranslateButton({ text, model }: { text: string; model: string }
   );
 }
 
-export function DispatchesPage() {
+export function DispatchesPage({ initialQuery = "" }: { initialQuery?: string } = {}) {
   const svc = useServices();
   const dispatches = useDispatches();
   const sources = useSources();
   const stateFn = useServerFn(getSyncState);
   const [filter, setFilter] = useState<DispatchStatus | "all">("all");
   const [sourceId, setSourceId] = useState("");
-  const [q, setQ] = useState("");
+  const [q, setQ] = useState(initialQuery);
   const [limit, setLimit] = useState(20);
   const [syncState, setSyncState] = useState<SyncState | null>(null);
 
