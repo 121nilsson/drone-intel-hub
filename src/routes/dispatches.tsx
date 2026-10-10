@@ -2,6 +2,8 @@ import { createFileRoute } from "@tanstack/react-router";
 import { DispatchesPage } from "@/features/dispatches/dispatches-page";
 
 export const Route = createFileRoute("/dispatches")({
+  validateSearch: (s: Record<string, unknown>): { q?: string } =>
+    typeof s.q === "string" && s.q ? { q: s.q } : {},
   head: () => ({
     meta: [
       { title: "Intel Feed — DRONE//INT" },
@@ -20,5 +22,12 @@ export const Route = createFileRoute("/dispatches")({
       { name: "twitter:card", content: "summary" },
     ],
   }),
-  component: () => <DispatchesPage />,
+  component: DispatchesRoute,
+});
+
+function DispatchesRoute() {
+  const { q } = Route.useSearch();
+  return <DispatchesPage key={q ?? ""} initialQuery={q ?? ""} />;
+}
+const _unused = ({
 });

@@ -315,6 +315,23 @@ export function DossierPage({ id }: { id: string }) {
             ))}
         </ol>
       </Panel>
+      <div className="h-14 sm:hidden" />
+      <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-2 gap-2 border-t border-border bg-background/95 p-2 backdrop-blur sm:hidden">
+        <Link
+          to="/counterparts"
+          search={{ a: d.id, b: counterparts[0]?.id ?? "" }}
+          className="border border-primary/50 py-2.5 text-center font-mono text-xs uppercase text-primary"
+        >
+          Compare
+        </Link>
+        <Link
+          to="/dispatches"
+          search={{ q: d.name }}
+          className="border border-border py-2.5 text-center font-mono text-xs uppercase text-muted-foreground"
+        >
+          Source posts
+        </Link>
+      </nav>
     </div>
   );
 }
