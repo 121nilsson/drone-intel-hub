@@ -23,7 +23,7 @@ const VERDICT: Record<ThreatVerdict, { label: string; cls: string }> = {
   jammed: { label: "Jammed", cls: "border-destructive/60 bg-destructive/10 text-destructive" },
   contested: { label: "Contested", cls: "border-warning/60 bg-warning/10 text-warning" },
   safe: { label: "Out of band", cls: "border-success/60 bg-success/10 text-success" },
-  fiber_immune: { label: "Fiber immune", cls: "border-accent/60 bg-accent/10 text-accent" },
+  fiber_immune: { label: "Fiber immune", cls: "border-primary/60 bg-primary/10 text-primary" },
   unknown: { label: "Unknown", cls: "border-border text-muted-foreground" },
 };
 
