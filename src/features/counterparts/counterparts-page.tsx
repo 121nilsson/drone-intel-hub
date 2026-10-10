@@ -1,6 +1,7 @@
 import { useNavigate } from "@tanstack/react-router";
 import { consensus } from "@/entities/drone/consensus";
 import { intersectBands, linkIsFiber } from "@/entities/normalization/rf";
+import { ewMatrix, type ThreatVerdict } from "@/entities/normalization/ew-matrix";
 import { flag, type Drone } from "@/entities/drone/types";
 import { useDrones } from "@/shared/infra/services";
 import { Panel, Tag } from "@/shared/ui/primitives";
@@ -17,6 +18,47 @@ function overlap(a: Drone, b: Drone) {
     }
   return [...new Set(shared)];
 }
+
+const VERDICT: Record<ThreatVerdict, { label: string; cls: string }> = {
+  jammed: { label: "Jammed", cls: "border-destructive/60 bg-destructive/10 text-destructive" },
+  contested: { label: "Contested", cls: "border-warning/60 bg-warning/10 text-warning" },
+  safe: { label: "Out of band", cls: "border-success/60 bg-success/10 text-success" },
+  fiber_immune: { label: "Fiber immune", cls: "border-accent/60 bg-accent/10 text-accent" },
+  unknown: { label: "Unknown", cls: "border-border text-muted-foreground" },
+};
+
+function EwColumn({ target, attacker }: { target: Drone; attacker: Drone }) {
+  const m = ewMatrix(target, attacker);
+  return (
+    <div>
+      <p className="mb-2 font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
+        {target.name} vs {attacker.name} EW
+        {m.antiJam && <span className="ml-2 text-accent">· anti-jam fitted</span>}
+      </p>
+      {!m.rows.length ? (
+        <p className="text-sm text-muted-foreground">
+          No jammer recorded on {attacker.name}.
+        </p>
+      ) : (
+        <ul className="space-y-2">
+          {m.rows.map((r, i) => (
+            <li key={i} className={`border-l-2 p-2.5 ${VERDICT[r.verdict].cls}`}>
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-mono text-xs uppercase">{r.role}</span>
+                <span className="font-mono text-[11px] font-semibold uppercase">
+                  {VERDICT[r.verdict].label}
+                </span>
+              </div>
+              <p className="mt-0.5 font-mono text-sm text-foreground">{r.link}</p>
+              <p className="text-xs text-muted-foreground">{r.rationale}</p>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 
 export function CounterpartsPage({ a, b }: { a?: string | undefined; b?: string | undefined }) {
   const drones = useDrones();
@@ -85,11 +127,17 @@ export function CounterpartsPage({ a, b }: { a?: string | undefined; b?: string 
 
   return (
     <div className="space-y-6">
-      <h1 className="text-3xl font-semibold">Counterpart comparison</h1>
+      <h1 className="text-2xl font-semibold md:text-3xl">Counterpart comparison</h1>
       <div className="grid gap-4 md:grid-cols-2">
         <Card d={A} k="a" />
         <Card d={B} k="b" />
       </div>
+      <Panel title="EW threat matrix">
+        <div className="grid gap-6 md:grid-cols-2">
+          <EwColumn target={A} attacker={B} />
+          <EwColumn target={B} attacker={A} />
+        </div>
+      </Panel>
       <Panel title="Potential frequency overlap">
         {shared.length ? (
           <ul className="flex flex-wrap gap-2">
