@@ -126,6 +126,13 @@ export function DispatchesPage({ initialQuery = "" }: { initialQuery?: string } 
   const remote = syncState?.progress;
   const workingId = remote?.phase === "analysing" ? remote.currentId : undefined;
   const byId = useMemo(() => new Map(dispatches.map((d) => [d.id, d])), [dispatches]);
+  /** Posts per correlated event, so the feed can show one story carried by many outlets. */
+  const eventSizes = useMemo(() => {
+    const sizes = new Map<string, number>();
+    for (const d of dispatches)
+      if (d.eventId) sizes.set(d.eventId, (sizes.get(d.eventId) ?? 0) + 1);
+    return sizes;
+  }, [dispatches]);
 
   return (
     <div className="mx-auto max-w-3xl space-y-4">
@@ -211,6 +218,14 @@ export function DispatchesPage({ initialQuery = "" }: { initialQuery?: string } 
                   {d.status}
                 </Tag>
                 {workingId === d.id && <Tag tone="primary">working</Tag>}
+                {d.eventId && (eventSizes.get(d.eventId) ?? 0) > 1 && (
+                  <Tag
+                    tone="accent"
+                    title={`Correlated with ${(eventSizes.get(d.eventId) ?? 1) - 1} other post(s) about the same event`}
+                  >
+                    event · {eventSizes.get(d.eventId)} posts
+                  </Tag>
+                )}
                 <span className="font-medium text-foreground">{d.sourceName}</span>
                 <span>{new Date(d.publishedAt ?? d.createdAt).toLocaleString()}</span>
               </div>

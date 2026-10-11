@@ -21,6 +21,18 @@ export interface SpecClaim {
   extractionEngine?: string;
   model?: string;
   date: string; // ISO
+  /**
+   * Set when the deep model was asked which report behind a contested spec this one supports
+   * (features/intake/contradictions.ts). An "outlier" verdict never removes or rewrites the
+   * claim - the report said what it said - it records what the check concluded, so a reader
+   * sees an adjudicated disagreement instead of an unresolved one.
+   */
+  adjudication?: {
+    verdict: "supported" | "outlier";
+    confidence: number;
+    at: string;
+    reason?: string;
+  };
 }
 
 /** Schema-less attribute: any key may be discovered by AI or analysts. */
@@ -33,6 +45,11 @@ export interface SpecAttribute {
   canonicalUnit?: string;
   claims: SpecClaim[];
   discoveredBy: "seed" | "ai" | "analyst";
+  /**
+   * When the deep model last checked this spec's disagreement. Keeps the check one-shot: a
+   * claim dated after it re-opens the question, otherwise the spec is not asked again.
+   */
+  contradictionCheckedAt?: string;
 }
 
 export type RFRole =

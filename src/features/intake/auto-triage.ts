@@ -2,12 +2,13 @@ import type { Candidate, Drone } from "@/entities/drone/types";
 import { phoneticKey } from "@/entities/drone/name-key";
 import { ProviderOutageError, type Adjudicator } from "@/shared/contracts/ai";
 import {
+  learnedNegativeKeys,
   mergeInto,
   notASystemName,
   promote,
-  rejectedByAnalyst,
   type PipelineDeps,
 } from "./pipeline";
+import { evidenceFrom, outletKey } from "./outlet-record";
 
 /**
  * Works the Queue so it does not need a person on it every day. Three rules, run after each
@@ -16,6 +17,8 @@ import {
  * 1. CORROBORATION. A new system name the AI reported from two or more independent outlets is
  *    promoted (or merged, if the catalog meanwhile has it). Repetition across sources is better
  *    evidence than one model's confidence, which is what the single-post promote gate relies on.
+ *    Outlets count by their measured precision (outlet-record.ts): a pair of outlets with a real
+ *    track record carries the evidence bar, while two feeds that only ever repost fall below it.
  * 2. ADJUDICATION. A candidate the pipeline matched to a catalog entry with middling confidence is
  *    put to the deep model once, as a yes/no question about that one entry: merged on a confident
  *    yes, released as a new name on a confident no (so rule 1 can pick it up), left otherwise.
@@ -31,6 +34,12 @@ export const AGE_OUT_BELOW = 0.5;
 /** Each report counted towards corroboration must be at least this confident. */
 export const CORROBORATION_MIN_CONFIDENCE = 0.5;
 export const CORROBORATING_OUTLETS = 2;
+/**
+ * Weighted evidence a corroborated name needs, on top of the distinct-outlet minimum. Outlets
+ * weigh 0.5–1.5 by measured precision (NEUTRAL_WEIGHT = 1 when their record is unknown), so two
+ * repost-only outlets (1.0) fall below this bar and two proven ones (up to 3.0) clear it.
+ */
+export const CORROBORATION_EVIDENCE = 2;
 /** The deep model's answer must be at least this confident to act on. */
 export const ADJUDICATION_CONFIDENCE = 0.8;
 /** Adjudications per run, so triage cannot eat the extraction budget. */
@@ -45,11 +54,6 @@ export interface TriageReport {
   stopReason?: string;
 }
 
-/** "Ukrinform (War) · https://..." -> "ukrinform": the outlet, whatever its feed is called. */
-function outletOf(source: string): string {
-  return phoneticKey(source.split(" · ")[0]!.replace(/\(.*?\)/g, ""));
-}
-
 /** Reviewed by a model: a heuristic-only result has not had its identity checked. */
 function aiReviewed(c: Candidate): boolean {
   const engine = c.extraction.metadata?.engine;
@@ -58,7 +62,13 @@ function aiReviewed(c: Candidate): boolean {
 
 export async function autoTriage(
   d: Pick<PipelineDeps, "drones" | "candidates">,
-  opts: { now?: number; adjudicate?: Adjudicator; maxAdjudications?: number } = {},
+  opts: {
+    now?: number;
+    adjudicate?: Adjudicator;
+    maxAdjudications?: number;
+    /** Outlet precision by phonetic key, from the dispatch archive (see outlet-record.ts). */
+    outletWeights?: ReadonlyMap<string, number>;
+  } = {},
 ): Promise<TriageReport> {
   const now = opts.now ?? Date.now();
   const report: TriageReport = {
@@ -132,10 +142,12 @@ export async function autoTriage(
     groups.set(key, [...(groups.get(key) ?? []), c]);
   }
   const all = d.candidates.list();
+  const suppressed = learnedNegativeKeys(all);
   for (const [key, group] of groups) {
-    const outlets = new Set(group.map((c) => outletOf(c.source)));
+    const outlets = new Set(group.map((c) => outletKey(c.source)));
     if (outlets.size < CORROBORATING_OUTLETS) continue;
-    if (rejectedByAnalyst(group[0]!.extraction.name!, all)) continue;
+    if (evidenceFrom(outlets, opts.outletWeights) < CORROBORATION_EVIDENCE) continue;
+    if (suppressed.has(key)) continue;
     // The catalog may have gained the system since these were queued: merge rather than duplicate.
     const existing = d.drones
       .list()

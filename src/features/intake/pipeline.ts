@@ -18,6 +18,7 @@ import { attributeSemantic, mergeSpecs } from "@/features/dynamic-specs/spec-eng
 import { counterpartIdsFor, linkCounterparts } from "@/entities/drone/relations";
 import { chatCompletionOnce } from "@/shared/infra/ai-proxy.server";
 import { combineExtractions, needsDeepAI, needsFastAI } from "./extraction-gates";
+import { outletKey } from "./outlet-record";
 import { linkVariant, mergeDroneIntelligence } from "@/entities/drone/merge-intelligence";
 import { ProcurementExtractionSchema } from "@/shared/contracts/extraction.schema";
 import { phoneticKey } from "@/entities/drone/name-key";
@@ -215,6 +216,9 @@ function applyRelatedSystems(
 ): PipelineResult {
   const slices = all.systemExtractions ?? [];
   if (slices.length < 2) return primary;
+  // Learned negatives, read once for the loop rather than per slice: the candidate list does not
+  // change meaningfully between slices of one extraction.
+  const suppressed = learnedNegativeKeys(d.candidates.list());
   const primaryName = primary.candidate.extraction.name?.toLowerCase();
   const primaryMatch = primary.candidate.extraction.matchId;
   const relatedCandidates: Candidate[] = [];
@@ -268,7 +272,7 @@ function applyRelatedSystems(
       extraction.confidence >= d.autoPromoteThreshold &&
       !collidesWithCatalog(extraction, d.drones.list()) &&
       !notASystemName(extraction.name, source) &&
-      !rejectedByAnalyst(extraction.name, d.candidates.list())
+      !suppressed.has(collisionKey(extraction.name))
     ) {
       d.candidates.add(candidate);
       const promoted = promote(candidate, d);
@@ -423,6 +427,7 @@ export async function runTwoTier(
     extraction,
     status: "pending",
   };
+  const suppressed = learnedNegativeKeys(d.candidates.list());
   if (extraction.matchId && extraction.confidence >= d.autoMergeThreshold) {
     // The guard above (re-checked synchronously, no awaits since) guarantees this exists.
     const target = d.drones.get(extraction.matchId)!;
@@ -478,7 +483,7 @@ export async function runTwoTier(
     extraction.confidence >= d.autoPromoteThreshold &&
     !collidesWithCatalog(extraction, catalog) &&
     !notASystemName(extraction.name, source) &&
-    !rejectedByAnalyst(extraction.name, d.candidates.list())
+    !suppressed.has(collisionKey(extraction.name))
   ) {
     d.candidates.add(candidate);
     const drone = promote(candidate, d);
@@ -863,16 +868,37 @@ export function removeDrone(
  * True when an analyst has already rejected this name: deleted the entry it created, or
  * discarded a candidate carrying it. Auto-promotion defers to that judgement.
  */
-export function rejectedByAnalyst(name: string, candidates: readonly Candidate[]): boolean {
-  const key = collisionKey(name);
-  if (!key) return false;
-  return candidates.some(
-    (c) =>
-      c.status === "discarded" &&
-      c.resolvedBy === "analyst" &&
-      !!c.extraction.name &&
-      collisionKey(c.extraction.name) === key,
-  );
+/**
+ * Names the system has learned not to promote automatically. Two paths in:
+ *
+ * - an analyst discarded the name once — their word is final, as it has always been;
+ * - the pipeline discarded it itself from LEARNED_NEGATIVE_REPEATS different outlets, which is a
+ *   false-positive pattern repeating, not three coincidences.
+ *
+ * Only automatic paths consult this; the Queue page can still promote any name by hand.
+ */
+export const LEARNED_NEGATIVE_REPEATS = 3;
+
+export function learnedNegativeKeys(candidates: readonly Candidate[]): Set<string> {
+  const suppressed = new Set<string>();
+  const autoDiscards = new Map<string, Set<string>>();
+  for (const c of candidates) {
+    if (c.status !== "discarded") continue;
+    const name = c.extraction.name;
+    if (!name) continue;
+    const key = collisionKey(name);
+    if (!key) continue;
+    if (c.resolvedBy === "analyst") {
+      suppressed.add(key);
+      continue;
+    }
+    const outlets = autoDiscards.get(key) ?? new Set<string>();
+    outlets.add(outletKey(c.source));
+    autoDiscards.set(key, outlets);
+  }
+  for (const [key, outlets] of autoDiscards)
+    if (outlets.size >= LEARNED_NEGATIVE_REPEATS) suppressed.add(key);
+  return suppressed;
 }
 
 export function mergeInto(

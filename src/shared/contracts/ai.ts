@@ -17,6 +17,28 @@ export type Adjudicator = (
 ) => Promise<{ same: boolean; confidence: number; reason?: string }>;
 
 /**
+ * The deep model's verdict on one contested figure: of the reports behind a spec's conflicting
+ * claims, which value is best supported. One disputed spec per call - the same shape of cheap,
+ * targeted question as Adjudicator, so it can be asked unattended after every sync.
+ */
+export interface ContradictionInput {
+  drone: Drone;
+  /** Human-readable spec identity, e.g. "Range (km)". */
+  specLabel: string;
+  /** The conflicting claims, in the spec's claim order. */
+  claims: { value: string; source: string; evidence?: string }[];
+}
+
+export interface ContradictionVerdict {
+  /** Index into `claims` of the best-supported value; -1 when the model cannot tell them apart. */
+  supported: number;
+  confidence: number;
+  reason?: string;
+}
+
+export type ContradictionAdjudicator = (input: ContradictionInput) => Promise<ContradictionVerdict>;
+
+/**
  * Instructions for the 7-day executive summary. One copy, used by the server-side summary and the
  * browser fallback, so both summarise the same way. The context it receives is built from the
  * week's reporting (features/briefing/briefing-data.ts), not from catalog edits.

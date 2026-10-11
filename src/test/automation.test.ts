@@ -10,6 +10,8 @@ import {
   silenceNotice,
 } from "@/features/sources/source-health";
 import { AGE_OUT_MS, autoTriage } from "@/features/intake/auto-triage";
+import { MAX_WEIGHT, MIN_WEIGHT } from "@/features/intake/outlet-record";
+import { phoneticKey } from "@/entities/drone/name-key";
 import { buildBriefing } from "@/features/briefing/briefing-data";
 import { ProviderOutageError, type Adjudicator } from "@/shared/contracts/ai";
 import type { MonitoredSource } from "@/entities/source/types";
@@ -262,6 +264,102 @@ describe("autoTriage: corroboration", () => {
     await autoTriage(d, { now: NOW });
     expect(d.drones.list()).toHaveLength(1);
     expect(d.candidates.list().every((c) => c.status === "merged")).toBe(true);
+  });
+
+  it("does not promote on two outlets whose reporting never pays off", async () => {
+    // Both feeds store plenty and produce nothing drone-related. The archive says both are
+    // noise, so their agreement is one name repeated twice, not corroboration.
+    const weights = new Map([
+      [phoneticKey("Copypasta"), MIN_WEIGHT],
+      [phoneticKey("Repost Central"), MIN_WEIGHT],
+    ]);
+    const d = deps(
+      [],
+      [
+        candidate("a", "Copypasta", {
+          extraction: extraction({ name: "Vampire", confidence: 0.7 }),
+        }),
+        candidate("b", "Repost Central", {
+          extraction: extraction({ name: "Vampire", confidence: 0.6 }),
+        }),
+      ],
+    );
+    const rep = await autoTriage(d, { now: NOW, outletWeights: weights });
+    expect(rep.corroborated).toBe(0);
+    expect(d.drones.list()).toEqual([]);
+    // Not resolved either: the candidates stay in the queue for the analyst.
+    expect(d.candidates.list().every((c) => c.status === "pending")).toBe(true);
+  });
+
+  it("promotes on a proven outlet plus one with no record yet", async () => {
+    const weights = new Map([[phoneticKey("Militarnyi"), MAX_WEIGHT]]);
+    const d = deps(
+      [],
+      [
+        candidate("a", "Militarnyi", {
+          extraction: extraction({ name: "Vampire", confidence: 0.7 }),
+        }),
+        candidate("b", "Defense Express", {
+          extraction: extraction({ name: "Vampire", confidence: 0.6 }),
+        }),
+      ],
+    );
+    const rep = await autoTriage(d, { now: NOW, outletWeights: weights });
+    expect(rep.corroborated).toBe(1);
+    expect(d.drones.list().map((x) => x.name)).toEqual(["Vampire"]);
+  });
+
+  it("does not promote a name the pipeline discarded from three outlets", async () => {
+    // The same wrong name extracted from three different feeds is a false-positive pattern
+    // repeating, so it is learned as a negative instead of being queued again next run.
+    const thrash = (id: string, source: string) =>
+      candidate(id, source, {
+        status: "discarded",
+        resolvedBy: "auto",
+        extraction: extraction({ name: "Vampire", confidence: 0.3 }),
+      });
+    const d = deps(
+      [],
+      [
+        candidate("a", "Militarnyi", {
+          extraction: extraction({ name: "Vampire", confidence: 0.7 }),
+        }),
+        candidate("b", "Defense Express", {
+          extraction: extraction({ name: "Vampire", confidence: 0.6 }),
+        }),
+        thrash("c", "Copypasta"),
+        thrash("d", "Repost Central"),
+        thrash("e", "Aggregator"),
+      ],
+    );
+    const rep = await autoTriage(d, { now: NOW });
+    expect(rep.corroborated).toBe(0);
+    expect(d.drones.list()).toEqual([]);
+  });
+
+  it("does not learn a negative from the same outlet discarding twice", async () => {
+    // Two runs of one noisy feed is one mistake, not a pattern.
+    const twice = (id: string) =>
+      candidate(id, "Copypasta", {
+        status: "discarded",
+        resolvedBy: "auto",
+        extraction: extraction({ name: "Vampire", confidence: 0.3 }),
+      });
+    const d = deps(
+      [],
+      [
+        candidate("a", "Militarnyi", {
+          extraction: extraction({ name: "Vampire", confidence: 0.7 }),
+        }),
+        candidate("b", "Defense Express", {
+          extraction: extraction({ name: "Vampire", confidence: 0.6 }),
+        }),
+        twice("c"),
+        twice("d"),
+      ],
+    );
+    const rep = await autoTriage(d, { now: NOW });
+    expect(rep.corroborated).toBe(1);
   });
 
   it.each([

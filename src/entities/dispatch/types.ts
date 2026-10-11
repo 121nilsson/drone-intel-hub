@@ -42,6 +42,11 @@ export interface RawDispatch {
   /** Versioned analysis identity for audit/reprocessing and cache decisions. */
   analysisFingerprint?: string;
   /**
+   * Event this post belongs to, when several outlets covered it (entities/dispatch/events.ts).
+   * Absent on singletons and on posts the archive has not correlated yet.
+   */
+  eventId?: string | undefined;
+  /**
    * PIPELINE_VERSION this post was last analysed with, whatever engine answered. A post analysed
    * by an older pipeline (or never stamped) is re-analysed in the background; see requeueStale.
    */

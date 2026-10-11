@@ -13,6 +13,7 @@ import {
   type Adjudicator,
   type AIProviderSettings,
   type BriefingSummarizer,
+  type ContradictionAdjudicator,
   type IntelExtractor,
 } from "@/shared/contracts/ai";
 import { chatCompletion } from "./ai-proxy.functions";
@@ -190,6 +191,45 @@ export function openAICompatibleAdjudicator(
       throw new Error("Invalid adjudication JSON");
     return {
       same: j["same"],
+      confidence: Math.max(0, Math.min(1, confidence)),
+      ...(typeof j["reason"] === "string" ? { reason: j["reason"].slice(0, 200) } : {}),
+    };
+  };
+}
+
+const CONTRADICT_SYS = `You are a defense analyst checking conflicting reported figures for one weapon system. You are given the catalog entry, one specification, and the reports that state values for it, each with the sentence it was read from. Reply in json with keys: supported (0-based index of the best-supported claim, or -1 when you cannot tell the reports apart), confidence (0..1), reason (short string). Prefer a figure stated plainly about this system over a range, a figure for a variant or a different system, or a rounding. Only use the reports given.`;
+
+/** The deep model as a ContradictionAdjudicator (see features/intake/contradictions.ts). */
+export function openAIContradictionAdjudicator(
+  cfg: AIProviderSettings,
+  chat: ChatTransport = (i) => chatCompletion({ data: i }),
+): ContradictionAdjudicator {
+  return async (input) => {
+    const entry = [
+      `Name: ${input.drone.name}`,
+      `Domain: ${input.drone.domain}; origin: ${input.drone.origin}`,
+    ]
+      .concat(input.drone.cyrillic ? [`Cyrillic: ${input.drone.cyrillic}`] : [])
+      .join("\n");
+    const claims = input.claims
+      .map((c, i) => `[${i}] ${c.value} — ${c.source}${c.evidence ? `\n    “${c.evidence}”` : ""}`)
+      .join("\n");
+    const r = await chatContent(chat, {
+      baseUrl: cfg.baseUrl,
+      apiKey: cfg.apiKey,
+      model: cfg.tier2Model,
+      json: true,
+      tier: "tier2",
+      system: CONTRADICT_SYS,
+      prompt: `Catalog system:\n${entry}\n\nSpecification: ${input.specLabel}\n\nReports:\n${claims}`,
+    });
+    const j = parseModelJson(r) ?? {};
+    const supported = Number(j["supported"]);
+    const confidence = Number(j["confidence"]);
+    if (!Number.isFinite(supported) || !Number.isFinite(confidence))
+      throw new Error("Invalid contradiction JSON");
+    return {
+      supported: Math.trunc(supported),
       confidence: Math.max(0, Math.min(1, confidence)),
       ...(typeof j["reason"] === "string" ? { reason: j["reason"].slice(0, 200) } : {}),
     };

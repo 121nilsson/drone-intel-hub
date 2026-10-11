@@ -18,6 +18,7 @@ export interface ClaimSelection {
 
 /** Short chip naming a claim's source; tapping opens the provenance sheet. */
 export function ClaimChip({ claim, onOpen }: { claim: SpecClaim; onOpen: () => void }) {
+  const verdict = claim.adjudication;
   return (
     <button
       type="button"
@@ -28,6 +29,18 @@ export function ClaimChip({ claim, onOpen }: { claim: SpecClaim; onOpen: () => v
           source string refuses to shrink and the ellipsis never appears. */}
       <span className="min-w-0 truncate">{claim.source}</span>
       {claim.date && <span className="shrink-0 opacity-70">· {claim.date.slice(5, 10)}</span>}
+      {verdict && (
+        <span
+          className={`shrink-0 ${verdict.verdict === "outlier" ? "text-destructive" : "text-primary"}`}
+          title={
+            verdict.verdict === "outlier"
+              ? `Contradiction check: marked an outlier${verdict.reason ? ` — ${verdict.reason}` : ""}`
+              : "Contradiction check: marked best-supported"
+          }
+        >
+          {verdict.verdict === "outlier" ? "⚠ outlier" : "✓ supported"}
+        </span>
+      )}
     </button>
   );
 }
@@ -83,6 +96,14 @@ export function ProvenanceSheet({
                 {claim.extractionEngine && <Tag>{claim.extractionEngine}</Tag>}
                 {claim.extractionConfidence !== undefined && (
                   <Tag>conf {Math.round(claim.extractionConfidence * 100)}%</Tag>
+                )}
+                {claim.adjudication && (
+                  <Tag tone={claim.adjudication.verdict === "outlier" ? "danger" : "primary"}>
+                    {claim.adjudication.verdict === "outlier"
+                      ? "Contradiction check: outlier"
+                      : "Contradiction check: best-supported"}
+                    {claim.adjudication.reason ? ` — ${claim.adjudication.reason}` : ""}
+                  </Tag>
                 )}
               </div>
               {dispatch ? (

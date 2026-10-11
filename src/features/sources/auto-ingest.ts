@@ -1,6 +1,7 @@
 import type { MonitoredSource } from "@/entities/source/types";
 import { MAX_ATTEMPTS, type RawDispatch } from "@/entities/dispatch/types";
 import { MIN_CHARS_FOR_DEDUPE, simHash64 } from "@/entities/dispatch/simhash";
+import { clusterEvents } from "@/entities/dispatch/events";
 import type { FetchedPost } from "@/shared/infra/source-fetch.functions";
 import type { DispatchRepository } from "@/shared/contracts/repository";
 import { runTwoTier, type PipelineDeps, type PipelineResult } from "@/features/intake/pipeline";
@@ -269,6 +270,35 @@ function describeIrrelevant(
     traceLevel() >= 2 ? `excerpt=${JSON.stringify(postExcerpt(d.text))}` : undefined,
     `left=${remaining}`,
   ];
+}
+
+/**
+ * Correlate the analysed archive into events and stamp the ids on the dispatches. Only members
+ * of a real cluster get one, and only when it changed, so a re-run is idempotent. Runs after a
+ * batch: the correlation is about what the archive now holds, not about one dispatch.
+ */
+export function stampEvents(dispatches: DispatchRepository): number {
+  const list = dispatches.list();
+  const clusters = clusterEvents(list);
+  if (clusters.size === 0) {
+    // Clusters can also *lose* a member (a claim retracted, a merge collapsed two systems), so
+    // a stale stamp is cleared even when nothing clusters this run.
+    return list
+      .filter((d) => d.eventId)
+      .reduce((n, d) => {
+        dispatches.update(d.id, { eventId: undefined });
+        return n + 1;
+      }, 0);
+  }
+  let changed = 0;
+  for (const d of list) {
+    const eventId = clusters.get(d.id);
+    if (eventId !== d.eventId) {
+      dispatches.update(d.id, eventId ? { eventId } : { eventId: undefined });
+      changed++;
+    }
+  }
+  return changed;
 }
 
 export function fetchingProgress(name: string, index: number, total: number): WorkProgress {
@@ -603,6 +633,9 @@ export async function processPending(
         }
       }
     }
+    // The batch is analysed: correlate what the archive now holds into events, so the feed can
+    // show one story carried by many outlets. Additive - no analysis reads it yet.
+    stampEvents(dispatches);
   } finally {
     // Release everything this run took, including the ones it never reached after `break`,
     // so a rate-limited pass does not stall the queue for the rest of the lease window.

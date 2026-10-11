@@ -8,8 +8,14 @@ import {
   LocalTaxonomyCandidateRepository,
   LocalTaxonomyRepository,
 } from "./local-repository";
-import { OpenAICompatibleExtractor, openAICompatibleAdjudicator } from "./openai-compatible-ai";
+import {
+  OpenAICompatibleExtractor,
+  openAICompatibleAdjudicator,
+  openAIContradictionAdjudicator,
+} from "./openai-compatible-ai";
 import { autoTriage } from "@/features/intake/auto-triage";
+import { outletWeights } from "@/features/intake/outlet-record";
+import { adjudicateContradictions } from "@/features/intake/contradictions";
 import { dbConfigured } from "./postgres/db.server";
 import { PostgresStore } from "./postgres/postgres-store.server";
 import { DEFAULT_SETTINGS } from "./settings-defaults";
@@ -255,9 +261,14 @@ export async function fetchAllSources(
   // low-confidence candidates discarded. No model calls while the providers are out.
   const triage = await autoTriage(
     { drones, candidates },
-    useRemote && !p.stopReason
-      ? { adjudicate: openAICompatibleAdjudicator(cfg, chatCompletionOnce) }
-      : {},
+    {
+      // Outlet precision from the same archive the cadence reads, so a name is corroborated by
+      // outlets whose past reporting backs them, not by two feeds that only ever repost.
+      outletWeights: outletWeights(dispatches.list()),
+      ...(useRemote && !p.stopReason
+        ? { adjudicate: openAICompatibleAdjudicator(cfg, chatCompletionOnce) }
+        : {}),
+    },
   );
   if (
     triage.corroborated ||
@@ -267,6 +278,18 @@ export async function fetchAllSources(
   )
     console.log(
       `[sources:sync] triage: ${triage.corroborated} corroborated, ${triage.adjudicatedMerged} merged and ${triage.adjudicatedReleased} released by adjudication, ${triage.agedOut} aged out${triage.stopReason ? ` (adjudication stopped: ${triage.stopReason})` : ""}`,
+    );
+  // Contested figures: the deep model says, once per disputed spec, which report behind the
+  // disagreement is best supported. Provenance stays whole; the claims carry the verdict.
+  const contradictions = await adjudicateContradictions(
+    drones,
+    useRemote && !p.stopReason
+      ? { adjudicate: openAIContradictionAdjudicator(cfg, chatCompletionOnce) }
+      : {},
+  );
+  if (contradictions.checked)
+    console.log(
+      `[sources:sync] contradictions: ${contradictions.checked} spec(s) checked, ${contradictions.outliers} claim(s) marked outlier${contradictions.stopReason ? ` (stopped: ${contradictions.stopReason})` : ""}`,
     );
   await report?.({
     phase: "done",

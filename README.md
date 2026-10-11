@@ -17,7 +17,7 @@ history (see `AGENTS.md`).
 | System dossier   | `/systems/$id`  | One system's specs with their claims and sources, RF links, components, history; delete a wrong entry (it is not auto-promoted again) |
 | **Counterparts** | `/counterparts` | Systems linked as variants or adversary counterparts                                                                                  |
 | **Queue**        | `/intake`       | Paste a link or text to analyse; triage candidates the pipeline could not auto-resolve                                                |
-| **Feed**         | `/dispatches`   | Archive of collected posts, with outcome and provenance                                                                               |
+| **Feed**         | `/dispatches`   | Archive of collected posts, with outcome, provenance, and event grouping across outlets                                               |
 | **Sources**      | `/sources`      | Monitored sources, sync status, and "Analyse queue" for pending posts                                                                 |
 | **Spec Engine**  | `/specs`        | Spec attributes across the catalog and the consensus behind them                                                                      |
 | **Taxonomy**     | `/taxonomy`     | Canonical propulsion/installation terms and unknown terms waiting for an analyst                                                      |
@@ -93,7 +93,19 @@ which never blocks a name the way an analyst's discard does:
 
 - **Corroboration.** A new name the AI reported from **two or more independent outlets** (each
   report at least 50% confident, passing the auto-promotion guards) is promoted, or merged if the
-  catalog has it by then.
+  catalog has it by then. Outlets are weighed by what their past reporting actually produced
+  (`src/features/intake/outlet-record.ts`): a pair of outlets with a real track record carries the
+  decision, while two feeds that only ever repost fall below the evidence bar.
+- **Learned negatives.** A name the pipeline itself discards from **three different outlets** is
+  remembered as a repeating false-positive pattern and no longer auto-promoted, the way an
+  analyst's discard always has. Only the automatic paths are gated by it; the Queue can still
+  promote any name by hand.
+- **Contradictions.** When a spec's sources materially disagree — consensus already flags it as
+  disputed — the deep model is asked once which report behind the disagreement is best supported.
+  The verdict rides on the claims (the supported one marked, the others as outliers) so a disputed
+  figure reads as adjudicated instead of unresolved. No claim is ever removed or rewritten, and a
+  check the model cannot decide leaves every claim untouched
+  (`src/features/intake/contradictions.ts`).
 - **Adjudication.** A candidate matched to a catalog entry with middling confidence is put to the
   tier-2 model once, as "is this report about _that_ entry?". A confident yes merges it; a
   confident no releases it as a new name, which corroboration can then pick up. At most 10 per
@@ -255,6 +267,14 @@ never collected again, and it points at the original so the archive still shows 
 carried it. Without this, three copies became three claims citing different sources, and
 `consensus()` counted one fact three times. The tolerance (10 of 64 bits) was measured: reworded
 copies land 7–8 bits apart, unrelated reports 23–36.
+
+**Event correlation.** After a batch is analysed, processed dispatches that carry the same article
+are linked into one event (`src/entities/dispatch/events.ts`), so the Feed reads as one story
+covered by several outlets instead of a row of unrelated posts. The link is URL identity only, and
+that is measured: an outlet's rewrite of one story sits 19 bits from the original on the SimHash,
+while a _different_ event in the same vocabulary sits at 20, so text proximity cannot separate
+same-event coverage from a real second event. Stamps are idempotent — a re-run changes nothing, and
+a post that stops being part of a cluster loses its stamp.
 
 **Processing.** Stage 2 drains the queue for up to 8 minutes per run, so a run never overlaps the
 next tick; whatever is left waits for the next one. The batch size follows the pacing budget.
