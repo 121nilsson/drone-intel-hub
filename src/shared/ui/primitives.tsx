@@ -2,18 +2,28 @@ import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
 export function Panel({
+  id,
   title,
   right,
   children,
   className,
+  contentClassName,
 }: {
+  id?: string;
   title?: ReactNode;
   right?: ReactNode;
   children: ReactNode;
   className?: string;
+  contentClassName?: string;
 }) {
   return (
-    <section className={cn("min-w-0 border border-border bg-card/80 backdrop-blur", className)}>
+    <section
+      id={id}
+      className={cn(
+        "min-w-0 scroll-mt-20 border border-border bg-card/80 backdrop-blur",
+        className,
+      )}
+    >
       {title && (
         <header className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-border px-4 py-2">
           <h2 className="min-w-0 break-words font-mono text-xs uppercase tracking-widest text-muted-foreground">
@@ -22,7 +32,7 @@ export function Panel({
           {right}
         </header>
       )}
-      <div className="min-w-0 p-4">{children}</div>
+      <div className={cn("min-w-0 p-4", contentClassName)}>{children}</div>
     </section>
   );
 }
@@ -32,11 +42,15 @@ export function Tag({
   tone = "default",
   className,
   title,
+  caps = true,
+  mono = true,
 }: {
   children: ReactNode;
   tone?: "default" | "primary" | "accent" | "danger";
   className?: string;
   title?: string;
+  caps?: boolean;
+  mono?: boolean;
 }) {
   const tones = {
     default: "border-border text-muted-foreground",
@@ -48,7 +62,9 @@ export function Tag({
     <span
       title={title}
       className={cn(
-        "inline-flex max-w-full items-center gap-1 border px-1.5 py-0.5 font-mono text-[11px] uppercase",
+        "inline-flex max-w-full items-center gap-1 border px-1.5 py-0.5 text-[11px]",
+        mono ? "font-mono" : "font-sans",
+        caps && "uppercase",
         tones[tone],
         className,
       )}

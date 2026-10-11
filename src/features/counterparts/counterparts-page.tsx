@@ -2,7 +2,8 @@ import { useNavigate } from "@tanstack/react-router";
 import { consensus } from "@/entities/drone/consensus";
 import { intersectBands, linkIsFiber } from "@/entities/normalization/rf";
 import { ewMatrix, type ThreatVerdict } from "@/entities/normalization/ew-matrix";
-import { flag, type Drone } from "@/entities/drone/types";
+import { type Drone } from "@/entities/drone/types";
+import { CountryBadge } from "@/shared/ui/country-badge";
 import { useDrones } from "@/shared/infra/services";
 import { Panel, Tag } from "@/shared/ui/primitives";
 
@@ -105,10 +106,12 @@ export function CounterpartsPage({ a, b }: { a?: string | undefined; b?: string 
       <h2 className="text-2xl font-semibold">{d.name}</h2>
       <div className="mt-2 flex flex-wrap gap-1.5">
         <Tag tone="primary">{d.domain}</Tag>
-        <Tag>{flag(d.origin)}</Tag>
+        <Tag caps={false} mono={false}>
+          <CountryBadge code={d.origin} />
+        </Tag>
         {d.operators.map((o) => (
-          <Tag key={o} tone="accent">
-            Op {flag(o)}
+          <Tag key={o} tone="accent" caps={false} mono={false}>
+            Op <CountryBadge code={o} />
           </Tag>
         ))}
       </div>

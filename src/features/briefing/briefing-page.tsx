@@ -1,6 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { DOMAINS, flag } from "@/entities/drone/types";
+import { DOMAINS } from "@/entities/drone/types";
+import { CountryBadge } from "@/shared/ui/country-badge";
 import { useDispatches, useDrones, useServices } from "@/shared/infra/services";
 import { buildBriefing } from "@/features/briefing/briefing-data";
 import {
@@ -154,62 +155,6 @@ function Briefing() {
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
-        <Panel
-          title="Most reported this week"
-          className="lg:col-span-2"
-          right={
-            <span className="font-mono text-xs text-muted-foreground">
-              {brief.reports} reports · {brief.outlets} outlets
-            </span>
-          }
-        >
-          <ul className="space-y-2">
-            {brief.reported.slice(0, 12).map((r) => (
-              <li key={r.drone.id} className="flex flex-wrap items-baseline justify-between gap-2">
-                <Link
-                  to="/systems/$id"
-                  params={{ id: r.drone.id }}
-                  className="font-semibold hover:text-primary"
-                >
-                  {r.drone.name}
-                </Link>
-                <span className="font-mono text-xs text-muted-foreground">
-                  {r.posts} report{r.posts === 1 ? "" : "s"} · {r.outlets.slice(0, 3).join(", ")}
-                  {r.outlets.length > 3 ? ` +${r.outlets.length - 3}` : ""}
-                </span>
-              </li>
-            ))}
-            {!brief.reported.length && (
-              <li className="text-sm text-muted-foreground">
-                No catalogued system was named in this week&apos;s reports.
-              </li>
-            )}
-          </ul>
-        </Panel>
-        <Panel title="First seen in reporting">
-          <ul className="space-y-2">
-            {brief.newSystems.map((d) => (
-              <li key={d.id}>
-                <Link
-                  to="/systems/$id"
-                  params={{ id: d.id }}
-                  className="flex justify-between hover:text-primary"
-                >
-                  <span>{d.name}</span>
-                  <span className="font-mono text-xs text-muted-foreground">
-                    {d.domain} · {flag(d.origin)}
-                  </span>
-                </Link>
-              </li>
-            ))}
-            {!brief.newSystems.length && (
-              <li className="text-sm text-muted-foreground">None this week.</li>
-            )}
-          </ul>
-        </Panel>
-      </div>
-
-      <div className="grid gap-6 lg:grid-cols-3">
         <Panel title="Latest reports" className="lg:col-span-2">
           <ul className="space-y-2.5">
             {brief.headlines.map((h) => (
@@ -231,7 +176,9 @@ function Briefing() {
                 <div className="mt-1.5 flex flex-wrap gap-1">
                   {h.systems.map((s) => (
                     <Link key={s.id} to="/systems/$id" params={{ id: s.id }}>
-                      <Tag tone="primary">{s.name}</Tag>
+                      <Tag tone="primary" caps={false} mono={false}>
+                        {s.name}
+                      </Tag>
                     </Link>
                   ))}
                 </div>
@@ -267,6 +214,73 @@ function Briefing() {
             ))}
             {!brief.newClaims.length && (
               <li className="text-sm text-muted-foreground">No new claims this week.</li>
+            )}
+          </ul>
+        </Panel>
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-3">
+        <Panel
+          title="Most reported this week"
+          className="lg:col-span-2"
+          contentClassName="max-h-[min(22rem,45vh)] overflow-y-auto"
+          right={
+            <span className="font-mono text-xs text-muted-foreground">
+              {brief.reports} reports · {brief.outlets} outlets
+            </span>
+          }
+        >
+          <ul className="space-y-2">
+            {brief.reported.slice(0, 12).map((r) => (
+              <li key={r.drone.id} className="flex flex-wrap items-baseline justify-between gap-2">
+                <Link
+                  to="/systems/$id"
+                  params={{ id: r.drone.id }}
+                  className="font-semibold hover:text-primary"
+                >
+                  {r.drone.name}
+                </Link>
+                <span className="font-mono text-xs text-muted-foreground">
+                  {r.posts} report{r.posts === 1 ? "" : "s"} · {r.outlets.slice(0, 3).join(", ")}
+                  {r.outlets.length > 3 ? ` +${r.outlets.length - 3}` : ""}
+                </span>
+              </li>
+            ))}
+            {!brief.reported.length && (
+              <li className="text-sm text-muted-foreground">
+                No catalogued system was named in this week&apos;s reports.
+              </li>
+            )}
+          </ul>
+        </Panel>
+        <Panel
+          title="First seen in reporting"
+          contentClassName="max-h-[min(22rem,45vh)] overflow-y-auto"
+        >
+          <ul className="space-y-2">
+            {brief.newSystems.slice(0, 8).map((d) => (
+              <li key={d.id}>
+                <Link
+                  to="/systems/$id"
+                  params={{ id: d.id }}
+                  className="flex justify-between gap-2 hover:text-primary"
+                >
+                  <span className="min-w-0 truncate">{d.name}</span>
+                  <span className="flex shrink-0 items-center gap-1.5 font-mono text-xs text-muted-foreground">
+                    {d.domain} · <CountryBadge code={d.origin} />
+                  </span>
+                </Link>
+              </li>
+            ))}
+            {brief.newSystems.length > 8 && (
+              <li>
+                <Link to="/catalog" className="font-mono text-xs text-primary hover:underline">
+                  +{brief.newSystems.length - 8} more in catalog →
+                </Link>
+              </li>
+            )}
+            {!brief.newSystems.length && (
+              <li className="text-sm text-muted-foreground">None this week.</li>
             )}
           </ul>
         </Panel>

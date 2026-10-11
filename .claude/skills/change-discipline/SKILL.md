@@ -22,7 +22,7 @@ wrong here.
 
 ### Find every call site before calling config dead or broken
 
-A narrow grep proves nothing. `DEFAULT_TIER_CONFIG` looked dead because grepping for its *name*
+A narrow grep proves nothing. `DEFAULT_TIER_CONFIG` looked dead because grepping for its _name_
 found nothing — it was routed through `d.tier` and was very much live, routing tier-1 extraction
 to Groq with an NVIDIA model id. Search for the field's consumers, its imports, and the shape it
 travels in, not just its declaration.
@@ -38,7 +38,7 @@ filter doing its job. A second time, a whole-corpus ratio turned out to describe
 later commit had already fixed.
 
 > Before quoting a number: write down the numerator, the denominator, and the time range. Then
-> confirm the items in the denominator are actually *new* work. "Counted" is not "lost".
+> confirm the items in the denominator are actually _new_ work. "Counted" is not "lost".
 
 ### A measurement of the whole corpus is not a measurement of now
 
@@ -55,7 +55,7 @@ already wired up, check what the pipeline does with what it gets.
 
 Before editing, capture the starting state (`npm run green:save`, plus `git status`). Afterwards,
 "pre-existing" should be a fact you recorded, not something you assumed because the number felt
-old. A stale baseline file compared against fresh output will hide a regression *you* caused.
+old. A stale baseline file compared against fresh output will hide a regression _you_ caused.
 
 ### Check for work already in the tree
 
@@ -147,12 +147,12 @@ satisfies.
 
 ### Current state — know this so you can tell "pre-existing" from "yours"
 
-| Check | Baseline |
-|---|---|
-| `tsc --noEmit` | 0 errors |
-| `eslint .` | 0 errors, **14 warnings** |
-| `prettier --check .` | clean |
-| `vitest run` | all passing |
+| Check                | Baseline                  |
+| -------------------- | ------------------------- |
+| `tsc --noEmit`       | 0 errors                  |
+| `eslint .`           | 0 errors, **14 warnings** |
+| `prettier --check .` | clean                     |
+| `vitest run`         | all passing               |
 
 Those 14 warnings are `react-refresh/only-export-components` and `react-hooks/exhaustive-deps`.
 They are a structural consequence of the Feature-Sliced layout, they are not errors, and fixing

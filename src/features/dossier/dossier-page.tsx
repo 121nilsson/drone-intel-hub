@@ -1,13 +1,53 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { consensus } from "@/entities/drone/consensus";
 import { ieeeLabel, natoLabel } from "@/entities/normalization/bands";
 import { effectiveIeeeBands, effectiveNatoBands, linkIsFiber } from "@/entities/normalization/rf";
-import { flag, type Drone, type SpecAttribute } from "@/entities/drone/types";
+import { type Drone, type SpecAttribute } from "@/entities/drone/types";
+import { CountryBadge } from "@/shared/ui/country-badge";
 import { ClaimChip, ProvenanceSheet, type ClaimSelection } from "./provenance-sheet";
 import { useDrones, useServices } from "@/shared/infra/services";
 import { removalImpact, removeDrone } from "@/features/intake/pipeline";
 import { Btn, ConfidenceTag, Panel, Tag } from "@/shared/ui/primitives";
+
+const DOSSIER_SECTIONS = [
+  { id: "specs", label: "Specifications" },
+  { id: "aliases", label: "Aliases" },
+  { id: "rf", label: "RF spectrum" },
+  { id: "supply", label: "Supply chain" },
+  { id: "payloads", label: "Payloads" },
+  { id: "sensors", label: "Sensors" },
+  { id: "variants", label: "Variants" },
+  { id: "counterparts", label: "Counterparts" },
+  { id: "timeline", label: "Timeline" },
+] as const;
+
+function DossierSectionNav() {
+  return (
+    <nav
+      aria-label="Dossier sections"
+      className="sticky top-14 z-20 hidden border-y border-border bg-background/95 py-2 backdrop-blur md:block"
+    >
+      <div className="flex flex-wrap gap-x-3 gap-y-1">
+        {DOSSIER_SECTIONS.map((s) => (
+          <a
+            key={s.id}
+            href={`#${s.id}`}
+            className="font-mono text-[11px] text-muted-foreground hover:text-primary"
+          >
+            {s.label}
+          </a>
+        ))}
+      </div>
+    </nav>
+  );
+}
 
 export function SpecTable({ drone }: { drone: Drone }) {
   const [sel, setSel] = useState<ClaimSelection | null>(null);
@@ -178,11 +218,13 @@ export function DossierPage({ id }: { id: string }) {
       <div>
         <div className="flex flex-wrap gap-2">
           <Tag tone="primary">{d.domain}</Tag>
-          <Tag>Origin {flag(d.origin)}</Tag>
+          <Tag caps={false} mono={false}>
+            Origin <CountryBadge code={d.origin} />
+          </Tag>
           {d.manufacturer && <Tag tone="accent">{d.manufacturer}</Tag>}
           {d.operators.map((o) => (
-            <Tag key={o} tone="accent">
-              Operator {flag(o)}
+            <Tag key={o} tone="accent" caps={false} mono={false}>
+              Operator <CountryBadge code={o} />
             </Tag>
           ))}
           <Tag>{d.propulsion}</Tag>
@@ -193,7 +235,9 @@ export function DossierPage({ id }: { id: string }) {
           </h1>
           <DeleteSystem key={d.id} drone={d} />
         </div>
-        <p className="mt-2 max-w-3xl text-muted-foreground">{d.summary}</p>
+        <p className="mt-2 max-w-3xl text-base leading-relaxed text-muted-foreground">
+          {d.summary}
+        </p>
         {d.reference && (
           <p className="mt-2 font-mono text-xs text-muted-foreground">
             <a
@@ -218,11 +262,12 @@ export function DossierPage({ id }: { id: string }) {
           ) : null;
         })()}
       </div>
+      <DossierSectionNav />
       <div className="grid gap-6 lg:grid-cols-3">
-        <Panel title="Consensus specifications" className="lg:col-span-2">
+        <Panel id="specs" title="Consensus specifications" className="lg:col-span-2">
           <SpecTable drone={d} />
         </Panel>
-        <Panel title="Alias registry">
+        <Panel id="aliases" title="Alias registry">
           <ul className="space-y-1 font-mono text-sm">
             <li>
               <span className="text-muted-foreground">canonical</span> {d.name}
@@ -239,7 +284,7 @@ export function DossierPage({ id }: { id: string }) {
             ))}
           </ul>
         </Panel>
-        <Panel title="RF spectrum">
+        <Panel id="rf" title="RF spectrum">
           <ul className="space-y-2">
             {d.rf.map((r, i) => {
               const ieee = effectiveIeeeBands(r).map(ieeeLabel);
@@ -275,13 +320,13 @@ export function DossierPage({ id }: { id: string }) {
             })}
           </ul>
         </Panel>
-        <Panel title="Supply chain">
+        <Panel id="supply" title="Supply chain">
           <ul className="space-y-2 text-sm">
             {d.components.map((c, i) => (
               <li key={i}>
                 <p>{c.part}</p>
                 <p className="font-mono text-xs text-muted-foreground">
-                  {c.manufacturer} · {flag(c.origin)}
+                  {c.manufacturer} · <CountryBadge code={c.origin} />
                 </p>
               </li>
             ))}
@@ -290,7 +335,7 @@ export function DossierPage({ id }: { id: string }) {
             )}
           </ul>
         </Panel>
-        <Panel title="Payload configurations">
+        <Panel id="payloads" title="Payload configurations">
           <ul className="space-y-2 text-sm">
             {(d.payloads ?? []).map((p, i) => (
               <li key={`${p.name}-${i}`}>
@@ -303,13 +348,15 @@ export function DossierPage({ id }: { id: string }) {
                     .filter(Boolean)
                     .join(" · ")}
                 </p>
-                {p.evidence && <p className="text-xs text-muted-foreground">“{p.evidence}”</p>}
+                {p.evidence && (
+                  <p className="text-xs leading-relaxed text-muted-foreground">“{p.evidence}”</p>
+                )}
               </li>
             ))}
             {!d.payloads?.length && <li className="text-muted-foreground">No payloads traced.</li>}
           </ul>
         </Panel>
-        <Panel title="Sensors & cameras">
+        <Panel id="sensors" title="Sensors & cameras">
           <ul className="space-y-2 text-sm">
             {(d.sensors ?? []).map((s, i) => (
               <li key={`${s.name}-${i}`}>
@@ -317,13 +364,15 @@ export function DossierPage({ id }: { id: string }) {
                 <p className="font-mono text-xs text-muted-foreground">
                   {[s.category, s.model, s.manufacturer].filter(Boolean).join(" · ")}
                 </p>
-                {s.evidence && <p className="text-xs text-muted-foreground">“{s.evidence}”</p>}
+                {s.evidence && (
+                  <p className="text-xs leading-relaxed text-muted-foreground">“{s.evidence}”</p>
+                )}
               </li>
             ))}
             {!d.sensors?.length && <li className="text-muted-foreground">No sensors traced.</li>}
           </ul>
         </Panel>
-        <Panel title="Variant family">
+        <Panel id="variants" title="Variant family">
           {parent && (
             <Link
               data-testid={`parent-link-${parent.id}`}
@@ -349,7 +398,7 @@ export function DossierPage({ id }: { id: string }) {
             <p className="text-sm text-muted-foreground">No family relationship recorded.</p>
           )}
         </Panel>
-        <Panel title="Counterparts">
+        <Panel id="counterparts" title="Counterparts">
           {counterparts.map((c) => (
             <Link
               data-testid={`counterpart-link-${c.id}`}
@@ -359,13 +408,16 @@ export function DossierPage({ id }: { id: string }) {
               className="block py-1 hover:text-primary"
             >
               {c.name}{" "}
-              <span className="font-mono text-xs text-muted-foreground">{flag(c.origin)}</span> →
+              <span className="text-xs text-muted-foreground">
+                <CountryBadge code={c.origin} />
+              </span>{" "}
+              →
             </Link>
           ))}
           {!counterparts.length && <p className="text-sm text-muted-foreground">None linked.</p>}
         </Panel>
       </div>
-      <Panel title="Spec evolution timeline">
+      <Panel id="timeline" title="Spec evolution timeline">
         <ol className="relative ml-2 border-l border-border">
           {[...d.evolution]
             .sort((a, b) => b.date.localeCompare(a.date))
@@ -384,7 +436,7 @@ export function DossierPage({ id }: { id: string }) {
         </ol>
       </Panel>
       <div className="h-14 sm:hidden" />
-      <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-2 gap-2 border-t border-border bg-background/95 p-2 backdrop-blur sm:hidden">
+      <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-3 gap-2 border-t border-border bg-background/95 p-2 backdrop-blur sm:hidden">
         <Link
           data-testid="compare-link"
           to="/counterparts"
@@ -399,8 +451,23 @@ export function DossierPage({ id }: { id: string }) {
           search={{ q: d.name }}
           className="border border-border py-2.5 text-center font-mono text-xs uppercase text-muted-foreground"
         >
-          Source posts
+          Posts
         </Link>
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            type="button"
+            className="border border-border py-2.5 text-center font-mono text-xs uppercase text-muted-foreground outline-none hover:text-primary"
+          >
+            Jump to…
+          </DropdownMenuTrigger>
+          <DropdownMenuContent side="top" align="end" className="max-h-64 overflow-y-auto">
+            {DOSSIER_SECTIONS.map((s) => (
+              <DropdownMenuItem key={s.id} asChild>
+                <a href={`#${s.id}`}>{s.label}</a>
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </nav>
     </div>
   );

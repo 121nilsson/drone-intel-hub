@@ -1,8 +1,9 @@
 import { Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
 import { consensus } from "@/entities/drone/consensus";
-import { DOMAINS, flag, type Domain, type Drone } from "@/entities/drone/types";
+import { DOMAINS, type Domain, type Drone } from "@/entities/drone/types";
+import { CountryBadge } from "@/shared/ui/country-badge";
 import { ieeeLabel } from "@/entities/normalization/bands";
 import { effectiveInstallationId, effectivePropulsionId } from "@/entities/normalization/taxonomy";
 import { effectiveIeeeBands, linkIsFiber } from "@/entities/normalization/rf";
@@ -26,7 +27,7 @@ function Facet({
   options: string[];
   value: string[];
   onChange: (v: string[]) => void;
-  render?: (o: string) => string;
+  render?: (o: string) => ReactNode;
 }) {
   return (
     <div>
@@ -75,6 +76,7 @@ export function CatalogPage() {
     fiberOnly: false,
   });
   const [showFilters, setShowFilters] = useState(false);
+  const [sort, setSort] = useState<"name" | "updated" | "domain">("name");
   const [mergeTargets, setMergeTargets] = useState<Record<string, string>>({});
   const [importing, setImporting] = useState(false);
   const [importNote, setImportNote] = useState<string | null>(null);
@@ -107,6 +109,97 @@ export function CatalogPage() {
     [drones],
   );
   const results = useMemo(() => repo.search(q, f), [repo, q, f, drones]);
+  const sorted = useMemo(() => {
+    const list = [...results];
+    if (sort === "name") list.sort((a, b) => a.name.localeCompare(b.name));
+    else if (sort === "updated") list.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    else list.sort((a, b) => a.domain.localeCompare(b.domain) || a.name.localeCompare(b.name));
+    return list;
+  }, [results, sort]);
+
+  const filterChips = useMemo(() => {
+    const chips: { id: string; label: string; clear: () => void }[] = [];
+    for (const d of f.domains)
+      chips.push({
+        id: `domain-${d}`,
+        label: d,
+        clear: () => setF((prev) => ({ ...prev, domains: prev.domains.filter((x) => x !== d) })),
+      });
+    for (const o of f.origin)
+      chips.push({
+        id: `origin-${o}`,
+        label: o,
+        clear: () => setF((prev) => ({ ...prev, origin: prev.origin.filter((x) => x !== o) })),
+      });
+    for (const o of f.operators)
+      chips.push({
+        id: `op-${o}`,
+        label: `Op ${o}`,
+        clear: () =>
+          setF((prev) => ({ ...prev, operators: prev.operators.filter((x) => x !== o) })),
+      });
+    for (const b of f.bands)
+      chips.push({
+        id: `band-${b}`,
+        label: b,
+        clear: () => setF((prev) => ({ ...prev, bands: prev.bands.filter((x) => x !== b) })),
+      });
+    for (const b of f.ieeeBands)
+      chips.push({
+        id: `ieee-${b}`,
+        label: ieeeLabel(b),
+        clear: () =>
+          setF((prev) => ({ ...prev, ieeeBands: prev.ieeeBands.filter((x) => x !== b) })),
+      });
+    for (const p of f.propulsion)
+      chips.push({
+        id: `prop-${p}`,
+        label: p,
+        clear: () =>
+          setF((prev) => ({ ...prev, propulsion: prev.propulsion.filter((x) => x !== p) })),
+      });
+    for (const id of f.propulsionIds)
+      chips.push({
+        id: `pfam-${id}`,
+        label: id,
+        clear: () =>
+          setF((prev) => ({
+            ...prev,
+            propulsionIds: prev.propulsionIds.filter((x) => x !== id),
+          })),
+      });
+    for (const id of f.installationIds)
+      chips.push({
+        id: `inst-${id}`,
+        label: id,
+        clear: () =>
+          setF((prev) => ({
+            ...prev,
+            installationIds: prev.installationIds.filter((x) => x !== id),
+          })),
+      });
+    for (const p of f.protocols)
+      chips.push({
+        id: `proto-${p}`,
+        label: p,
+        clear: () =>
+          setF((prev) => ({ ...prev, protocols: prev.protocols.filter((x) => x !== p) })),
+      });
+    if (f.fiberOnly)
+      chips.push({
+        id: "fiber",
+        label: "Fiber link",
+        clear: () => setF((prev) => ({ ...prev, fiberOnly: false })),
+      });
+    return chips;
+  }, [f]);
+
+  function focusDuplicates() {
+    setShowFilters(true);
+    requestAnimationFrame(() =>
+      document.getElementById("catalog-duplicates")?.scrollIntoView({ behavior: "smooth" }),
+    );
+  }
 
   async function importReference() {
     if (importingRef.current) return;
@@ -168,14 +261,14 @@ export function CatalogPage() {
           options={opts.origin}
           value={f.origin}
           onChange={(v) => setF({ ...f, origin: v })}
-          render={flag}
+          render={(o) => <CountryBadge code={o} />}
         />
         <Facet
           label="Battlefield operator"
           options={opts.operators}
           value={f.operators}
           onChange={(v) => setF({ ...f, operators: v })}
-          render={flag}
+          render={(o) => <CountryBadge code={o} />}
         />
         <Facet
           label="RF band"
@@ -221,7 +314,7 @@ export function CatalogPage() {
           Fiber link
         </button>
         {duplicates.length > 0 && (
-          <div className="border-t border-border pt-4">
+          <div id="catalog-duplicates" className="border-t border-border pt-4 scroll-mt-24">
             <p className="mb-2 font-mono text-[11px] uppercase tracking-widest text-accent">
               Duplicate Systems ({duplicates.length})
             </p>
@@ -289,14 +382,61 @@ export function CatalogPage() {
         )}
       </aside>
       <div>
+        <div className="mb-4">
+          <h1 className="text-3xl font-semibold">Systems catalog</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Search and filter catalogued unmanned systems, RF links, and merge duplicates.
+          </p>
+        </div>
+        {duplicates.length > 0 && (
+          <button
+            type="button"
+            onClick={focusDuplicates}
+            className="mb-3 w-full border border-accent/50 bg-accent/10 px-3 py-2.5 text-left text-sm hover:border-accent"
+          >
+            <span className="font-semibold text-accent">
+              {duplicates.length} possible duplicate group{duplicates.length === 1 ? "" : "s"}
+            </span>
+            <span className="mt-0.5 block text-muted-foreground">
+              Review in filters → merge into a single catalog entry
+            </span>
+          </button>
+        )}
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="Search Geran, Герань, Shahed, Kometa, NVIDIA…"
           className="w-full border border-border bg-card px-3 py-2.5 font-mono text-sm outline-none focus:border-primary"
         />
+        {filterChips.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {filterChips.map((chip) => (
+              <button
+                key={chip.id}
+                type="button"
+                onClick={chip.clear}
+                className="inline-flex items-center gap-1 border border-primary/40 bg-primary/10 px-2 py-0.5 font-mono text-[11px] text-primary hover:bg-primary/15"
+              >
+                {chip.label}
+                <span aria-hidden>×</span>
+              </button>
+            ))}
+          </div>
+        )}
         <div className="my-3 flex flex-wrap items-center justify-between gap-2">
-          <p className="font-mono text-xs text-muted-foreground">{results.length} systems</p>
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="font-mono text-xs text-muted-foreground">{sorted.length} systems</p>
+            <select
+              value={sort}
+              onChange={(e) => setSort(e.target.value as "name" | "updated" | "domain")}
+              className="border border-border bg-background px-2 py-1 font-mono text-[11px] outline-none focus:border-primary"
+              aria-label="Sort systems"
+            >
+              <option value="name">Sort: name</option>
+              <option value="updated">Sort: recently updated</option>
+              <option value="domain">Sort: domain</option>
+            </select>
+          </div>
           <Btn
             type="button"
             variant="ghost"
@@ -308,7 +448,7 @@ export function CatalogPage() {
         </div>
         {importNote && <p className="mb-3 font-mono text-xs text-muted-foreground">{importNote}</p>}
         <div className="grid gap-3 md:grid-cols-2">
-          {results.map((d) => {
+          {sorted.map((d) => {
             const top = d.specs
               .filter((x) => x.key !== "unit_cost")
               .slice(0, 2)
@@ -323,8 +463,8 @@ export function CatalogPage() {
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
                       <h3 className="font-semibold">
-                        <span className="mr-1.5 font-mono text-xs text-muted-foreground">
-                          {flag(d.origin)}
+                        <span className="mr-1.5 text-xs text-muted-foreground">
+                          <CountryBadge code={d.origin} />
                         </span>
                         {d.name}
                       </h3>
@@ -339,8 +479,8 @@ export function CatalogPage() {
                   )}
                   <div className="mt-3 flex flex-wrap gap-1.5">
                     {d.operators.map((o) => (
-                      <Tag key={o} tone="accent">
-                        Op {flag(o)}
+                      <Tag key={o} tone="accent" caps={false} mono={false}>
+                        Op <CountryBadge code={o} />
                       </Tag>
                     ))}
                     {d.rf.slice(0, 3).map((r, i) => (

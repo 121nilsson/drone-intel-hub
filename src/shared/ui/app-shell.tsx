@@ -3,7 +3,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { Menu, Plus, Search, X, Radar } from "lucide-react";
 import { useDrones } from "@/shared/infra/services";
 import { droneHaystack } from "@/shared/infra/local-repository";
-import { flag } from "@/entities/drone/types";
+import { CountryBadge } from "@/shared/ui/country-badge";
 
 const NAV = [
   { to: "/", label: "Briefing" },
@@ -57,8 +57,8 @@ function CommandSearch({ open, onClose }: { open: boolean; onClose: () => void }
                   <span className="font-medium">{d.name}</span>{" "}
                   <span className="text-muted-foreground">{d.cyrillic}</span>
                 </span>
-                <span className="font-mono text-xs text-muted-foreground">
-                  {d.domain} · {flag(d.origin)}
+                <span className="flex items-center gap-1.5 font-mono text-xs text-muted-foreground">
+                  {d.domain} · <CountryBadge code={d.origin} />
                 </span>
               </button>
             </li>

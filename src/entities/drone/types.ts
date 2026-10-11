@@ -251,16 +251,5 @@ export interface Candidate {
   adjudicatedAt?: string;
 }
 
-export const FLAGS: Record<string, string> = {
-  RU: "🇷🇺",
-  UA: "🇺🇦",
-  IR: "🇮🇷",
-  CN: "🇨🇳",
-  US: "🇺🇸",
-  TW: "🇹🇼",
-  KP: "🇰🇵",
-  TR: "🇹🇷",
-  DE: "🇩🇪",
-  PL: "🇵🇱",
-};
-export const flag = (c: string) => `${FLAGS[c] ?? "🏳"} ${c}`;
+/** Plain-text country code; rendered flags live in `CountryBadge` (flag-icons). */
+export const flag = (c: string) => c.trim().toUpperCase();
