@@ -221,9 +221,11 @@ Content is CC BY-SA 4.0; each imported system records the article, revision and 
 
 ## Scheduled auto-ingest
 
-A Nitro task polls every monitored source every 10 minutes and runs relevant posts through the
-pipeline above. It runs **only in the built app**: Nitro is a build-time plugin here, so
-`npm run dev` schedules nothing.
+A Nitro task polls the monitored sources every 10 minutes and runs relevant posts through the
+pipeline above. Which sources a tick polls follows their own yield (`src/features/sources/cadence.ts`):
+a source with any drone-related post keeps the fast lane, a source whose records show only noise
+drops to hourly, and the manual **Sync all now** polls every source regardless. It runs **only in
+the built app**: Nitro is a build-time plugin here, so `npm run dev` schedules nothing.
 
 | Where                                    | What                                             |
 | ---------------------------------------- | ------------------------------------------------ |
@@ -242,7 +244,8 @@ A web page is either an article or an index of links. Article pages are read wit
 (Firefox Reader View's algorithm, on linkedom, server-side only): navigation, related-story
 blocks and boilerplate are dropped and the body is stored. Index pages keep every headline, and
 the top three are replaced with the bodies behind them. RSS items that carry only a teaser are
-followed the same way. Any single failure falls back to the headline.
+followed the same way, up to eight per feed; a feed that already publishes full text is stored
+whole, up to 8,000 characters per item. Any single failure falls back to the headline.
 
 **One story, once.** The same story often arrives from a Telegram channel, an RSS feed and a news
 site within minutes. Each post is fingerprinted with a 64-bit SimHash
@@ -272,6 +275,11 @@ without a success in between, it is turned off (its Auto box unticked) and the r
 the Sources page. Any successful fetch clears the record, and ticking Auto again starts the source
 clean. Paused and turned-off sources are skipped by auto-sync and "Fetch all"; each keeps its own
 Sync button, and a manual sync that works resumes it.
+
+**Silence is tracked, not punished.** A fetch that answers 200 with no posts is not a failure — a
+weekly feed is legally empty on most ticks — but it is counted: a source silent for about six
+hours of runs is marked on the Sources page, and when most of one platform's proven sources fall
+silent in the same run, the sync log names it as likely parser drift rather than a quiet day.
 
 **Unattended running.** Both containers use `restart: unless-stopped`, so the stack comes back
 after a crash or a host reboot.

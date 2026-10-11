@@ -2,9 +2,12 @@ import { describe, expect, it } from "vitest";
 import {
   FAILURES_BEFORE_PAUSE,
   PAUSE_MS,
+  SILENT_RUNS,
   healthAfterFetch,
   isCollectable,
+  platformDrift,
   reenable,
+  silenceNotice,
 } from "@/features/sources/source-health";
 import { AGE_OUT_MS, autoTriage } from "@/features/intake/auto-triage";
 import { buildBriefing } from "@/features/briefing/briefing-data";
@@ -66,6 +69,99 @@ describe("source health", () => {
 
   it("starts a re-enabled source clean", () => {
     expect(reenable()).toMatchObject({ autoSync: true, failStreak: 0, pausedOnce: false });
+  });
+
+  /** Apply runs the way collection does, with the post count each fetch returned. */
+  const runFetched = (
+    s: MonitoredSource,
+    results: (string | undefined)[],
+    fetched: number[],
+    start = NOW,
+  ) =>
+    results.reduce(
+      (cur, err, i) => ({
+        ...cur,
+        ...healthAfterFetch(cur, err, start + i * 600_000, fetched[i] ?? 0),
+      }),
+      s,
+    );
+
+  it("counts a 200-with-no-posts fetch as silence, never as a failure", () => {
+    // A feed that publishes once a week is legally empty on 97% of the cron's ticks, so
+    // silence must not feed the pause machinery - a wrong pause costs a week of intel.
+    const s = runFetched(source(), Array(SILENT_RUNS + 4).fill(undefined), Array(40).fill(0));
+    expect(s.emptyStreak).toBe(SILENT_RUNS + 4);
+    expect(s.failStreak).toBe(0);
+    expect(s.pausedUntil).toBeUndefined();
+    expect(s.autoSync).not.toBe(false);
+    expect(silenceNotice(s)).toContain(`${SILENT_RUNS + 4} fetches`);
+  });
+
+  it("clears the streak and stamps the parser proof on a run that returns posts", () => {
+    const s = runFetched(source(), [undefined, undefined, undefined], [0, 0, 7], NOW);
+    expect(s.emptyStreak).toBe(0);
+    expect(s.lastPostAt).toBe(iso(NOW + 2 * 600_000));
+    expect(silenceNotice(s)).toBeNull();
+  });
+
+  it("leaves the silence streak alone when the fetch errored", () => {
+    // An erroring host is the fail streak's business; the silence streak measures the parser,
+    // and an errored fetch says nothing about it.
+    const s = runFetched(source(), [undefined, undefined, "HTTP 403"], [0, 0, 0]);
+    expect(s.emptyStreak).toBe(2);
+    expect(s.failStreak).toBe(1);
+  });
+
+  it("says nothing about a source inside the silence bounds", () => {
+    const s = runFetched(source(), Array(SILENT_RUNS - 1).fill(undefined), Array(40).fill(0));
+    expect(silenceNotice(s)).toBeNull();
+  });
+});
+
+describe("platformDrift", () => {
+  const input = (platform: string, fetched: number, hoursAgo = 1) => ({
+    platform,
+    fetched,
+    lastPostAt: iso(NOW - hoursAgo * 3_600_000),
+  });
+
+  it("reports a platform whose proven sources all came back empty", () => {
+    // The signal a per-source check cannot see: one silent source reads as a quiet day, four
+    // on one platform in the same run is a parser change.
+    const msgs = platformDrift([
+      input("Telegram", 0),
+      input("Telegram", 0),
+      input("Telegram", 0),
+      input("Telegram", 0),
+    ]);
+    expect(msgs).toEqual(["4 of 4 Telegram sources returned no posts"]);
+  });
+
+  it("stays quiet when most of the platform still parses", () => {
+    const msgs = platformDrift([
+      input("Telegram", 0),
+      input("Telegram", 0),
+      input("Telegram", 5),
+      input("Telegram", 3),
+    ]);
+    expect(msgs).toEqual([]);
+  });
+
+  it("ignores sources without a recent yield to drift from", () => {
+    const stale = platformDrift(Array(4).fill(input("Telegram", 0, 8 * 24)));
+    expect(stale).toEqual([]);
+    const never = platformDrift([
+      { platform: "RSS", fetched: 0 },
+      { platform: "RSS", fetched: 0 },
+      { platform: "RSS", fetched: 0 },
+      { platform: "RSS", fetched: 0 },
+    ]);
+    expect(never).toEqual([]);
+  });
+
+  it("needs a quorum before calling a platform broken", () => {
+    const msgs = platformDrift([input("RSS", 0), input("RSS", 0), input("RSS", 0)]);
+    expect(msgs).toEqual([]);
   });
 });
 

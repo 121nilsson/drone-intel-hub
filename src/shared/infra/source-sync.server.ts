@@ -142,6 +142,9 @@ export async function runAutoSync(opts?: {
     const { fetchAllSources } = await import("./fetch-posts.server");
     const { reports, stopReason } = await fetchAllSources(report, {
       ...(cooling ? { cooldownUntil: cooling.until } : {}),
+      // Forcing the throttle (a manual run) also polls sources the cadence deferred: the
+      // operator asked for the whole list, not the due part of it.
+      ...(force ? { force: true } : {}),
     });
     await storeResult(reports);
     try {

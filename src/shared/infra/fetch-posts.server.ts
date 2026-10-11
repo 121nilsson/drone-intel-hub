@@ -27,7 +27,8 @@ import {
 } from "@/features/sources/auto-ingest";
 import { fetchOne, FETCH_CONCURRENCY, sourceHost } from "./fetch-posts";
 import { mapWithConcurrency } from "./pool";
-import { healthAfterFetch, isCollectable } from "@/features/sources/source-health";
+import { healthAfterFetch, isCollectable, platformDrift } from "@/features/sources/source-health";
+import { isDue, yieldBySource } from "@/features/sources/cadence";
 
 /** AI time per run. Under the 10-minute cron period so a run never overlaps the next tick. */
 const AI_WINDOW_MS = 8 * 60_000;
@@ -52,6 +53,8 @@ export async function fetchAllSources(
   opts: {
     /** While set, stage 2 is skipped: the provider recently rate-limited this key. */
     cooldownUntil?: string;
+    /** Poll every collectable source, not just those the cadence says are due. Manual runs force. */
+    force?: boolean;
   } = {},
 ): Promise<{ reports: SyncReport[]; stopReason?: string }> {
   if (!dbConfigured()) throw new Error("Auto-sync needs DATABASE_URL (PostgreSQL)");
@@ -111,7 +114,18 @@ export async function fetchAllSources(
   // Stage 1: collect every source into the dispatch queue (network only).
   // Opt-out rather than opt-in: sources without the flag predate it and keep being polled.
   // Off and paused sources are skipped; a pause ends on its own (see source-health.ts).
-  const targets = sources.list().filter((s) => s.platform !== "X" && isCollectable(s));
+  // Within that, each source keeps a lane its own measured yield earned (cadence.ts), so the
+  // fixed 10-minute cron stops spending most of its requests on sources that never paid off.
+  // A manual run forces the whole list: an operator asking for "all" means all.
+  const yields = yieldBySource(dispatches.list());
+  const targets = sources
+    .list()
+    .filter(
+      (s) =>
+        s.platform !== "X" &&
+        isCollectable(s) &&
+        (opts.force === true || isDue(s, yields.get(s.id))),
+    );
   const reports: SyncReport[] = [];
 
   // Article bodies need a DOM, so the extractor is server-only and injected into the shared
@@ -136,15 +150,20 @@ export async function fetchAllSources(
       ...(articleText ? { articleText } : {}),
     });
 
+  // How many posts each fetched source returned, for the drift check below. A source that
+  // errored is deliberately left out: an erroring host is the health streak's business, and
+  // counting it as "no posts" would blame a parser for an outage.
+  const fetchedById = new Map<string, number>();
   const collected = await mapWithConcurrency(
     targets,
     FETCH_CONCURRENCY,
     async (s) => {
       const c = await collectSource(s, fetcher, dispatches);
+      if (!c.error) fetchedById.set(s.id, c.fetched);
       sources.update(s.id, {
         lastFetched: new Date().toISOString(),
         lastError: c.error,
-        ...healthAfterFetch(s, c.error),
+        ...healthAfterFetch(s, c.error, Date.now(), c.fetched),
       });
       return c;
     },
@@ -156,6 +175,24 @@ export async function fetchAllSources(
       },
     },
   );
+
+  // Every source on one platform answering 200 with no posts in the same run is what a parser
+  // change looks like - one silent source reads as a quiet day, the fleet pattern does not.
+  // Sources the cadence deferred are not in fetchedById, so they cannot masquerade as silence.
+  const drift = platformDrift(
+    sources
+      .list()
+      .filter((s) => fetchedById.has(s.id))
+      .map((s) => ({
+        platform: s.platform,
+        fetched: fetchedById.get(s.id)!,
+        lastPostAt: s.lastPostAt,
+      })),
+  );
+  if (drift.length)
+    console.log(
+      `[sources:sync] suspicious: ${drift.join("; ")} — likely a parser change, not a quiet day`,
+    );
 
   for (const result of collected) {
     // collectSource reports failures as a value, so a rejected worker is a bug (or a store

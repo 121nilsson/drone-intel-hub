@@ -77,6 +77,14 @@ function parseTelegram(html: string, chan: string): FetchedPost[] {
   return out.reverse().slice(0, 20);
 }
 
+/**
+ * Ceiling on one RSS item's stored text. Feeds that publish full articles (the WordPress common
+ * case) used to be cut at 3000 characters mid-sentence, so the pipeline only ever saw the
+ * opening of a story. Aligned with the Readability bodies' own ceiling: a dispatch is one
+ * document either way, and the store's document cap is an order of magnitude above both.
+ */
+const RSS_ITEM_CHARS = 8000;
+
 function parseRss(xml: string): FetchedPost[] {
   const items = xml.split(/<item[\s>]|<entry[\s>]/).slice(1);
   return items
@@ -98,7 +106,7 @@ function parseRss(xml: string): FetchedPost[] {
       const filteredText = filter(`${title}. ${desc}`);
       return {
         id: `rss:${guid.trim()}`,
-        text: filteredText.slice(0, 3000),
+        text: filteredText.slice(0, RSS_ITEM_CHARS),
         url: link.trim(),
         date,
       };
@@ -123,6 +131,12 @@ function parseWeb(html: string, url: string): FetchedPost[] {
 
 /** Ceiling on follow-up requests per source, so one source cannot cost a dozen fetches. */
 const MAX_FOLLOWS = 3;
+/**
+ * RSS goes deeper than a web index. A teaser item holds a headline and a hook; the story is
+ * behind the link, so following eight of a feed's twenty items buys the bodies the extractor
+ * works from, while a full-text feed needs no follow-up at all.
+ */
+const MAX_RSS_FOLLOWS = 8;
 const FOLLOW_CONCURRENCY = 3;
 /** Below this, Readability has found chrome rather than an article, so the anchor text stays. */
 const MIN_ARTICLE_CHARS = 400;
@@ -225,7 +239,7 @@ async function rssPosts(xml: string, opts: FetchOptions): Promise<FetchedPost[]>
   const posts = parseRss(xml);
   const extract = opts.articleText;
   if (!extract) return posts;
-  const follow = Math.min(opts.maxFollows ?? MAX_FOLLOWS, MAX_FOLLOWS);
+  const follow = Math.min(opts.maxFollows ?? MAX_RSS_FOLLOWS, MAX_RSS_FOLLOWS);
   const teasers = posts.filter((p) => p.url && p.text.length < RSS_TEASER_CHARS).slice(0, follow);
   if (teasers.length === 0) return posts;
 

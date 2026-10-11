@@ -15,8 +15,13 @@ import {
   isCollectable,
   isPaused,
   reenable,
+  silenceNotice,
 } from "./source-health";
-import { getSyncState, type SyncState } from "@/shared/infra/source-sync.functions";
+import {
+  getSyncState,
+  triggerAutoSync,
+  type SyncState,
+} from "@/shared/infra/source-sync.functions";
 import { getStoreStatus } from "@/shared/infra/store.functions";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Btn, Panel, Tag } from "@/shared/ui/primitives";
@@ -119,6 +124,7 @@ export function SourcesPage() {
   const nav = useNavigate();
   const fetchFn = useServerFn(fetchSourcePosts);
   const stateFn = useServerFn(getSyncState);
+  const triggerFn = useServerFn(triggerAutoSync);
   const [f, setF] = useState({
     name: "",
     platform: "Telegram" as SourcePlatform,
@@ -156,7 +162,7 @@ export function SourcesPage() {
       sv.sources.update(s.id, {
         lastFetched: new Date().toISOString(),
         lastError: c.error,
-        ...healthAfterFetch(s, c.error),
+        ...healthAfterFetch(s, c.error, Date.now(), c.fetched),
       });
       say(
         c.error
@@ -404,6 +410,9 @@ export function SourcesPage() {
             {s.lastError && (
               <p className="mt-1 font-mono text-[11px] text-destructive">{s.lastError}</p>
             )}
+            {silenceNotice(s) && (
+              <p className="mt-1 font-mono text-[11px] text-accent">{silenceNotice(s)}</p>
+            )}
             {isPaused(s) && (
               <p className="mt-1 font-mono text-[11px] text-accent">
                 Paused after {FAILURES_BEFORE_PAUSE} failed fetches; retried automatically from{" "}
@@ -563,6 +572,34 @@ export function SourcesPage() {
             <div className="mb-3 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center sm:gap-3">
               <Btn className="justify-center py-2.5" onClick={syncAll} disabled={!!busy}>
                 {busy === "all" ? "Fetching…" : "Fetch all feeds"}
+              </Btn>
+              <Btn
+                variant="ghost"
+                className="justify-center py-2.5"
+                disabled={!!busy || !postgres}
+                title={
+                  postgres
+                    ? "Runs the server-side pass now, past the throttle the cron respects, and polls every source rather than only those due"
+                    : "Needs PostgreSQL (DATABASE_URL)"
+                }
+                onClick={async () => {
+                  setBusy("sync");
+                  try {
+                    const r = await triggerFn({ data: { force: true } });
+                    say(
+                      r.ran ? `Sync all now: ${r.reason}` : `Sync all now did not run: ${r.reason}`,
+                    );
+                    try {
+                      setSyncState(await stateFn());
+                    } catch {
+                      /* the poll retries */
+                    }
+                  } finally {
+                    setBusy(null);
+                  }
+                }}
+              >
+                {busy === "sync" ? "Syncing…" : "Sync all now"}
               </Btn>
               <Btn
                 variant="ghost"

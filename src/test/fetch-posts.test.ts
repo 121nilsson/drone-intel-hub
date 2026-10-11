@@ -380,6 +380,58 @@ describe("fetchOne fetch options", () => {
     expect(r.posts[0]!.id).toMatch(/^rss:/);
     expect(r.posts[0]!.url).toBe("https://x.test/a");
   });
+
+  it("keeps a full-text feed item whole instead of cutting it at a teaser length", async () => {
+    // WordPress-style feeds embed the whole article. The old 3000-char cap stored the opening
+    // of every long report and nothing that followed it.
+    const body = `${"A detailed report on the strike with the technical detail that matters. ".repeat(80)}tail-marker`;
+    const xml = `<rss><channel>
+      <item><title>Shahed strike on Odesa</title><link>https://x.test/a</link>
+        <content:encoded><![CDATA[${body}]]></content:encoded></item>
+    </channel></rss>`;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => ok(xml)),
+    );
+    const r = await fetchOne({ platform: "RSS", handle: "https://x.test/feed" });
+    if (!r.ok) throw new Error(r.error);
+    expect(r.posts[0]!.text.length).toBeGreaterThan(5000);
+    expect(r.posts[0]!.text).toContain("tail-marker");
+  });
+
+  it("follows more teaser items than a web index does", async () => {
+    const xml = `<rss><channel>
+      ${[1, 2, 3, 4, 5, 6]
+        .map(
+          (n) =>
+            `<item><title>Report ${n}</title><link>https://x.test/a${n}</link><description>A short teaser of report ${n}, truncated by the feed before the interesting part.</description></item>`,
+        )
+        .join("\n")}
+    </channel></rss>`;
+    const routes: Record<string, () => Response> = {
+      "https://x.test/feed": () => new Response(xml, { status: 200 }),
+      ...Object.fromEntries(
+        [1, 2, 3, 4, 5, 6].map((n) => [
+          `https://x.test/a${n}`,
+          () => new Response(`<article>${n}</article>`, { status: 200 }),
+        ]),
+      ),
+    };
+    const fn = stubRoutes(routes);
+    const r = await fetchOne(
+      { platform: "RSS", handle: "https://x.test/feed" },
+      {
+        articleText: bodiesByUrl(
+          Object.fromEntries([1, 2, 3, 4, 5, 6].map((n) => [`https://x.test/a${n}`, bodyOf(20)])),
+        ),
+      },
+    );
+    if (!r.ok) throw new Error(r.error);
+    expect(r.posts).toHaveLength(6);
+    for (const p of r.posts) expect(p.text.length).toBeGreaterThan(400);
+    // The feed plus every teaser followed: on a teaser feed the story is behind the link.
+    expect(fn).toHaveBeenCalledTimes(7);
+  });
 });
 
 // ------------------------------------------------------------------ X bridge

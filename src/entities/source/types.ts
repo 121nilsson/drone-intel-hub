@@ -24,4 +24,12 @@ export interface MonitoredSource {
   pausedOnce?: boolean | undefined;
   /** Why automation turned the source off, shown on the Sources page. */
   disabledReason?: string | undefined;
+  /**
+   * Consecutive fetches that answered 200 with zero posts. Never a failure on its own - a feed
+   * that publishes weekly is legally empty most ticks - but the streak is what tells a parser
+   * change from a quiet day. See SILENT_RUNS in features/sources/source-health.ts.
+   */
+  emptyStreak?: number | undefined;
+  /** Last fetch that returned at least one post: proof this source's parser still works. */
+  lastPostAt?: string | undefined;
 }
