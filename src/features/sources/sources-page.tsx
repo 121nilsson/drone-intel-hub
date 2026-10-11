@@ -15,8 +15,11 @@ import { Btn, Panel, Tag } from "@/shared/ui/primitives";
 import {
   collectSource,
   fetchingProgress,
+  isStale,
   processPending,
   progressFromItem,
+  REANALYSIS_BATCH,
+  requeueStale,
   WORK_STALE_MS,
   type WorkProgress,
 } from "./auto-ingest";
@@ -277,6 +280,7 @@ export function SourcesPage() {
     duplicate: 0,
   };
   for (const d of dispatches) counts[d.status]++;
+  const stale = dispatches.filter(isStale).length;
 
   /**
    * Per-source dispatch breakdown. Computed once for the whole archive rather than per source row,
@@ -365,6 +369,20 @@ export function SourcesPage() {
           >
             {busy === "queue" ? "Analysing…" : `Analyse queue (${counts.pending})`}
           </Btn>
+          {stale > 0 && (
+            <Btn
+              variant="ghost"
+              className="justify-center py-2.5"
+              disabled={!!busy}
+              title="Posts analysed by an older pipeline. Auto-sync re-analyses them in batches once the live queue is empty; this queues the next batch now."
+              onClick={() => {
+                const n = requeueStale(svc.dispatches, REANALYSIS_BATCH);
+                say(`Queued ${n} older post${n === 1 ? "" : "s"} for re-analysis.`);
+              }}
+            >
+              {`Re-analyse older (${stale})`}
+            </Btn>
+          )}
           <Btn
             variant="ghost"
             className="justify-center py-2.5"

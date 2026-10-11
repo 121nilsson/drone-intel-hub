@@ -1,4 +1,5 @@
 import { parseNumber } from "@/entities/normalization/numeric";
+import { mentionsPhonetic, phoneticKey } from "@/entities/drone/name-key";
 import type {
   DetectedSystem,
   Domain,
@@ -37,6 +38,14 @@ const STOP = new Set(
     .map((w) => w.toLowerCase()),
 );
 
+/**
+ * mentions(), or the same name in another script or romanisation ("Ланцетом" for Lancet). For
+ * catalog matching; detectNames keeps the exact form, since a novel name is not yet known.
+ */
+export function mentionsName(text: string, name: string) {
+  return mentions(text, name) || mentionsPhonetic(text, name);
+}
+
 /** Find proper nouns, acronyms and model designations without requiring quotes. */
 export function detectNames(raw: string): string[] {
   const out: string[] = [];
@@ -52,9 +61,10 @@ export function detectNames(raw: string): string[] {
     if (!out.some((o) => o.toLowerCase() === n.toLowerCase())) out.push(n);
   };
   for (const m of raw.matchAll(/["«“']([^"»”']{2,40})["»”']/g)) add(m[1]!);
-  // Designations: Geran-5, Molniya-1, FP-1, Lancet-3M, Shahed-238
+  // Designations: Geran-5, Molniya-1, FP-1, Lancet-3M, Shahed-238, \u041B\u0430\u043D\u0446\u0435\u0442-3\u041C. Lookarounds rather
+  // than \b, which only knows ASCII letters and so never matched before a Cyrillic name.
   for (const m of raw.matchAll(
-    /\b([A-Z\u0410-\u042F][\p{L}]*(?:\s[A-Z][\p{L}]+)?-\p{N}+[A-Za-z]?)\b/gu,
+    /(?<![\p{L}\p{N}])([A-Z\u0410-\u042F][\p{L}]*(?:\s[A-Z\u0410-\u042F][\p{L}]+)?-\p{N}+[A-Za-z\u0410-\u044F]?)(?![\p{L}\p{N}])/gu,
   ))
     add(m[1]!);
   // Acronym names, optionally with a single-letter variant: STING S, MAGURA V5
@@ -89,9 +99,9 @@ const base = (n: string) => {
 export function resolveSystems(raw: string, catalog: Drone[]): DetectedSystem[] {
   const systems: DetectedSystem[] = [];
   const seen = new Set<string>();
-  // 1. Exact catalog mentions
+  // 1. Catalog mentions, in any script or romanisation ("Ланцет" finds Lancet)
   for (const d of catalog) {
-    const hit = catalogNames(d).find((n) => mentions(raw, n));
+    const hit = catalogNames(d).find((n) => mentionsName(raw, n));
     if (hit && !seen.has(d.id)) {
       seen.add(d.id);
       systems.push({ name: hit, matchId: d.id });
@@ -102,15 +112,16 @@ export function resolveSystems(raw: string, catalog: Drone[]): DetectedSystem[] 
     detectNames(raw),
     systems.map((s) => s.name),
   )) {
-    if (systems.some((s) => s.name.toLowerCase() === n.toLowerCase())) continue;
-    if (catalog.some((d) => catalogNames(d).some((c) => c.toLowerCase() === n.toLowerCase())))
-      continue;
+    // Compared by phonetic key, so a Cyrillic spelling of a matched system is not a new one.
+    const key = phoneticKey(n);
+    if (systems.some((s) => phoneticKey(s.name) === key)) continue;
+    if (catalog.some((d) => catalogNames(d).some((c) => phoneticKey(c) === key))) continue;
     const b = base(n);
     const parent = b
       ? catalog.find((d) =>
           catalogNames(d).some((c) => {
             const cb = base(c);
-            return cb?.stem === b.stem && cb.variant !== b.variant;
+            return !!cb && phoneticKey(cb.stem) === phoneticKey(b.stem) && cb.variant !== b.variant;
           }),
         )
       : undefined;
@@ -351,7 +362,7 @@ function extractFacts(raw: string): Facts {
 
 function contextForSystem(raw: string, name: string): string {
   const clauses = raw.split(/(?<=[.!?;\n])\s+/);
-  const hits = clauses.filter((clause) => mentions(clause, name));
+  const hits = clauses.filter((clause) => mentionsName(clause, name));
   return hits.join(" ");
 }
 

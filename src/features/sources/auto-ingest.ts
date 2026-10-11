@@ -6,6 +6,7 @@ import type { DispatchRepository } from "@/shared/contracts/repository";
 import { runTwoTier, type PipelineDeps } from "@/features/intake/pipeline";
 import type { Drone } from "@/entities/drone/types";
 import { ProviderOutageError } from "@/shared/contracts/ai";
+import { EXTRACTION_PROMPT_VERSION } from "@/shared/contracts/extraction.schema";
 
 export const DRONE_HINT =
   /drone|uav|ugv|usv|fpv|shahed|geran|lancet|bpla|бла|бпла|дрон|квадрокоптер|ланцет|герань|шахед|мавик|молния|курьер|термит|катран|магура|баба яга|interceptor|loitering|unmanned|jammer|РЭБ|EW\b/i;
@@ -404,9 +405,18 @@ export async function processPending(
         /* progress must not fail the batch */
       }
       const now = new Date().toISOString();
+      // A re-analysis replaces this post's earlier contribution rather than adding to it. Kept
+      // restorable until the new run succeeds, so a failed re-run loses nothing.
+      const restore = d.reanalyze ? retractContribution(d, deps) : undefined;
       const isRelevant = DRONE_HINT.test(d.text) || (catalogPattern?.test(d.text) ?? false);
       if (!isRelevant) {
-        dispatches.update(d.id, { status: "irrelevant", text: "", processedAt: now });
+        dispatches.update(d.id, {
+          status: "irrelevant",
+          text: "",
+          processedAt: now,
+          pipelineVersion: PIPELINE_VERSION,
+          reanalyze: false,
+        });
         rep.irrelevant++;
         continue;
       }
@@ -416,9 +426,12 @@ export async function processPending(
           url: d.url,
           ...(d.publishedAt ? { publishedAt: d.publishedAt } : {}),
         });
+        if (d.reanalyze) supersedeCandidates(d, r.candidate.id, deps);
         dispatches.update(d.id, {
           status: "processed",
           processedAt: now,
+          pipelineVersion: PIPELINE_VERSION,
+          reanalyze: false,
           outcome: r.kind,
           candidateIds: [r.candidate.id, ...(r.relatedCandidates ?? []).map((c) => c.id)],
           droneIds: r.droneIds?.length
@@ -446,6 +459,7 @@ export async function processPending(
         else if (r.kind === "auto-discarded") rep.discarded++;
         else rep.queued++;
       } catch (e) {
+        restore?.();
         const error = e instanceof Error ? e.message : "Processing failed";
         if (e instanceof ProviderOutageError) {
           // Every provider is refusing or cooling down: the post is not at fault, so it keeps its
@@ -488,4 +502,82 @@ export async function processPending(
   }
   rep.remaining = dispatches.pending(Number.MAX_SAFE_INTEGER).length;
   return rep;
+}
+
+/**
+ * The analysis pipeline a post was processed with. Includes the prompt version, so a prompt
+ * change re-analyses old posts on its own; bump the suffix for a pipeline change that should too
+ * (`/2`: AI-decided identity, the auto-promotion guards, and the outage handling).
+ */
+export const PIPELINE_VERSION = `${EXTRACTION_PROMPT_VERSION}/2`;
+
+/** Posts per auto-sync run handed back for re-analysis, once the live queue is empty. */
+export const REANALYSIS_BATCH = 25;
+
+/** A post analysed by an older pipeline, or one that failed for good, still holding its text. */
+export function isStale(d: RawDispatch): boolean {
+  return (
+    (d.status === "processed" || d.status === "failed") &&
+    !!d.text.trim() &&
+    d.pipelineVersion !== PIPELINE_VERSION
+  );
+}
+
+/**
+ * Hand up to `limit` stale posts back to the queue, newest first: recent reporting matters most
+ * to the briefing. They are processed by the same leased, outage-aware processPending as new posts,
+ * which replaces their earlier contribution (see retractContribution) once the new run succeeds.
+ */
+export function requeueStale(dispatches: DispatchRepository, limit: number): number {
+  const stale = dispatches
+    .list()
+    .filter(isStale)
+    .sort((a, b) => (b.publishedAt ?? b.createdAt).localeCompare(a.publishedAt ?? a.createdAt))
+    .slice(0, limit);
+  for (const d of stale)
+    dispatches.update(d.id, { status: "pending", attempts: 0, error: undefined, reanalyze: true });
+  return stale.length;
+}
+
+/**
+ * Remove the spec claims a post contributed, from every catalog entry. A claim is the post's when
+ * it carries the post's id (the merge paths) or its source line (promotion, which predates ids).
+ * Returns a function that puts the entries back, for when the re-run fails.
+ */
+function retractContribution(d: RawDispatch, deps: PipelineDeps): () => void {
+  const source = `${d.sourceName} · ${d.url}`;
+  const mine = (c: { sourceId?: string; source: string }) =>
+    c.sourceId === d.id || c.source === source;
+  const before: Drone[] = [];
+  for (const drone of deps.drones.list()) {
+    if (!drone.specs.some((s) => s.claims.some(mine))) continue;
+    before.push(drone);
+    deps.drones.upsert({
+      ...drone,
+      specs: drone.specs
+        .map((s) => ({ ...s, claims: s.claims.filter((c) => !mine(c)) }))
+        .filter((s) => s.claims.length > 0),
+    });
+  }
+  return () => {
+    for (const drone of before) deps.drones.upsert(drone);
+  };
+}
+
+/** The earlier run's candidates still awaiting triage are replaced by the new run's. */
+function supersedeCandidates(d: RawDispatch, replacement: string, deps: PipelineDeps) {
+  const pending = new Set(
+    deps.candidates
+      .list()
+      .filter((c) => c.status === "pending")
+      .map((c) => c.id),
+  );
+  for (const id of d.candidateIds ?? []) {
+    if (!pending.has(id) || id === replacement) continue;
+    deps.candidates.update(id, {
+      status: "discarded",
+      resolvedBy: "auto",
+      supersededBy: replacement,
+    });
+  }
 }

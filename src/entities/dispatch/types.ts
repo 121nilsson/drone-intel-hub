@@ -41,6 +41,16 @@ export interface RawDispatch {
   duplicateOf?: string | undefined;
   /** Versioned analysis identity for audit/reprocessing and cache decisions. */
   analysisFingerprint?: string;
+  /**
+   * PIPELINE_VERSION this post was last analysed with, whatever engine answered. A post analysed
+   * by an older pipeline (or never stamped) is re-analysed in the background; see requeueStale.
+   */
+  pipelineVersion?: string;
+  /**
+   * Set while a re-analysis is queued: the next run replaces this post's earlier contribution
+   * (its claims and still-pending candidates) instead of adding a second copy of it.
+   */
+  reanalyze?: boolean;
   analysis?: {
     schemaVersion: number;
     engine: string;

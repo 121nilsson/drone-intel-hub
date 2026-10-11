@@ -95,6 +95,30 @@ system and tells the model to return nothing rather than invent one. Model outpu
 a deliberately tolerant schema (`extraction.schema.ts`): a malformed field or list item is
 dropped, not the whole reply.
 
+**Matching across scripts.** Catalog names are matched by a spelling-insensitive key
+(`src/entities/drone/name-key.ts`): Cyrillic is transliterated and romanisation differences are
+folded, so "Ланцет-3", "Lantset-3" and "Lancet-3" are one system, and Russian/Ukrainian case
+endings ("Шахеды", "Ланцетом") still match. The same key decides auto-promotion collisions and
+the Catalog page's duplicate suggestions, which also group a name that is another entry's alias,
+and entries sharing a Wikidata item.
+
+**Guards on auto-promotion.** Confidence alone never creates a catalog entry from a name that
+reads as an organisation or unit, matches the outlet the post came from, or that an analyst has
+already discarded or deleted. Those go to the Queue instead.
+
+### Re-analysis
+
+Every processed post records the pipeline version that analysed it (`PIPELINE_VERSION` in
+`src/features/sources/auto-ingest.ts`, which includes the prompt version). Posts from an older
+version, and posts that failed for good, are re-analysed in the background: when an auto-sync run
+has emptied the live queue without a provider outage, it hands the 25 newest stale posts back to
+the queue for the next run. Sources → **Re-analyse older** queues the next batch at once.
+
+A re-run replaces the post's earlier contribution rather than adding to it: its spec claims are
+removed from the catalog and its still-pending candidates are superseded, but only once the new
+run succeeds. A failed re-run restores them. Bump the `/N` suffix of `PIPELINE_VERSION` when a
+pipeline change is worth re-running old posts for; a prompt version change does it on its own.
+
 ### Providers and fallback
 
 Any OpenAI-compatible provider with a key in the environment takes part. Built in, in priority

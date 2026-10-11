@@ -12,6 +12,7 @@ import type { CatalogFacets } from "@/shared/contracts/repository";
 import { Btn, Tag } from "@/shared/ui/primitives";
 import { cn } from "@/lib/utils";
 import { mergeDrones } from "@/features/intake/pipeline";
+import { duplicateGroups } from "@/entities/drone/duplicates";
 import { applyReference } from "@/features/catalog/reference-import";
 
 function Facet({
@@ -132,27 +133,8 @@ export function CatalogPage() {
       setImporting(false);
     }
   }
-  const duplicates = useMemo(() => {
-    const byKey = new Map<string, Drone[]>();
-    for (const d of drones) {
-      // Group by canonical normalized name
-      const key = d.name
-        .trim()
-        .toLowerCase()
-        .replace(/[^a-z0-9\u0400-\u04ff]+/g, "-");
-      const arr = byKey.get(key) || [];
-      arr.push(d);
-      byKey.set(key, arr);
-    }
-    return Array.from(byKey.entries())
-      .filter(([_, group]) => group.length > 1)
-      .map(([key, group]) => ({
-        key,
-        name: group[0]?.name ?? key,
-        drones: group,
-        ids: group.map((g) => g.id),
-      }));
-  }, [drones]);
+  // Same name in another spelling, a name that is another entry's alias, or one Wikidata item.
+  const duplicates = useMemo(() => duplicateGroups(drones), [drones]);
 
   const activeFilters = Object.values(f).reduce(
     (n, v) => n + (Array.isArray(v) ? v.length : v ? 1 : 0),
@@ -252,6 +234,7 @@ export function CatalogPage() {
                     className="border border-border/80 bg-background/50 p-2.5 text-xs"
                   >
                     <p className="font-semibold text-foreground">{dup.name}</p>
+                    <p className="text-muted-foreground">{dup.reasons.join("; ")}</p>
                     <div className="my-1.5 flex flex-wrap gap-1">
                       {dup.drones.map((d) => (
                         <Link

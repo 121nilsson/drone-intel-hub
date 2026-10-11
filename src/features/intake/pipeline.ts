@@ -20,6 +20,7 @@ import { chatCompletionOnce } from "@/shared/infra/ai-proxy.server";
 import { combineExtractions, needsDeepAI, needsFastAI } from "./extraction-gates";
 import { linkVariant, mergeDroneIntelligence } from "@/entities/drone/merge-intelligence";
 import { ProcurementExtractionSchema } from "@/shared/contracts/extraction.schema";
+import { phoneticKey } from "@/entities/drone/name-key";
 
 export interface PipelineDeps {
   tier1: IntelExtractor;
@@ -67,14 +68,13 @@ export type PipelineResult = PipelinePrimaryResult & {
   droneIds?: string[];
 };
 
-const norm = (s: string) => s.trim().toLowerCase();
-
 /**
  * Collision keys strip punctuation and spacing, not just case: to a source document
  * "Shahed-136" and "Shahed 136" are the same system, and auto-promotion must not create a
  * duplicate catalog entry just because the source hyphenated differently than the catalog did.
+ * The same goes for script and romanisation: "Ланцет-3" collides with "Lancet-3".
  */
-const collisionKey = (s: string) => norm(s).replace(/[\s\-_./]+/g, "");
+const collisionKey = (s: string) => phoneticKey(s);
 
 /** Mark an extraction with why it came from a degraded tier, visible to the analyst in triage. */
 function annotate(extraction: Extraction, note: string): Extraction {

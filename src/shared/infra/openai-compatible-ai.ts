@@ -21,7 +21,7 @@ import {
   EXTRACTION_PROMPT_VERSION,
   EXTRACTION_SCHEMA_VERSION,
 } from "@/shared/contracts/extraction.schema";
-import { mentions } from "./heuristic-ai";
+import { mentionsName } from "./heuristic-ai";
 import extractionPrompt from "@/shared/contracts/extraction-prompt.json";
 
 const EXTRACT_SYS = extractionPrompt.system;
@@ -47,7 +47,7 @@ export class OpenAICompatibleExtractor implements IntelExtractor {
   }
   async extract(raw: string, catalog: Drone[], context?: Extraction): Promise<Extraction> {
     const named = catalog.filter((d) =>
-      [d.name, d.cyrillic ?? "", ...d.aliases].some((name) => mentions(raw, name)),
+      [d.name, d.cyrillic ?? "", ...d.aliases].some((name) => mentionsName(raw, name)),
     );
     const stems = new Set(
       [...raw.matchAll(/\b([\p{L}]{3,})-\p{N}+\w*\b/giu)].map((m) => m[1]!.toLowerCase()),

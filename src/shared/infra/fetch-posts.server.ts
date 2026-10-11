@@ -18,6 +18,8 @@ import {
   collectSource,
   fetchingProgress,
   processPending,
+  REANALYSIS_BATCH,
+  requeueStale,
   progressFromItem,
   type SyncReport,
   type WorkProgress,
@@ -198,6 +200,13 @@ export async function fetchAllSources(
       await report?.(lastItem);
     },
   });
+  // Spare capacity goes to re-analysing posts an older pipeline handled. Only once the live
+  // queue is empty and providers are answering, so fresh reporting always comes first; the
+  // requeued posts are picked up by the next tick.
+  if (!p.stopReason && p.remaining === 0) {
+    const requeued = requeueStale(dispatches, REANALYSIS_BATCH);
+    if (requeued) console.log(`[sources:sync] queued ${requeued} older post(s) for re-analysis`);
+  }
   await report?.({
     phase: "done",
     current: lastItem?.current ?? QUEUE_ROW,
