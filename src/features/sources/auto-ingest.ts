@@ -3,10 +3,11 @@ import { MAX_ATTEMPTS, type RawDispatch } from "@/entities/dispatch/types";
 import { MIN_CHARS_FOR_DEDUPE, simHash64 } from "@/entities/dispatch/simhash";
 import type { FetchedPost } from "@/shared/infra/source-fetch.functions";
 import type { DispatchRepository } from "@/shared/contracts/repository";
-import { runTwoTier, type PipelineDeps } from "@/features/intake/pipeline";
+import { runTwoTier, type PipelineDeps, type PipelineResult } from "@/features/intake/pipeline";
 import type { Drone } from "@/entities/drone/types";
 import { ProviderOutageError } from "@/shared/contracts/ai";
 import { EXTRACTION_PROMPT_VERSION } from "@/shared/contracts/extraction.schema";
+import { traceFailure, traceItem, traceLevel } from "@/shared/infra/pipeline-trace";
 
 export const DRONE_HINT =
   /drone|uav|ugv|usv|fpv|shahed|geran|lancet|bpla|бла|бпла|дрон|квадрокоптер|ланцет|герань|шахед|мавик|молния|курьер|термит|катран|магура|баба яга|interceptor|loitering|unmanned|jammer|РЭБ|EW\b/i;
@@ -188,6 +189,86 @@ function postExcerpt(text: string): string {
   const flat = text.replace(/\s+/g, " ").trim();
   if (flat.length <= EXCERPT_LEN) return flat;
   return `${flat.slice(0, EXCERPT_LEN - 1)}…`;
+}
+
+const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+
+/**
+ * The per-item log line: what ran, what was found, what was written.
+ *
+ * Ordered so the two things you scan for are in a fixed place — position and source at the front,
+ * outcome and remaining backlog at the end — with the diagnostics in between. Optional parts drop
+ * out rather than printing a placeholder, so a line never contains "undefined" and a missing
+ * stage reads as absent rather than as a value.
+ */
+function describeItem(
+  d: RawDispatch,
+  r: PipelineResult,
+  index: number,
+  total: number,
+  rep: ProcessReport,
+  deps: PipelineDeps,
+  remaining: number,
+): (string | number | undefined)[] {
+  const e = r.candidate.extraction;
+  const t = r.trace;
+  // The catalog name, not the extracted one: on a merge these can differ, and the line is
+  // about what the catalog now holds.
+  const target =
+    r.kind === "auto-merged" || r.kind === "auto-promoted" ? deps.drones.get(r.droneId) : undefined;
+  const name = target?.name ?? e.name ?? "unidentified";
+
+  const engines = t?.engines.length ? t.engines.join("+") : (e.metadata?.engine ?? "unknown");
+  const found = [
+    plural(t?.systems ?? 1, "system"),
+    plural(t?.specs ?? e.specs.length, "spec"),
+  ].join(", ");
+
+  let added: string;
+  if (r.kind === "auto-merged") {
+    const addedSpecs = t?.specsMerged;
+    added = `merged into ${JSON.stringify(name)}${addedSpecs ? ` (+${addedSpecs} specs)` : ""}`;
+  } else if (r.kind === "auto-promoted") {
+    added = `promoted new catalog entry ${JSON.stringify(name)}`;
+  } else if (r.kind === "auto-discarded") {
+    added = `discarded (conf below threshold)`;
+  } else {
+    added = "queued for review";
+  }
+
+  return [
+    `${index}/${total}`,
+    d.sourceName,
+    `engine=${engines}`,
+    e.metadata?.model ? `model=${e.metadata.model}` : undefined,
+    `conf=${Math.round(e.confidence * 100)}%`,
+    `found ${found}`,
+    ...(t?.reasons.length ? [`why=${t.reasons.join(",")}`] : []),
+    ...(t?.degraded.length ? [`degraded=${t.degraded.join(";")}`] : []),
+    ...(r.relatedCandidates?.length ? [plural(r.relatedCandidates.length, "related")] : []),
+    traceLevel() >= 2 ? `excerpt=${JSON.stringify(postExcerpt(d.text))}` : undefined,
+    added,
+    `left=${remaining}`,
+    `run: ${rep.processed} analysed, ${rep.merged} merged, ${rep.promoted} promoted`,
+  ];
+}
+
+/** The same line for a post the pre-filter dropped before any model was called. */
+function describeIrrelevant(
+  d: RawDispatch,
+  index: number,
+  total: number,
+  remaining: number,
+): (string | number | undefined)[] {
+  return [
+    `${index}/${total}`,
+    d.sourceName,
+    "engine=pre-filter",
+    "found 0 systems",
+    "skipped (no drone signal)",
+    traceLevel() >= 2 ? `excerpt=${JSON.stringify(postExcerpt(d.text))}` : undefined,
+    `left=${remaining}`,
+  ];
 }
 
 export function fetchingProgress(name: string, index: number, total: number): WorkProgress {
@@ -418,6 +499,14 @@ export async function processPending(
           reanalyze: false,
         });
         rep.irrelevant++;
+        traceItem(
+          describeIrrelevant(
+            d,
+            i + 1,
+            batch.length,
+            dispatches.pending(Number.MAX_SAFE_INTEGER).length,
+          ),
+        );
         continue;
       }
       try {
@@ -454,6 +543,17 @@ export async function processPending(
         if (r.candidate.extraction.metadata?.engine === "heuristic") rep.heuristicOnly!++;
         else rep.tier1Calls!++;
         if (r.candidate.tier === 2) rep.tier2Calls!++;
+        traceItem(
+          describeItem(
+            d,
+            r,
+            i + 1,
+            batch.length,
+            rep,
+            deps,
+            dispatches.pending(Number.MAX_SAFE_INTEGER).length,
+          ),
+        );
         if (r.kind === "auto-merged") rep.merged++;
         else if (r.kind === "auto-promoted") rep.promoted++;
         else if (r.kind === "auto-discarded") rep.discarded++;
@@ -461,6 +561,14 @@ export async function processPending(
       } catch (e) {
         restore?.();
         const error = e instanceof Error ? e.message : "Processing failed";
+        // A failure is the case where the log matters most, so it is traced even at level 0 and
+        // names the post, so the line is actionable on its own.
+        traceFailure([
+          `${i + 1}/${batch.length}`,
+          d.sourceName,
+          "engine=failed",
+          `FAILED: ${error}`,
+        ]);
         if (e instanceof ProviderOutageError) {
           // Every provider is refusing or cooling down: the post is not at fault, so it keeps its
           // attempt budget and stays pending, and the batch stops. The reason is phrased so the

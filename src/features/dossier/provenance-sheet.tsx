@@ -24,7 +24,9 @@ export function ClaimChip({ claim, onOpen }: { claim: SpecClaim; onOpen: () => v
       onClick={onOpen}
       className="inline-flex max-w-full items-center gap-1 border border-border px-1.5 py-1 font-mono text-[11px] text-muted-foreground hover:border-primary hover:text-primary"
     >
-      <span className="truncate">{claim.source}</span>
+      {/* min-w-0: a flex item's default min-width is its content size, so without this the
+          source string refuses to shrink and the ellipsis never appears. */}
+      <span className="min-w-0 truncate">{claim.source}</span>
       {claim.date && <span className="shrink-0 opacity-70">· {claim.date.slice(5, 10)}</span>}
     </button>
   );

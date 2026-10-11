@@ -58,14 +58,19 @@ export function SpecTable({ drone }: { drone: Drone }) {
           );
         })}
       </ul>
-      <table className="hidden w-full text-sm sm:table">
+      {/* table-fixed, and the widths are declared rather than negotiated. Under the default
+          auto layout the browser hands the Attribute column whatever it wants, and a source URL
+          is a long unbroken string, so it took every pixel and left the value columns crammed
+          against each other with the row overflowing the panel. A fixed layout takes the widths
+          from this header row instead, so no cell content can widen the table. */}
+      <table className="hidden w-full table-fixed text-sm sm:table">
         <thead>
           <tr className="text-left font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
-            <th className="pb-2">Attribute</th>
-            <th className="pb-2">Consensus</th>
-            <th className="pb-2">Spread</th>
-            <th className="pb-2">Sources</th>
-            <th className="pb-2">Conf.</th>
+            <th className="w-[52%] pb-2">Attribute</th>
+            <th className="w-[18%] pb-2">Consensus</th>
+            <th className="w-[12%] pb-2">Spread</th>
+            <th className="w-[9%] pb-2">Sources</th>
+            <th className="w-[9%] pb-2">Conf.</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-border">

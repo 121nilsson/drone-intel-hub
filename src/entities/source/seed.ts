@@ -738,6 +738,85 @@ export const SEED_SOURCES: MonitoredSource[] = [
       "Broader Ukraine conflict discussion. High noise-to-signal ratio, filter with DRONE_HINT.",
     autoSync: false,
   },
+
+  // --- Additional verified sources (2026-10-11) ---
+  // Each endpoint was fetched and run through the real parser before adoption, not just
+  // status-checked (200 OK is not usable content). A commercial UAS feed is only useful if its
+  // titles and bodies survive parseRss/parseTelegram and reach the relevance gate, which is why the
+  // broad Ukraine feeds below are kept but lean on DRONE_HINT and SimHash dedupe rather than being
+  // treated as tight signal. Two high-profile channels were rejected outright and are not here:
+  // @DeepStateUA and @ssternenko fetch fine but both are (nearly) all Cyrillic with no drone term
+  // DRONE_HINT recognises, so the fetch-time gate wrote nothing. Widening the gate does not rescue
+  // them - measured 1/20 and 0/10 relevant - so they would be dead rows.
+  {
+    id: "suas-news",
+    name: "sUAS News",
+    platform: "RSS",
+    handle: "https://suasnews.com/feed/",
+    domain: "Air",
+    notes:
+      "Commercial and military UAS industry news. Manufacturer programs and platform introductions.",
+  },
+  {
+    id: "unmanned-airspace",
+    name: "Unmanned Airspace",
+    platform: "RSS",
+    handle: "https://www.unmannedairspace.info/feed/",
+    domain: "Multi",
+    notes: "Counter-UAS, BVLOS and airspace integration; strongest drone-relevance of the group.",
+  },
+  {
+    id: "edr-magazine",
+    name: "EDR Magazine",
+    platform: "RSS",
+    handle: "https://www.edrmagazine.eu/feed",
+    domain: "Multi",
+    notes: "European defence technology, including interceptor and counter-drone demonstrations.",
+  },
+  {
+    id: "defence-industry-europe",
+    name: "Defence Industry Europe",
+    platform: "RSS",
+    handle: "https://defence-industry.eu/feed/",
+    domain: "Multi",
+    notes:
+      "European defence procurement and industry. Broader than drones; filter with DRONE_HINT.",
+  },
+  {
+    id: "dod-contracts",
+    name: "US DoD Contracts",
+    platform: "RSS",
+    handle: "https://www.defense.gov/DesktopModules/ArticleCS/RSS.ashx?ContentType=1&Site=945",
+    domain: "Multi",
+    notes:
+      "Official US contract awards, including UAV/counter-UAS buys. Authoritative but verbose; filter with DRONE_HINT.",
+  },
+  {
+    id: "kyiv-post",
+    name: "Kyiv Post",
+    platform: "RSS",
+    handle: "https://www.kyivpost.com/feed",
+    domain: "Multi",
+    notes:
+      "Ukrainian defence industry and war coverage. Broad news, so it leans on the relevance gate.",
+  },
+  {
+    id: "euromaidan-press",
+    name: "Euromaidan Press",
+    platform: "RSS",
+    handle: "https://euromaidanpress.com/feed/",
+    domain: "Multi",
+    notes: "Frontline and defence-industry reporting from Ukraine. Broad; filter with DRONE_HINT.",
+  },
+  {
+    id: "escadrone",
+    name: "Escadrone",
+    platform: "Telegram",
+    handle: "@escadrone",
+    domain: "Air",
+    notes:
+      "Ukrainian FPV manufacturer; interceptor and kamikaze-drone airframe updates and strike footage.",
+  },
 ];
 
 /**

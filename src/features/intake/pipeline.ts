@@ -58,10 +58,35 @@ export interface AnalysisContext {
 }
 
 type PipelinePrimaryResult =
-  | { kind: "auto-merged"; droneId: string; candidate: Candidate }
-  | { kind: "auto-promoted"; droneId: string; candidate: Candidate }
-  | { kind: "auto-discarded"; candidate: Candidate }
-  | { kind: "queued"; candidate: Candidate };
+  | { kind: "auto-merged"; droneId: string; candidate: Candidate; trace?: PipelineTrace }
+  | { kind: "auto-promoted"; droneId: string; candidate: Candidate; trace?: PipelineTrace }
+  | { kind: "auto-discarded"; candidate: Candidate; trace?: PipelineTrace }
+  | { kind: "queued"; candidate: Candidate; trace?: PipelineTrace };
+
+/**
+ * What the run actually did, per item.
+ *
+ * Reporting rather than deciding: nothing branches on these fields, and they exist so the queue
+ * can print "used the heuristic engine, escalated to tier 2, found 3 systems" instead of an
+ * aggregate that hides which post behaved how.
+ */
+export interface PipelineTrace {
+  /** The deterministic first pass ran. */
+  heuristic: boolean;
+  /** Which engines answered, e.g. "heuristic+t1+t2", "heuristic+t2", or "t1(heuristic)". */
+  engines: string[];
+  /** A tier that was called and failed, degrading to a deterministic result. */
+  degraded: string[];
+  /** Why the escalation gates fired (see extraction-gates). */
+  reasons: string[];
+  /** Specs the extraction produced, and systems it identified. */
+  specs: number;
+  systems: number;
+  /** New specs written onto an existing catalog entry. Merge path only. */
+  specsMerged?: number;
+  /** Extraction rejected as not a system name before the promote gate. */
+  rejected?: boolean;
+}
 
 export type PipelineResult = PipelinePrimaryResult & {
   relatedCandidates?: Candidate[];
@@ -285,8 +310,13 @@ export async function runTwoTier(
   let extraction: Extraction | undefined;
   /** Why a tier fell back, re-applied to every per-system candidate (see extractionForSystem). */
   const degraded: string[] = [];
+  /** Which engines actually answered, for the per-item trace. */
+  const engines: string[] = [];
   const heuristic = d.heuristicFirst !== false ? (d.heuristic ?? d.fallback) : undefined;
-  if (heuristic) extraction = await heuristic.extract(raw, catalog);
+  if (heuristic) {
+    extraction = await heuristic.extract(raw, catalog);
+    engines.push("heuristic");
+  }
 
   const fastGate = extraction
     ? needsFastAI(extraction, d.escalationThreshold)
@@ -297,6 +327,7 @@ export async function runTwoTier(
       const refined = await d.tier1.extract(raw, catalog, extraction);
       extraction = extraction ? combineExtractions(extraction, refined) : refined;
       if (extraction.metadata) extraction.metadata.escalationReasons = fastGate.reasons;
+      engines.push("t1");
     } catch (err) {
       if (d.deferOnOutage && err instanceof ProviderOutageError) throw err;
       if (!extraction) {
@@ -317,6 +348,7 @@ export async function runTwoTier(
   }
   if (!extraction) {
     extraction = await d.tier1.extract(raw, catalog);
+    engines.push("t1");
   }
   if (!extraction) throw new Error("Extraction engine returned no result");
 
@@ -328,6 +360,7 @@ export async function runTwoTier(
     tier = 2;
     try {
       extraction = combineExtractions(extraction, await d.tier2.extract(raw, catalog, extraction));
+      engines.push("t2");
       if (extraction.metadata) {
         extraction.metadata.escalationReasons = [
           ...(extraction.metadata.escalationReasons ?? []),
@@ -345,6 +378,21 @@ export async function runTwoTier(
     }
   }
   const fullExtraction: Extraction = extraction;
+  // Built once and attached to whichever outcome is returned. `specsMerged` is filled in on the
+  // merge path below, where the pre- and post-merge catalog entry are both in hand.
+  const trace: PipelineTrace = {
+    heuristic: engines.includes("heuristic"),
+    engines,
+    degraded: [...degraded],
+    reasons: [
+      ...(fastGate.needed && !tier1IsHeuristic ? fastGate.reasons : []),
+      ...(deepGate.needed && !tier2IsSameHeuristic ? deepGate.reasons : []),
+    ],
+    specs: fullExtraction.specs.length,
+    // `systems`, not `systemExtractions`: the latter only exists for a multi-system split, so
+    // counting it reports 0 for every ordinary post.
+    systems: fullExtraction.systems?.length ?? (fullExtraction.name ? 1 : 0),
+  };
   if ((fullExtraction.systemExtractions?.length ?? 0) > 1) {
     const primary =
       fullExtraction.systemExtractions?.find((s) => s.matchId === fullExtraction.matchId) ??
@@ -378,6 +426,7 @@ export async function runTwoTier(
   if (extraction.matchId && extraction.confidence >= d.autoMergeThreshold) {
     // The guard above (re-checked synchronously, no awaits since) guarantees this exists.
     const target = d.drones.get(extraction.matchId)!;
+    const specsBefore = target.specs.length;
     const withSpecs = mergeSpecs(target, extraction.specs, source, {
       ...(context.dispatchId ? { sourceId: context.dispatchId } : {}),
       extractionConfidence: extraction.confidence,
@@ -410,8 +459,9 @@ export async function runTwoTier(
     candidate.resolvedInto = target.id;
     candidate.resolvedBy = "auto";
     d.candidates.add(candidate);
+    trace.specsMerged = withSpecs.specs.length - specsBefore;
     return applyRelatedSystems(
-      { kind: "auto-merged", droneId: target.id, candidate },
+      { kind: "auto-merged", droneId: target.id, candidate, trace },
       fullExtraction,
       source,
       d,
@@ -438,6 +488,7 @@ export async function runTwoTier(
         kind: "auto-promoted",
         droneId: drone.id,
         candidate: { ...candidate, status: "promoted", resolvedInto: drone.id, resolvedBy: "auto" },
+        trace,
       },
       fullExtraction,
       source,
@@ -451,7 +502,7 @@ export async function runTwoTier(
     candidate.resolvedBy = "auto";
     d.candidates.add(candidate);
     return applyRelatedSystems(
-      { kind: "auto-discarded", candidate },
+      { kind: "auto-discarded", candidate, trace },
       fullExtraction,
       source,
       d,
@@ -461,7 +512,7 @@ export async function runTwoTier(
   }
   d.candidates.add(candidate);
   return applyRelatedSystems(
-    { kind: "queued", candidate },
+    { kind: "queued", candidate, trace },
     fullExtraction,
     source,
     d,
