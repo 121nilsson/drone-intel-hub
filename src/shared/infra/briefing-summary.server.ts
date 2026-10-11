@@ -6,14 +6,12 @@ import {
   type BriefingSummaryStored,
 } from "@/features/briefing/briefing-summary-shared";
 import { DEFAULT_SETTINGS } from "@/shared/infra/settings-defaults";
+import { BRIEFING_SUMMARY_SYSTEM } from "@/shared/contracts/ai";
 import { chatCompletionOnce } from "@/shared/infra/ai-proxy.server";
 import { readProviderEnvConfig } from "@/shared/infra/provider-env.server";
 import { db, dbConfigured } from "@/shared/infra/postgres/db.server";
 
 export const BRIEFING_SUMMARY_SLOT = "briefing:executive_summary";
-
-const SUMMARY_SYSTEM =
-  "Write a terse 4-6 sentence executive intelligence summary of weekly drone technology shifts. No preamble.";
 
 export function briefingContextFingerprint(context: string): string {
   return createHash("sha256").update(context, "utf8").digest("hex");
@@ -42,10 +40,13 @@ export async function getSharedBriefingSummary(
   now = Date.now(),
 ): Promise<BriefingSummaryStored | null> {
   if (!dbConfigured()) return null;
-  const fingerprint = briefingContextFingerprint(context);
+  // Freshness alone decides. The context is built from the week's posts and changes on every
+  // sync; keying reuse on its fingerprint would regenerate the summary (a tier-2 call) on nearly
+  // every page view. The summary may lag the live panels by up to the TTL. `context` is kept in
+  // the signature for callers and for the fingerprint stored alongside a new summary.
+  void context;
   const stored = await readStored();
   if (!stored) return null;
-  if (stored.contextFingerprint !== fingerprint) return null;
   if (!isBriefingSummaryFresh(stored.generatedAt, now)) return null;
   return stored;
 }
@@ -77,7 +78,7 @@ async function summarizeOnServer(context: string): Promise<string> {
   const r = await chatCompletionOnce({
     model: env.tier2Model ?? DEFAULT_SETTINGS.tier2Model,
     json: false,
-    system: SUMMARY_SYSTEM,
+    system: BRIEFING_SUMMARY_SYSTEM,
     prompt: context,
     tier: "tier2",
   });

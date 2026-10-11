@@ -14,5 +14,14 @@ export interface MonitoredSource {
   /** Post IDs already ingested — prevents duplicates across syncs. */
   seenIds?: string[];
   lastError?: string | undefined;
+  /** False turns the source off: no scheduled or "fetch all" collection. */
   autoSync?: boolean;
+  /** Consecutive failed fetches; reset by any success. See features/sources/source-health.ts. */
+  failStreak?: number | undefined;
+  /** Set after repeated failures: the source is skipped until then, then tried again. */
+  pausedUntil?: string | undefined;
+  /** The source has been paused before and not recovered since; failing again turns it off. */
+  pausedOnce?: boolean | undefined;
+  /** Why automation turned the source off, shown on the Sources page. */
+  disabledReason?: string | undefined;
 }

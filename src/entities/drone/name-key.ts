@@ -73,9 +73,16 @@ export function phoneticText(s: string): string {
   );
 }
 
-/** One compact key per name: phoneticText without separators ("Shahed-136" = "Шахед 136"). */
+/**
+ * One compact key per name: phoneticText without separators ("Shahed-136" = "Шахед 136"). A final
+ * vowel after a stem of three or more letters is dropped, since English spellings often add or
+ * swap one ("Vampire" / "Вампир", "Molniya" / "Молния"). Used only to decide matches and
+ * collisions, where a rare false match sends a name to review rather than losing anything.
+ */
 export function phoneticKey(s: string): string {
-  return phoneticText(s).replace(/ /g, "");
+  return phoneticText(s)
+    .replace(/ /g, "")
+    .replace(/([a-z]{3,})[aeiou]$/, "$1");
 }
 
 /**

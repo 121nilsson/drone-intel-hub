@@ -8,7 +8,8 @@ import {
   LocalTaxonomyCandidateRepository,
   LocalTaxonomyRepository,
 } from "./local-repository";
-import { OpenAICompatibleExtractor } from "./openai-compatible-ai";
+import { OpenAICompatibleExtractor, openAICompatibleAdjudicator } from "./openai-compatible-ai";
+import { autoTriage } from "@/features/intake/auto-triage";
 import { dbConfigured } from "./postgres/db.server";
 import { PostgresStore } from "./postgres/postgres-store.server";
 import { DEFAULT_SETTINGS } from "./settings-defaults";
@@ -26,6 +27,7 @@ import {
 } from "@/features/sources/auto-ingest";
 import { fetchOne, FETCH_CONCURRENCY, sourceHost } from "./fetch-posts";
 import { mapWithConcurrency } from "./pool";
+import { healthAfterFetch, isCollectable } from "@/features/sources/source-health";
 
 /** AI time per run. Under the 10-minute cron period so a run never overlaps the next tick. */
 const AI_WINDOW_MS = 8 * 60_000;
@@ -108,7 +110,8 @@ export async function fetchAllSources(
 
   // Stage 1: collect every source into the dispatch queue (network only).
   // Opt-out rather than opt-in: sources without the flag predate it and keep being polled.
-  const targets = sources.list().filter((s) => s.platform !== "X" && s.autoSync !== false);
+  // Off and paused sources are skipped; a pause ends on its own (see source-health.ts).
+  const targets = sources.list().filter((s) => s.platform !== "X" && isCollectable(s));
   const reports: SyncReport[] = [];
 
   // Article bodies need a DOM, so the extractor is server-only and injected into the shared
@@ -138,7 +141,11 @@ export async function fetchAllSources(
     FETCH_CONCURRENCY,
     async (s) => {
       const c = await collectSource(s, fetcher, dispatches);
-      sources.update(s.id, { lastFetched: new Date().toISOString(), lastError: c.error });
+      sources.update(s.id, {
+        lastFetched: new Date().toISOString(),
+        lastError: c.error,
+        ...healthAfterFetch(s, c.error),
+      });
       return c;
     },
     {
@@ -207,6 +214,23 @@ export async function fetchAllSources(
     const requeued = requeueStale(dispatches, REANALYSIS_BATCH);
     if (requeued) console.log(`[sources:sync] queued ${requeued} older post(s) for re-analysis`);
   }
+  // Work the Queue: corroborated names promoted, borderline matches adjudicated, stale
+  // low-confidence candidates discarded. No model calls while the providers are out.
+  const triage = await autoTriage(
+    { drones, candidates },
+    useRemote && !p.stopReason
+      ? { adjudicate: openAICompatibleAdjudicator(cfg, chatCompletionOnce) }
+      : {},
+  );
+  if (
+    triage.corroborated ||
+    triage.adjudicatedMerged ||
+    triage.adjudicatedReleased ||
+    triage.agedOut
+  )
+    console.log(
+      `[sources:sync] triage: ${triage.corroborated} corroborated, ${triage.adjudicatedMerged} merged and ${triage.adjudicatedReleased} released by adjudication, ${triage.agedOut} aged out${triage.stopReason ? ` (adjudication stopped: ${triage.stopReason})` : ""}`,
+    );
   await report?.({
     phase: "done",
     current: lastItem?.current ?? QUEUE_ROW,

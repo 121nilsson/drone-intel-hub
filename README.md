@@ -87,8 +87,25 @@ bounded batches, through the same pipeline the Queue page uses (`runTwoTier` in
    new system is promoted into the catalog, and a low-confidence result is discarded. Everything
    else waits in the Queue for an analyst. Thresholds are on the Settings page.
 
-The briefing summary uses the tier-2 model and is cached in `sync_state`, so every user sees the
-same summary until the 7-day context changes.
+**Auto-triage** (`src/features/intake/auto-triage.ts`) then works the Queue after every
+auto-sync, so it does not need a person on it daily. Everything it resolves is marked "auto",
+which never blocks a name the way an analyst's discard does:
+
+- **Corroboration.** A new name the AI reported from **two or more independent outlets** (each
+  report at least 50% confident, passing the auto-promotion guards) is promoted, or merged if the
+  catalog has it by then.
+- **Adjudication.** A candidate matched to a catalog entry with middling confidence is put to the
+  tier-2 model once, as "is this report about _that_ entry?". A confident yes merges it; a
+  confident no releases it as a new name, which corroboration can then pick up. At most 10 per
+  run, and none during a provider outage.
+- **Age-out.** A candidate below 50% that nothing corroborated within 7 days is discarded.
+
+**Briefing.** The briefing is built from the week's _reporting_
+(`src/features/briefing/briefing-data.ts`): the most reported systems by outlets and reports,
+systems seen for the first time, new spec figures (flagged when disputed), the latest reports, and
+catalog changes. The Wikipedia import is left out everywhere, so a reference import no longer
+dominates the week. The executive summary is generated from the same data by the tier-2 model and
+shared through `sync_state`; it refreshes at most about twice a day, while the panels are live.
 
 The extraction prompt (`src/shared/contracts/extraction-prompt.json`) defines what counts as a
 system and tells the model to return nothing rather than invent one. Model output is validated by
@@ -248,6 +265,16 @@ overlapping ticks cannot both proceed, and the 9-minute floor holds across resta
 overlapping a cron tick cannot process the same post twice. Leases are released when the batch
 ends, and expire on their own (5 min to 1 h, scaled to the batch) so a crashed worker never pins
 a post.
+
+**Source health** (`src/features/sources/source-health.ts`). A source that fails **3 fetches in a
+row** is paused for **7 days** and then tried again automatically. If it fails 3 times again
+without a success in between, it is turned off (its Auto box unticked) and the reason is shown on
+the Sources page. Any successful fetch clears the record, and ticking Auto again starts the source
+clean. Paused and turned-off sources are skipped by auto-sync and "Fetch all"; each keeps its own
+Sync button, and a manual sync that works resumes it.
+
+**Unattended running.** Both containers use `restart: unless-stopped`, so the stack comes back
+after a crash or a host reboot.
 
 ## PostgreSQL
 

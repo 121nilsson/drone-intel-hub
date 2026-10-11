@@ -33,6 +33,7 @@ describe("phoneticKey", () => {
     ["Молния", "Molniya"],
     ["Лютий", "Liutyi"],
     ["Лютый", "Lyutyi"],
+    ["Вампир", "Vampire"],
   ])("%s and %s share a key", (a, b) => {
     expect(phoneticKey(a)).toBe(phoneticKey(b));
   });

@@ -9,6 +9,13 @@ import type { DispatchStatus } from "@/entities/dispatch/types";
 import { fetchSourcePosts } from "@/shared/infra/source-fetch.functions";
 import { FETCH_CONCURRENCY, sourceHost } from "@/shared/infra/fetch-posts";
 import { mapWithConcurrency } from "@/shared/infra/pool";
+import {
+  FAILURES_BEFORE_PAUSE,
+  healthAfterFetch,
+  isCollectable,
+  isPaused,
+  reenable,
+} from "./source-health";
 import { getSyncState, type SyncState } from "@/shared/infra/source-sync.functions";
 import { getStoreStatus } from "@/shared/infra/store.functions";
 import { Btn, Panel, Tag } from "@/shared/ui/primitives";
@@ -145,7 +152,11 @@ export function SourcesPage() {
         (x) => fetchFn({ data: { platform: x.platform, handle: x.handle } }),
         sv.dispatches,
       );
-      sv.sources.update(s.id, { lastFetched: new Date().toISOString(), lastError: c.error });
+      sv.sources.update(s.id, {
+        lastFetched: new Date().toISOString(),
+        lastError: c.error,
+        ...healthAfterFetch(s, c.error),
+      });
       say(
         c.error
           ? `${s.name}: ${c.error}`
@@ -206,7 +217,10 @@ export function SourcesPage() {
 
   const syncAll = useCallback(async () => {
     setBusy("all");
-    const list = svcRef.current.sources.list().filter((x) => x.platform !== "X");
+    // Same rule as auto-sync: off and paused sources are skipped; each still has its own Sync.
+    const list = svcRef.current.sources
+      .list()
+      .filter((x) => x.platform !== "X" && isCollectable(x));
     try {
       // Parallel lanes, one in-flight request per host: the same shape as the server's collection
       // pass, so a slow source no longer queues up behind 78 others before the queue is touched.
@@ -480,6 +494,18 @@ export function SourcesPage() {
                 {s.lastError && (
                   <p className="mt-1 font-mono text-[11px] text-destructive">{s.lastError}</p>
                 )}
+                {isPaused(s) && (
+                  <p className="mt-1 font-mono text-[11px] text-accent">
+                    Paused after {FAILURES_BEFORE_PAUSE} failed fetches; retried automatically from{" "}
+                    {new Date(s.pausedUntil!).toLocaleDateString()}. A manual Sync that works
+                    resumes it now.
+                  </p>
+                )}
+                {s.disabledReason && s.autoSync === false && (
+                  <p className="mt-1 font-mono text-[11px] text-destructive">
+                    {s.disabledReason}. Tick Auto to turn it back on.
+                  </p>
+                )}
               </div>
               <div className="grid grid-cols-4 items-center gap-2 sm:flex sm:flex-wrap">
                 <label
@@ -490,7 +516,12 @@ export function SourcesPage() {
                     type="checkbox"
                     checked={s.autoSync !== false}
                     disabled={s.platform === "X"}
-                    onChange={(e) => svc.sources.update(s.id, { autoSync: e.target.checked })}
+                    onChange={(e) =>
+                      svc.sources.update(
+                        s.id,
+                        e.target.checked ? reenable() : { autoSync: false, pausedUntil: undefined },
+                      )
+                    }
                   />
                   Auto
                 </label>

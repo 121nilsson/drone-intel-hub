@@ -8,7 +8,9 @@ import type {
   SystemExtraction,
 } from "@/entities/drone/types";
 import {
+  BRIEFING_SUMMARY_SYSTEM,
   ProviderOutageError,
+  type Adjudicator,
   type AIProviderSettings,
   type BriefingSummarizer,
   type IntelExtractor,
@@ -140,12 +142,66 @@ export class OpenAICompatibleSummarizer implements BriefingSummarizer {
       apiKey: this.cfg.apiKey,
       model: this.cfg.tier2Model,
       json: false,
-      system:
-        "Write a terse 4-6 sentence executive intelligence summary of weekly drone technology shifts. No preamble.",
+      system: BRIEFING_SUMMARY_SYSTEM,
       prompt: context,
       tier: "tier2",
     });
     if (!r.ok) throw failure(r);
     return r.content;
   }
+}
+
+const ADJUDICATE_SYS = `You check whether a report is about one specific catalog system.
+Reply in json: {"same": boolean, "confidence": number between 0 and 1, "reason": short string}.
+"same" is true only if the report's system IS the catalog system (an alias, transliteration or
+spelling variant counts). A different variant number, a successor, a different system from the
+same manufacturer, or a system merely mentioned alongside it is NOT the same.`;
+
+/** The deep model as an Adjudicator (see auto-triage.ts). Server or browser, via `chat`. */
+export function openAICompatibleAdjudicator(
+  cfg: AIProviderSettings,
+  chat: ChatTransport = (i) => chatCompletion({ data: i }),
+): Adjudicator {
+  return async (candidate, target) => {
+    const entry = [
+      `Name: ${target.name}`,
+      target.cyrillic ? `Cyrillic: ${target.cyrillic}` : "",
+      target.aliases.length ? `Aliases: ${target.aliases.slice(0, 15).join(", ")}` : "",
+      `Domain: ${target.domain}; origin: ${target.origin}`,
+      target.manufacturer ? `Manufacturer: ${target.manufacturer}` : "",
+      target.summary ? `Summary: ${target.summary.slice(0, 400)}` : "",
+    ]
+      .filter(Boolean)
+      .join("\n");
+    const r = await chatContent(chat, {
+      baseUrl: cfg.baseUrl,
+      apiKey: cfg.apiKey,
+      model: cfg.tier2Model,
+      json: true,
+      tier: "tier2",
+      system: ADJUDICATE_SYS,
+      prompt: `Catalog system:\n${entry}\n\nThe pipeline read the report's system as: ${
+        candidate.extraction.name ?? "(unnamed)"
+      }\n\nReport:\n${candidate.raw.slice(0, 3000)}`,
+    });
+    const j = parseModelJson(r) ?? {};
+    const confidence = Number(j["confidence"]);
+    if (typeof j["same"] !== "boolean" || !Number.isFinite(confidence))
+      throw new Error("Invalid adjudication JSON");
+    return {
+      same: j["same"],
+      confidence: Math.max(0, Math.min(1, confidence)),
+      ...(typeof j["reason"] === "string" ? { reason: j["reason"].slice(0, 200) } : {}),
+    };
+  };
+}
+
+/** One call through `chat`, as content or a typed failure. */
+async function chatContent(
+  chat: ChatTransport,
+  input: Parameters<ChatTransport>[0],
+): Promise<string> {
+  const r = await chat(input);
+  if (!r.ok) throw failure(r);
+  return r.content;
 }

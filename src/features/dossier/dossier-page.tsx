@@ -25,7 +25,11 @@ export function SpecTable({ drone }: { drone: Drone }) {
         {drone.specs.map((s) => {
           const c = consensus(s);
           return (
-            <li key={s.key} className="border border-border bg-background/40 p-3" data-testid={`spec-${s.key}`}>
+            <li
+              key={s.key}
+              className="border border-border bg-background/40 p-3"
+              data-testid={`spec-${s.key}`}
+            >
               <div className="flex items-start justify-between gap-2">
                 <p className="text-sm">
                   {s.label}
@@ -187,7 +191,13 @@ export function DossierPage({ id }: { id: string }) {
         <p className="mt-2 max-w-3xl text-muted-foreground">{d.summary}</p>
         {d.reference && (
           <p className="mt-2 font-mono text-xs text-muted-foreground">
-            <a href={d.reference.url} target="_blank" rel="noreferrer" className="underline" data-testid="reference-link">
+            <a
+              href={d.reference.url}
+              target="_blank"
+              rel="noreferrer"
+              className="underline"
+              data-testid="reference-link"
+            >
               {d.reference.url.includes("wikipedia.org") ? "Wikipedia, CC BY-SA 4.0" : "Wikidata"}
             </a>
           </p>
@@ -321,7 +331,7 @@ export function DossierPage({ id }: { id: string }) {
           )}
           {variants.map((variant) => (
             <Link
-             data-testid={`variant-link-${variant.id}`}
+              data-testid={`variant-link-${variant.id}`}
               key={variant.id}
               to="/systems/$id"
               params={{ id: variant.id }}

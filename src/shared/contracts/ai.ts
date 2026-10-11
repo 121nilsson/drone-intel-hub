@@ -1,4 +1,4 @@
-import type { Drone, Extraction } from "@/entities/drone/types";
+import type { Candidate, Drone, Extraction } from "@/entities/drone/types";
 
 /** Inference contract — any engine (heuristic, NIM, OpenAI-compatible) can implement it. */
 export interface IntelExtractor {
@@ -6,6 +6,23 @@ export interface IntelExtractor {
   readonly label: string;
   extract(raw: string, catalog: Drone[], context?: Extraction): Promise<Extraction>;
 }
+
+/**
+ * The deep model's verdict on "is the system in this report that catalog entry?" - one entry,
+ * yes or no, so it can be asked cheaply about candidates the pipeline matched without confidence.
+ */
+export type Adjudicator = (
+  candidate: Candidate,
+  target: Drone,
+) => Promise<{ same: boolean; confidence: number; reason?: string }>;
+
+/**
+ * Instructions for the 7-day executive summary. One copy, used by the server-side summary and the
+ * browser fallback, so both summarise the same way. The context it receives is built from the
+ * week's reporting (features/briefing/briefing-data.ts), not from catalog edits.
+ */
+export const BRIEFING_SUMMARY_SYSTEM =
+  "Write a terse 4-6 sentence executive intelligence summary of the past week's drone and counter-drone reporting, using only the context given. Cover the most reported systems and where they were reported from, systems seen for the first time, notable new specification or capability claims (say when a claim is disputed), and any trend across reports. Name systems; do not list counts for their own sake. No preamble.";
 
 export interface BriefingSummarizer {
   summarize(context: string): Promise<string>;

@@ -247,6 +247,8 @@ export interface Candidate {
   supersededBy?: string;
   /** Who resolved it; absent on candidates resolved before auto-triage existed. */
   resolvedBy?: "auto" | "analyst";
+  /** When the deep model was asked whether this is its matched catalog entry; asked once. */
+  adjudicatedAt?: string;
 }
 
 export const FLAGS: Record<string, string> = {
