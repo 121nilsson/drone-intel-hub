@@ -123,7 +123,7 @@ export function CatalogPage() {
       const skipped = report.skipped + res.skipped;
       const tail = res.truncated ? ", truncated" : "";
       setImportNote(
-        `created ${report.created}, enriched ${report.enriched}, linked ${report.linked}, skipped ${skipped}${tail}`,
+        `created ${report.created}, enriched ${report.enriched}, linked ${report.linked}, skipped ${skipped}, spec figures ${report.specClaims}${tail}`,
       );
     } catch (e) {
       setImportNote(e instanceof Error ? e.message : "Reference import failed");

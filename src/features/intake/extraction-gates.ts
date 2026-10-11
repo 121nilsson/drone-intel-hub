@@ -17,6 +17,11 @@ export function needsFastAI(e: Extraction, threshold: number): ExtractionGate {
 }
 
 export function needsDeepAI(e: Extraction, threshold: number): ExtractionGate {
+  // An AI pass read the report and found no named system (and no catalog match survived it).
+  // Its confidence is 0 by design, which would otherwise escalate every generic "drones attacked
+  // overnight" post to the deep tier with nothing to attribute.
+  if (e.metadata?.engine !== "heuristic" && !e.name && !e.systems?.length)
+    return { needed: false, reasons: [] };
   const reasons: string[] = [];
   if (e.confidence < threshold) reasons.push("low-combined-confidence");
   if ((e.systems?.length ?? 0) > 1) {
@@ -72,34 +77,60 @@ function mergeSystems(a: SystemExtraction[], b: SystemExtraction[]): SystemExtra
   return out;
 }
 
-/** AI refines deterministic output; it never silently removes a deterministic observation. */
+/**
+ * AI refines deterministic output. Deterministic FACTS (specs, RF bands, payloads...) are never
+ * silently removed, but IDENTITY is the AI's call: the heuristic proposes every capitalised term
+ * near a drone keyword ("National", "Ukrinform"), so an unconfirmed heuristic system is dropped
+ * unless it is a catalog match - a name the catalog already knows is not noise.
+ */
 export function combineExtractions(base: Extraction, refinement: Extraction): Extraction {
+  const aiJudged = refinement.metadata?.engine === "ai";
+  const confirmed = new Set(
+    [...(refinement.systems ?? []), ...(refinement.systemExtractions ?? [])].map((s) =>
+      s.name.toLowerCase(),
+    ),
+  );
+  const kept = (s: { name: string; matchId?: string }) =>
+    !aiJudged || !!s.matchId || confirmed.has(s.name.toLowerCase());
+  const baseSystems = (base.systems ?? []).filter(kept);
   const systemExtractions = mergeSystems(
-    base.systemExtractions ?? [],
+    (base.systemExtractions ?? []).filter(kept),
     refinement.systemExtractions ?? [],
   );
+  const systems = [
+    ...baseSystems,
+    ...(refinement.systems ?? []).filter(
+      (x) =>
+        !baseSystems.some(
+          (s) =>
+            (s.matchId && s.matchId === x.matchId) || s.name.toLowerCase() === x.name.toLowerCase(),
+        ),
+    ),
+  ];
+  // With no name from the AI, the base name stands only if it is itself a catalog match.
+  const { name: baseName, ...baseRest } = base;
+  const name = refinement.name ?? (!aiJudged || base.matchId ? baseName : undefined);
+  // The AI's confidence is the verdict on identity, so the heuristic cannot inflate it - except
+  // when the AI found nothing and only catalog matches remain to vouch for the post.
+  const confidence =
+    aiJudged && (confirmed.size > 0 || !systems.length)
+      ? refinement.confidence
+      : Math.max(base.confidence, refinement.confidence);
   return {
-    ...base,
+    ...baseRest,
     ...refinement,
+    ...(name ? { name } : {}),
     aliases: [...new Set([...base.aliases, ...refinement.aliases])],
     operators: [...new Set([...base.operators, ...refinement.operators])],
     specs: mergeSpecs(base.specs, refinement.specs),
     rfBands: [...new Set([...base.rfBands, ...refinement.rfBands])],
-    systems: [
-      ...(base.systems ?? []),
-      ...(refinement.systems ?? []).filter(
-        (x) =>
-          !(base.systems ?? []).some(
-            (s) => s.matchId === x.matchId && s.name.toLowerCase() === x.name.toLowerCase(),
-          ),
-      ),
-    ],
+    systems,
     systemExtractions,
     components: [...(base.components ?? []), ...(refinement.components ?? [])],
     payloads: [...(base.payloads ?? []), ...(refinement.payloads ?? [])],
     sensors: [...(base.sensors ?? []), ...(refinement.sensors ?? [])],
     guidance: [...new Set([...(base.guidance ?? []), ...(refinement.guidance ?? [])])],
-    confidence: Math.max(base.confidence, refinement.confidence),
+    confidence,
     rationale: [base.rationale, refinement.rationale].filter(Boolean).join(" · "),
     metadata: {
       schemaVersion: Math.max(

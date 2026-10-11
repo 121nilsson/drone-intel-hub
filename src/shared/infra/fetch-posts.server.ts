@@ -12,6 +12,7 @@ import { OpenAICompatibleExtractor } from "./openai-compatible-ai";
 import { dbConfigured } from "./postgres/db.server";
 import { PostgresStore } from "./postgres/postgres-store.server";
 import { DEFAULT_SETTINGS } from "./settings-defaults";
+import { readProviderEnvConfig } from "./provider-env.server";
 import {
   QUEUE_ROW,
   collectSource,
@@ -67,12 +68,15 @@ export async function fetchAllSources(
     taxonomyCandidates.attach(store),
   ]);
 
-  const useRemote = !!process.env["NVIDIA_API_KEY"];
+  // Any provider with a key enables AI, and the models are the ones the chain sends first - the
+  // same resolution the Settings page and the browser use (see readProviderEnvConfig).
+  const env = await readProviderEnvConfig();
+  const useRemote = env.hasKey;
   const cfg = {
     ...DEFAULT_SETTINGS,
-    baseUrl: process.env["NVIDIA_BASE_URL"] || DEFAULT_SETTINGS.baseUrl,
-    tier1Model: process.env["NVIDIA_TIER1_MODEL"] || DEFAULT_SETTINGS.tier1Model,
-    tier2Model: process.env["NVIDIA_TIER2_MODEL"] || DEFAULT_SETTINGS.tier2Model,
+    baseUrl: env.baseUrl ?? DEFAULT_SETTINGS.baseUrl,
+    tier1Model: env.tier1Model ?? DEFAULT_SETTINGS.tier1Model,
+    tier2Model: env.tier2Model ?? DEFAULT_SETTINGS.tier2Model,
     apiKey: "",
   };
 
@@ -91,6 +95,9 @@ export async function fetchAllSources(
     heuristic: new HeuristicExtractor(1),
     fallback: new HeuristicExtractor(1),
     heuristicFirst: DEFAULT_SETTINGS.heuristicFirst,
+    // A provider outage leaves the post pending for the next tick instead of recording a
+    // heuristic-only result as final.
+    deferOnOutage: true,
     escalationThreshold: DEFAULT_SETTINGS.escalationThreshold,
     autoMergeThreshold: DEFAULT_SETTINGS.autoMergeThreshold,
     autoPromoteThreshold: DEFAULT_SETTINGS.autoPromoteThreshold,

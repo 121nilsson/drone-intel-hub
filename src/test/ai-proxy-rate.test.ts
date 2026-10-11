@@ -302,7 +302,7 @@ describe("chatCompletionOnce request handling", () => {
     expect(init?.signal).toBeInstanceOf(AbortSignal);
   });
 
-  it("retries a timed-out request", async () => {
+  it("retries a timed-out request once, then parks the model after two in a row", async () => {
     const fn = vi.fn(async () => {
       const err = new Error("The operation was aborted due to timeout");
       err.name = "TimeoutError";
@@ -317,6 +317,35 @@ describe("chatCompletionOnce request handling", () => {
 
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.error).toBe("Provider timeout");
-    expect(fn).toHaveBeenCalledTimes(3);
+    expect(fn).toHaveBeenCalledTimes(2);
+
+    // The next post does not wait out another timeout: the model is cooling down.
+    const next = await chat(INPUT);
+    expect(fn).toHaveBeenCalledTimes(2);
+    expect(next).toMatchObject({ ok: false, outage: true });
+    if (!next.ok) expect(next.error).toContain("timeout — cooling down");
+  });
+
+  it("resets the timeout streak when the model answers", async () => {
+    let calls = 0;
+    const fn = vi.fn(async () => {
+      calls++;
+      if (calls === 1 || calls === 3) {
+        const err = new Error("timeout");
+        err.name = "TimeoutError";
+        throw err;
+      }
+      return new Response(JSON.stringify({ choices: [{ message: { content: "ok" } }] }));
+    });
+    vi.stubGlobal("fetch", fn);
+    const chat = await loadTransport("0");
+
+    const first = chat(INPUT);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(await first).toMatchObject({ ok: true });
+    const second = chat(INPUT);
+    await vi.advanceTimersByTimeAsync(60_000);
+    // Timeout, success, timeout: never two in a row, so the second call still retries and answers.
+    expect(await second).toMatchObject({ ok: true });
   });
 });

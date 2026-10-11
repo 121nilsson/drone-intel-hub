@@ -30,7 +30,8 @@ export const getStoreStatus = createServerFn({ method: "POST" }).handler(async (
     postgres:
       !!process.env["DATABASE_URL"] ||
       (!!process.env["SUPABASE_URL"] && !!process.env["SUPABASE_SERVICE_ROLE_KEY"]),
-    provider: readProviderEnvConfig(),
+    // Awaited: readProviderEnvConfig also reads the multi-provider table, so it is async now.
+    provider: await readProviderEnvConfig(),
   };
 });
 

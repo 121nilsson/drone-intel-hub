@@ -3,7 +3,8 @@ import { processPending } from "@/features/sources/auto-ingest";
 import type { PipelineDeps } from "@/features/intake/pipeline";
 import type { DispatchRepository } from "@/shared/contracts/repository";
 import type { RawDispatch } from "@/entities/dispatch/types";
-import type { IntelExtractor } from "@/shared/contracts/ai";
+import { ProviderOutageError, type IntelExtractor } from "@/shared/contracts/ai";
+import { PROVIDER_OUTAGE_KINDS, providerErrorKind } from "@/features/sources/auto-ingest";
 import type { Candidate, Drone, Extraction } from "@/entities/drone/types";
 
 const row = (id: string, text: string): RawDispatch => ({
@@ -116,5 +117,36 @@ describe("processPending error handling", () => {
     expect(rep.processed).toBe(1);
     expect(rep.failed).toBe(1);
     expect(rows[1]!.status).toBe("processed");
+  });
+});
+
+describe("processPending when every provider is out", () => {
+  const outage = (msg: string): IntelExtractor => ({
+    tier: 1,
+    label: "outage",
+    extract: async () => {
+      throw new ProviderOutageError(msg);
+    },
+  });
+
+  it.each([
+    "All providers unavailable. Last error: Provider rate limit (429). Tried: nvidia:x, groq:y.",
+    // The last provider's error alone would not read as an outage; the stop reason still must.
+    "All providers unavailable. Cooling down: nvidia (credits, 900s), groq (auth, 300s).",
+  ])("keeps the post pending without spending an attempt, and stops: %s", async (msg) => {
+    const rows = [
+      row("a", "Alpha drone post about a Lancet strike"),
+      row("b", "Bravo drone post about a Geran strike"),
+    ];
+    const dispatches = makeDispatches(rows);
+    const rep = await processPending(dispatches, { ...deps(outage(msg)), deferOnOutage: true }, 10);
+
+    expect(rep.processed).toBe(0);
+    expect(rows[0]!.status).toBe("pending");
+    expect(rows[0]!.attempts).toBeUndefined();
+    expect(rows[1]!.status).toBe("pending");
+    // source-sync keys its cooldown off this.
+    const kind = providerErrorKind(rep.stopReason ?? "");
+    expect(kind && PROVIDER_OUTAGE_KINDS.has(kind)).toBe(true);
   });
 });

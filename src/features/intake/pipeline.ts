@@ -5,8 +5,12 @@ import type {
   SpecAttribute,
   SystemExtraction,
 } from "@/entities/drone/types";
-import type { IntelExtractor } from "@/shared/contracts/ai";
-import type { CandidateRepository, DroneRepository } from "@/shared/contracts/repository";
+import { ProviderOutageError, type IntelExtractor } from "@/shared/contracts/ai";
+import type {
+  CandidateRepository,
+  DispatchRepository,
+  DroneRepository,
+} from "@/shared/contracts/repository";
 import type { TaxonomyCandidateRepository } from "@/shared/contracts/taxonomy";
 import type { Procurement } from "@/entities/procurement/types";
 import { mergeLinks, normalizeExtraction, toRFLink } from "@/entities/normalization/apply";
@@ -27,6 +31,13 @@ export interface PipelineDeps {
   heuristicFirst?: boolean;
   /** Analyst override: spend tier-2 budget even when automatic gates are satisfied. */
   forceDeepAnalysis?: boolean;
+  /**
+   * Rethrow a ProviderOutageError instead of degrading to the heuristic result. Set by queue
+   * processors: a degraded result there is recorded as final and never re-analysed, so during an
+   * outage the post must stay pending for a later run instead. An interactive paste leaves it
+   * unset and gets the degraded result with a note.
+   */
+  deferOnOutage?: boolean;
   drones: DroneRepository;
   candidates: CandidateRepository;
   /** When set, unknown propulsion terms are queued for an analyst. Absent in tests and older callers. */
@@ -99,7 +110,47 @@ function collidesWithCatalog(e: Extraction, catalog: Drone[]): boolean {
   return [e.name ?? "", ...e.aliases].some((n) => n.trim() && known.has(collisionKey(n)));
 }
 
-function extractionForSystem(parent: Extraction, s: SystemExtraction): Extraction {
+/**
+ * One system's slice of a multi-system extraction, as a standalone extraction.
+ *
+ * `notes` are the degraded-tier notes from the parent ("tier-1 AI unavailable — ..."). A slice's
+ * own rationale replaces the parent's, so without re-applying them a candidate built from a
+ * failed AI call reads exactly like one the AI produced.
+ */
+/**
+ * Words that name an organisation, a unit or an outlet rather than a piece of equipment. A model
+ * that misreads a report ("operators of the unmanned systems battalion destroyed a convoy") is
+ * often confident about it, so confidence alone cannot keep these out of the catalog.
+ */
+const ORGANISATION =
+  /\b(?:brigades?|battalions?|regiments?|divisions?|corps|command|forces|army|navy|air force|guards?|troops|grouping|agency|news|ministry|department|directorate|company|corporation|inc|ltd|llc|gmbh|jsc|holding|institute|university|bureau|paratroopers)\b|бригад|батальйон|батальон|полк|дивізі|дивизи|корпус|командуван|командован|угруповання|группировк|агентств|міністерств|министерств/iu;
+
+/**
+ * True when a name should not be promoted into the catalog without an analyst: it reads as an
+ * organisation, or it is the outlet the report came from ("Ukrinform" from "Ukrinform (War)").
+ * Only auto-promotion is gated; the candidate still goes to the Queue for review.
+ */
+export function notASystemName(name: string, source: string): boolean {
+  if (ORGANISATION.test(name)) return true;
+  const key = collisionKey(name);
+  const outlet = collisionKey(source.split(" · ")[0]!.replace(/\(.*?\)/g, ""));
+  // Short keys would match by accident ("UA" inside "Ukrainska Pravda").
+  if (key.length < 4 || outlet.length < 4) return false;
+  return outlet.includes(key) || key.includes(outlet);
+}
+
+function extractionForSystem(
+  parent: Extraction,
+  s: SystemExtraction,
+  notes: string[] = [],
+): Extraction {
+  return notes.reduce(
+    (e, note) => (e.rationale?.includes(note) ? e : annotate(e, note)),
+    sliceExtraction(parent, s),
+  );
+}
+
+function sliceExtraction(parent: Extraction, s: SystemExtraction): Extraction {
   return {
     name: s.name,
     aliases: s.aliases ?? [],
@@ -135,6 +186,7 @@ function applyRelatedSystems(
   source: string,
   d: PipelineDeps,
   context: AnalysisContext,
+  notes: string[] = [],
 ): PipelineResult {
   const slices = all.systemExtractions ?? [];
   if (slices.length < 2) return primary;
@@ -151,7 +203,7 @@ function applyRelatedSystems(
       (!primaryMatch && primaryName && slice.name.toLowerCase() === primaryName)
     )
       continue;
-    const extraction = applyNormalization(extractionForSystem(all, slice)).extraction;
+    const extraction = applyNormalization(extractionForSystem(all, slice, notes)).extraction;
     const candidate: Candidate = {
       id: crypto.randomUUID(),
       raw: primary.candidate.raw,
@@ -189,16 +241,28 @@ function applyRelatedSystems(
       d.autoPromoteThreshold !== undefined &&
       extraction.name &&
       extraction.confidence >= d.autoPromoteThreshold &&
-      !collidesWithCatalog(extraction, d.drones.list())
+      !collidesWithCatalog(extraction, d.drones.list()) &&
+      !notASystemName(extraction.name, source) &&
+      !rejectedByAnalyst(extraction.name, d.candidates.list())
     ) {
       d.candidates.add(candidate);
       const promoted = promote(candidate, d);
+      // Persisted, not just set on the local object: add() has already written the candidate.
+      d.candidates.update(candidate.id, { resolvedBy: "auto" });
       candidate.status = "promoted";
       candidate.resolvedInto = promoted.id;
       candidate.resolvedBy = "auto";
       droneIds.add(promoted.id);
       relatedCandidates.push(candidate);
       continue;
+    } else if (
+      d.autoDiscardThreshold !== undefined &&
+      extraction.confidence < d.autoDiscardThreshold
+    ) {
+      // Same gate as the primary candidate. Without it a single noisy post queued a dozen
+      // near-zero-confidence slices for review, burying the candidates worth an analyst's time.
+      candidate.status = "discarded";
+      candidate.resolvedBy = "auto";
     }
     d.candidates.add(candidate);
     relatedCandidates.push(candidate);
@@ -219,6 +283,8 @@ export async function runTwoTier(
   const catalog = d.drones.list();
   let tier: 1 | 2 = 1;
   let extraction: Extraction | undefined;
+  /** Why a tier fell back, re-applied to every per-system candidate (see extractionForSystem). */
+  const degraded: string[] = [];
   const heuristic = d.heuristicFirst !== false ? (d.heuristic ?? d.fallback) : undefined;
   if (heuristic) extraction = await heuristic.extract(raw, catalog);
 
@@ -232,18 +298,20 @@ export async function runTwoTier(
       extraction = extraction ? combineExtractions(extraction, refined) : refined;
       if (extraction.metadata) extraction.metadata.escalationReasons = fastGate.reasons;
     } catch (err) {
+      if (d.deferOnOutage && err instanceof ProviderOutageError) throw err;
       if (!extraction) {
         if (!d.fallback) throw err;
-        extraction = annotate(
-          await d.fallback.extract(raw, catalog),
-          "tier-1 AI unavailable — heuristic",
-        );
+        degraded.push("tier-1 AI unavailable — heuristic");
+        extraction = annotate(await d.fallback.extract(raw, catalog), degraded.at(-1)!);
       } else {
-        extraction = annotate(extraction, "tier-1 AI unavailable — kept heuristic");
+        degraded.push("tier-1 AI unavailable — kept heuristic");
+        extraction = annotate(extraction, degraded.at(-1)!);
       }
       console.error(
         "[pipeline] tier-1 call failed, using deterministic result",
         (err as Error).message,
+        "source:",
+        source,
       );
     }
   }
@@ -267,9 +335,13 @@ export async function runTwoTier(
         ];
       }
     } catch (err) {
+      // The deep pass was owed (low confidence or conflicting identity); keeping the shallow
+      // result during an outage would skip it for good.
+      if (d.deferOnOutage && err instanceof ProviderOutageError) throw err;
       tier = 1;
       console.error("[pipeline] tier-2 call failed, keeping tier-1 result", (err as Error).message);
-      extraction = annotate(extraction, "tier-2 AI unavailable — kept tier 1");
+      degraded.push("tier-2 AI unavailable — kept tier 1");
+      extraction = annotate(extraction, degraded.at(-1)!);
     }
   }
   const fullExtraction: Extraction = extraction;
@@ -278,7 +350,7 @@ export async function runTwoTier(
       fullExtraction.systemExtractions?.find((s) => s.matchId === fullExtraction.matchId) ??
       fullExtraction.systemExtractions?.find((s) => s.name === fullExtraction.name) ??
       fullExtraction.systemExtractions?.[0];
-    if (primary) extraction = extractionForSystem(fullExtraction, primary);
+    if (primary) extraction = extractionForSystem(fullExtraction, primary, degraded);
   }
   const normalized = applyNormalization(extraction);
   extraction = normalized.extraction;
@@ -344,6 +416,7 @@ export async function runTwoTier(
       source,
       d,
       context,
+      degraded,
     );
   }
   // A name colliding with the catalog means the model missed a match; promoting it would
@@ -353,7 +426,9 @@ export async function runTwoTier(
     !extraction.matchId &&
     extraction.name?.trim() &&
     extraction.confidence >= d.autoPromoteThreshold &&
-    !collidesWithCatalog(extraction, catalog)
+    !collidesWithCatalog(extraction, catalog) &&
+    !notASystemName(extraction.name, source) &&
+    !rejectedByAnalyst(extraction.name, d.candidates.list())
   ) {
     d.candidates.add(candidate);
     const drone = promote(candidate, d);
@@ -368,6 +443,7 @@ export async function runTwoTier(
       source,
       d,
       context,
+      degraded,
     );
   }
   if (d.autoDiscardThreshold !== undefined && extraction.confidence < d.autoDiscardThreshold) {
@@ -380,10 +456,18 @@ export async function runTwoTier(
       source,
       d,
       context,
+      degraded,
     );
   }
   d.candidates.add(candidate);
-  return applyRelatedSystems({ kind: "queued", candidate }, fullExtraction, source, d, context);
+  return applyRelatedSystems(
+    { kind: "queued", candidate },
+    fullExtraction,
+    source,
+    d,
+    context,
+    degraded,
+  );
 }
 
 export function promote(
@@ -644,6 +728,100 @@ export function mergeDrones(
   d.drones.remove?.(mergeId);
 
   return result;
+}
+
+export interface RemoveDroneReport {
+  /** Other catalog entries whose counterpart or variant links pointed at the removed one. */
+  unlinked: number;
+  /** Candidates that had been promoted or merged into it, now discarded by the analyst. */
+  discarded: number;
+  /** Feed posts whose provenance listed it. */
+  dispatches: number;
+}
+
+/**
+ * What removing an entry would touch, without changing anything. The dossier shows this before
+ * the analyst confirms.
+ */
+export function removalImpact(
+  id: string,
+  d: Pick<PipelineDeps, "drones" | "candidates"> & { dispatches?: DispatchRepository },
+): RemoveDroneReport {
+  return {
+    unlinked: d.drones.list().filter((x) => x.id !== id && linksTo(x, id)).length,
+    discarded: d.candidates.list().filter((c) => c.resolvedInto === id).length,
+    dispatches: (d.dispatches?.list() ?? []).filter((x) => x.droneIds?.includes(id)).length,
+  };
+}
+
+function linksTo(drone: Drone, id: string): boolean {
+  return (
+    drone.counterpartIds.includes(id) ||
+    drone.variantOfId === id ||
+    (drone.variantIds?.includes(id) ?? false)
+  );
+}
+
+/**
+ * Remove a catalog entry an analyst has judged wrong (a unit or an outlet promoted as a system).
+ *
+ * Nothing is left pointing at it: other entries lose their links to it, feed posts drop it from
+ * their provenance, and the candidates that created or fed it become "discarded by the analyst".
+ * That last part is also what keeps it out: auto-promotion refuses a name an analyst has rejected
+ * (see rejectedByAnalyst), so the next post naming it goes to the Queue instead of straight back
+ * into the catalog. The candidates keep `resolvedInto` as history; the Queue shows it as deleted.
+ */
+export function removeDrone(
+  id: string,
+  d: Pick<PipelineDeps, "drones" | "candidates"> & { dispatches?: DispatchRepository },
+): RemoveDroneReport | undefined {
+  if (!d.drones.get(id)) return undefined;
+  const report: RemoveDroneReport = { unlinked: 0, discarded: 0, dispatches: 0 };
+  const now = new Date().toISOString();
+
+  for (const other of d.drones.list()) {
+    if (other.id === id || !linksTo(other, id)) continue;
+    const { variantOfId, ...rest } = other;
+    d.drones.upsert({
+      ...rest,
+      ...(variantOfId && variantOfId !== id ? { variantOfId } : {}),
+      counterpartIds: other.counterpartIds.filter((x) => x !== id),
+      ...(other.variantIds ? { variantIds: other.variantIds.filter((x) => x !== id) } : {}),
+      updatedAt: now,
+    });
+    report.unlinked++;
+  }
+
+  for (const c of d.candidates.list()) {
+    if (c.resolvedInto !== id) continue;
+    d.candidates.update(c.id, { status: "discarded", resolvedBy: "analyst" });
+    report.discarded++;
+  }
+
+  for (const post of d.dispatches?.list() ?? []) {
+    if (!post.droneIds?.includes(id)) continue;
+    d.dispatches!.update(post.id, { droneIds: post.droneIds.filter((x) => x !== id) });
+    report.dispatches++;
+  }
+
+  d.drones.remove?.(id);
+  return report;
+}
+
+/**
+ * True when an analyst has already rejected this name: deleted the entry it created, or
+ * discarded a candidate carrying it. Auto-promotion defers to that judgement.
+ */
+export function rejectedByAnalyst(name: string, candidates: readonly Candidate[]): boolean {
+  const key = collisionKey(name);
+  if (!key) return false;
+  return candidates.some(
+    (c) =>
+      c.status === "discarded" &&
+      c.resolvedBy === "analyst" &&
+      !!c.extraction.name &&
+      collisionKey(c.extraction.name) === key,
+  );
 }
 
 export function mergeInto(

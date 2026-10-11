@@ -1,12 +1,13 @@
-import { Link } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { consensus } from "@/entities/drone/consensus";
 import { ieeeLabel, natoLabel } from "@/entities/normalization/bands";
 import { effectiveIeeeBands, effectiveNatoBands, linkIsFiber } from "@/entities/normalization/rf";
 import { flag, type Drone, type SpecAttribute } from "@/entities/drone/types";
 import { ClaimChip, ProvenanceSheet, type ClaimSelection } from "./provenance-sheet";
-import { useDrones } from "@/shared/infra/services";
-import { ConfidenceTag, Panel, Tag } from "@/shared/ui/primitives";
+import { useDrones, useServices } from "@/shared/infra/services";
+import { removalImpact, removeDrone } from "@/features/intake/pipeline";
+import { Btn, ConfidenceTag, Panel, Tag } from "@/shared/ui/primitives";
 
 export function SpecTable({ drone }: { drone: Drone }) {
   const [sel, setSel] = useState<ClaimSelection | null>(null);
@@ -24,7 +25,7 @@ export function SpecTable({ drone }: { drone: Drone }) {
         {drone.specs.map((s) => {
           const c = consensus(s);
           return (
-            <li key={s.key} className="border border-border bg-background/40 p-3">
+            <li key={s.key} className="border border-border bg-background/40 p-3" data-testid={`spec-${s.key}`}>
               <div className="flex items-start justify-between gap-2">
                 <p className="text-sm">
                   {s.label}
@@ -102,6 +103,52 @@ export function SpecTable({ drone }: { drone: Drone }) {
   );
 }
 
+/**
+ * Delete a wrongly catalogued entry. Two steps: the first click shows what else the removal
+ * touches, the second does it. See removeDrone for what is cleaned up.
+ */
+function DeleteSystem({ drone }: { drone: Drone }) {
+  const svc = useServices();
+  const navigate = useNavigate();
+  const [confirming, setConfirming] = useState(false);
+  if (!confirming)
+    return (
+      <Btn variant="danger" onClick={() => setConfirming(true)}>
+        Delete
+      </Btn>
+    );
+  const impact = removalImpact(drone.id, svc);
+  const effects = [
+    impact.discarded &&
+      `${impact.discarded} candidate${impact.discarded === 1 ? "" : "s"} marked discarded`,
+    impact.unlinked &&
+      `${impact.unlinked} linked system${impact.unlinked === 1 ? "" : "s"} unlinked`,
+    impact.dispatches &&
+      `${impact.dispatches} feed post${impact.dispatches === 1 ? "" : "s"} lose this link`,
+  ].filter(Boolean);
+  return (
+    <div className="flex flex-wrap items-center gap-2 border border-destructive/60 px-3 py-2 text-sm">
+      <span>
+        Delete <strong>{drone.name}</strong> and its {drone.specs.length} spec
+        {drone.specs.length === 1 ? "" : "s"}?{effects.length ? ` ${effects.join(", ")}.` : ""} The
+        name will not be auto-promoted again.
+      </span>
+      <Btn
+        variant="danger"
+        onClick={() => {
+          removeDrone(drone.id, svc);
+          void navigate({ to: "/catalog" });
+        }}
+      >
+        Confirm delete
+      </Btn>
+      <Btn variant="ghost" onClick={() => setConfirming(false)}>
+        Cancel
+      </Btn>
+    </div>
+  );
+}
+
 export function DossierPage({ id }: { id: string }) {
   const drones = useDrones();
   const d = drones.find((x) => x.id === id);
@@ -131,13 +178,16 @@ export function DossierPage({ id }: { id: string }) {
           ))}
           <Tag>{d.propulsion}</Tag>
         </div>
-        <h1 className="mt-3 text-3xl font-semibold md:text-4xl">
-          {d.name} {d.cyrillic && <span className="text-muted-foreground">{d.cyrillic}</span>}
-        </h1>
+        <div className="mt-3 flex flex-wrap items-start justify-between gap-3">
+          <h1 className="text-3xl font-semibold md:text-4xl">
+            {d.name} {d.cyrillic && <span className="text-muted-foreground">{d.cyrillic}</span>}
+          </h1>
+          <DeleteSystem key={d.id} drone={d} />
+        </div>
         <p className="mt-2 max-w-3xl text-muted-foreground">{d.summary}</p>
         {d.reference && (
           <p className="mt-2 font-mono text-xs text-muted-foreground">
-            <a href={d.reference.url} target="_blank" rel="noreferrer" className="underline">
+            <a href={d.reference.url} target="_blank" rel="noreferrer" className="underline" data-testid="reference-link">
               {d.reference.url.includes("wikipedia.org") ? "Wikipedia, CC BY-SA 4.0" : "Wikidata"}
             </a>
           </p>
@@ -261,6 +311,7 @@ export function DossierPage({ id }: { id: string }) {
         <Panel title="Variant family">
           {parent && (
             <Link
+              data-testid={`parent-link-${parent.id}`}
               to="/systems/$id"
               params={{ id: parent.id }}
               className="block py-1 hover:text-primary"
@@ -270,6 +321,7 @@ export function DossierPage({ id }: { id: string }) {
           )}
           {variants.map((variant) => (
             <Link
+             data-testid={`variant-link-${variant.id}`}
               key={variant.id}
               to="/systems/$id"
               params={{ id: variant.id }}
@@ -285,6 +337,7 @@ export function DossierPage({ id }: { id: string }) {
         <Panel title="Counterparts">
           {counterparts.map((c) => (
             <Link
+              data-testid={`counterpart-link-${c.id}`}
               key={c.id}
               to="/counterparts"
               search={{ a: d.id, b: c.id }}
@@ -318,6 +371,7 @@ export function DossierPage({ id }: { id: string }) {
       <div className="h-14 sm:hidden" />
       <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-2 gap-2 border-t border-border bg-background/95 p-2 backdrop-blur sm:hidden">
         <Link
+          data-testid="compare-link"
           to="/counterparts"
           search={{ a: d.id, b: counterparts[0]?.id ?? "" }}
           className="border border-primary/50 py-2.5 text-center font-mono text-xs uppercase text-primary"
@@ -325,6 +379,7 @@ export function DossierPage({ id }: { id: string }) {
           Compare
         </Link>
         <Link
+          data-testid="source-posts-link"
           to="/dispatches"
           search={{ q: d.name }}
           className="border border-border py-2.5 text-center font-mono text-xs uppercase text-muted-foreground"

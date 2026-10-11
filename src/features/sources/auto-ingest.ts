@@ -5,6 +5,7 @@ import type { FetchedPost } from "@/shared/infra/source-fetch.functions";
 import type { DispatchRepository } from "@/shared/contracts/repository";
 import { runTwoTier, type PipelineDeps } from "@/features/intake/pipeline";
 import type { Drone } from "@/entities/drone/types";
+import { ProviderOutageError } from "@/shared/contracts/ai";
 
 export const DRONE_HINT =
   /drone|uav|ugv|usv|fpv|shahed|geran|lancet|bpla|бла|бпла|дрон|квадрокоптер|ланцет|герань|шахед|мавик|молния|курьер|термит|катран|магура|баба яга|interceptor|loitering|unmanned|jammer|РЭБ|EW\b/i;
@@ -445,8 +446,21 @@ export async function processPending(
         else if (r.kind === "auto-discarded") rep.discarded++;
         else rep.queued++;
       } catch (e) {
-        const attempts = (d.attempts ?? 0) + 1;
         const error = e instanceof Error ? e.message : "Processing failed";
+        if (e instanceof ProviderOutageError) {
+          // Every provider is refusing or cooling down: the post is not at fault, so it keeps its
+          // attempt budget and stays pending, and the batch stops. The reason is phrased so the
+          // cooldown in source-sync recognises it as an outage even when the last provider's
+          // error alone (say, a timeout) would not read as one.
+          const formatted = formatProviderError(error);
+          const kind = providerErrorKind(formatted);
+          dispatches.update(d.id, { error });
+          rep.failed++;
+          rep.stopReason =
+            kind && PROVIDER_OUTAGE_KINDS.has(kind) ? formatted : "Provider unavailable";
+          break;
+        }
+        const attempts = (d.attempts ?? 0) + 1;
         if (/invalid extraction json|json/i.test(error)) rep.parseFailures!++;
         dispatches.update(d.id, {
           attempts,

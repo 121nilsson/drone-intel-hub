@@ -39,6 +39,7 @@ function CandidateRow({ c }: { c: Candidate }) {
   const translateFn = useServerFn(translateText);
   const e = c.extraction;
   const systems = e.systems ?? [];
+  const resolvedExists = !!c.resolvedInto && drones.some((x) => x.id === c.resolvedInto);
   const [target, setTarget] = useState(e.matchId ?? "");
   const [name, setName] = useState(e.name ?? systems.find((s) => !s.matchId)?.name ?? "");
   const [translating, setTranslating] = useState(false);
@@ -247,9 +248,14 @@ function CandidateRow({ c }: { c: Candidate }) {
             <>
               {" "}
               →{" "}
-              <Link to="/systems/$id" params={{ id: c.resolvedInto }} className="text-primary">
-                {c.resolvedInto}
-              </Link>
+              {resolvedExists ? (
+                <Link to="/systems/$id" params={{ id: c.resolvedInto }} className="text-primary">
+                  {c.resolvedInto}
+                </Link>
+              ) : (
+                // The entry was deleted from its dossier; keep the history, drop the dead link.
+                <span className="line-through">{c.resolvedInto} (deleted)</span>
+              )}
             </>
           )}
         </p>
@@ -268,6 +274,7 @@ export function IntakePage({
   const [raw, setRaw] = useState("");
   const [source, setSource] = useState("Analyst paste");
   const [busy, setBusy] = useState(false);
+  const [deep, setDeep] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [visible, setVisible] = useState(PAGE);
   useEffect(() => {
@@ -310,6 +317,13 @@ export function IntakePage({
         autoPromoteThreshold,
         autoDiscardThreshold,
         heuristicFirst,
+        // Escalation is otherwise automatic: needsDeepAI only reaches tier 2 on low confidence,
+        // unresolved multi-system attribution, or conflicting identity. An analyst pasting a
+        // report by hand is the one case where the tier-2 budget is usually worth spending, so
+        // this asks for it directly rather than leaving it to the gate. The tier-2 call runs
+        // through the same provider chain as tier 1, so a busy provider falls back rather than
+        // failing the paste.
+        ...(deep ? { forceDeepAnalysis: true } : {}),
       });
       const conf = `Tier ${r.candidate.tier}, ${Math.round(r.candidate.extraction.confidence * 100)}%`;
       setMsg(
@@ -359,20 +373,34 @@ export function IntakePage({
             Sample
           </Btn>
           <Btn onClick={submit} disabled={busy || !raw.trim()}>
-            {busy ? "Analyzing…" : "Ingest"}
+            {busy ? "Analyzing…" : deep ? "Ingest (tier 2)" : "Ingest"}
           </Btn>
         </div>
+        <label className="mt-2 flex items-start gap-2 text-xs text-muted-foreground">
+          <input
+            type="checkbox"
+            className="mt-0.5"
+            checked={deep}
+            onChange={(e) => setDeep(e.target.checked)}
+          />
+          <span>
+            Always run Tier 2 ({svc.tier2.label}). Off, Tier 2 is reached only when the gates below
+            say the result is low-confidence or ambiguous. Tier 2 costs more and is slower, but on a
+            hand-pasted report it is usually the difference between a merge and a triage queue item.
+            Both tiers use the same provider fallback chain.
+          </span>
+        </label>
         {msg && <p className="mt-3 break-words font-mono text-xs text-accent">{msg}</p>}
         <p className="mt-4 break-words text-xs text-muted-foreground">
           Pasting a bare http(s) link fetches and reads the article server-side first. Local
           deterministic extraction runs first; Tier 1 fills unresolved fields and Tier 2 is reserved
           for low-confidence or ambiguous attribution below{" "}
-          {Math.round(svc.settings.escalationThreshold * 100)}%. Matches above{" "}
-          {Math.round(svc.settings.autoMergeThreshold * 100)}% auto-merge; new, uniquely named
-          systems above {Math.round(svc.settings.autoPromoteThreshold * 100)}% auto-promote;
-          anything below {Math.round(svc.settings.autoDiscardThreshold * 100)}% is auto-discarded.
-          If the AI provider is unreachable, ingestion falls back to the built-in heuristic engine
-          and the candidate is marked degraded.
+          {Math.round(svc.settings.escalationThreshold * 100)}%, unless you tick the box above.{" "}
+          Matches above {Math.round(svc.settings.autoMergeThreshold * 100)}% auto-merge; new,
+          uniquely named systems above {Math.round(svc.settings.autoPromoteThreshold * 100)}%
+          auto-promote; anything below {Math.round(svc.settings.autoDiscardThreshold * 100)}% is
+          auto-discarded. If the AI provider is unreachable, ingestion falls back to the built-in
+          heuristic engine and the candidate is marked degraded.
         </p>
       </Panel>
       <div className="min-w-0 space-y-6">

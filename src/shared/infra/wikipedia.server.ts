@@ -161,7 +161,10 @@ async function getExtracts(
     url.searchParams.set("exintro", "1");
     url.searchParams.set("explaintext", "1");
     url.searchParams.set("exlimit", String(TITLE_BATCH));
-    url.searchParams.set("rvprop", "ids");
+    // Content too: the infobox and specification section are where the figures live
+    // (wiki-specs.ts). Parsed and dropped on the server; only the extracted specs travel on.
+    url.searchParams.set("rvprop", "ids|content");
+    url.searchParams.set("rvslots", "main");
     url.searchParams.set("redirects", "1");
     url.searchParams.set("format", "json");
     url.searchParams.set("formatversion", "2");

@@ -7,9 +7,15 @@ import type {
   SupplyComponent,
   SystemExtraction,
 } from "@/entities/drone/types";
-import type { AIProviderSettings, BriefingSummarizer, IntelExtractor } from "@/shared/contracts/ai";
+import {
+  ProviderOutageError,
+  type AIProviderSettings,
+  type BriefingSummarizer,
+  type IntelExtractor,
+} from "@/shared/contracts/ai";
 import { chatCompletion } from "./ai-proxy.functions";
-import { chatCompletionOnce, type ChatTransport } from "./ai-proxy.server";
+import type { ChatResult, ChatTransport } from "./ai-proxy.server";
+import { parseModelJson } from "./model-json";
 import {
   AIExtractionSchema,
   EXTRACTION_PROMPT_VERSION,
@@ -19,6 +25,11 @@ import { mentions } from "./heuristic-ai";
 import extractionPrompt from "@/shared/contracts/extraction-prompt.json";
 
 const EXTRACT_SYS = extractionPrompt.system;
+
+/** A failed call as an exception, typed so a queue can tell a provider outage from a bad post. */
+function failure(r: Extract<ChatResult, { ok: false }>): Error {
+  return r.outage ? new ProviderOutageError(r.error) : new Error(r.error);
+}
 
 export class OpenAICompatibleExtractor implements IntelExtractor {
   readonly label: string;
@@ -66,8 +77,9 @@ export class OpenAICompatibleExtractor implements IntelExtractor {
       json: true,
       tier: this.tier === 1 ? "tier1" : "tier2",
     });
-    if (!r.ok) throw new Error(r.error);
-    const decoded: unknown = JSON.parse(r.content.replace(/^```json|```$/g, "").trim());
+    if (!r.ok) throw failure(r);
+    const decoded = parseModelJson(r.content);
+    if (!decoded) throw new Error("Invalid extraction JSON: no JSON object in the reply");
     const parsed = AIExtractionSchema.safeParse(decoded);
     if (!parsed.success)
       throw new Error(
@@ -133,7 +145,7 @@ export class OpenAICompatibleSummarizer implements BriefingSummarizer {
       prompt: context,
       tier: "tier2",
     });
-    if (!r.ok) throw new Error(r.error);
+    if (!r.ok) throw failure(r);
     return r.content;
   }
 }

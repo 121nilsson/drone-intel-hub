@@ -19,11 +19,27 @@ export interface AIProvider {
   apiKeyEnv: string;
   /** Default model for this provider */
   defaultModel: string;
+  /**
+   * Model this provider serves for tier 1 (screening), when it is not the configured model for
+   * the first call and the chain has fallen through to it.
+   *
+   * Unset is normal and correct: `getProviderModel` then falls back to `defaultModel`. Set it
+   * only when a provider needs a *different* model per tier, which is the usual case for a cheap
+   * screening model on one provider and a reasoning model on another.
+   */
+  tier1Model?: string;
+  /** Tier 2 (reasoning) counterpart of `tier1Model`. Same fallback rule. */
+  tier2Model?: string;
+  /** Dedicated translation model, when the provider has one. Unset: its tier-1 model translates. */
+  translateModel?: string;
   /** Priority (lower = tried first) */
   priority: number;
   /** Whether this provider is enabled */
   enabled: boolean;
 }
+
+/** Which tier a call belongs to, used to pick each provider's model. */
+export type TierName = "tier1" | "tier2";
 
 /** Tier configuration with primary and fallback providers */
 export interface TierConfig {
@@ -47,9 +63,10 @@ export interface MultiProviderConfig {
 export const BUILTIN_PROVIDERS: AIProvider[] = [
   {
     name: "nvidia",
-    baseUrl: "https://api.nvidia.com/v1",
+    baseUrl: "https://integrate.api.nvidia.com/v1",
     apiKeyEnv: "NVIDIA_API_KEY",
-    defaultModel: "meta/llama-3.1-8b-instruct",
+    defaultModel: "nvidia/nemotron-3-super-120b-a12b",
+    translateModel: "nvidia/riva-translate-4b-instruct-v2",
     priority: 10,
     enabled: true,
   },
@@ -57,7 +74,7 @@ export const BUILTIN_PROVIDERS: AIProvider[] = [
     name: "groq",
     baseUrl: "https://api.groq.com/openai/v1",
     apiKeyEnv: "GROQ_API_KEY",
-    defaultModel: "mixtral-8x7b-32768",
+    defaultModel: "openai/gpt-oss-20b",
     priority: 20,
     enabled: true,
   },
@@ -73,7 +90,7 @@ export const BUILTIN_PROVIDERS: AIProvider[] = [
     name: "mistral",
     baseUrl: "https://api.mistral.ai/v1",
     apiKeyEnv: "MISTRAL_API_KEY",
-    defaultModel: "mistral-small",
+    defaultModel: "ministral-14b-2512",
     priority: 40,
     enabled: true,
   },
@@ -116,6 +133,42 @@ export function getProviderBaseUrl(provider: AIProvider): string {
 }
 
 /**
+ * The model this provider should serve for a given tier.
+ *
+ * This is what makes a fallback chain meaningful. A model id is namespaced to one provider's
+ * catalogue - `nvidia/nemotron-3-super-120b-a12b` does not exist on Groq, and `openai/gpt-oss-20b`
+ * does not exist on NVIDIA - so replaying the failing call's model against the next provider is a
+ * request that cannot succeed. Instead each provider is asked for its own model for that tier.
+ *
+ * Resolution order, most specific first:
+ *   1. `${NAME}_TIER1_MODEL` / `${NAME}_TIER2_MODEL` in the environment, so an operator can point
+ *      at a model the build does not know about without a code change.
+ *   2. `tier1Model` / `tier2Model` on the provider entry.
+ *   3. `defaultModel` - the "if none are explicitly set" case, and the right answer for most
+ *      providers, since most serve one model well enough for both tiers.
+ *
+ * Passing no tier returns `defaultModel`: an untiered call has nothing to specialise on.
+ */
+export function getProviderModel(provider: AIProvider, tier?: TierName): string {
+  const override = tier
+    ? process.env[`${provider.name.toUpperCase()}_${tier.toUpperCase()}_MODEL`]
+    : undefined;
+  if (override?.trim()) return override.trim();
+  const explicit =
+    tier === "tier1" ? provider.tier1Model : tier === "tier2" ? provider.tier2Model : undefined;
+  return explicit?.trim() || provider.defaultModel;
+}
+
+/**
+ * The model this provider translates with: `${NAME}_TRANSLATE_MODEL`, then the provider's own
+ * translation model, then its tier-1 model - any instruct model can translate a post.
+ */
+export function getProviderTranslateModel(provider: AIProvider): string {
+  const override = process.env[`${provider.name.toUpperCase()}_TRANSLATE_MODEL`]?.trim();
+  return override || provider.translateModel || getProviderModel(provider, "tier1");
+}
+
+/**
  * Get all providers that have valid API keys configured
  */
 export function getAvailableProviders(): AIProvider[] {
@@ -130,12 +183,12 @@ export const DEFAULT_TIER_CONFIG: MultiProviderConfig = {
   tier1: {
     tier: "tier1",
     primary: "groq",
-    fallbacks: ["nvidia", "openrouter"],
+    fallbacks: ["openrouter", "nvidia"],
   },
   tier2: {
     tier: "tier2",
-    primary: "nvidia",
-    fallbacks: ["groq", "openrouter"],
+    primary: "groq",
+    fallbacks: ["openrouter", "nvidia"],
   },
 };
 
@@ -272,14 +325,14 @@ export function getNextProvider(exclude?: AIProvider[]): AIProvider | undefined 
 
   switch (strategy) {
     case "round-robin": {
-      // Simple round-robin: just cycle through available providers
-      const current = available[roundRobinIndex % available.length];
+      // Cycle through the providers that are not excluded. Filtering first, rather than
+      // recursing past excluded ones, cannot loop forever when every provider is excluded.
+      const candidates = exclude
+        ? available.filter((p) => !exclude.some((e) => e.name === p.name))
+        : available;
+      if (candidates.length === 0) return undefined;
+      const current = candidates[roundRobinIndex % candidates.length];
       roundRobinIndex++;
-
-      // Skip excluded providers
-      if (exclude && exclude.some((p) => p.name === current.name)) {
-        return getNextProvider([...exclude, current]);
-      }
       return current;
     }
 

@@ -162,6 +162,8 @@ export function SourcesPage() {
       autoPromoteThreshold: sv.settings.autoPromoteThreshold,
       autoDiscardThreshold: sv.settings.autoDiscardThreshold,
       heuristicFirst: sv.settings.heuristicFirst,
+      // Same as the cron task: an outage leaves posts pending rather than final and heuristic-only.
+      deferOnOutage: true,
     };
     try {
       const p = await processPending(sv.dispatches, deps, 20, {

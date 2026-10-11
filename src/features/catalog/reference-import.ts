@@ -1,4 +1,6 @@
-import type { Drone, DroneReference, ReferenceCard } from "@/entities/drone/types";
+import type { Drone, DroneReference, Extraction, ReferenceCard } from "@/entities/drone/types";
+import { normalizeExtraction } from "@/entities/normalization/apply";
+import { attributeSemantic, mergeSpecs } from "@/features/dynamic-specs/spec-engine";
 import { isQid, referenceKey } from "@/shared/infra/wikipedia";
 
 export interface ApplyReferenceReport {
@@ -6,14 +8,20 @@ export interface ApplyReferenceReport {
   enriched: number;
   linked: number;
   skipped: number;
+  /** Spec claims added from article infoboxes and Wikidata quantities. */
+  specClaims: number;
   /** Drones the caller should upsert. Unchanged cards are absent. */
   changed: Drone[];
 }
 
 /**
- * Fills identity from reference cards. An existing summary, operator list, spec, RF link,
- * component, or propulsion value is left as it is. Two Wikidata items that name one catalog
- * card share that card: the second id is stored on `alsoIds` and the card is not duplicated.
+ * Fills identity from reference cards. An existing summary, operator list, RF link, component,
+ * or propulsion value is left as it is. Two Wikidata items that name one catalog card share that
+ * card: the second id is stored on `alsoIds` and the card is not duplicated.
+ *
+ * Card specs are added as claims sourced to the article, never as replacements: a Wikipedia
+ * figure is one more source beside the reports already on the dossier, and consensus() weighs it
+ * like any other.
  */
 export function applyReference(
   catalog: readonly Drone[],
@@ -22,7 +30,14 @@ export function applyReference(
 ): ApplyReferenceReport {
   const working = catalog.map((d) => d);
   const changed = new Map<string, Drone>();
-  const report = { created: 0, enriched: 0, linked: 0, skipped: 0, changed: [] as Drone[] };
+  const report = {
+    created: 0,
+    enriched: 0,
+    linked: 0,
+    skipped: 0,
+    specClaims: 0,
+    changed: [] as Drone[],
+  };
 
   for (const card of cards) {
     if (!isQid(card.wikidataId) || !card.name.trim()) {
@@ -31,19 +46,21 @@ export function applyReference(
     }
     const hit = find(working, card);
     if (!hit) {
-      const drone = createDrone(card, freshId(card, working), now);
+      const drone = withReferenceSpecs(createDrone(card, freshId(card, working), now), card, now);
       working.push(drone);
       changed.set(drone.id, drone);
       report.created++;
+      report.specClaims += claimCount(drone);
       continue;
     }
     const mode = attachMode(hit.drone, card);
-    const next = applyOne(hit.drone, card, now, mode);
+    const next = withReferenceSpecs(applyOne(hit.drone, card, now, mode), card, now);
     if (sameIdentity(hit.drone, next)) {
       report.skipped++;
       continue;
     }
     working[hit.index] = next;
+    report.specClaims += claimCount(next) - claimCount(hit.drone);
     changed.set(next.id, next);
     const already =
       hit.drone.reference?.wikidataId === card.wikidataId ||
@@ -179,6 +196,7 @@ function sameIdentity(prev: Drone, next: Drone): boolean {
     a.license === b.license;
   return (
     refSame &&
+    claimCount(prev) === claimCount(next) &&
     prev.summary === next.summary &&
     (prev.cyrillic ?? "") === (next.cyrillic ?? "") &&
     (prev.manufacturer ?? "") === (next.manufacturer ?? "") &&
@@ -186,6 +204,50 @@ function sameIdentity(prev: Drone, next: Drone): boolean {
     prev.operators.join("\0") === next.operators.join("\0") &&
     prev.aliases.join("\0") === next.aliases.join("\0")
   );
+}
+
+function claimCount(d: Drone): number {
+  return d.specs.reduce((n, s) => n + s.claims.length, 0);
+}
+
+/**
+ * Card figures as spec claims sourced to the article. A claim already recorded from the same
+ * article with the same value is not added again, so re-running the import is idempotent; a
+ * newer revision with a changed figure adds a claim beside the old one rather than erasing it.
+ */
+function withReferenceSpecs(drone: Drone, card: ReferenceCard, now: string): Drone {
+  if (!card.specs?.length) return drone;
+  const wrapper: Extraction = {
+    aliases: [],
+    operators: [],
+    specs: card.specs,
+    rfBands: [],
+    confidence: 1,
+    rationale: "",
+  };
+  const specs = normalizeExtraction(wrapper).extraction.specs.filter(
+    (s) =>
+      !drone.specs.some(
+        (a) =>
+          attributeSemantic(a) === attributeSemantic(s) &&
+          a.claims.some((c) => c.source === card.url && String(c.value) === String(s.value)),
+      ),
+  );
+  if (!specs.length) return drone;
+  const before = new Set(drone.specs.map(attributeSemantic));
+  const merged = mergeSpecs(drone, specs, card.url, {
+    extractionEngine: "reference",
+    // Structured infobox data, but still a secondary source: below a confident first-hand report.
+    extractionConfidence: 0.8,
+  });
+  return {
+    ...merged,
+    // Attributes first seen here are reference data, not something a model discovered.
+    specs: merged.specs.map((s) =>
+      before.has(attributeSemantic(s)) ? s : { ...s, discoveredBy: "seed" as const },
+    ),
+    updatedAt: now,
+  };
 }
 
 function createDrone(card: ReferenceCard, id: string, now: string): Drone {

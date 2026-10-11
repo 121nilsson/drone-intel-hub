@@ -1,4 +1,5 @@
-import type { Domain, ReferenceCard } from "@/entities/drone/types";
+import type { Domain, ExtractedSpec, ReferenceCard } from "@/entities/drone/types";
+import { specsFromWikidataClaims, specsFromWikitext } from "./wiki-specs";
 
 /**
  * Pinned vehicle classes. A single query that unions all five property paths times out on the
@@ -280,6 +281,7 @@ function cardFromEntity(
     ? wikiUrl(sitelink.lang, sitelink.title)
     : `https://www.wikidata.org/wiki/${qid}`;
   const manufacturer = manufacturerOf(entity, related);
+  const specs = referenceSpecs(extract?.wikitext, entity.claims);
   return {
     wikidataId: qid,
     name: named.name.slice(0, 200),
@@ -294,7 +296,15 @@ function cardFromEntity(
     title,
     revisionId: extract?.revid ?? 0,
     url,
+    ...(specs.length ? { specs } : {}),
   };
+}
+
+/** The article's figures first; Wikidata fills only the keys the article does not give. */
+function referenceSpecs(wikitext: string | undefined, claims: unknown): ExtractedSpec[] {
+  const fromArticle = wikitext ? specsFromWikitext(wikitext) : [];
+  const have = new Set(fromArticle.map((s) => s.key));
+  return [...fromArticle, ...specsFromWikidataClaims(claims).filter((s) => !have.has(s.key))];
 }
 
 function isCategory(name: string, entity: RawEntity): boolean {
@@ -426,6 +436,7 @@ interface WikiExtract {
   extract: string;
   revid: number;
   title: string;
+  wikitext?: string;
 }
 
 function claimIds(entity: RawEntity, prop: string): string[] {
@@ -484,11 +495,15 @@ function indexExtracts(payload: unknown): Map<string, WikiExtract> {
     const title = typeof row["title"] === "string" ? row["title"] : "";
     if (!title) continue;
     const revisions = Array.isArray(row["revisions"]) ? row["revisions"] : [];
-    const revid = asRecord(revisions[0])?.["revid"];
+    const revision = asRecord(revisions[0]);
+    const revid = revision?.["revid"];
+    // formatversion=2 with rvslots puts the text under slots.main.content.
+    const content = asRecord(asRecord(revision?.["slots"])?.["main"])?.["content"];
     map.set(title, {
       title,
       extract: typeof row["extract"] === "string" ? row["extract"] : "",
       revid: typeof revid === "number" ? revid : 0,
+      ...(typeof content === "string" ? { wikitext: content } : {}),
     });
   }
   const hop = new Map<string, string>();

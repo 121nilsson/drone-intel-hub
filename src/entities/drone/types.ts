@@ -121,6 +121,11 @@ export interface ReferenceCard {
   title: string;
   revisionId: number;
   url: string;
+  /**
+   * Figures from the article's infobox or specification section, plus Wikidata quantities the
+   * article lacks. Each carries the template line it was read from as evidence.
+   */
+  specs?: ExtractedSpec[];
 }
 
 export interface Drone {

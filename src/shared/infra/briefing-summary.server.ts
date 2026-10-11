@@ -66,17 +66,16 @@ export async function putSharedBriefingSummary(
 }
 
 async function summarizeOnServer(context: string): Promise<string> {
-  const env = readProviderEnvConfig();
-  const apiKey = process.env["NVIDIA_API_KEY"]?.trim();
-  if (!env.hasKey || !apiKey) {
-    return `Automated digest (local engine — set NVIDIA_API_KEY on the server for narrative analysis).\n\n${context}`;
+  // Async: reading the provider table is a dynamic import, so it is awaited rather than
+  // inspected synchronously.
+  const env = await readProviderEnvConfig();
+  if (!env.hasKey) {
+    return `Automated digest (local engine — set a provider key such as GROQ_API_KEY or NVIDIA_API_KEY on the server for narrative analysis).\n\n${context}`;
   }
-  const model = env.tier2Model ?? DEFAULT_SETTINGS.tier2Model;
-  const baseUrl = env.baseUrl ?? DEFAULT_SETTINGS.baseUrl;
+  // No key or URL here: the transport resolves both per provider, so the summary falls through
+  // the same chain as extraction instead of being pinned to one provider's credentials.
   const r = await chatCompletionOnce({
-    baseUrl,
-    apiKey,
-    model,
+    model: env.tier2Model ?? DEFAULT_SETTINGS.tier2Model,
     json: false,
     system: SUMMARY_SYSTEM,
     prompt: context,
@@ -95,7 +94,7 @@ export async function resolveSharedBriefingSummary(
   if (hit) return hit;
   if (!dbConfigured()) return null;
 
-  const env = readProviderEnvConfig();
+  const env = await readProviderEnvConfig();
   if (!env.hasKey) return null;
 
   const summary = await summarizeOnServer(context);

@@ -7,7 +7,12 @@ import {
   useSyncExternalStore,
   type ReactNode,
 } from "react";
-import type { AIProviderSettings, BriefingSummarizer, IntelExtractor } from "@/shared/contracts/ai";
+import type {
+  AIProviderSettings,
+  BriefingSummarizer,
+  IntelExtractor,
+  ProviderEnvConfig,
+} from "@/shared/contracts/ai";
 import {
   LocalCandidateRepository,
   LocalDispatchRepository,
@@ -21,7 +26,6 @@ import type { DocumentStore } from "@/shared/contracts/store";
 import { LocalStorageStore } from "./local-store";
 import { RemoteStore } from "./remote-store";
 import { getStoreStatus } from "./store.functions";
-import type { ProviderEnvConfig } from "@/shared/contracts/ai";
 import { HeuristicExtractor, HeuristicSummarizer } from "./heuristic-ai";
 import { OpenAICompatibleExtractor, OpenAICompatibleSummarizer } from "./openai-compatible-ai";
 
@@ -44,6 +48,12 @@ interface Services {
   aiKeyFromEnv: boolean;
   /** True when any inference field is supplied by the server environment. */
   aiFromEnv: boolean;
+  /**
+   * Non-secret inference settings resolved on the server, including the multi-provider table.
+   * Null when the server could not be reached or supplied nothing, which the Settings page shows
+   * as "unknown" rather than as "no providers".
+   */
+  providerEnv: ProviderEnvConfig | null;
   tier1: IntelExtractor;
   tier2: IntelExtractor;
   /** Deterministic first pass; separate from outage fallback for explicit orchestration. */
@@ -82,7 +92,7 @@ export function ServicesProvider({ children }: { children: ReactNode }) {
       let store: DocumentStore = new LocalStorageStore();
       try {
         const status = await getStoreStatus();
-        setEnvCfg(status.provider);
+        setEnvCfg(status.provider ?? null);
         if (status.postgres) store = new RemoteStore();
       } catch {
         setEnvCfg(null);
@@ -154,6 +164,7 @@ export function ServicesProvider({ children }: { children: ReactNode }) {
       aiConfigured: remote,
       aiKeyFromEnv: envCfg?.hasKey === true,
       aiFromEnv,
+      providerEnv: envCfg,
       tier1: remote ? new OpenAICompatibleExtractor(1, resolved) : new HeuristicExtractor(1),
       tier2: remote ? new OpenAICompatibleExtractor(2, resolved) : new HeuristicExtractor(2),
       heuristic: new HeuristicExtractor(1),
