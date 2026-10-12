@@ -113,7 +113,7 @@ abstract class CachedRepository<C extends Collection> implements Subscribable {
   }
 }
 
-const LATE_SEED_IDS = ["tor-m2", "volnorez", "edm4s-skywiper"];
+const LATE_SEED_IDS = ["tor-m2", "volnorez", "edm4s-skywiper", "saab-giraffe-1x"];
 
 export class LocalDroneRepository extends CachedRepository<"drones"> implements DroneRepository {
   constructor() {
