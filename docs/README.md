@@ -4,7 +4,7 @@
 | -------- | ----------- |
 | [current-state.md](./current-state.md) | **Canonical reference** — what the app ships today (routes, storage, ingest, AI, normalization) |
 | [roadmap.md](./roadmap.md) | **Canonical forward work** — verified open items only |
-| [ideas.md](./ideas.md) | Broader improvement backlog (code, UI, UX, AI) — promote items into roadmap when ready |
+| [ideas.md](./ideas.md) | Broader backlog (code, UI, UX, AI, **ingestion**, **heuristics**) — promote into roadmap when ready |
 | [normalization.md](./normalization.md) | Design spec for the normalization engine (implementation in `src/entities/normalization/`) |
 | [sources_list.md](./sources_list.md) | Curated OSINT source ideas and platform notes |
 | [modelbenchmark.md](./modelbenchmark.md) | NVIDIA NIM benchmark notes and reproduction scripts |
