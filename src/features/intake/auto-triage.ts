@@ -8,7 +8,7 @@ import {
   promote,
   type PipelineDeps,
 } from "./pipeline";
-import { evidenceFrom, outletKey } from "./outlet-record";
+import { evidenceFrom, outletKey } from "@/entities/source/outlet-record";
 
 /**
  * Works the Queue so it does not need a person on it every day. Three rules, run after each

@@ -3,6 +3,7 @@ import {
   PIPELINE_VERSION,
   isStale,
   processPending,
+  requeueFailed,
   requeueStale,
 } from "@/features/sources/auto-ingest";
 import type { PipelineDeps } from "@/features/intake/pipeline";
@@ -207,5 +208,32 @@ describe("processPending with a re-analysis", () => {
     expect(drones[0]!.specs[0]!.claims).toHaveLength(2);
     expect(candidates.find((c) => c.id === "old-pending")!.status).toBe("pending");
     expect(rows[0]).toMatchObject({ status: "pending", attempts: 1, reanalyze: true });
+  });
+});
+
+describe("requeueFailed", () => {
+  it("returns failed posts with text to pending, resetting attempts and errors", () => {
+    const rows = [
+      post({ id: "a", status: "failed", attempts: 3, error: "timeout" }),
+      post({ id: "b", status: "failed", attempts: 2, text: "" }),
+      post({ id: "c", status: "processed" }),
+    ];
+    const { dispatches } = setup(rows as RawDispatch[], matched);
+    const n = requeueFailed(dispatches);
+    expect(n).toBe(1);
+    expect(rows[0]).toMatchObject({ status: "pending", attempts: 0, error: undefined });
+    expect(rows[1]!.status).toBe("failed");
+  });
+
+  it("only requeues the given ids when provided", () => {
+    const rows = [
+      post({ id: "a", status: "failed", attempts: 3 }),
+      post({ id: "b", status: "failed", attempts: 3 }),
+    ];
+    const { dispatches } = setup(rows as RawDispatch[], matched);
+    const n = requeueFailed(dispatches, ["a"]);
+    expect(n).toBe(1);
+    expect(rows[0]!.status).toBe("pending");
+    expect(rows[1]!.status).toBe("failed");
   });
 });

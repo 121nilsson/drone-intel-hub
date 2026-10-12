@@ -10,7 +10,7 @@ import {
   silenceNotice,
 } from "@/features/sources/source-health";
 import { AGE_OUT_MS, autoTriage } from "@/features/intake/auto-triage";
-import { MAX_WEIGHT, MIN_WEIGHT } from "@/features/intake/outlet-record";
+import { MAX_WEIGHT, MIN_WEIGHT } from "@/entities/source/outlet-record";
 import { phoneticKey } from "@/entities/drone/name-key";
 import { buildBriefing } from "@/features/briefing/briefing-data";
 import { ProviderOutageError, type Adjudicator } from "@/shared/contracts/ai";

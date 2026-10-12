@@ -6,6 +6,10 @@ import type { RawDispatch } from "@/entities/dispatch/types";
  * instead of counting heads. Two reposts of one name are not the same evidence as two outlets
  * that have both historically produced real drone reporting.
  *
+ * Lives in entities rather than a feature because both the intake feature (to weigh corroboration)
+ * and the Sources page (to show an outlet's track record) read it, and a feature may not depend on
+ * another feature's internals.
+ *
  * The key is the phonetic key of the outlet's name, because that is what a candidate's
  * "Outlet · url" source string reduces to when the outlet has to be recognised again.
  */
@@ -33,32 +37,53 @@ function outletKeyOfName(sourceName: string): string {
   return phoneticKey(sourceName.replace(/\(.*?\)/g, ""));
 }
 
+/** One outlet's row for the reliability panel and for corroboration weights. */
+export interface OutletRecord {
+  key: string;
+  /** A name seen for the outlet, for display; several feeds can share one key. */
+  name: string;
+  stored: number;
+  relevant: number;
+  /** MIN_WEIGHT..MAX_WEIGHT; neutral while the record is too thin to weigh. */
+  weight: number;
+}
+
+function recordWeight(stored: number, relevant: number): number {
+  if (stored < MIN_RECORD) return NEUTRAL_WEIGHT;
+  const share = Math.min(1, Math.max(0, relevant / stored));
+  return MIN_WEIGHT + share;
+}
+
 /**
- * Weight per outlet, from the dispatch archive. Same yield definitions as the Sources page and
- * the collection cadence, so all three read one measure. The archive is capped, so this is the
- * recent record rather than all of history - enough to separate a reporting outlet from a
- * copy-paste one.
+ * Per-outlet rows from the dispatch archive. Same yield definitions as the Sources page and the
+ * collection cadence, so all three read one measure. The archive is capped, so this is the recent
+ * record rather than all of history - enough to separate a reporting outlet from a copy-paste one.
  */
-export function outletWeights(dispatches: Iterable<RawDispatch>): Map<string, number> {
-  const record = new Map<string, { stored: number; relevant: number }>();
+export function outletRecords(dispatches: Iterable<RawDispatch>): OutletRecord[] {
+  const record = new Map<string, { name: string; stored: number; relevant: number }>();
   for (const d of dispatches) {
-    const r = record.get(d.sourceName) ?? { stored: 0, relevant: 0 };
+    const key = outletKeyOfName(d.sourceName);
+    if (!key) continue;
+    const r = record.get(key) ?? { name: d.sourceName, stored: 0, relevant: 0 };
     r.stored++;
     if (d.status === "processed" || d.outcome === "queued") r.relevant++;
-    record.set(d.sourceName, r);
+    record.set(key, r);
   }
-  const weights = new Map<string, number>();
-  for (const [name, r] of record) {
-    const key = outletKeyOfName(name);
-    if (!key) continue;
-    if (r.stored < MIN_RECORD) {
-      weights.set(key, NEUTRAL_WEIGHT);
-      continue;
-    }
-    const share = Math.min(1, Math.max(0, r.relevant / r.stored));
-    weights.set(key, MIN_WEIGHT + share);
-  }
-  return weights;
+  return [...record.entries()].map(([key, { name, stored, relevant }]) => ({
+    key,
+    name,
+    stored,
+    relevant,
+    weight: recordWeight(stored, relevant),
+  }));
+}
+
+/**
+ * Weight per outlet, from the dispatch archive (outletRecords collapsed to the map corroboration
+ * reads).
+ */
+export function outletWeights(dispatches: Iterable<RawDispatch>): Map<string, number> {
+  return new Map(outletRecords(dispatches).map((r) => [r.key, r.weight]));
 }
 
 /**

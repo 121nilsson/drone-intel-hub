@@ -3,6 +3,7 @@ import {
   HeuristicExtractor,
   detectNames,
   extractPrice,
+  extractUnitPrice,
   mentions,
   resolveSystems,
 } from "@/shared/infra/heuristic-ai";
@@ -102,6 +103,84 @@ describe("extractPrice", () => {
       max: 20000,
       currency: "USD",
     });
+  });
+
+  it("keeps a spelled-out billion instead of dropping it", () => {
+    // Regression: "$2 billion" matched "$2" and the magnitude vanished, so the Akash dossier
+    // carried a unit price of $2 from a sentence about $2 billion of contracts.
+    expect(extractPrice("costs $2 billion per unit")).toBe("$2 billion");
+    expect(extractPrice("costs $2bn each")).toBe("$2bn");
+    expect(extractPrice("costs $2b each")).toBe("$2b");
+    expect(extractPrice("2 billion USD per unit")).toBe("2 billion USD");
+  });
+});
+
+describe("extractUnitPrice", () => {
+  it("reads a per-unit price and keeps the sentence as its evidence", () => {
+    const p = extractUnitPrice("The Akash missile costs $2 million per unit, officials said.");
+    expect(p?.value).toBe("$2 million");
+    expect(p?.evidence).toContain("per unit");
+  });
+
+  it("refuses a programme total - the case that put $2 on the Akash dossier", () => {
+    expect(
+      extractUnitPrice(
+        "In fact, Armenia has emerged as India’s largest buyer of military equipment, signing defense contracts worth nearly $2 billion since 2020, according to reports. Its purchases include multiple-launch rocket systems, counter-drone systems and anti-tank missiles.",
+      ),
+    ).toBeUndefined();
+  });
+
+  it("refuses money with no price cue at all", () => {
+    expect(extractUnitPrice("the strike destroyed $3 million of equipment")).toBeUndefined();
+    expect(extractUnitPrice("operators received $5 million in funding last year")).toBeUndefined();
+  });
+
+  it("refuses a clause describing a total even when it names a price", () => {
+    expect(extractUnitPrice("the $2 billion contract was signed in March")).toBeUndefined();
+    expect(extractUnitPrice("a deal worth $30 million was announced")).toBeUndefined();
+  });
+
+  it("reads a real price in a post that also mentions totals", () => {
+    const p = extractUnitPrice(
+      "India signed a $2 billion agreement with Armenia. The Akash launcher costs about $4 million apiece.",
+    );
+    expect(p?.value).toBe("$4 million");
+    expect(p?.evidence).toContain("apiece");
+  });
+
+  it("returns undefined for a post with no money", () => {
+    expect(extractUnitPrice("a drone was seen near Kharkiv")).toBeUndefined();
+  });
+});
+
+describe("price magnitudes across languages", () => {
+  // Each case is about the magnitude surviving the parse, not about the exact word: the
+  // Ukrainian soft sign and the double-l spelling both appear in the wild, so the assertions
+  // match the word's shape rather than its bytes.
+  it("keeps an English billion", () => {
+    expect(extractPrice("costs $2 billion per unit")).toBe("$2 billion");
+  });
+
+  it("keeps a Russian billion and million", () => {
+    expect(extractPrice("цена $2 млрд")).toMatch(/^\$2 млрд$/);
+    expect(extractPrice("стоимость $2,5 млн")).toMatch(/^\$2,5 млн$/);
+  });
+
+  it("keeps a Ukrainian billion, either spelling", () => {
+    expect(extractPrice("вартість $2 мільярда")).toMatch(/^\$2 міл.+рд$/);
+  });
+
+  it("keeps a Swedish billion and million", () => {
+    // The ordering hazard this guards: a bare latin "m" would match the first letter of
+    // "miljard" and read 2 million instead of 2 billion.
+    expect(extractPrice("kostar $2 miljarder")).toBe("$2 miljarder");
+    expect(extractPrice("kostar $2 miljoner")).toBe("$2 miljoner");
+  });
+
+  it("keeps the magnitude on a real unit price with a Ukrainian price cue", () => {
+    const p = extractUnitPrice("Вартість одного комплексу становить $1,04 мільярда.");
+    expect(p?.value).toMatch(/^\$1,04 міл.+рд$/);
+    expect(p?.evidence).toContain("Вартість");
   });
 });
 

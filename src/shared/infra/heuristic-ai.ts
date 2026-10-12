@@ -131,7 +131,46 @@ export function resolveSystems(raw: string, catalog: Drone[]): DetectedSystem[] 
 }
 
 const CUR = "[$€£₽]";
-const AMT = `(\\d[\\d,. ]*\\d|\\d)\\s*(k|K|m|M|bn|million|thousand)?`;
+/**
+ * Magnitude words and suffixes, grouped by the language of the source that wrote them. They are
+ * grouped because the list grows by language - Swedish alongside Russian alongside English - and
+ * the registry is the only place a new one is added. English covers en-US and en-GB alike: both
+ * spell magnitudes the same way.
+ *
+ * Order is decided once, where the list is flattened (MAG below): longest alternative first,
+ * globally. Left to chance, a single-letter suffix eats the first letter of another language's
+ * word - "$2 miljard" would match the "m" and read as 2 million instead of 2 billion, which is
+ * the same class of silent drop that put "$2" on the Akash dossier.
+ */
+const MAGNITUDES: Record<string, string[]> = {
+  english: ["thousand", "million", "billion", "k", "K", "m", "M", "b", "bn"],
+  // Ukrainian: both spellings in the wild - the correct soft sign (міл[Ь]ярд) and the common
+  // double-l (міл[л]ярд) - so the ambiguous position is a class rather than two near-identical
+  // entries that a future reader cannot tell apart.
+  ukrainian: [
+    "міл[ьл]ярдів",
+    "міл[ьл]ярди",
+    "міл[ьл]ярд",
+    "міл[ьл]йонів",
+    "міл[ьл]йони",
+    "міл[ьл]йон",
+    "тисяч",
+    "тис",
+    "млн",
+    "млрд",
+  ],
+  russian: ["миллиардов", "миллиард", "тысяч", "тыс", "миллионов", "миллион", "млн", "млрд"],
+  // Swedish matters here because Saab and Swedish systems appear in Swedish-language sources.
+  swedish: ["miljarder", "miljard", "miljoner", "miljon", "tusen"],
+};
+
+/** The registry as one alternation, longest-first. Both price patterns read this same list. */
+const MAG = `(?:${Object.values(MAGNITUDES)
+  .flat()
+  .sort((a, b) => b.length - a.length)
+  .join("|")})`;
+
+const AMT = `(\\d[\\d,. ]*\\d|\\d)\\s*(${MAG})?`;
 export function extractPrice(raw: string): string | undefined {
   const re = new RegExp(`(${CUR})\\s?${AMT}(?:\\s*(?:-|–|—|to)\\s*${CUR}?\\s?${AMT})?`);
   const m = raw.match(re);
@@ -141,9 +180,39 @@ export function extractPrice(raw: string): string | undefined {
     return m[4] ? `${fmt(m[2]!, m[3])} - ${fmt(m[4], m[5])}` : fmt(m[2]!, m[3]);
   }
   const w = raw.match(
-    /(\d[\d,.]*)\s*(k|million|thousand)?\s*(USD|dollars|EUR|euros|rubles|roubles|UAH|hryvnia)/i,
+    new RegExp(
+      `(\\d[\\d,. ]*\\d|\\d)\\s*(${MAG})?\\s*(USD|dollars|EUR|euros|rubles|roubles|UAH|hryvnia)`,
+      "i",
+    ),
   );
   return w ? `${w[1]}${w[2] ? ` ${w[2]}` : ""} ${w[3]!.toUpperCase()}` : undefined;
+}
+
+/**
+ * Money in OSINT reporting is far more often programme value than a price tag, so a unit-cost
+ * claim needs evidence the figure is *per unit*: "signing defense contracts worth nearly $2
+ * billion since 2020" is a decade of arms sales, and reading its "2" as the price of one missile
+ * is what put "$2" on the Akash dossier. The clause must name a price (PRICE_CUE) and must not
+ * describe a total (TOTAL_CUE) - under-claiming a price only leaves the archive for an analyst,
+ * while over-claiming one writes a wrong figure into every consensus that reads it.
+ */
+const PRICE_CUE =
+  /unit\s*(?:cost|price)|per[- ]\w+|apiece|price\s*tag|priced\s+at|sells?\s+for|asking\s+price|\bcosts?\b|\bpriced\b|\bprice\b|вартість|вартості|ціна|ціні|стоимость|стоимости|цен[аеы]/i;
+const TOTAL_CUE =
+  /\bworth\b|\bcontracts?\b|\bdeals?\b|\bprogram(?:me)?s?\b|\btotal\b|\bbudget\b|\bsigned\b|\bsince\s+\d{4}|контракт|договір|договор/i;
+
+/**
+ * The clause carrying a per-unit price, with the sentence as the claim's evidence: a bare "$2"
+ * as evidence tells a reader of the dossier nothing about what it came from.
+ */
+export function extractUnitPrice(raw: string): { value: string; evidence: string } | undefined {
+  for (const clause of raw.split(/(?<=[.!?;\n])\s+/)) {
+    const value = extractPrice(clause);
+    if (!value) continue;
+    if (!PRICE_CUE.test(clause) || TOTAL_CUE.test(clause)) continue;
+    return { value, evidence: clause.trim().slice(0, 300) };
+  }
+  return undefined;
 }
 
 interface Facts {
@@ -355,8 +424,8 @@ function extractFacts(raw: string): Facts {
     });
   }
 
-  const price = extractPrice(raw);
-  if (price) add("unit_cost", "Unit Cost / Price", price, undefined, price);
+  const priced = extractUnitPrice(raw);
+  if (priced) add("unit_cost", "Unit Cost / Price", priced.value, undefined, priced.evidence);
   return { specs, payloads, sensors, components, guidance: [...new Set(guidance)] };
 }
 

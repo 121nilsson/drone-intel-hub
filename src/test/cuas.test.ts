@@ -22,8 +22,12 @@ describe("counter-drone ingestion and normalization", () => {
     expect(normalizeQuantity("50 Вт")?.canonicalUnit).toBe("W");
   });
   it("resolves C-UAS installations", () => {
-    expect(resolveTerm("Tracked SAM", "installation", SEEDED_TERMS).canonicalId).toBe("tracked-sam");
-    expect(resolveTerm("anti-drone gun", "installation", SEEDED_TERMS).canonicalId).toBe("handheld-gun");
+    expect(resolveTerm("Tracked SAM", "installation", SEEDED_TERMS).canonicalId).toBe(
+      "tracked-sam",
+    );
+    expect(resolveTerm("anti-drone gun", "installation", SEEDED_TERMS).canonicalId).toBe(
+      "handheld-gun",
+    );
   });
   it("Tor-M2 can engage a Geran-2", () => {
     const rows = kineticEnvelope(get("geran-2"), get("tor-m2"));

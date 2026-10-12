@@ -139,9 +139,7 @@ export function SpectrumPage() {
                   </span>
                 </div>
                 <p className="font-mono text-sm text-foreground">
-                  {x.link.freqMHz
-                    ? `${x.link.freqMHz[0]}–${x.link.freqMHz[1]} MHz`
-                    : x.link.label}
+                  {x.link.freqMHz ? `${x.link.freqMHz[0]}–${x.link.freqMHz[1]} MHz` : x.link.label}
                 </p>
                 <p className="text-xs text-muted-foreground">
                   {x.exposure === "jammed"

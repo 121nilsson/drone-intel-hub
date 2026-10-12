@@ -6,7 +6,7 @@ import type { DispatchStatus } from "@/entities/dispatch/types";
 import { getSyncState, type SyncState } from "@/shared/infra/source-sync.functions";
 import { translateText } from "@/shared/infra/ai-proxy.functions";
 import { Btn, Panel, Tag } from "@/shared/ui/primitives";
-import { formatProviderError } from "@/features/sources/auto-ingest";
+import { formatProviderError, requeueFailed } from "@/features/sources/auto-ingest";
 
 const STATUSES = ["all", "pending", "processed", "irrelevant", "failed", "duplicate"] as const;
 const field =
@@ -30,6 +30,49 @@ function ExpandableText({ text }: { text: string }) {
         >
           {expanded ? "Show less" : "Show more"}
         </button>
+      )}
+    </div>
+  );
+}
+
+import type { RawDispatch } from "@/entities/dispatch/types";
+
+function AnalysisDetail({ d }: { d: RawDispatch }) {
+  const [open, setOpen] = useState(false);
+  const items: { k: string; v: string }[] = [];
+  if (d.analysis) {
+    const a = d.analysis;
+    if (a.engine) items.push({ k: "engine", v: String(a.engine) });
+    if (a.model) items.push({ k: "model", v: String(a.model) });
+    if (a.promptVersion) items.push({ k: "prompt", v: String(a.promptVersion) });
+    if (a.schemaVersion !== undefined) items.push({ k: "schema", v: String(a.schemaVersion) });
+    if (a.analyzedAt) items.push({ k: "analyzedAt", v: String(a.analyzedAt) });
+    if (a.escalationReasons?.length)
+      items.push({ k: "escalation", v: a.escalationReasons.join(", ") });
+  }
+  if (d.attempts !== undefined) items.push({ k: "attempts", v: String(d.attempts) });
+  if (d.pipelineVersion) items.push({ k: "pipeline", v: String(d.pipelineVersion) });
+  if (d.outcome) items.push({ k: "outcome", v: String(d.outcome) });
+  if (d.error) items.push({ k: "error", v: String(d.error) });
+  if (items.length === 0) return null;
+  return (
+    <div className="mt-2 min-w-0">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="py-1 font-mono text-xs text-muted-foreground hover:text-primary"
+      >
+        {open ? "Hide analysis" : "Show analysis"}
+      </button>
+      {open && (
+        <div className="mt-1 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 border-l-2 border-primary/30 pl-3 font-mono text-[11px] text-muted-foreground">
+          {items.map((it) => (
+            <div key={it.k} className="contents">
+              <div>{it.k}:</div>
+              <div className="break-all">{it.v}</div>
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );
@@ -261,8 +304,14 @@ export function DispatchesPage({ initialQuery = "" }: { initialQuery?: string } 
                   {formatProviderError(d.error)}
                 </p>
               )}
+              <AnalysisDetail d={d} />
               <div className="mt-3 flex flex-wrap items-center gap-3">
                 {d.text && <TranslateButton text={d.text} model={svc.settings.translateModel} />}
+                {d.status === "failed" && d.text && (
+                  <Btn variant="ghost" onClick={() => requeueFailed(svc.dispatches, [d.id])}>
+                    Retry
+                  </Btn>
+                )}
                 <a
                   href={d.url}
                   target="_blank"

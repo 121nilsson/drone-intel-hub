@@ -114,6 +114,22 @@ describe("fetchOne", () => {
     expect(r.posts[0]?.url).toBe("https://t.me/chan/12");
   });
 
+  it("keeps Cyrillic-only Telegram posts even without English drone terms (language-fair gate)", async () => {
+    const html = `<div class="tgme_widget_message_wrap" data-post="chan/15">
+        <div class="tgme_widget_message_text">Ворог застосував дрон-камікадзе під прикриттям густого туману в районі передової лінії оборони нашого підрозділу</div>
+        <time datetime="2026-10-06T09:00:00+00:00"></time>
+      </div>`;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => ok(html)),
+    );
+    const r = await fetchOne({ platform: "Telegram", handle: "@chan" });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.posts).toHaveLength(1);
+    expect(r.posts[0]?.id).toBe("tg:chan/15");
+  });
+
   it("surfaces a non-OK status as an error", async () => {
     vi.stubGlobal(
       "fetch",

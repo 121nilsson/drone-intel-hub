@@ -16,7 +16,7 @@ export function CountryBadge({
   showCode?: boolean;
   className?: string;
 }) {
-  let iso = code.trim().toUpperCase();
+  const iso = code.trim().toUpperCase();
   if (code === "??") code = "xx";
   const fi = flagIconClass(code);
 

@@ -65,13 +65,10 @@ function parseTelegram(html: string, chan: string): FetchedPost[] {
     let text = decode(txt);
     text = filter(text);
     if (text.length < 20) continue;
-    // Additional drone-specific filter for Telegram
-    if (
-      !/\b(drone|uav|fpv|ugv|usv|ew|rf|mhz|ghz|shahed|geran|lancet|sting|bayraktar|kargu|warmate|switchblade|jammer|crpa|gnss|gps)\b/i.test(
-        text,
-      )
-    )
-      continue;
+    // Language bias removed: the stage-2 DRONE_HINT gate (Cyrillic-aware) decides relevance;
+    // this fetch-time English-only filter silently discarded Ukrainian-language posts. See prior
+    // measurement: @DeepStateUA and @ssternenko collected zero due to this gate. The downstream
+    // relevance gate remains the single source of truth, so Telegram posts stay language-fair.
     out.push({ id: `tg:${post}`, text, url: `https://t.me/${post}`, date });
   }
   return out.reverse().slice(0, 20);

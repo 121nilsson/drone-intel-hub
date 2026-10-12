@@ -96,7 +96,10 @@ export const INSTALLATION_TERMS: TaxonomyTerm[] = [
   term("installation", "vtol", "VTOL", ["vertical takeoff"]),
   term("installation", "tiltrotor", "Tiltrotor", ["tilt-rotor"], "vtol"),
   term("installation", "helicopter", "Helicopter", ["single-rotor"]),
-  term("installation", "tracked-sam", "Tracked SAM", ["tracked air defence", "tracked air defense"]),
+  term("installation", "tracked-sam", "Tracked SAM", [
+    "tracked air defence",
+    "tracked air defense",
+  ]),
   term("installation", "wheeled-sam", "Wheeled SAM", ["wheeled air defence", "truck-mounted sam"]),
   term("installation", "vehicle-dome", "Vehicle dome", ["jammer dome", "vehicle-mounted jammer"]),
   term("installation", "handheld-gun", "Handheld gun", ["anti-drone gun", "anti-drone rifle"]),

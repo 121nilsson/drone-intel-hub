@@ -14,7 +14,7 @@ import {
   openAIContradictionAdjudicator,
 } from "./openai-compatible-ai";
 import { autoTriage } from "@/features/intake/auto-triage";
-import { outletWeights } from "@/features/intake/outlet-record";
+import { outletWeights } from "@/entities/source/outlet-record";
 import { adjudicateContradictions } from "@/features/intake/contradictions";
 import { dbConfigured } from "./postgres/db.server";
 import { PostgresStore } from "./postgres/postgres-store.server";

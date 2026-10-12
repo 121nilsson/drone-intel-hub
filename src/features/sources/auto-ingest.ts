@@ -681,6 +681,22 @@ export function requeueStale(dispatches: DispatchRepository, limit: number): num
 }
 
 /**
+ * Hand a failed post back to the queue: reset its attempt budget and error so a transient
+ * failure (a timeout, a provider that has since recovered) can be retried without a pipeline
+ * version bump. Only posts that still carry their text, since a stub has nothing to analyse.
+ */
+export function requeueFailed(dispatches: DispatchRepository, ids?: string[]): number {
+  const set = ids && ids.length ? new Set(ids) : null;
+  const failed = dispatches
+    .list()
+    .filter((d) => d.status === "failed" && !!d.text.trim() && (!set || set.has(d.id)))
+    .sort((a, b) => (b.publishedAt ?? b.createdAt).localeCompare(a.publishedAt ?? a.createdAt));
+  for (const d of failed)
+    dispatches.update(d.id, { status: "pending", attempts: 0, error: undefined });
+  return failed.length;
+}
+
+/**
  * Remove the spec claims a post contributed, from every catalog entry. A claim is the post's when
  * it carries the post's id (the merge paths) or its source line (promotion, which predates ids).
  * Returns a function that puts the entries back, for when the re-run fails.

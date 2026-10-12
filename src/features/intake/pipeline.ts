@@ -18,7 +18,7 @@ import { attributeSemantic, mergeSpecs } from "@/features/dynamic-specs/spec-eng
 import { counterpartIdsFor, linkCounterparts } from "@/entities/drone/relations";
 import { chatCompletionOnce } from "@/shared/infra/ai-proxy.server";
 import { combineExtractions, needsDeepAI, needsFastAI } from "./extraction-gates";
-import { outletKey } from "./outlet-record";
+import { outletKey } from "@/entities/source/outlet-record";
 import { linkVariant, mergeDroneIntelligence } from "@/entities/drone/merge-intelligence";
 import { ProcurementExtractionSchema } from "@/shared/contracts/extraction.schema";
 import { phoneticKey } from "@/entities/drone/name-key";

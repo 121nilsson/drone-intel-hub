@@ -6,6 +6,7 @@ import { PLATFORMS, type MonitoredSource, type SourcePlatform } from "@/entities
 import { sampleDispatch } from "@/entities/source/seed";
 import { useDispatches, useServices, useSources } from "@/shared/infra/services";
 import type { DispatchStatus } from "@/entities/dispatch/types";
+import { outletRecords } from "@/entities/source/outlet-record";
 import { fetchSourcePosts } from "@/shared/infra/source-fetch.functions";
 import { FETCH_CONCURRENCY, sourceHost } from "@/shared/infra/fetch-posts";
 import { mapWithConcurrency } from "@/shared/infra/pool";
@@ -33,6 +34,7 @@ import {
   progressFromItem,
   REANALYSIS_BATCH,
   requeueStale,
+  requeueFailed,
   WORK_STALE_MS,
   type WorkProgress,
 } from "./auto-ingest";
@@ -568,6 +570,54 @@ export function SourcesPage() {
         </TabsContent>
 
         <TabsContent value="collection" className="mt-4 space-y-4">
+          <Panel title="Outlet reliability">
+            {(() => {
+              const rows = outletRecords(dispatches)
+                .filter((r) => r.stored >= 1)
+                .sort((a, b) => {
+                  if (Math.abs(b.weight - a.weight) > 0.001) return a.weight - b.weight;
+                  return b.stored - a.stored;
+                })
+                .slice(0, 12);
+              if (rows.length === 0) {
+                return (
+                  <p className="text-sm text-muted-foreground">
+                    Not enough dispatch history yet. Reliability appears once outlets have stored
+                    posts.
+                  </p>
+                );
+              }
+              return (
+                <div className="space-y-1 font-mono text-xs">
+                  {rows.map((r) => {
+                    const ratio = r.stored === 0 ? 0 : r.relevant / r.stored;
+                    const tone =
+                      r.weight < 1
+                        ? "text-destructive"
+                        : r.weight > 1
+                          ? "text-primary"
+                          : "text-muted-foreground";
+                    return (
+                      <div key={r.key} className="flex items-center justify-between">
+                        <div className="min-w-0">
+                          <div className="truncate">{r.name}</div>
+                          <div className="text-[11px] text-muted-foreground">
+                            {r.stored} stored · {r.relevant} relevant · {Math.round(ratio * 100)}%
+                            signal
+                          </div>
+                        </div>
+                        <div className={`text-[11px] ${tone}`}>{r.weight.toFixed(2)}</div>
+                      </div>
+                    );
+                  })}
+                  <p className="mt-2 text-[11px] text-muted-foreground">
+                    Weight 0.5–1.5 (neutral &lt; 5 posts). 100% relevant → 1.5, 0% → 0.5.
+                  </p>
+                </div>
+              );
+            })()}
+          </Panel>
+
           <Panel title="Collection & analysis">
             <div className="mb-3 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center sm:gap-3">
               <Btn className="justify-center py-2.5" onClick={syncAll} disabled={!!busy}>
@@ -628,6 +678,20 @@ export function SourcesPage() {
                   }}
                 >
                   {`Re-analyse older (${stale})`}
+                </Btn>
+              )}
+              {counts.failed > 0 && (
+                <Btn
+                  variant="ghost"
+                  className="justify-center py-2.5"
+                  disabled={!!busy}
+                  title="Failed posts with text can be retried (transient provider failures reset the attempt budget)."
+                  onClick={() => {
+                    const n = requeueFailed(svc.dispatches);
+                    say(`Queued ${n} failed post${n === 1 ? "" : "s"} for retry.`);
+                  }}
+                >
+                  {`Retry failed (${counts.failed})`}
                 </Btn>
               )}
               <Btn variant="ghost" className="justify-center py-2.5" onClick={() => setTab("add")}>

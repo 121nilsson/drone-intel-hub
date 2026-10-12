@@ -6,8 +6,9 @@ import {
   NEUTRAL_WEIGHT,
   evidenceFrom,
   outletKey,
+  outletRecords,
   outletWeights,
-} from "@/features/intake/outlet-record";
+} from "@/entities/source/outlet-record";
 import { phoneticKey } from "@/entities/drone/name-key";
 import type { RawDispatch } from "@/entities/dispatch/types";
 

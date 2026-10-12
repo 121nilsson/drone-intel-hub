@@ -155,10 +155,22 @@ export function kineticEnvelope(target: Drone, defender: Drone): KineticCheck[] 
   if (maxSpeed !== undefined)
     out.push(
       speed === undefined
-        ? { check: "Speed", verdict: "unknown", rationale: `Limit ${maxSpeed} km/h; target speed not recorded` }
+        ? {
+            check: "Speed",
+            verdict: "unknown",
+            rationale: `Limit ${maxSpeed} km/h; target speed not recorded`,
+          }
         : speed <= maxSpeed
-          ? { check: "Speed", verdict: "in_envelope", rationale: `${speed} km/h ≤ ${maxSpeed} km/h limit` }
-          : { check: "Speed", verdict: "outside", rationale: `${speed} km/h exceeds ${maxSpeed} km/h limit` },
+          ? {
+              check: "Speed",
+              verdict: "in_envelope",
+              rationale: `${speed} km/h ≤ ${maxSpeed} km/h limit`,
+            }
+          : {
+              check: "Speed",
+              verdict: "outside",
+              rationale: `${speed} km/h exceeds ${maxSpeed} km/h limit`,
+            },
     );
   const alt =
     specValue(target, "altitude.max") ??
@@ -168,10 +180,22 @@ export function kineticEnvelope(target: Drone, defender: Drone): KineticCheck[] 
   if (ceiling !== undefined)
     out.push(
       alt === undefined
-        ? { check: "Altitude", verdict: "unknown", rationale: `Ceiling ${ceiling} km; target altitude not recorded` }
+        ? {
+            check: "Altitude",
+            verdict: "unknown",
+            rationale: `Ceiling ${ceiling} km; target altitude not recorded`,
+          }
         : alt <= ceiling
-          ? { check: "Altitude", verdict: "in_envelope", rationale: `${alt} km within ${ceiling} km ceiling` }
-          : { check: "Altitude", verdict: "outside", rationale: `${alt} km above ${ceiling} km ceiling` },
+          ? {
+              check: "Altitude",
+              verdict: "in_envelope",
+              rationale: `${alt} km within ${ceiling} km ceiling`,
+            }
+          : {
+              check: "Altitude",
+              verdict: "outside",
+              rationale: `${alt} km above ${ceiling} km ceiling`,
+            },
     );
   const reach = specValue(defender, "range.engagement");
   if (reach !== undefined)
