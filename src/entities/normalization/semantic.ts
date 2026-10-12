@@ -6,6 +6,25 @@ export function semanticKeyFor(key: string, label = ""): string {
     .replace(/[\s-]+/g, "_");
   const lab = label.trim();
 
+  // Counter-drone envelopes first: "effective range" / "target speed" must not fall into the
+  // vehicle's own range or speed.
+  if (
+    k === "engagement_range" ||
+    k === "suppression_radius" ||
+    k === "effective_range" ||
+    /engagement range|kill range|suppression radius|jamming radius|effective range/i.test(lab)
+  )
+    return "range.engagement";
+  if (k === "detection_range" || /detection range/i.test(lab)) return "range.detection";
+  if (k === "target_altitude_max" || /engagement altitude|max(?:imum)? target altitude/i.test(lab))
+    return "altitude.target_max";
+  if (k === "target_altitude_min" || /min(?:imum)? target altitude/i.test(lab))
+    return "altitude.target_min";
+  if (k === "target_speed_max" || /target speed/i.test(lab)) return "speed.target_max";
+  if (k === "jamming_power" || k === "output_power" || /jamming power|output power/i.test(lab))
+    return "power.rf";
+  if (k === "target_channels" || /target channels/i.test(lab)) return "capacity.target_channels";
+
   if (k === "fiber_spool" || k === "spool_length" || /spool/i.test(lab)) return "range.fiber_spool";
   if (
     k === "operational_range" ||
@@ -71,5 +90,6 @@ export function canonicalUnitForSemantic(semantic: string): string | undefined {
   if (semantic.startsWith("speed.")) return "km/h";
   if (semantic.startsWith("payload.") || semantic.startsWith("weight.")) return "kg";
   if (semantic.startsWith("endurance.")) return "min";
+  if (semantic.startsWith("power.")) return "W";
   return undefined;
 }

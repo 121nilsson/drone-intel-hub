@@ -11,7 +11,7 @@ import { EXTRACTION_PROMPT_VERSION } from "@/shared/contracts/extraction.schema"
 import { traceFailure, traceItem, traceLevel } from "@/shared/infra/pipeline-trace";
 
 export const DRONE_HINT =
-  /drone|uav|ugv|usv|fpv|shahed|geran|lancet|bpla|бла|бпла|дрон|квадрокоптер|ланцет|герань|шахед|мавик|молния|курьер|термит|катран|магура|баба яга|interceptor|loitering|unmanned|jammer|РЭБ|EW\b/i;
+  /drone|uav|ugv|usv|fpv|shahed|geran|lancet|bpla|бла|бпла|дрон|квадрокоптер|ланцет|герань|шахед|мавик|молния|курьер|термит|катран|магура|баба яга|interceptor|loitering|unmanned|jammer|РЭБ|EW\b|c-?uas|counter-?drone|anti-?drone|антидрон|протидрон|перехват|shorad|зрк|зрпк|pantsir|панцир|tunguska|тунгуск|gepard|гепард|volnorez|волнорез|skywiper|edm4s|stupor|ступор|harpoon-?3|гарпун|tsukorok|цукорок|bulat|булат|(?<![\p{L}])(?:tor-?m\d?|тор-?м\d?|osa-?akm|оса-?акм)(?![\p{L}])/iu;
 
 function escapeRegex(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");

@@ -5,6 +5,7 @@ export const CANONICAL_UNIT = {
   speed: "km/h",
   mass: "kg",
   duration: "min",
+  power: "W",
 } as const;
 
 export type Dimension = keyof typeof CANONICAL_UNIT;
@@ -89,6 +90,13 @@ const UNITS: UnitDef[] = [
     dimension: "mass",
     toCanonical: OZ_KG,
     pattern: /(?:oz|ounces?)(?![\p{L}\p{N}])/iu,
+  },
+  { token: "kW", dimension: "power", toCanonical: 1000, pattern: /(?:kw|кВт)(?![\p{L}\p{N}])/iu },
+  {
+    token: "W",
+    dimension: "power",
+    toCanonical: 1,
+    pattern: /(?<![/\p{L}])(?:w|watts?|вт)(?![\p{L}\p{N}])/iu,
   },
   { token: "kg", dimension: "mass", toCanonical: 1, pattern: /(?:kg|кг)(?![\p{L}\p{N}])/iu },
   { token: "g", dimension: "mass", toCanonical: 0.001, pattern: /(?:grams?|гр)(?![\p{L}\p{N}])/iu },
