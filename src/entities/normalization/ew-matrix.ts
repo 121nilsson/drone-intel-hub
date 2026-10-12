@@ -1,5 +1,6 @@
 import type { Drone, RFLink } from "@/entities/drone/types";
 import { intersectBands, linkIsFiber } from "./rf";
+import { semanticKeyFor } from "./semantic";
 
 /** Outcome of one opposing EW emitter against one of a system's links. */
 export type ThreatVerdict = "jammed" | "contested" | "safe" | "fiber_immune" | "unknown";
@@ -109,4 +110,75 @@ export function ewMatrix(target: Drone, attacker: Drone) {
         ? target.rf.map((l) => assessLink(l, emitters, antiJam))
         : [],
   };
+}
+
+/** Median numeric value of every spec on `d` whose canonical measurement is `semantic`. */
+export function specValue(d: Drone, semantic: string): number | undefined {
+  const vals: number[] = [];
+  for (const a of d.specs) {
+    if ((a.semantic ?? semanticKeyFor(a.key, a.label)) !== semantic) continue;
+    for (const c of a.claims) {
+      if (c.adjudication?.verdict === "outlier") continue;
+      const v = c.normalized?.canonicalValue ?? (typeof c.value === "number" ? c.value : undefined);
+      if (v !== undefined && Number.isFinite(v)) vals.push(v);
+    }
+  }
+  if (!vals.length) return undefined;
+  vals.sort((x, y) => x - y);
+  return vals[Math.floor(vals.length / 2)];
+}
+
+export type KineticVerdict = "in_envelope" | "outside" | "unknown";
+export interface KineticCheck {
+  check: string;
+  verdict: KineticVerdict;
+  rationale: string;
+}
+
+/** True when the system records a kinetic engagement envelope (SHORAD, interceptor). */
+export function isKineticDefender(d: Drone): boolean {
+  return (
+    specValue(d, "altitude.target_max") !== undefined ||
+    specValue(d, "speed.target_max") !== undefined
+  );
+}
+
+/**
+ * Whether `target` flies inside `defender`'s published engagement envelope.
+ * Missing data on either side gives "unknown" rather than a guess.
+ */
+export function kineticEnvelope(target: Drone, defender: Drone): KineticCheck[] {
+  if (!isKineticDefender(defender)) return [];
+  const out: KineticCheck[] = [];
+  const speed = specValue(target, "speed.max") ?? specValue(target, "speed.cruise");
+  const maxSpeed = specValue(defender, "speed.target_max");
+  if (maxSpeed !== undefined)
+    out.push(
+      speed === undefined
+        ? { check: "Speed", verdict: "unknown", rationale: `Limit ${maxSpeed} km/h; target speed not recorded` }
+        : speed <= maxSpeed
+          ? { check: "Speed", verdict: "in_envelope", rationale: `${speed} km/h ≤ ${maxSpeed} km/h limit` }
+          : { check: "Speed", verdict: "outside", rationale: `${speed} km/h exceeds ${maxSpeed} km/h limit` },
+    );
+  const alt =
+    specValue(target, "altitude.max") ??
+    specValue(target, "altitude.service_ceiling") ??
+    specValue(target, "altitude.recommended");
+  const ceiling = specValue(defender, "altitude.target_max");
+  if (ceiling !== undefined)
+    out.push(
+      alt === undefined
+        ? { check: "Altitude", verdict: "unknown", rationale: `Ceiling ${ceiling} km; target altitude not recorded` }
+        : alt <= ceiling
+          ? { check: "Altitude", verdict: "in_envelope", rationale: `${alt} km within ${ceiling} km ceiling` }
+          : { check: "Altitude", verdict: "outside", rationale: `${alt} km above ${ceiling} km ceiling` },
+    );
+  const reach = specValue(defender, "range.engagement");
+  if (reach !== undefined)
+    out.push({
+      check: "Reach",
+      verdict: "in_envelope",
+      rationale: `Engages out to ${reach} km — target must enter that radius`,
+    });
+  return out;
 }

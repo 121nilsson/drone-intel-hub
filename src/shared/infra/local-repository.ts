@@ -113,9 +113,18 @@ abstract class CachedRepository<C extends Collection> implements Subscribable {
   }
 }
 
+const LATE_SEED_IDS = ["tor-m2", "volnorez", "edm4s-skywiper"];
+
 export class LocalDroneRepository extends CachedRepository<"drones"> implements DroneRepository {
   constructor() {
     super("drones", SEED_DRONES);
+  }
+  /** Reference systems added after a store was first seeded; added once if absent. */
+  override async attach(store: DocumentStore) {
+    await super.attach(store);
+    const have = new Set(this.items.map((d) => d.id));
+    for (const d of SEED_DRONES)
+      if (LATE_SEED_IDS.includes(d.id) && !have.has(d.id)) this.upsert(d);
   }
   get(id: string) {
     return this.items.find((d) => d.id === id);
