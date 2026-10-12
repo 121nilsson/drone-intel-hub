@@ -1,7 +1,12 @@
 import { useNavigate } from "@tanstack/react-router";
 import { consensus } from "@/entities/drone/consensus";
 import { intersectBands, linkIsFiber } from "@/entities/normalization/rf";
-import { ewMatrix, type ThreatVerdict } from "@/entities/normalization/ew-matrix";
+import {
+  ewMatrix,
+  kineticEnvelope,
+  type KineticVerdict,
+  type ThreatVerdict,
+} from "@/entities/normalization/ew-matrix";
 import { type Drone } from "@/entities/drone/types";
 import { CountryBadge } from "@/shared/ui/country-badge";
 import { useDrones } from "@/shared/infra/services";
@@ -54,6 +59,37 @@ function EwColumn({ target, attacker }: { target: Drone; attacker: Drone }) {
           ))}
         </ul>
       )}
+    </div>
+  );
+}
+
+const KINETIC: Record<KineticVerdict, { label: string; cls: string }> = {
+  in_envelope: { label: "Engageable", cls: VERDICT.jammed.cls },
+  outside: { label: "Outside envelope", cls: VERDICT.safe.cls },
+  unknown: { label: "Unknown", cls: VERDICT.unknown.cls },
+};
+
+function KineticColumn({ target, defender }: { target: Drone; defender: Drone }) {
+  const rows = kineticEnvelope(target, defender);
+  if (!rows.length) return null;
+  return (
+    <div>
+      <p className="mb-2 font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
+        {target.name} vs {defender.name} kinetic envelope
+      </p>
+      <ul className="space-y-2">
+        {rows.map((r) => (
+          <li key={r.check} className={`border-l-2 p-2.5 ${KINETIC[r.verdict].cls}`}>
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-mono text-xs uppercase">{r.check}</span>
+              <span className="font-mono text-[11px] font-semibold uppercase">
+                {KINETIC[r.verdict].label}
+              </span>
+            </div>
+            <p className="text-xs text-muted-foreground">{r.rationale}</p>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
@@ -136,6 +172,8 @@ export function CounterpartsPage({ a, b }: { a?: string | undefined; b?: string 
         <div className="grid gap-6 md:grid-cols-2">
           <EwColumn target={A} attacker={B} />
           <EwColumn target={B} attacker={A} />
+          <KineticColumn target={A} defender={B} />
+          <KineticColumn target={B} defender={A} />
         </div>
       </Panel>
       <Panel title="Potential frequency overlap">
