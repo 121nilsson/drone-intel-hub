@@ -434,7 +434,8 @@ export const SEED_DRONES: Drone[] = [
     operators: ["RU"],
     propulsion: "Vehicle power",
     installation: "Vehicle dome",
-    summary: "Vehicle-mounted dome jammer fitted to tanks and APCs against FPV control and video links.",
+    summary:
+      "Vehicle-mounted dome jammer fitted to tanks and APCs against FPV control and video links.",
     specs: [s("suppression_radius", "Suppression radius", "m", [[600, "OSINT Telegram", 30]])],
     rf: [
       { role: "unknown", band: "Jammer 800–1020 MHz", freqMHz: [800, 1020], notes: "jammer" },
@@ -458,7 +459,10 @@ export const SEED_DRONES: Drone[] = [
     installation: "Handheld gun",
     summary: "Handheld directional anti-drone jammer donated in numbers to Ukraine.",
     specs: [
-      s("effective_range", "Effective range", "km", [[3, "NT Service", 200], [5, "Media", 90]]),
+      s("effective_range", "Effective range", "km", [
+        [3, "NT Service", 200],
+        [5, "Media", 90],
+      ]),
       s("weight", "Weight", "kg", [[6.5, "NT Service", 200]]),
     ],
     rf: [
@@ -474,29 +478,20 @@ export const SEED_DRONES: Drone[] = [
     createdAt: ago(10),
     updatedAt: ago(10),
   },
-  {
-    id: "saab-giraffe-1x",
-    name: "Saab Giraffe 1X",
-    aliases: ["Giraffe 1X", "G1X"],
-    domain: "Land",
-    origin: "SE",
-    manufacturer: "Saab",
-    operators: ["UA"],
-    propulsion: "Vehicle power",
-    installation: "Mast-mounted",
-    summary:
-      "Lightweight 3D AESA X-band surveillance radar with Enhanced Drone Tracker for classifying small UAVs by rotor micro-Doppler.",
-    specs: [
-      s("detection_range_small_uav", "Detection range (micro-UAV)", "km", [[4, "Saab", 200]]),
-      s("detection_range", "Instrumented range", "km", [[75, "Saab", 200]]),
-      s("elevation_coverage", "Elevation coverage", "°", [[70, "Saab", 200]]),
-      s("target_channels", "Simultaneous tracks", undefined, [[100, "Saab", 200]]),
-    ],
-    rf: [{ role: "unknown", band: "X-band radar (AESA)", freqMHz: [8500, 10000], notes: "radar" }],
-    components: [],
-    evolution: [],
-    counterpartIds: [],
-    createdAt: ago(5),
-    updatedAt: ago(5),
-  },
 ];
+
+/**
+ * Seeded systems that duplicate another entry, so SEED_DRONES must not offer them again.
+ *
+ * Adding a row to the seed list is one-directional by design (see
+ * LocalDroneRepository.addMissingDefaults), so an install that already stored a duplicate keeps
+ * it. This list is where a merge across the whole install is declared: "saab-giraffe-1x" was
+ * merged into the import-created "giraffe-1x-12ac" on 2026-10-12, after an automatic re-add of
+ * the late-seeded row undid that merge on every page load. Ids here are never re-added.
+ */
+export const RETIRED_SEED_IDS = ["saab-giraffe-1x"] as const;
+
+/** Seed rows that are still wanted, i.e. the seed minus anything retired. */
+export const ACTIVE_SEED_DRONES: Drone[] = SEED_DRONES.filter(
+  (d) => !(RETIRED_SEED_IDS as readonly string[]).includes(d.id),
+);

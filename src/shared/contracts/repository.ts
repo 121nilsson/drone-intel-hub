@@ -23,6 +23,8 @@ export interface DroneRepository {
   upsert(drone: Drone): void;
   remove(id: string): void;
   search(query: string, facets?: CatalogFacets): Drone[];
+  /** Add seed entries the catalog lacks (the catalog page's "Load missing"); retired ids are excluded. */
+  addMissingDefaults?(): number;
 }
 
 export interface CandidateRepository {

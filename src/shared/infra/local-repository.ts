@@ -1,5 +1,5 @@
 import type { Candidate, Drone } from "@/entities/drone/types";
-import { SEED_DRONES } from "@/entities/drone/seed";
+import { ACTIVE_SEED_DRONES, SEED_DRONES } from "@/entities/drone/seed";
 import { isNearDuplicate, simHash64 } from "@/entities/dispatch/simhash";
 import { canonicalUrl } from "@/entities/dispatch/url-key";
 import type { MonitoredSource } from "@/entities/source/types";
@@ -113,18 +113,9 @@ abstract class CachedRepository<C extends Collection> implements Subscribable {
   }
 }
 
-const LATE_SEED_IDS = ["tor-m2", "volnorez", "edm4s-skywiper", "saab-giraffe-1x"];
-
 export class LocalDroneRepository extends CachedRepository<"drones"> implements DroneRepository {
   constructor() {
     super("drones", SEED_DRONES);
-  }
-  /** Reference systems added after a store was first seeded; added once if absent. */
-  override async attach(store: DocumentStore) {
-    await super.attach(store);
-    const have = new Set(this.items.map((d) => d.id));
-    for (const d of SEED_DRONES)
-      if (LATE_SEED_IDS.includes(d.id) && !have.has(d.id)) this.upsert(d);
   }
   get(id: string) {
     return this.items.find((d) => d.id === id);
@@ -138,6 +129,23 @@ export class LocalDroneRepository extends CachedRepository<"drones"> implements 
   remove(id: string) {
     this.items = this.items.filter((d) => d.id !== id);
     this.drop(id);
+  }
+  /**
+   * Seed entries the catalog does not have yet, the counterpart of the Sources page's "Load
+   * default sources". Manual on purpose: an analyst who merged or deleted a seeded system
+   * decided it does not belong, and no background process may put it back - an automatic
+   * version of this once ran on every load and undid merges, resurrecting a merged-away
+   * saab-giraffe-1x every time the page was reloaded.
+   */
+  addMissingDefaults(): number {
+    const existingIds = new Set(this.items.map((d) => d.id));
+    const missing = ACTIVE_SEED_DRONES.filter((d) => !existingIds.has(d.id));
+    for (const d of missing) {
+      this.items = [...this.items, d];
+      this.save(d);
+    }
+    this.emit();
+    return missing.length;
   }
   search(query: string, f: CatalogFacets = {}) {
     const q = norm(query.trim());

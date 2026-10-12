@@ -445,6 +445,21 @@ export function CatalogPage() {
           >
             {importing ? "Importing…" : "Import reference catalog"}
           </Btn>
+          <Btn
+            type="button"
+            variant="ghost"
+            title="Adds seeded reference systems this catalog does not have. Never re-adds one an analyst merged or deleted away."
+            onClick={() => {
+              const added = repo.addMissingDefaults?.() ?? 0;
+              setImportNote(
+                added
+                  ? `Loaded ${added} missing reference ${added === 1 ? "system" : "systems"}`
+                  : "No missing reference systems",
+              );
+            }}
+          >
+            Load missing
+          </Btn>
         </div>
         {importNote && <p className="mb-3 font-mono text-xs text-muted-foreground">{importNote}</p>}
         <div className="grid gap-3 md:grid-cols-2">
