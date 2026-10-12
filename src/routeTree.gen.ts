@@ -17,6 +17,7 @@ import { Route as IntakeRouteImport } from './routes/intake'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as SourcesRouteImport } from './routes/sources'
 import { Route as SpecsRouteImport } from './routes/specs'
+import { Route as SpectrumRouteImport } from './routes/spectrum'
 import { Route as TaxonomyRouteImport } from './routes/taxonomy'
 import { Route as SystemsIdRouteImport } from './routes/systems/$id'
 
@@ -60,6 +61,11 @@ const SpecsRoute = SpecsRouteImport.update({
   path: '/specs',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SpectrumRoute = SpectrumRouteImport.update({
+  id: '/spectrum',
+  path: '/spectrum',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const TaxonomyRoute = TaxonomyRouteImport.update({
   id: '/taxonomy',
   path: '/taxonomy',
@@ -80,6 +86,7 @@ export interface FileRoutesByFullPath {
   '/settings': typeof SettingsRoute
   '/sources': typeof SourcesRoute
   '/specs': typeof SpecsRoute
+  '/spectrum': typeof SpectrumRoute
   '/taxonomy': typeof TaxonomyRoute
   '/systems/$id': typeof SystemsIdRoute
 }
@@ -92,6 +99,7 @@ export interface FileRoutesByTo {
   '/settings': typeof SettingsRoute
   '/sources': typeof SourcesRoute
   '/specs': typeof SpecsRoute
+  '/spectrum': typeof SpectrumRoute
   '/taxonomy': typeof TaxonomyRoute
   '/systems/$id': typeof SystemsIdRoute
 }
@@ -105,6 +113,7 @@ export interface FileRoutesById {
   '/settings': typeof SettingsRoute
   '/sources': typeof SourcesRoute
   '/specs': typeof SpecsRoute
+  '/spectrum': typeof SpectrumRoute
   '/taxonomy': typeof TaxonomyRoute
   '/systems/$id': typeof SystemsIdRoute
 }
@@ -119,6 +128,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/sources'
     | '/specs'
+    | '/spectrum'
     | '/taxonomy'
     | '/systems/$id'
   fileRoutesByTo: FileRoutesByTo
@@ -131,6 +141,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/sources'
     | '/specs'
+    | '/spectrum'
     | '/taxonomy'
     | '/systems/$id'
   id:
@@ -143,6 +154,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/sources'
     | '/specs'
+    | '/spectrum'
     | '/taxonomy'
     | '/systems/$id'
   fileRoutesById: FileRoutesById
@@ -156,6 +168,7 @@ export interface RootRouteChildren {
   SettingsRoute: typeof SettingsRoute
   SourcesRoute: typeof SourcesRoute
   SpecsRoute: typeof SpecsRoute
+  SpectrumRoute: typeof SpectrumRoute
   TaxonomyRoute: typeof TaxonomyRoute
   SystemsIdRoute: typeof SystemsIdRoute
 }
@@ -218,6 +231,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SpecsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/spectrum': {
+      id: '/spectrum'
+      path: '/spectrum'
+      fullPath: '/spectrum'
+      preLoaderRoute: typeof SpectrumRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/taxonomy': {
       id: '/taxonomy'
       path: '/taxonomy'
@@ -244,6 +264,7 @@ const rootRouteChildren: RootRouteChildren = {
   SettingsRoute: SettingsRoute,
   SourcesRoute: SourcesRoute,
   SpecsRoute: SpecsRoute,
+  SpectrumRoute: SpectrumRoute,
   TaxonomyRoute: TaxonomyRoute,
   SystemsIdRoute: SystemsIdRoute,
 }
