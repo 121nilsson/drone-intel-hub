@@ -1,6 +1,11 @@
 # Drone OSINT Normalization — Implementation Plan
 
-> This supersedes the first draft in [`normalization.md`](./normalization.md). It keeps the draft's
+> [!IMPORTANT]
+> **Completed / archived.** Normalization ships in `src/entities/normalization/`, Taxonomy and Spec
+> Engine UI, and migration `005_normalization.sql`. Operational detail:
+> [../current-state.md](../current-state.md). Design reference: [../normalization.md](../normalization.md).
+
+> This supersedes the first draft in [`normalization.md`](../normalization.md). It keeps the draft's
 > intent (preserve raw text, deterministic conversions, extensible taxonomies, full provenance) but
 > re-bases every file, symbol and storage decision on how this repository is actually built.
 

@@ -1,5 +1,12 @@
 # Drone OSINT Normalization Engine
 
+> [!NOTE]
+> **Status:** This file is the **design reference** (requirements and examples). The running
+> implementation lives in `src/entities/normalization/`, the Taxonomy and Spec Engine pages, and
+> migration `005_normalization.sql`. For what is shipped today see
+> [current-state.md](./current-state.md). The rollout plan is archived in
+> [archive/normalization_implementation.md](./archive/normalization_implementation.md).
+
 ## Objective
 
 Build a robust normalization and taxonomy layer for the drone OSINT platform.

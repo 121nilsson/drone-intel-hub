@@ -1,5 +1,10 @@
 # Drone Intel Hub — Improvement Roadmap (Round 3)
 
+> [!IMPORTANT]
+> **Historical (round 3).** Superseded by [../roadmap.md](../roadmap.md) and
+> [../current-state.md](../current-state.md). The status table at the top is outdated (e.g.
+> Readability, SimHash dedupe, and taxonomy normalization are shipped).
+
 > [!NOTE]
 > This is a third pass, from a deeper end-to-end review. Rounds 1 and 2
 > focused on ingest breadth and the relationship graph. This round covers

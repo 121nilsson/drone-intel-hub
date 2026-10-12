@@ -65,15 +65,51 @@ export function detectNames(raw: string): string[] {
   // than \b, which only knows ASCII letters and so never matched before a Cyrillic name.
   for (const m of raw.matchAll(
     /(?<![\p{L}\p{N}])([A-Z\u0410-\u042F][\p{L}]*(?:\s[A-Z\u0410-\u042F][\p{L}]+)?-\p{N}+[A-Za-z\u0410-\u044F]?)(?![\p{L}\p{N}])/gu,
-  ))
-    add(m[1]!);
+  )) {
+    // A capability adjective is not part of the designation: "SUPERSONIC UAV-300" describes the
+    // UAV-300 in a headline, and naming it whole promoted a munition as its own catalog entry.
+    add(m[1]!.replace(CAPABILITY_ADJECTIVE, ""));
+  }
   // Acronym names, optionally with a single-letter variant: STING S, MAGURA V5
-  for (const m of raw.matchAll(/\b([A-Z]{3,}(?:\s(?:[A-Z]\d*|V\d+)\b)?)/g)) add(m[1]!);
+  for (const m of raw.matchAll(/\b([A-Z]{3,}(?:\s(?:[A-Z]\d*|V\d+)\b)?)/g)) {
+    if (isTitleLine(raw, m.index)) continue;
+    add(m[1]!);
+  }
   // Capitalised 1–2 word phrases not at sentence start: Baba Yaga, Bars, Magura V5
-  for (const m of raw.matchAll(/\b([A-Z][a-z]{2,}\s(?:[A-Z][a-z]{2,}|[A-Z]\d+))\b/g)) add(m[1]!);
-  for (const m of raw.matchAll(/(?<=[a-z0-9,;:()]\s)([A-Z][a-z]{2,})\b/g)) add(m[1]!);
+  for (const m of raw.matchAll(/\b([A-Z][a-z]{2,}\s(?:[A-Z][a-z]{2,}|[A-Z]\d+))\b/g)) {
+    if (isTitleLine(raw, m.index)) continue;
+    add(m[1]!);
+  }
+  for (const m of raw.matchAll(/(?<=[a-z0-9,;:()]\s)([A-Z][a-z]{2,})\b/g)) {
+    if (isTitleLine(raw, m.index)) continue;
+    add(m[1]!);
+  }
   // Drop names that are prefixes of a longer detected designation (Geran vs Geran-5)
   return dropContained(out, out);
+}
+
+/**
+ * The adjectives that describe a capability rather than name a system. Every drone headline
+ * contains at least one, and "SUPERSONIC UAV-300" is the failure this list exists for: the
+ * adjective and the designation were read as one name.
+ */
+const CAPABILITY_ADJECTIVE =
+  /^(?:SUPERSONIC|HYPERSONIC|LOITERING|KAMIKAZE|STEALTH|INTERCEPTOR|ONE[- ]WAY|COMBAT|TACTICAL|STRATEGIC)\s+/i;
+
+/**
+ * True when the match sits on a line carrying three or more capitalised tokens - a headline,
+ * not a sentence. "AKINCI STRIKES WITH SUPERSONIC UAV-300 MISSILE!" reads STRIKES, WITH and
+ * MISSILE as system names otherwise, which is how a munition from one press-release title was
+ * promoted into the catalog as its own entry. Body prose ("The AKINCI carried the UAV-300
+ * missile") has two such tokens and is unaffected; a sentence written entirely in capitals is
+ * the cost of the rule, and under-detecting a name there is the safe direction to fail.
+ */
+function isTitleLine(raw: string, at: number | undefined): boolean {
+  if (at === undefined) return false;
+  const from = raw.lastIndexOf("\n", at) + 1;
+  const to = raw.indexOf("\n", at);
+  const line = raw.slice(from, to === -1 ? raw.length : to);
+  return (line.match(/\b[A-Z][A-Z0-9-]{2,}\b/g) ?? []).length >= 3;
 }
 
 /** Remove names that are a word-part of a longer name (Geran ⊂ Geran-5, Yaga ⊂ Baba Yaga). */
@@ -355,8 +391,12 @@ function extractFacts(raw: string): Facts {
     );
   }
 
+  // Left boundary matters: a designation's number is not a quantity. "UAV-300 MISSILE" used to
+  // read as 300 missiles, which is how AKINCI's dossier came to carry "Number of missiles: 300"
+  // from one press-release headline. `\b` cannot help here - the hyphen is a boundary - so the
+  // lookbehind rejects a digit that follows a letter, digit or hyphen.
   for (const m of raw.matchAll(
-    /(\d+)\s+(jammers?|cameras?|missiles?|rotors?|antennas?|bombs?)/gi,
+    /(?<![-\p{L}\p{N}])(\d+)\s+(jammers?|cameras?|missiles?|rotors?|antennas?|bombs?)/giu,
   )) {
     const noun = m[2]!.toLowerCase().replace(/s$/, "");
     add(`${noun}s`, `Number of ${noun}s`, Number(m[1]), undefined, m[0]);

@@ -1,5 +1,10 @@
 # Drone Intel Hub — Improvement Roadmap
 
+> [!IMPORTANT]
+> **Historical (round 1).** Superseded by [../roadmap.md](../roadmap.md) and
+> [../current-state.md](../current-state.md). Many items here (Readability, dedupe, etc.) are
+> already shipped — do not treat this file as the source of truth.
+
 > [!NOTE]
 > This document focuses on two themes: (1) getting more signal out of the open web,
 > and (2) mapping relationships between systems so the catalog can reason about

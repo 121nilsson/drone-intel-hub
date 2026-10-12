@@ -1,5 +1,10 @@
 # NVIDIA NIM Model Benchmark
 
+> [!NOTE]
+> **Stale quickly.** NIM catalogues, account entitlements, and app defaults (`settings-defaults.ts`,
+> env tier models) change over time. Re-run the scripts below before trusting model rankings; compare
+> results with Settings → **Inference** provider routing on a running server.
+
 Measured against the free-tier endpoint (`https://integrate.api.nvidia.com/v1`) with the
 key from `.env.local`. All numbers are wall-clock from a single account on a residential
 connection, so treat them as relative, not absolute.

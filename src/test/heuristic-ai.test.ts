@@ -74,6 +74,19 @@ describe("detectNames", () => {
   it("ignores stop words", () => {
     expect(detectNames("The Russians reported it")).not.toContain("The");
   });
+
+  it("does not read a headline's words as names", () => {
+    // Regression: one press-release headline ("AKINCI STRIKES WITH SUPERSONIC UAV-300
+    // MISSILE!") named a munition as a system, promoted it into the catalog, and had its
+    // adjectives absorbed into the designation.
+    expect(detectNames("AKINCI STRIKES WITH SUPERSONIC UAV-300 MISSILE!")).toEqual(["UAV-300"]);
+  });
+
+  it("still reads names in body prose beside a designation", () => {
+    const names = detectNames("The AKINCI carried the UAV-300 missile");
+    expect(names).toContain("AKINCI");
+    expect(names).toContain("UAV-300");
+  });
 });
 
 describe("extractPrice", () => {
@@ -212,7 +225,6 @@ describe("HeuristicExtractor number parsing", () => {
     const e = await t1.extract("range 2,000 km", CATALOG);
     expect(specOf(e.specs, "range")).toBe(2000);
   });
-
   it("still reads a plain integer", async () => {
     const e = await t1.extract("Cruise 600 km/h", CATALOG);
     expect(specOf(e.specs, "speed")).toBe(600);
@@ -240,6 +252,25 @@ describe("HeuristicExtractor extraction", () => {
     const e = await t1.extract("fitted with 4 jammers and 2 antennas", CATALOG);
     expect(specOf(e.specs, "jammers")).toBe(4);
     expect(specOf(e.specs, "antennas")).toBe(2);
+  });
+
+  it("does not read a designation's number as a quantity", async () => {
+    // Regression: "UAV-300 MISSILE" read as 300 missiles, so AKINCI's dossier carried a
+    // "Number of missiles: 300" spec out of one press-release headline.
+    const e = await t1.extract("AKINCI STRIKES WITH SUPERSONIC UAV-300 MISSILE!", CATALOG);
+    expect(e.specs.find((s) => s.key === "missiles")).toBeUndefined();
+    expect(e.payloads).toEqual([]);
+  });
+
+  it("still counts real quantities of munitions", async () => {
+    const e = await t1.extract("The UAV carries 4 missiles and 2 bombs", CATALOG);
+    expect(specOf(e.specs, "missiles")).toBe(4);
+    expect(specOf(e.specs, "bombs")).toBe(2);
+  });
+
+  it("keeps counting nouns when a designation shares the sentence", async () => {
+    const e = await t1.extract("The UAV-300 carries 6 missiles", CATALOG);
+    expect(specOf(e.specs, "missiles")).toBe(6);
   });
 
   it("picks up RF bands", async () => {

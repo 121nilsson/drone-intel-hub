@@ -1,5 +1,10 @@
 # Implementation plan — the input side (ingest quality)
 
+> [!IMPORTANT]
+> **Completed / archived.** Phases A–E (timeouts, parallel fetch, Readability bodies, SimHash
+> dedupe, yield telemetry) are implemented — see [../current-state.md](../current-state.md) and
+> the **Scheduled auto-ingest** section of [../../README.md](../../README.md). Kept for history only.
+
 > [!NOTE]
 > This is the detailed plan for item **4** of the five-point roadmap ("Fix the input side — it's
 > the ceiling on quality"). Everything below is verified against the current source; file:line

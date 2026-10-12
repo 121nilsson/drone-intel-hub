@@ -1,6 +1,10 @@
 # Drone Intel Hub — Improvement Roadmap (Round 2)
 
 > [!IMPORTANT]
+> **Historical (round 2).** Superseded by [../roadmap.md](../roadmap.md) and
+> [../current-state.md](../current-state.md).
+
+> [!IMPORTANT]
 > This is a corrected and re-sequenced iteration of `improvements.md`, informed by an
 > independent code review. Several items from round 1 were inaccurate or overstated.
 > Every claim below has been verified against the live source files.

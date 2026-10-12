@@ -15,7 +15,8 @@ history (see `AGENTS.md`).
 | **Briefing**     | `/`             | 7-day summary: new systems, spec changes, merges, and an executive summary from the tier-2 model                                      |
 | **Catalog**      | `/catalog`      | Every known system; imports the Wikipedia/Wikidata reference catalog                                                                  |
 | System dossier   | `/systems/$id`  | One system's specs with their claims and sources, RF links, components, history; delete a wrong entry (it is not auto-promoted again) |
-| **Counterparts** | `/counterparts` | Systems linked as variants or adversary counterparts                                                                                  |
+| **Counterparts** | `/counterparts` | Systems linked as variants or adversary counterparts; EW and kinetic envelope comparison                                             |
+| **Spectrum**     | `/spectrum`     | RF band map: which catalog systems operate or jam in each segment, and fiber-immune links                                           |
 | **Queue**        | `/intake`       | Paste a link or text to analyse; triage candidates the pipeline could not auto-resolve                                                |
 | **Feed**         | `/dispatches`   | Archive of collected posts, with outcome, provenance, and event grouping across outlets                                               |
 | **Sources**      | `/sources`      | Monitored sources, sync status, and "Analyse queue" for pending posts                                                                 |
@@ -43,8 +44,14 @@ npm i
 docker compose up -d db   # Postgres on 127.0.0.1:5435
 npm run dev               # Vite dev server; reads .env and .env.local
 npm test                  # vitest
+npm run green             # typecheck, lint, format check, and tests (see scripts/green-check.mjs)
+npm run green:save        # save a baseline before a large change; green then diffs against it
 npm run lint              # eslint (prettier runs as a lint rule)
 ```
+
+More detail on what is shipped vs planned: [docs/current-state.md](docs/current-state.md),
+[docs/roadmap.md](docs/roadmap.md), and [docs/ideas.md](docs/ideas.md) (index:
+[docs/README.md](docs/README.md)).
 
 Scheduled auto-ingest only runs in the built app (see [Scheduled auto-ingest](#scheduled-auto-ingest));
 in `npm run dev` use "Sync all now" on the Sources page.
@@ -62,6 +69,9 @@ Built with TanStack Start, React, TypeScript, Tailwind CSS, Nitro, and PostgreSQ
 - **Storage** goes through the async `DocumentStore` contract. `store.functions.ts` picks
   PostgreSQL when the server has `DATABASE_URL`, Lovable Cloud when its service role is
   configured, and browser storage otherwise. Repositories are write-through caches over it.
+- **Normalization.** After extraction, `normalizeExtraction()` in `src/entities/normalization/`
+  turns free-text specs, RF links, propulsion and installation into comparable units and taxonomy
+  ids. Unknown terms queue on the Taxonomy page; the Spec Engine shows consensus across claims.
 
 ## AI pipeline
 
@@ -72,7 +82,8 @@ involved, so it is fast and never blocked by a provider. **Processing** drains t
 bounded batches, through the same pipeline the Queue page uses (`runTwoTier` in
 `src/features/intake/pipeline.ts`):
 
-1. **Relevance filter.** A post with no drone keyword and no catalog name is stored as
+1. **Relevance filter.** A post must match `DRONE_HINT` or a catalog name/alias pattern built from
+   the current drones (`buildCatalogPattern` in `auto-ingest.ts`). Otherwise it is stored as
    `irrelevant` and never reaches a model.
 2. **Heuristics.** A deterministic extractor proposes systems, specs and RF bands at no cost. A
    complete, confident match to a known catalog entry needs no AI at all.
@@ -119,10 +130,11 @@ catalog changes. The Wikipedia import is left out everywhere, so a reference imp
 dominates the week. The executive summary is generated from the same data by the tier-2 model and
 shared through `sync_state`; it refreshes at most about twice a day, while the panels are live.
 
-The extraction prompt (`src/shared/contracts/extraction-prompt.json`) defines what counts as a
-system and tells the model to return nothing rather than invent one. Model output is validated by
-a deliberately tolerant schema (`extraction.schema.ts`): a malformed field or list item is
-dropped, not the whole reply.
+The extraction prompt (`src/shared/contracts/extraction-prompt.json`, currently
+**`drone-osint-v5`**) defines what counts as a system and tells the model to return nothing rather
+than invent one. Model output is validated by a deliberately tolerant schema
+(`extraction.schema.ts`): a malformed field or list item is dropped, not the whole reply. Processed
+posts record `PIPELINE_VERSION` (`${promptVersion}/2` in `auto-ingest.ts`) for re-analysis.
 
 **Matching across scripts.** Catalog names are matched by a spelling-insensitive key
 (`src/entities/drone/name-key.ts`): Cyrillic is transliterated and romanisation differences are
@@ -193,6 +205,7 @@ into the app container too. Values here override the browser's Settings page, fi
 | `PROVIDER_TIMEOUT_MS`                                                     | Per-request timeout. Defaults to 90 s so a hung connection cannot stall a sync pass. `0` disables it.                                                         |
 | `FETCH_TIMEOUT_MS`                                                        | Per-request timeout when polling a source or fetching an article. Defaults to 15 s. `0` disables it.                                                          |
 | `FETCH_ARTICLE_BODIES`                                                    | Set to `0` to stop extracting article bodies from web pages and RSS teasers, falling back to headlines and feed text.                                         |
+| `PIPELINE_TRACE`                                                          | Per-item ingestion tracing to the server console (`[pipeline] …`). Unset = one line per item; `verbose` adds excerpts; `0` = off. See `.env.example`.          |
 | `X_BRIDGE_BASE`                                                           | Optional https base URL of an RSS bridge serving X/Twitter timelines. Without it, X sources report that they need a paid API. Env only, never a source field. |
 
 Settings → **Inference** shows which providers the server resolved, which model each one serves
@@ -310,6 +323,20 @@ after a crash or a host reboot.
 mounted into the container's init directory. The app container gets its own `DATABASE_URL`
 pointing at the `db` service. For `npm run dev`, `DATABASE_URL` must use the published host port
 `5435`, not the container port `5432`.
+
+The authoritative schema is the SQL files under `migrations/` (not `drizzle/`, which is not used
+at runtime). Applied in order on a fresh volume:
+
+| File | Purpose |
+| ---- | ------- |
+| `001_init.sql` | Core collections as JSONB documents |
+| `002_sync_state.sql` | Auto-sync throttle and briefing summary slot |
+| `003_dispatches.sql` | Dispatch archive fields |
+| `004_dispatch_lease.sql` | Per-dispatch claim leases |
+| `004_procurements.sql` | Procurement collection |
+| `005_normalization.sql` | Taxonomy collections |
+| `006_dispatch_content_hash.sql` | Content fingerprint for dedupe |
+| `007_source_endpoints.sql` | Per-source fetch endpoints |
 
 To start from an empty database, drop the volume: `docker compose down -v`.
 
