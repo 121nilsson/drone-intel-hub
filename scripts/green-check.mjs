@@ -44,7 +44,12 @@ function run(args) {
     maxBuffer: 64 * 1024 * 1024,
   });
   if (r.error) throw r.error;
-  return { code: r.status ?? 1, out: `${r.stdout ?? ""}\n${r.stderr ?? ""}` };
+  // Some tools colour their output when the environment asks for it (FORCE_COLOR), even when
+  // stdout is a pipe. An ANSI-wrapped `[warn]` line does not match the format check's regex, and
+  // a whole failing prettier pass silently reads as zero findings - which is how this gate came
+  // to report a clean format check on a tree with six unformatted files. Strip colour first.
+  const out = `${r.stdout ?? ""}\n${r.stderr ?? ""}`.replace(/\u001b\[[0-9;]*m/g, "");
+  return { code: r.status ?? 1, out };
 }
 
 /** Errors block. Warnings are reported but tolerated - see eslint's 14 existing react-refresh ones. */
