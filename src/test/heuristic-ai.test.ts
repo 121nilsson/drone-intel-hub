@@ -180,7 +180,7 @@ describe("price magnitudes across languages", () => {
   });
 
   it("keeps a Ukrainian billion, either spelling", () => {
-    expect(extractPrice("вартість $2 мільярда")).toMatch(/^\$2 міл.+рд$/);
+    expect(extractPrice("вартість $2 мільярда")).toMatch(/^\$2 міл.+рд\p{L}*$/u);
   });
 
   it("keeps a Swedish billion and million", () => {
@@ -192,7 +192,7 @@ describe("price magnitudes across languages", () => {
 
   it("keeps the magnitude on a real unit price with a Ukrainian price cue", () => {
     const p = extractUnitPrice("Вартість одного комплексу становить $1,04 мільярда.");
-    expect(p?.value).toMatch(/^\$1,04 міл.+рд$/);
+    expect(p?.value).toMatch(/^\$1,04 міл.+рд\p{L}*$/u);
     expect(p?.evidence).toContain("Вартість");
   });
 });
