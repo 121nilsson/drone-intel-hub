@@ -264,7 +264,6 @@ function extractFacts(raw: string): Facts {
   }
 
   for (const [word, key, label] of [
-    ["wingspan|wing span", "wingspan", "Wingspan"],
     ["length|long", "length", "Length"],
     ["height|tall", "height", "Height"],
     ["width|wide", "width", "Width"],
