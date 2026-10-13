@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { extractClassSpecs, extractContractValue, extractUnitPrice } from "@/shared/infra/heuristics";
 
 function specs(raw: string) {
-  const out: Array<{ key: string; value: number | string; unit?: string }> = [];
+  const out: Array<{ key: string; value: number | string; unit: string | undefined }> = [];
   extractClassSpecs(raw, (key, _l, value, unit) => out.push({ key, value, unit }));
   return out;
 }
