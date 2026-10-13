@@ -4,6 +4,7 @@ import { DOMAINS } from "@/entities/drone/types";
 import { CountryBadge } from "@/shared/ui/country-badge";
 import { useDispatches, useDrones, useServices } from "@/shared/infra/services";
 import { buildBriefing } from "@/features/briefing/briefing-data";
+import { NewClaim } from "@/features/briefing/briefing-data";
 import {
   BRIEFING_SUMMARY_TTL_MS,
   readBriefingSummaryCache,
@@ -14,6 +15,7 @@ import {
   storeBriefingExecutiveSummary,
 } from "@/shared/infra/briefing.functions";
 import { Panel, Tag } from "@/shared/ui/primitives";
+import { useRelatedIntel, RelatedChips } from "@/features/intel-graph";
 
 export function BriefingPage() {
   const [mounted, setMounted] = useState(false);
@@ -23,6 +25,59 @@ export function BriefingPage() {
       <p className="animate-pulse font-mono text-sm text-muted-foreground">Loading briefing…</p>
     );
   return <Briefing />;
+}
+
+function NewSpecClaimItem({ n, i }: { n: NewClaim; i: number }) {
+  const relatedIntel = useRelatedIntel(n.drone.id);
+  return (
+    <li key={i} className="text-sm">
+      <Link
+        to="/systems/$id"
+        params={{ id: n.drone.id }}
+        className="font-semibold hover:text-primary"
+      >
+        {n.drone.name}
+      </Link>{" "}
+      <span className="text-muted-foreground">{n.spec.label}:</span>{" "}
+      <span className="font-mono">{String(n.claim.value)}</span>
+      {n.disputed && (
+        <Tag tone="danger" className="ml-1.5 align-middle">
+          Disputed
+        </Tag>
+      )}
+      <p className="font-mono text-[11px] text-muted-foreground">
+        {n.claim.source.split(" · ")[0]}
+      </p>
+      {relatedIntel?.edges.length && (
+        <div className="mt-1">
+          <RelatedChips edges={relatedIntel.edges} maxChips={2} />
+        </div>
+      )}
+    </li>
+  );
+}
+
+function NewSystemItem({ d }: { d: Drone }) {
+  const relatedIntel = useRelatedIntel(d.id);
+  return (
+    <li key={d.id}>
+      <Link
+        to="/systems/$id"
+        params={{ id: d.id }}
+        className="flex justify-between gap-2 hover:text-primary"
+      >
+        <span className="min-w-0 truncate">{d.name}</span>
+        <span className="flex shrink-0 items-center gap-1.5 font-mono text-xs text-muted-foreground">
+          {d.domain} · <CountryBadge code={d.origin} />
+        </span>
+      </Link>
+      {relatedIntel?.edges.length && (
+        <div className="mt-1 ml-6">
+          <RelatedChips edges={relatedIntel.edges} maxChips={2} />
+        </div>
+      )}
+    </li>
+  );
 }
 
 function Briefing() {
@@ -192,25 +247,7 @@ function Briefing() {
         <Panel title="New spec claims">
           <ul className="space-y-2">
             {brief.newClaims.slice(0, 20).map((n, i) => (
-              <li key={i} className="text-sm">
-                <Link
-                  to="/systems/$id"
-                  params={{ id: n.drone.id }}
-                  className="font-semibold hover:text-primary"
-                >
-                  {n.drone.name}
-                </Link>{" "}
-                <span className="text-muted-foreground">{n.spec.label}:</span>{" "}
-                <span className="font-mono">{String(n.claim.value)}</span>
-                {n.disputed && (
-                  <Tag tone="danger" className="ml-1.5 align-middle">
-                    Disputed
-                  </Tag>
-                )}
-                <p className="font-mono text-[11px] text-muted-foreground">
-                  {n.claim.source.split(" · ")[0]}
-                </p>
-              </li>
+              <NewSpecClaimItem key={i} n={n} i={i} />
             ))}
             {!brief.newClaims.length && (
               <li className="text-sm text-muted-foreground">No new claims this week.</li>
@@ -259,18 +296,7 @@ function Briefing() {
         >
           <ul className="space-y-2">
             {brief.newSystems.slice(0, 8).map((d) => (
-              <li key={d.id}>
-                <Link
-                  to="/systems/$id"
-                  params={{ id: d.id }}
-                  className="flex justify-between gap-2 hover:text-primary"
-                >
-                  <span className="min-w-0 truncate">{d.name}</span>
-                  <span className="flex shrink-0 items-center gap-1.5 font-mono text-xs text-muted-foreground">
-                    {d.domain} · <CountryBadge code={d.origin} />
-                  </span>
-                </Link>
-              </li>
+              <NewSystemItem key={d.id} d={d} />
             ))}
             {brief.newSystems.length > 8 && (
               <li>

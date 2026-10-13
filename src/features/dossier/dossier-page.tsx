@@ -15,6 +15,7 @@ import { ClaimChip, ProvenanceSheet, type ClaimSelection } from "./provenance-sh
 import { useDrones, useServices } from "@/shared/infra/services";
 import { removalImpact, removeDrone } from "@/features/intake/pipeline";
 import { Btn, ConfidenceTag, Panel, Tag } from "@/shared/ui/primitives";
+import { useRelatedIntel, RelatedRail } from "@/features/intel-graph";
 
 const DOSSIER_SECTIONS = [
   { id: "specs", label: "Specifications" },
@@ -201,6 +202,13 @@ function DeleteSystem({ drone }: { drone: Drone }) {
 export function DossierPage({ id }: { id: string }) {
   const drones = useDrones();
   const d = drones.find((x) => x.id === id);
+  const relatedIntel = useRelatedIntel(id);
+  const counterparts = d ? drones.filter((x) => d.counterpartIds.includes(x.id)) : [];
+  const parent = d?.variantOfId ? drones.find((x) => x.id === d.variantOfId) : undefined;
+  const variants = d
+    ? drones.filter((x) => d.variantIds?.includes(x.id) || x.variantOfId === d.id)
+    : [];
+
   if (!d)
     return (
       <p className="text-muted-foreground">
@@ -210,9 +218,6 @@ export function DossierPage({ id }: { id: string }) {
         </Link>
       </p>
     );
-  const counterparts = drones.filter((x) => d.counterpartIds.includes(x.id));
-  const parent = d.variantOfId ? drones.find((x) => x.id === d.variantOfId) : undefined;
-  const variants = drones.filter((x) => d.variantIds?.includes(x.id) || x.variantOfId === d.id);
   return (
     <div className="space-y-6">
       <div>
@@ -283,6 +288,9 @@ export function DossierPage({ id }: { id: string }) {
               </li>
             ))}
           </ul>
+        </Panel>
+        <Panel id="related" title="Related Intelligence">
+          <RelatedRail edges={relatedIntel?.edges ?? []} maxItems={10} />
         </Panel>
         <Panel id="rf" title="RF spectrum">
           <ul className="space-y-2">

@@ -332,6 +332,45 @@ describe("HeuristicExtractor extraction", () => {
     expect(specOf(e.specs, "endurance")).toBe(6);
   });
 
+  it("reads weights through the lexicons in RU/UK/SV", async () => {
+    const cases: Array<[string, string, number]> = [
+      ["максимальная взлетная масса 300 кг", "weight_mtow", 300],
+      ["сухая масса 200 кг", "weight_empty", 200],
+      ["стартовая масса 220 кг", "weight_launch", 220],
+      ["максимальна злітна маса 310 кг", "weight_mtow", 310],
+      ["пуста маса 190 кг", "weight_empty", 190],
+      ["стартова маса 230 кг", "weight_launch", 230],
+      ["max startvikt 280 kg", "weight_mtow", 280],
+      ["tomvikt 170 kg", "weight_empty", 170],
+      ["startvikt 205 kg", "weight_launch", 205],
+    ];
+    for (const [text, key, value] of cases) {
+      const e = await t1.extract(text, CATALOG);
+      expect(specOf(e.specs, key)).toBe(value);
+    }
+  });
+
+  it("reads dimensions through the lexicons in RU/UK/SV", async () => {
+    const cases: Array<[string, string, number]> = [
+      ["длина 1,5 м", "length", 1.5],
+      ["высота 2 м", "height", 2],
+      ["ширина 0,8 м", "width", 0.8],
+      ["диаметр 0,3 м", "diameter", 0.3],
+      ["довжина 1,2 м", "length", 1.2],
+      ["висота 3 м", "height", 3],
+      ["ширина 1,1 м", "width", 1.1],
+      ["діаметр 0,4 м", "diameter", 0.4],
+      ["längd 4 m", "length", 4],
+      ["höjd 2 m", "height", 2],
+      ["bredd 1,5 m", "width", 1.5],
+      ["diameter 0,6 m", "diameter", 0.6],
+    ];
+    for (const [text, key, value] of cases) {
+      const e = await t1.extract(text, CATALOG);
+      expect(specOf(e.specs, key)).toBe(value);
+    }
+  });
+
   it("extracts dimensions, guidance and a named thermal camera", async () => {
     const e = await t1.extract(
       "Shahed-136 has a wingspan of 2.5 m and uses GPS/INS with a Boson 640 thermal camera.",

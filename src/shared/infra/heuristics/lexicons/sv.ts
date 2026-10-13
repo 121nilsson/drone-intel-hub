@@ -36,5 +36,12 @@ export const sv: Lexicon = {
     targetAltitude: ["bekämpningshöjd"],
     targetSpeed: ["målhastighet"],
     targetChannels: ["målkanaler", "samtidiga mål"],
+    length: ["längd", "lång"],
+    height: ["höjd", "hög"],
+    width: ["bredd", "bred"],
+    diameter: ["diameter", "kaliber"],
+    weightMtow: ["max startvikt", "maximal startvikt", "mtow"],
+    weightEmpty: ["tomvikt", "tömvikt", "nettovikt"],
+    weightLaunch: ["startvikt", "startmassa", "väger"],
   },
 };

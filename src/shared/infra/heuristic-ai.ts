@@ -1,4 +1,5 @@
 import { parseNumber } from "@/entities/normalization/numeric";
+import { cue, unit } from "./heuristics/lexicons";
 import { mentionsPhonetic, phoneticKey } from "@/entities/drone/name-key";
 import type {
   DetectedSystem,
@@ -215,43 +216,35 @@ function extractFacts(raw: string): Facts {
   // figures, in every registered language (EN/UK/RU/SV) - see ./heuristics.
   extractClassSpecs(raw, add);
 
+  const KG = unit("kg");
   const weights: Array<[RegExp, string, string]> = [
     [
-      new RegExp(
-        `(?:mtow|max(?:imum)? takeoff weight)[^\\d]{0,20}(${NUMBER})\\s*(kg|кг|lb|lbs?)`,
-        "giu",
-      ),
+      new RegExp(`(?:${cue("weightMtow")})[^\\d]{0,20}(${NUMBER})\\s*(${KG})`, "giu"),
       "weight_mtow",
       "Maximum takeoff weight",
     ],
     [
-      new RegExp(`(?:empty|dry) weight[^\\d]{0,20}(${NUMBER})\\s*(kg|кг|lb|lbs?)`, "giu"),
+      new RegExp(`(?:${cue("weightEmpty")})[^\\d]{0,20}(${NUMBER})\\s*(${KG})`, "giu"),
       "weight_empty",
       "Empty weight",
     ],
     [
-      new RegExp(`(?:launch weight|weighs?)[^\\d]{0,20}(${NUMBER})\\s*(kg|кг|lb|lbs?)`, "giu"),
+      new RegExp(`(?:${cue("weightLaunch")})[^\\d]{0,20}(${NUMBER})\\s*(${KG})`, "giu"),
       "weight_launch",
       "Launch weight",
     ],
     [
-      new RegExp(`(?:warhead|explosive charge)[^\\d]{0,20}(${NUMBER})\\s*(kg|кг|lb|lbs?)`, "giu"),
+      new RegExp(`(?:${cue("warhead")})[^\\d]{0,20}(${NUMBER})\\s*(${KG})`, "giu"),
       "warhead",
       "Warhead weight",
     ],
     [
-      new RegExp(
-        `(${NUMBER})\\s*(kg|кг|lb|lbs?)[^\\d.;\\n]{0,20}(?:warhead|explosive charge)`,
-        "giu",
-      ),
+      new RegExp(`(${NUMBER})\\s*(${KG})[^\\d.;\\n]{0,20}(?:${cue("warhead")})`, "giu"),
       "warhead",
       "Warhead weight",
     ],
     [
-      new RegExp(
-        `(?:payload(?: capacity)?|carries)[^\\d]{0,20}(${NUMBER})\\s*(kg|кг|lb|lbs?)`,
-        "giu",
-      ),
+      new RegExp(`(?:${cue("payload")})[^\\d]{0,20}(${NUMBER})\\s*(${KG})`, "giu"),
       "payload",
       "Payload capacity",
     ],
@@ -263,20 +256,21 @@ function extractFacts(raw: string): Facts {
     }
   }
 
-  for (const [word, key, label] of [
-    ["length|long", "length", "Length"],
-    ["height|tall", "height", "Height"],
-    ["width|wide", "width", "Width"],
+  const M = unit("m");
+  for (const [cueKey, key, label] of [
+    ["length", "length", "Length"],
+    ["height", "height", "Height"],
+    ["width", "width", "Width"],
     ["diameter", "diameter", "Diameter"],
   ] as const) {
     measure(
-      new RegExp(`(?:${word})[^\\d]{0,16}(${NUMBER})\\s*(?:m|meters?|metres?)`, "giu"),
+      new RegExp(`(?:${cue(cueKey as any)})[^\\d]{0,16}(${NUMBER})\\s*(${M})`, "giu"),
       key,
       label,
       "m",
     );
     measure(
-      new RegExp(`(${NUMBER})\\s*(?:m|meters?|metres?)[^.;\\n]{0,16}(?:${word})`, "giu"),
+      new RegExp(`(${NUMBER})\\s*(${M})[^.;\\n]{0,16}(?:${cue(cueKey as any)})`, "giu"),
       key,
       label,
       "m",

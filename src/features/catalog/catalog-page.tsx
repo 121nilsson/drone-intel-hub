@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils";
 import { mergeDrones } from "@/features/intake/pipeline";
 import { duplicateGroups } from "@/entities/drone/duplicates";
 import { applyReference } from "@/features/catalog/reference-import";
+import { useRelatedIntel, RelatedChips } from "@/features/intel-graph";
 
 function Facet({
   label,
@@ -53,6 +54,70 @@ function Facet({
           );
         })}
       </div>
+    </div>
+  );
+}
+
+function CatalogCard({ d, drones, cp }: { d: Drone; drones: Drone[]; cp: Drone | undefined }) {
+  const top = d.specs
+    .filter((x) => x.key !== "unit_cost")
+    .slice(0, 2)
+    .map((x) => `${x.label} ${consensus(x).display}`);
+  const relatedIntel = useRelatedIntel(d.id);
+  return (
+    <div
+      key={d.id}
+      className="flex flex-col border border-border bg-card/80 transition-colors hover:border-primary"
+    >
+      <Link to="/systems/$id" params={{ id: d.id }} className="block flex-1 p-4">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <h3 className="font-semibold">
+              <span className="mr-1.5 text-xs text-muted-foreground">
+                <CountryBadge code={d.origin} />
+              </span>
+              {d.name}
+            </h3>
+            <p className="truncate text-sm text-muted-foreground">
+              {[d.cyrillic, ...d.aliases].filter(Boolean).join(" · ")}
+            </p>
+          </div>
+          <Tag tone="primary">{d.domain}</Tag>
+        </div>
+        {top.length > 0 && (
+          <p className="mt-2 font-mono text-xs text-foreground/80">{top.join(" · ")}</p>
+        )}
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {d.operators.map((o) => (
+            <Tag key={o} tone="accent" caps={false} mono={false}>
+              Op <CountryBadge code={o} />
+            </Tag>
+          ))}
+          {d.rf.slice(0, 3).map((r, i) => (
+            <Tag key={i}>
+              {linkIsFiber(r)
+                ? "fiber"
+                : r.freqMHz
+                  ? `${r.role} ${r.freqMHz[0]}–${r.freqMHz[1]}`
+                  : r.band}
+            </Tag>
+          ))}
+        </div>
+        {relatedIntel?.edges.length && (
+          <div className="mt-2">
+            <RelatedChips edges={relatedIntel.edges} maxChips={3} />
+          </div>
+        )}
+      </Link>
+      {cp && (
+        <Link
+          to="/counterparts"
+          search={{ a: d.id, b: cp.id }}
+          className="border-t border-border px-4 py-2.5 font-mono text-xs uppercase text-muted-foreground hover:text-primary"
+        >
+          Compare vs {cp.name} →
+        </Link>
+      )}
     </div>
   );
 }
@@ -106,7 +171,7 @@ export function CatalogPage() {
         ),
       ],
     }),
-    [drones],
+    [drones], // eslint-disable-line react-hooks/exhaustive-deps -- drones is stable from useDrones()
   );
   const results = useMemo(() => repo.search(q, f), [repo, q, f, drones]);
   const sorted = useMemo(() => {
@@ -464,62 +529,8 @@ export function CatalogPage() {
         {importNote && <p className="mb-3 font-mono text-xs text-muted-foreground">{importNote}</p>}
         <div className="grid gap-3 md:grid-cols-2">
           {sorted.map((d) => {
-            const top = d.specs
-              .filter((x) => x.key !== "unit_cost")
-              .slice(0, 2)
-              .map((x) => `${x.label} ${consensus(x).display}`);
             const cp = d.counterpartIds.map((id) => drones.find((x) => x.id === id)).find(Boolean);
-            return (
-              <div
-                key={d.id}
-                className="flex flex-col border border-border bg-card/80 transition-colors hover:border-primary"
-              >
-                <Link to="/systems/$id" params={{ id: d.id }} className="block flex-1 p-4">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <h3 className="font-semibold">
-                        <span className="mr-1.5 text-xs text-muted-foreground">
-                          <CountryBadge code={d.origin} />
-                        </span>
-                        {d.name}
-                      </h3>
-                      <p className="truncate text-sm text-muted-foreground">
-                        {[d.cyrillic, ...d.aliases].filter(Boolean).join(" · ")}
-                      </p>
-                    </div>
-                    <Tag tone="primary">{d.domain}</Tag>
-                  </div>
-                  {top.length > 0 && (
-                    <p className="mt-2 font-mono text-xs text-foreground/80">{top.join(" · ")}</p>
-                  )}
-                  <div className="mt-3 flex flex-wrap gap-1.5">
-                    {d.operators.map((o) => (
-                      <Tag key={o} tone="accent" caps={false} mono={false}>
-                        Op <CountryBadge code={o} />
-                      </Tag>
-                    ))}
-                    {d.rf.slice(0, 3).map((r, i) => (
-                      <Tag key={i}>
-                        {linkIsFiber(r)
-                          ? "fiber"
-                          : r.freqMHz
-                            ? `${r.role} ${r.freqMHz[0]}–${r.freqMHz[1]}`
-                            : r.band}
-                      </Tag>
-                    ))}
-                  </div>
-                </Link>
-                {cp && (
-                  <Link
-                    to="/counterparts"
-                    search={{ a: d.id, b: cp.id }}
-                    className="border-t border-border px-4 py-2.5 font-mono text-xs uppercase text-muted-foreground hover:text-primary"
-                  >
-                    Compare vs {cp.name} →
-                  </Link>
-                )}
-              </div>
-            );
+            return <CatalogCard key={d.id} d={d} drones={drones} cp={cp} />;
           })}
         </div>
       </div>

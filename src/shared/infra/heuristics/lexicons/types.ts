@@ -54,5 +54,19 @@ export interface Lexicon {
     targetSpeed: string[];
     /** SHORAD: simultaneous target channels. */
     targetChannels: string[];
+    /** Dimension: length. */
+    length: string[];
+    /** Dimension: height. */
+    height: string[];
+    /** Dimension: width. */
+    width: string[];
+    /** Dimension: diameter. */
+    diameter: string[];
+    /** Weight: maximum takeoff weight. */
+    weightMtow: string[];
+    /** Weight: empty / dry mass. */
+    weightEmpty: string[];
+    /** Weight: launch mass. */
+    weightLaunch: string[];
   };
 }

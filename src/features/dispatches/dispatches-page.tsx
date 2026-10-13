@@ -7,6 +7,7 @@ import { getSyncState, type SyncState } from "@/shared/infra/source-sync.functio
 import { translateText } from "@/shared/infra/ai-proxy.functions";
 import { Btn, Panel, Tag } from "@/shared/ui/primitives";
 import { formatProviderError, requeueFailed } from "@/features/sources/auto-ingest";
+import { useRelatedIntel, RelatedInlineToast } from "@/features/intel-graph";
 
 const STATUSES = ["all", "pending", "processed", "irrelevant", "failed", "duplicate"] as const;
 const field =
@@ -114,6 +115,97 @@ export function TranslateButton({ text, model }: { text: string; model: string }
       </Btn>
       {err && <span className="font-mono text-[11px] text-destructive">{err}</span>}
     </span>
+  );
+}
+
+function DispatchItem({
+  d,
+  workingId,
+  eventSizes,
+  byId,
+  svc,
+}: {
+  d: RawDispatch;
+  workingId: string | undefined;
+  eventSizes: Map<string, number>;
+  byId: Map<string, RawDispatch>;
+  svc: ReturnType<typeof useServices>;
+}) {
+  const relatedIntel = useRelatedIntel(d.id);
+
+  return (
+    <li key={d.id} className="min-w-0 border border-border bg-card/80 p-4">
+      <div className="flex min-w-0 flex-wrap items-center gap-2 font-mono text-[11px] text-muted-foreground">
+        <Tag
+          tone={d.status === "processed" ? "primary" : d.status === "failed" ? "danger" : "default"}
+        >
+          {d.status}
+        </Tag>
+        {workingId === d.id && <Tag tone="primary">working</Tag>}
+        {d.eventId && (eventSizes.get(d.eventId) ?? 0) > 1 && (
+          <Tag
+            tone="accent"
+            title={`Correlated with ${(eventSizes.get(d.eventId) ?? 1) - 1} other post(s) about the same event}`}
+          >
+            event · {eventSizes.get(d.eventId)} posts
+          </Tag>
+        )}
+        <span className="font-medium text-foreground">{d.sourceName}</span>
+        <span>{new Date(d.publishedAt ?? d.createdAt).toLocaleString()}</span>
+      </div>
+      {(d.droneIds?.length ||
+        d.outcome === "queued" ||
+        (d.status === "duplicate" && d.duplicateOf)) && (
+        <div className="mt-2 flex flex-wrap gap-2 font-mono text-xs">
+          {d.droneIds?.map((id) => (
+            <Link
+              key={id}
+              to="/systems/$id"
+              params={{ id }}
+              className="border border-primary/50 px-2 py-1 text-primary"
+            >
+              {id}
+            </Link>
+          ))}
+          {d.outcome === "queued" && (
+            <Link to="/intake" className="border border-accent/50 px-2 py-1 text-accent">
+              In intake queue
+            </Link>
+          )}
+          {d.status === "duplicate" && d.duplicateOf && (
+            <span className="text-accent">
+              Duplicate of {byId.get(d.duplicateOf)?.sourceName ?? d.duplicateOf}
+            </span>
+          )}
+        </div>
+      )}
+      {d.text && <ExpandableText text={d.text} />}
+      {d.error && (
+        <p className="mt-2 font-mono text-[11px] text-destructive">
+          {formatProviderError(d.error)}
+        </p>
+      )}
+      <AnalysisDetail d={d} />
+      {relatedIntel?.edges.length && (
+        <RelatedInlineToast edges={relatedIntel.edges} sourceLabel={d.sourceName} maxVisible={2} />
+      )}
+      <div className="mt-3 flex flex-wrap items-center gap-3">
+        {d.text && <TranslateButton text={d.text} model={svc.settings.translateModel} />}
+        {d.status === "failed" && d.text && (
+          <Btn variant="ghost" onClick={() => requeueFailed(svc.dispatches, [d.id])}>
+            Retry
+          </Btn>
+        )}
+        <a
+          href={d.url}
+          target="_blank"
+          rel="noreferrer"
+          className="font-mono text-xs text-muted-foreground underline"
+        >
+          Open original ↗
+        </a>
+      </div>
+    </li>
   );
 }
 
@@ -247,81 +339,14 @@ export function DispatchesPage({ initialQuery = "" }: { initialQuery?: string } 
       ) : (
         <ul className="space-y-3">
           {shown.map((d) => (
-            <li key={d.id} className="min-w-0 border border-border bg-card/80 p-4">
-              <div className="flex min-w-0 flex-wrap items-center gap-2 font-mono text-[11px] text-muted-foreground">
-                <Tag
-                  tone={
-                    d.status === "processed"
-                      ? "primary"
-                      : d.status === "failed"
-                        ? "danger"
-                        : "default"
-                  }
-                >
-                  {d.status}
-                </Tag>
-                {workingId === d.id && <Tag tone="primary">working</Tag>}
-                {d.eventId && (eventSizes.get(d.eventId) ?? 0) > 1 && (
-                  <Tag
-                    tone="accent"
-                    title={`Correlated with ${(eventSizes.get(d.eventId) ?? 1) - 1} other post(s) about the same event`}
-                  >
-                    event · {eventSizes.get(d.eventId)} posts
-                  </Tag>
-                )}
-                <span className="font-medium text-foreground">{d.sourceName}</span>
-                <span>{new Date(d.publishedAt ?? d.createdAt).toLocaleString()}</span>
-              </div>
-              {(d.droneIds?.length ||
-                d.outcome === "queued" ||
-                (d.status === "duplicate" && d.duplicateOf)) && (
-                <div className="mt-2 flex flex-wrap gap-2 font-mono text-xs">
-                  {d.droneIds?.map((id) => (
-                    <Link
-                      key={id}
-                      to="/systems/$id"
-                      params={{ id }}
-                      className="border border-primary/50 px-2 py-1 text-primary"
-                    >
-                      {id}
-                    </Link>
-                  ))}
-                  {d.outcome === "queued" && (
-                    <Link to="/intake" className="border border-accent/50 px-2 py-1 text-accent">
-                      In intake queue
-                    </Link>
-                  )}
-                  {d.status === "duplicate" && d.duplicateOf && (
-                    <span className="text-accent">
-                      Duplicate of {byId.get(d.duplicateOf)?.sourceName ?? d.duplicateOf}
-                    </span>
-                  )}
-                </div>
-              )}
-              {d.text && <ExpandableText text={d.text} />}
-              {d.error && (
-                <p className="mt-2 font-mono text-[11px] text-destructive">
-                  {formatProviderError(d.error)}
-                </p>
-              )}
-              <AnalysisDetail d={d} />
-              <div className="mt-3 flex flex-wrap items-center gap-3">
-                {d.text && <TranslateButton text={d.text} model={svc.settings.translateModel} />}
-                {d.status === "failed" && d.text && (
-                  <Btn variant="ghost" onClick={() => requeueFailed(svc.dispatches, [d.id])}>
-                    Retry
-                  </Btn>
-                )}
-                <a
-                  href={d.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="font-mono text-xs text-muted-foreground underline"
-                >
-                  Open original ↗
-                </a>
-              </div>
-            </li>
+            <DispatchItem
+              key={d.id}
+              d={d}
+              workingId={workingId}
+              eventSizes={eventSizes}
+              byId={byId}
+              svc={svc}
+            />
           ))}
         </ul>
       )}

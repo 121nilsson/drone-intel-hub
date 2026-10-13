@@ -65,5 +65,17 @@ export const en: Lexicon = {
     targetAltitude: ["engagement altitude", "max(?:imum)? target altitude", "targets up to"],
     targetSpeed: ["target speed", "targets flying at", "targets moving at"],
     targetChannels: ["target channels", "simultaneous targets", "targets simultaneously"],
+    length: ["length", "long"],
+    height: ["height", "tall", "high"],
+    width: ["width", "wide", "breadth"],
+    diameter: ["diameter", "dia\\.?"],
+    weightMtow: [
+      "mtow",
+      "maximum takeoff weight",
+      "max(?:imum)? takeoff weight",
+      "max takeoff weight",
+    ],
+    weightEmpty: ["empty weight", "dry weight"],
+    weightLaunch: ["launch weight", "weighs?\\b", "launch mass"],
   },
 };

@@ -10,6 +10,7 @@ import {
 } from "@/entities/normalization/spectrum-bands";
 import { useDrones } from "@/shared/infra/services";
 import { Panel } from "@/shared/ui/primitives";
+import { useRelatedIntel, RelatedRail } from "@/features/intel-graph";
 
 const EXPOSURE: Record<Exposure, { label: string; cls: string }> = {
   jammed: { label: "Jammed", cls: "border-destructive/60 bg-destructive/10 text-destructive" },
@@ -99,6 +100,7 @@ export function SpectrumPage() {
   const [focus, setFocus] = useState<string>();
   const focused = drones.find((d) => d.id === focus);
   const exposure = focused ? linkExposure(focused, entries) : [];
+  const relatedIntel = useRelatedIntel(focus);
 
   return (
     <div className="mx-auto max-w-7xl space-y-6 px-4 py-6">
@@ -163,6 +165,15 @@ export function SpectrumPage() {
                   Open dossier
                 </Link>
               </p>
+            )}
+            {focused && (
+              <div className="mt-4 pt-4 border-t border-border">
+                <RelatedRail
+                  edges={relatedIntel?.edges ?? []}
+                  title={`Related to ${focused.name}`}
+                  maxItems={8}
+                />
+              </div>
             )}
           </div>
         )}
