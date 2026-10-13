@@ -1,0 +1,40 @@
+import type { Lexicon } from "./types";
+
+/** Swedish - Saab and other Swedish systems appear in Swedish-language sources. */
+export const sv: Lexicon = {
+  lang: "sv",
+  money: {
+    magnitudes: ["miljarder", "miljard", "miljoner", "miljon", "tusen", "mdr", "mkr"],
+    currencyWords: ["kronor", "SEK", "kr"],
+    unitPriceCues: ["styckpris", "per styck", "kostar", "\\bpris\\b", "à"],
+    totalCues: ["\\bavtal", "\\bkontrakt", "\\bbeställning", "\\bbudget", "värt", "\\btotalt"],
+  },
+  units: {
+    km: ["km", "kilometer"],
+    m: ["m", "meter"],
+    kg: ["kg"],
+    hours: ["timmar", "timme", "tim"],
+    minutes: ["minuter", "min"],
+    kmh: ["km\\/tim"],
+    watt: ["W", "watt"],
+    kilowatt: ["kW"],
+  },
+  cues: {
+    speed: ["hastighet", "marschfart"],
+    range: ["räckvidd", "räckvidden"],
+    endurance: ["flygtid", "uthållighet"],
+    altitude: ["flyghöjd", "tjänstetopphöjd", "höjd"],
+    wingspan: ["vingbredd", "spännvidd"],
+    payload: ["last(?:förmåga)?", "nyttolast"],
+    warhead: ["stridsdel", "sprängladdning"],
+    ugvLoad: ["lastkapacitet", "dragförmåga"],
+    ugvOperatingTime: ["drifttid", "batteritid"],
+    jammingPower: ["störeffekt", "uteffekt"],
+    suppressionRadius: ["störradie", "skyddsradie", "effektiv räckvidd"],
+    engagementRange: ["bekämpningsräckvidd", "bekämpar mål på"],
+    detectionRange: ["upptäcktsavstånd", "upptäcktsräckvidd", "upptäcker mål på"],
+    targetAltitude: ["bekämpningshöjd"],
+    targetSpeed: ["målhastighet"],
+    targetChannels: ["målkanaler", "samtidiga mål"],
+  },
+};
