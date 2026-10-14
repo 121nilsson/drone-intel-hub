@@ -191,6 +191,8 @@ export interface FetchOptions {
   maxRequests?: number;
   /** Operator-supplied RSS bridge base URL for X/Twitter. Env-controlled, never a source field. */
   xBridgeBase?: string;
+  /** Fall back to Jina Reader instead of an RSS bridge when no bridge URL is available. */
+  xJinaReader?: boolean;
 }
 
 /**
@@ -260,6 +262,29 @@ async function rssPosts(xml: string, opts: FetchOptions): Promise<FetchedPost[]>
  * TanStack or database imports, so the browser button, the scheduled task, and unit tests
  * all share it. X has no first-party path without a paid API; a bridge can be supplied.
  */
+function parseJinaTwitter(body: string): FetchedPost[] {
+  const out: FetchedPost[] = [];
+  const seen = new Set<string>();
+  const chunks = body.split(/\n\s*\*\s+/);
+  for (const chunk of chunks) {
+    const m = chunk.match(/https:\/\/x\.com\/[A-Za-z0-9_]+\/status\/(\d+)/);
+    if (!m) continue;
+    const url = m[0]!;
+    const id = m[1]!;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    const text = chunk
+      .replace(/!\[[^\]]*\]\([^)]*\)/g, " ")
+      .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1 ")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (text.length < 20) continue;
+    out.push({ id, text, url, date: new Date().toISOString() });
+    if (out.length >= 10) break;
+  }
+  return out;
+}
+
 export async function fetchOne(
   source: Pick<MonitoredSource, "platform" | "handle">,
   opts: FetchOptions = {},
@@ -267,17 +292,24 @@ export async function fetchOne(
   const timeoutMs = opts.timeoutMs ?? FETCH_TIMEOUT_MS;
   try {
     if (source.platform === "X") {
-      // The bridge base is operator-controlled (env), not a source field, so this cannot be turned
-      // into an SSRF primitive by someone who can add a source.
-      if (!opts.xBridgeBase)
-        return { ok: false, error: "X/Twitter needs a paid API or an RSS bridge (X_BRIDGE_BASE)" };
-      if (!/^https:\/\//.test(opts.xBridgeBase))
-        return { ok: false, error: "X_BRIDGE_BASE must start with https://" };
       const handle = source.handle.replace(/^@/, "").trim();
       if (!/^[A-Za-z0-9_]{1,64}$/.test(handle)) return { ok: false, error: "Invalid X handle" };
-      const r = await getText(`${opts.xBridgeBase.replace(/\/$/, "")}/${handle}`, timeoutMs);
-      if (!r.ok) return { ok: false, error: r.status ? `X ${r.status}` : r.error };
-      return { ok: true, posts: parseRss(r.body) };
+      if (opts.xBridgeBase) {
+        if (!/^https:\/\//.test(opts.xBridgeBase))
+          return { ok: false, error: "X_BRIDGE_BASE must start with https://" };
+        const r = await getText(opts.xBridgeBase.replace(/\/$/, "") + "/" + handle, timeoutMs);
+        if (!r.ok) return { ok: false, error: r.status ? "X " + r.status : r.error };
+        return { ok: true, posts: parseRss(r.body) };
+      }
+      if (opts.xJinaReader || process.env["X_JINA_READER"] === "1") {
+        const r = await getText("https://r.jina.ai/https://x.com/" + handle, timeoutMs);
+        if (!r.ok) return { ok: false, error: r.status ? "X/Jina " + r.status : r.error };
+        const posts = parseJinaTwitter(r.body);
+        return posts.length
+          ? { ok: true, posts }
+          : { ok: false, error: "X/Jina returned no posts" };
+      }
+      return { ok: false, error: "X/Twitter needs X_BRIDGE_BASE or X_JINA_READER=1" };
     }
     if (source.platform === "Telegram") {
       const chan = source.handle.replace(/^@|^https?:\/\/t\.me\/(s\/)?/, "").split("/")[0] ?? "";

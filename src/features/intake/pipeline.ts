@@ -2,6 +2,7 @@ import type {
   Candidate,
   Drone,
   Extraction,
+  ExtractedSpec,
   SpecAttribute,
   SystemExtraction,
 } from "@/entities/drone/types";
@@ -242,8 +243,20 @@ function applyRelatedSystems(
       extraction,
       status: "pending",
     };
-    if (extraction.matchId && extraction.confidence >= d.autoMergeThreshold) {
-      const target = d.drones.get(extraction.matchId);
+    const target = extraction.matchId ? d.drones.get(extraction.matchId) : undefined;
+    const targetName = target?.name.trim().toLowerCase() ?? "";
+    const extractedName = (extraction.name ?? "").trim().toLowerCase();
+    const isDistinctVariant =
+      !!target &&
+      extractedName.length > targetName.length &&
+      extractedName.startsWith(targetName) &&
+      /^(?:ace|edge|mse|block\s*\d+|series)$/.test(extractedName.slice(targetName.length).trim());
+    if (
+      extraction.matchId &&
+      extraction.confidence >= d.autoMergeThreshold &&
+      target &&
+      !isDistinctVariant
+    ) {
       if (target) {
         const merged = mergeDroneIntelligence(
           withNormalizedRf(
@@ -406,6 +419,20 @@ export async function runTwoTier(
   }
   const normalized = applyNormalization(extraction);
   extraction = normalized.extraction;
+  // Autonomy brake: a model-produced figure is only actionable if its evidence actually
+  // appears in the original post. Identity fields are untouched.
+  const fold = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase();
+  const hasEvidence = (spec: ExtractedSpec) => {
+    const proof = spec.evidence ?? spec.raw;
+    if (!proof) return true;
+    return fold(raw).includes(fold(String(proof)));
+  };
+  if (extraction.specs) extraction.specs = extraction.specs.filter(hasEvidence);
+  if (extraction.systemExtractions)
+    extraction.systemExtractions = extraction.systemExtractions.map((s) => ({
+      ...s,
+      specs: s.specs.filter(hasEvidence),
+    }));
   for (const unknown of normalized.unknowns) {
     d.taxonomyCandidates?.record(unknown.rawTerm, unknown.taxonomy, { source });
   }

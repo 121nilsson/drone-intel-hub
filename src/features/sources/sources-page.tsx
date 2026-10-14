@@ -436,7 +436,6 @@ export function SourcesPage() {
               <input
                 type="checkbox"
                 checked={s.autoSync !== false}
-                disabled={s.platform === "X"}
                 onChange={(e) =>
                   svc.sources.update(
                     s.id,
@@ -447,7 +446,7 @@ export function SourcesPage() {
               Auto
             </label>
             <Btn
-              disabled={!!busy || s.platform === "X"}
+              disabled={!!busy}
               onClick={async () => {
                 setBusy(s.id);
                 try {

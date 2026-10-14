@@ -443,6 +443,31 @@ export function DossierPage({ id }: { id: string }) {
             ))}
         </ol>
       </Panel>
+      <Panel id="claims" title="Spec claim timeline">
+        <ol className="relative ml-2 border-l border-border">
+          {d.specs
+            .flatMap((s) => s.claims.map((claim, i) => ({ spec: s, claim, index: i })))
+            .sort((a, b) => (b.claim.date ?? "").localeCompare(a.claim.date ?? ""))
+            .slice(0, 40)
+            .map(({ spec, claim, index }) => (
+              <li key={`${spec.key}-${index}`} className="mb-3 ml-4">
+                <span className="absolute -left-1.5 mt-1.5 h-2.5 w-2.5 border border-primary bg-background" />
+                <p className="font-mono text-xs text-muted-foreground">
+                  {(claim.date ?? "").slice(0, 10)} · {spec.label}
+                </p>
+                <p className="text-sm">
+                  {String(claim.value)} {spec.unit ?? ""}{" "}
+                  <span className="font-mono text-xs text-muted-foreground">
+                    — {claim.source || claim.model || "?"}
+                  </span>
+                </p>
+              </li>
+            ))}
+          {!d.specs.some((s) => s.claims.length) && (
+            <p className="text-sm text-muted-foreground">No dated claims.</p>
+          )}
+        </ol>
+      </Panel>
       <div className="h-14 sm:hidden" />
       <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-3 gap-2 border-t border-border bg-background/95 p-2 backdrop-blur sm:hidden">
         <Link

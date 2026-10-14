@@ -153,6 +153,7 @@ export async function fetchAllSources(
     fetchOne(s, {
       timeoutMs: FETCH_TIMEOUT_MS,
       ...(process.env["X_BRIDGE_BASE"] ? { xBridgeBase: process.env["X_BRIDGE_BASE"] } : {}),
+      ...(process.env["X_JINA_READER"] === "1" ? { xJinaReader: true } : {}),
       ...(articleText ? { articleText } : {}),
     });
 

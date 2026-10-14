@@ -392,13 +392,19 @@ function scan(raw: string, catalog: Drone[], deep: boolean): Extraction {
       : /uav|fpv|drone|loitering|wing|interceptor|bomber/.test(t)
         ? "Air"
         : undefined;
-  const origin = /russia|russian|рос/.test(t)
+  const origin = /russia|russian|рос(?:сия)?|москва/.test(t)
     ? "RU"
-    : /ukrain|укр/.test(t)
+    : /ukraine|україна|украина|укр/.test(t)
       ? "UA"
-      : /iran/.test(t)
+      : /iran|иран/.test(t)
         ? "IR"
-        : undefined;
+        : /china|китай/.test(t)
+          ? "CN"
+          : /turkey|türkiye|turkiye|турция/.test(t)
+            ? "TR"
+            : /israel/.test(t)
+              ? "IL"
+              : undefined;
 
   const systems = resolveSystems(raw, catalog);
   const matched = systems.filter((s) => s.matchId);
