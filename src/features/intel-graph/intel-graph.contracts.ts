@@ -34,38 +34,38 @@ export interface RelatedIntel {
 // Type weights for ranking edges
 export const EDGE_TYPE_WEIGHTS: Record<GraphEdgeType, number> = {
   counterpart: 1.0,
-  ew_interaction: 0.95,
-  rf_overlap: 0.85,
+  "ew-interaction": 0.95,
+  "rf-overlap": 0.85,
   lineage: 0.9,
-  spec_dispute: 0.75,
-  shared_component: 0.7,
-  shared_operator: 0.65,
-  event_correlation: 0.6,
-  reference_shared: 0.5,
+  "spec-dispute": 0.75,
+  "shared-component": 0.7,
+  "shared-operator": 0.65,
+  "event-correlation": 0.6,
+  "reference-shared": 0.5,
 };
 
 // Human-readable labels for edge types
 export const EDGE_TYPE_LABELS: Record<GraphEdgeType, string> = {
   counterpart: "Counterpart",
-  rf_overlap: "RF Overlap",
-  ew_interaction: "EW Interaction",
-  spec_dispute: "Spec Dispute",
-  shared_component: "Shared Component",
-  shared_operator: "Shared Operator",
-  event_correlation: "Same Event",
+  "rf-overlap": "RF Overlap",
+  "ew-interaction": "EW Interaction",
+  "spec-dispute": "Spec Dispute",
+  "shared-component": "Shared Component",
+  "shared-operator": "Shared Operator",
+  "event-correlation": "Same Event",
   lineage: "Variant Family",
-  reference_shared: "Shared Reference",
+  "reference-shared": "Shared Reference",
 };
 
 // Icon mapping for edge types
 export const EDGE_TYPE_ICONS: Record<GraphEdgeType, string> = {
   counterpart: "⚔️",
-  rf_overlap: "📡",
-  ew_interaction: "🛡️",
-  spec_dispute: "⚠️",
-  shared_component: "🔧",
-  shared_operator: "🎖️",
-  event_correlation: "📰",
+  "rf-overlap": "📡",
+  "ew-interaction": "🛡️",
+  "spec-dispute": "⚠️",
+  "shared-component": "🔧",
+  "shared-operator": "🎖️",
+  "event-correlation": "📰",
   lineage: "🌿",
-  reference_shared: "📖",
+  "reference-shared": "📖",
 };

@@ -100,7 +100,7 @@ export interface SensorObservation {
   sourceId?: string;
 }
 
-export type EvolutionKind = "frequency" | "motor" | "payload" | "airframe" | "other";
+export type EvolutionKind = "frequency" | "motor" | "payload" | "airframe" | "mention" | "other";
 export interface EvolutionEvent {
   date: string;
   kind: EvolutionKind;
@@ -161,6 +161,8 @@ export interface Drone {
   installation?: string;
   installationId?: string;
   summary: string;
+  /** Cached English translation of a non-English source-language summary. */
+  summaryEnglish?: string;
   specs: SpecAttribute[];
   rf: RFLink[];
   components: SupplyComponent[];
@@ -252,6 +254,21 @@ export interface Extraction {
 }
 
 export type CandidateStatus = "pending" | "promoted" | "merged" | "discarded";
+export interface CandidateQuality {
+  /** Model/system quality score used for triage. */
+  confidence: number;
+  /** Number of extracted specs retained for this candidate. */
+  specCount: number;
+  /** Specs whose evidence text was actually retained after the autonomy brake. */
+  evidenceSpecCount: number;
+  /** Systems the extraction attributed this candidate/text to. */
+  systemNames: string[];
+  /** Candidate quality risks that keep it in review. */
+  risks: string[];
+  /** Runtime triage outcome this candidate reached. */
+  decision?: "auto-merged" | "auto-promoted" | "queued" | "auto-discarded";
+}
+
 export interface Candidate {
   id: string;
   raw: string;
@@ -266,6 +283,8 @@ export interface Candidate {
   resolvedBy?: "auto" | "analyst";
   /** When the deep model was asked whether this is its matched catalog entry; asked once. */
   adjudicatedAt?: string;
+  /** Explainability snapshot captured at ingest time. */
+  quality?: CandidateQuality;
 }
 
 /** Plain-text country code; rendered flags live in `CountryBadge` (flag-icons). */

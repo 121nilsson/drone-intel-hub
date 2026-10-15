@@ -116,7 +116,12 @@ describe("runTwoTier relation persistence", () => {
         },
       ],
     });
-    const result = await runTwoTier("report", SRC, d, { dispatchId: "dispatch-1" });
+    const result = await runTwoTier(
+      "Shahed-136 reached 180 km/h. Geran-2 reached 220 km/h.\nreport",
+      SRC,
+      d,
+      { dispatchId: "dispatch-1" },
+    );
     expect(result.droneIds?.sort()).toEqual(["geran-2", "shahed-136"]);
     expect(d.drones.get("shahed-136")?.specs[0]?.claims[0]).toMatchObject({
       value: 180,

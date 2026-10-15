@@ -1,5 +1,6 @@
 import { Link, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useServerFn } from "@tanstack/react-start";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -13,6 +14,7 @@ import { type Drone, type SpecAttribute } from "@/entities/drone/types";
 import { CountryBadge } from "@/shared/ui/country-badge";
 import { ClaimChip, ProvenanceSheet, type ClaimSelection } from "./provenance-sheet";
 import { useDrones, useServices } from "@/shared/infra/services";
+import { translateText } from "@/shared/infra/ai-proxy.functions";
 import { removalImpact, removeDrone } from "@/features/intake/pipeline";
 import { Btn, ConfidenceTag, Panel, Tag } from "@/shared/ui/primitives";
 import { useRelatedIntel, RelatedRail } from "@/features/intel-graph";
@@ -199,8 +201,91 @@ function DeleteSystem({ drone }: { drone: Drone }) {
   );
 }
 
+function DossierSummary({ drone, svc }: { drone: Drone; svc: ReturnType<typeof useServices> }) {
+  const translateFn = useServerFn(translateText);
+  const summary = drone.summary;
+  const storageSummary = drone.summaryEnglish;
+  const likelyEnglish = /^[\w\s.,;:!?"'()\-[\]{}&%/]+$/.test(summary);
+  const [translated, setTranslated] = useState<string | null>(null);
+  const [translating, setTranslating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (storageSummary) {
+      setTranslated(storageSummary);
+      setError(null);
+      setTranslating(false);
+      if (storageSummary && !likelyEnglish) {
+        // already cached in storage, so no translated request is needed on this view
+      }
+      return;
+    }
+    if (likelyEnglish) {
+      setTranslated(null);
+      setError(null);
+      setTranslating(false);
+      return;
+    }
+    let cancelled = false;
+    setTranslating(true);
+    setError(null);
+    void translateFn({ data: { text: summary, model: svc.settings.translateModel } })
+      .then((res) => {
+        if (cancelled) return;
+        if (res.ok) {
+          setTranslated(res.translated);
+          // Cache the result in the system record so the translation token is only paid once.
+          try {
+            svc.drones.upsert({ ...drone, summaryEnglish: res.translated });
+          } catch (err) {
+            // Non-fatal: the browser still has this translation for this page render.
+            console.warn("[dossier] could not persist translated summary", err);
+          }
+        } else setError(res.error);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setError(err instanceof Error ? err.message : "Translation failed");
+      })
+      .finally(() => {
+        if (!cancelled) setTranslating(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [drone, likelyEnglish, storageSummary, summary, svc, svc.settings.translateModel, translateFn]);
+
+  if (translated) {
+    return (
+      <div className="space-y-2">
+        <p className="max-w-3xl text-base leading-relaxed">{translated}</p>
+        <details className="font-mono text-xs text-muted-foreground">
+          <summary className="cursor-pointer">Original ({likelyEnglish ? "English" : "source language"})</summary>
+          <p className="mt-1 max-w-3xl leading-relaxed text-muted-foreground">{summary}</p>
+        </details>
+      </div>
+    );
+  }
+
+  if (!likelyEnglish && translating) {
+    return (
+      <div className="space-y-2">
+        <p className="max-w-3xl animate-pulse font-mono text-sm text-muted-foreground">
+          Translating summary…
+        </p>
+        <p className="max-w-3xl text-base leading-relaxed text-muted-foreground">{summary}</p>
+      </div>
+    );
+  }
+
+  return (
+    <p className="max-w-3xl text-base leading-relaxed text-muted-foreground">{summary}</p>
+  );
+}
+
 export function DossierPage({ id }: { id: string }) {
   const drones = useDrones();
+  const svc = useServices();
   const d = drones.find((x) => x.id === id);
   const relatedIntel = useRelatedIntel(id);
   const counterparts = d ? drones.filter((x) => d.counterpartIds.includes(x.id)) : [];
@@ -240,9 +325,7 @@ export function DossierPage({ id }: { id: string }) {
           </h1>
           <DeleteSystem key={d.id} drone={d} />
         </div>
-        <p className="mt-2 max-w-3xl text-base leading-relaxed text-muted-foreground">
-          {d.summary}
-        </p>
+        <DossierSummary drone={d} svc={svc} />
         {d.reference && (
           <p className="mt-2 font-mono text-xs text-muted-foreground">
             <a

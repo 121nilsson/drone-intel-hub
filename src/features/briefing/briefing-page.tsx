@@ -1,6 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { DOMAINS } from "@/entities/drone/types";
+import type { Drone } from "@/entities/drone/types";
 import { CountryBadge } from "@/shared/ui/country-badge";
 import { useDispatches, useDrones, useServices } from "@/shared/infra/services";
 import { buildBriefing } from "@/features/briefing/briefing-data";

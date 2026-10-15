@@ -27,11 +27,10 @@ export function buildSpecsLink(droneId: string, specKey: string): DeepLink {
 }
 
 /** Build a deep link to the Feed filtered to a dispatch or search */
-export function buildDispatchLink(dispatchId?: string, search?: string): DeepLink {
-  return {
-    route: "/dispatches",
-    search: dispatchId ? { q: dispatchId } : search ? { q: search } : undefined,
-  };
+export function buildDispatchLink(dispatchId?: string, searchQuery?: string): DeepLink {
+  const search =
+    dispatchId ? { q: dispatchId } : (searchQuery ? { q: searchQuery } : undefined);
+  return search ? { route: "/dispatches", search } : { route: "/dispatches" };
 }
 
 /** Build a deep link to the Spectrum page with a system focused */
@@ -44,10 +43,7 @@ export function buildSpectrumLink(focusId: string): DeepLink {
 
 /** Build a deep link to the Catalog filtered */
 export function buildCatalogLink(filters?: Record<string, string>): DeepLink {
-  return {
-    route: "/catalog",
-    search: filters,
-  };
+  return filters ? { route: "/catalog", search: filters } : { route: "/catalog" };
 }
 
 /** Build a deep link to the Briefing */
@@ -59,10 +55,10 @@ export function buildBriefingLink(): DeepLink {
 
 /** Build a deep link to the Intake/Queue page with a draft */
 export function buildIntakeLink(draft?: string, source?: string): DeepLink {
-  return {
-    route: "/intake",
-    search: { draft, source }.filter(([, v]) => v !== undefined) as Record<string, string>,
-  };
+  const search = Object.fromEntries(
+    Object.entries({ draft, source }).filter(([, v]) => v !== undefined),
+  ) as Record<string, string>;
+  return Object.keys(search).length ? { route: "/intake", search } : { route: "/intake" };
 }
 
 /** Build a deep link to the Sources page */
@@ -137,8 +133,15 @@ export function parseDeepLink(url: string, baseUrl: string): DeepLink | null {
       search[key] = value;
     }
     const hash = parsed.hash || undefined;
+    const hasSearch = Object.keys(search).length > 0;
 
-    return { route, search: Object.keys(search).length ? search : undefined, hash };
+    return hasSearch && hash
+      ? { route, search, hash }
+      : hasSearch
+        ? { route, search }
+        : hash
+          ? { route, hash }
+          : { route };
   } catch {
     return null;
   }

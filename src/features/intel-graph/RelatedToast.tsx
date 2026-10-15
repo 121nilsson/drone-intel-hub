@@ -27,26 +27,26 @@ interface RelatedToastProps {
 
 const ICON_MAP: Record<GraphEdgeType, typeof ExternalLink> = {
   counterpart: Zap,
-  rf_overlap: Radio,
-  ew_interaction: Shield,
-  spec_dispute: AlertTriangle,
-  shared_component: Wrench,
-  shared_operator: Medal,
-  event_correlation: Newspaper,
+  "rf-overlap": Radio,
+  "ew-interaction": Shield,
+  "spec-dispute": AlertTriangle,
+  "shared-component": Wrench,
+  "shared-operator": Medal,
+  "event-correlation": Newspaper,
   lineage: GitBranch,
-  reference_shared: BookOpen,
+  "reference-shared": BookOpen,
 };
 
 const TONE_MAP: Record<GraphEdgeType, "primary" | "accent" | "danger" | "default"> = {
   counterpart: "primary",
-  rf_overlap: "accent",
-  ew_interaction: "danger",
-  spec_dispute: "danger",
-  shared_component: "default",
-  shared_operator: "accent",
-  event_correlation: "default",
+  "rf-overlap": "accent",
+  "ew-interaction": "danger",
+  "spec-dispute": "danger",
+  "shared-component": "default",
+  "shared-operator": "accent",
+  "event-correlation": "default",
   lineage: "primary",
-  reference_shared: "default",
+  "reference-shared": "default",
 };
 
 export function RelatedToast({ edges, sourceLabel, maxItems = 5, onDismiss }: RelatedToastProps) {
@@ -60,9 +60,9 @@ export function RelatedToast({ edges, sourceLabel, maxItems = 5, onDismiss }: Re
 
   const handleDeepLink = (deepLink: DeepLink) => {
     if (deepLink.route.startsWith("/systems/")) {
-      navigate({ to: deepLink.route, search: deepLink.search, hash: deepLink.hash });
+      navigate({ to: deepLink.route, ...(deepLink.search ? { search: deepLink.search } : {}), ...(deepLink.hash ? { hash: deepLink.hash } : {}) });
     } else {
-      navigate({ to: deepLink.route, search: deepLink.search, hash: deepLink.hash });
+      navigate({ to: deepLink.route, ...(deepLink.search ? { search: deepLink.search } : {}), ...(deepLink.hash ? { hash: deepLink.hash } : {}) });
     }
   };
 
@@ -124,8 +124,8 @@ function RelatedToastItem({
     <li>
       <Link
         to={edge.deepLink.route}
-        search={edge.deepLink.search}
-        hash={edge.deepLink.hash}
+          {...(edge.deepLink.search ? { search: edge.deepLink.search } : {})}
+          {...(edge.deepLink.hash ? { hash: edge.deepLink.hash } : {})}
         className="flex items-start gap-2 p-2 border border-border/50 bg-background/50 rounded hover:bg-secondary transition-colors"
         onClick={(e) => {
           // Prevent default link behavior, use navigate instead
@@ -176,9 +176,9 @@ export function RelatedInlineToast({
 
   const handleDeepLink = (deepLink: DeepLink) => {
     if (deepLink.route.startsWith("/systems/")) {
-      navigate({ to: deepLink.route, search: deepLink.search, hash: deepLink.hash });
+      navigate({ to: deepLink.route, ...(deepLink.search ? { search: deepLink.search } : {}), ...(deepLink.hash ? { hash: deepLink.hash } : {}) });
     } else {
-      navigate({ to: deepLink.route, search: deepLink.search, hash: deepLink.hash });
+      navigate({ to: deepLink.route, ...(deepLink.search ? { search: deepLink.search } : {}), ...(deepLink.hash ? { hash: deepLink.hash } : {}) });
     }
   };
 
@@ -202,8 +202,8 @@ export function RelatedInlineToast({
           <li key={`${edge.type}:${edge.targetId}`}>
             <Link
               to={edge.deepLink.route}
-              search={edge.deepLink.search}
-              hash={edge.deepLink.hash}
+          {...(edge.deepLink.search ? { search: edge.deepLink.search } : {})}
+          {...(edge.deepLink.hash ? { hash: edge.deepLink.hash } : {})}
               className="flex items-center gap-2 px-2 py-1.5 text-sm hover:text-primary transition-colors"
               onClick={(e) => {
                 e.preventDefault();

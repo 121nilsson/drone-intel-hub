@@ -28,26 +28,26 @@ interface RelatedRailProps {
 
 const ICON_MAP: Record<GraphEdgeType, typeof ExternalLink> = {
   counterpart: Zap,
-  rf_overlap: Radio,
-  ew_interaction: Shield,
-  spec_dispute: AlertTriangle,
-  shared_component: Wrench,
-  shared_operator: Medal,
-  event_correlation: Newspaper,
+  "rf-overlap": Radio,
+  "ew-interaction": Shield,
+  "spec-dispute": AlertTriangle,
+  "shared-component": Wrench,
+  "shared-operator": Medal,
+  "event-correlation": Newspaper,
   lineage: GitBranch,
-  reference_shared: BookOpen,
+  "reference-shared": BookOpen,
 };
 
 const TONE_MAP: Record<GraphEdgeType, "primary" | "accent" | "danger" | "default"> = {
   counterpart: "primary",
-  rf_overlap: "accent",
-  ew_interaction: "danger",
-  spec_dispute: "danger",
-  shared_component: "default",
-  shared_operator: "accent",
-  event_correlation: "default",
+  "rf-overlap": "accent",
+  "ew-interaction": "danger",
+  "spec-dispute": "danger",
+  "shared-component": "default",
+  "shared-operator": "accent",
+  "event-correlation": "default",
   lineage: "primary",
-  reference_shared: "default",
+  "reference-shared": "default",
 };
 
 export function RelatedRail({
@@ -76,9 +76,9 @@ export function RelatedRail({
     }
 
     if (deepLink.route.startsWith("/systems/")) {
-      navigate({ to: deepLink.route, search: deepLink.search, hash: deepLink.hash });
+      navigate({ to: deepLink.route, ...(deepLink.search ? { search: deepLink.search } : {}), ...(deepLink.hash ? { hash: deepLink.hash } : {}) });
     } else {
-      navigate({ to: deepLink.route, search: deepLink.search, hash: deepLink.hash });
+      navigate({ to: deepLink.route, ...(deepLink.search ? { search: deepLink.search } : {}), ...(deepLink.hash ? { hash: deepLink.hash } : {}) });
     }
   };
 
@@ -196,8 +196,8 @@ export function RelatedChips({ edges, maxChips = 4 }: { edges: GraphEdge[]; maxC
         <Link
           key={`${edge.type}:${edge.targetId}`}
           to={edge.deepLink.route}
-          search={edge.deepLink.search}
-          hash={edge.deepLink.hash}
+          {...(edge.deepLink.search ? { search: edge.deepLink.search } : {})}
+          {...(edge.deepLink.hash ? { hash: edge.deepLink.hash } : {})}
           className="inline-flex items-center gap-1 px-1.5 py-0.5 border border-border bg-background/50 rounded text-[10px] hover:bg-secondary transition-colors"
           title={edge.evidence.join(" · ")}
         >

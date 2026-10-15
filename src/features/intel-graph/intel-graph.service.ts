@@ -1,5 +1,6 @@
 import type { Drone, SpecAttribute, RFLink } from "@/entities/drone/types";
-import type { Dispatch } from "@/entities/dispatch/types";
+import { consensus } from "@/entities/drone/consensus";
+import type { RawDispatch as Dispatch } from "@/entities/dispatch/types";
 import {
   intersectBands,
   linkIsFiber,
@@ -361,7 +362,7 @@ function computeSpecDisputeEdges(source: Drone): GraphEdge[] {
     // Check if this spec has disputed consensus
     // We need to import consensus here - but it's in entities/drone/consensus
     // For now, check if any claim has disputed flag
-    const hasDispute = spec.claims.some((c) => c.disputed);
+    const hasDispute = consensus(spec).disputed;
     if (!hasDispute) continue;
 
     edges.push({

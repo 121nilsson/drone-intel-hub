@@ -1,5 +1,6 @@
 import type {
   Candidate,
+  CandidateQuality,
   Drone,
   Extraction,
   ExtractedSpec,
@@ -22,7 +23,7 @@ import { combineExtractions, needsDeepAI, needsFastAI } from "./extraction-gates
 import { outletKey } from "@/entities/source/outlet-record";
 import { linkVariant, mergeDroneIntelligence } from "@/entities/drone/merge-intelligence";
 import { ProcurementExtractionSchema } from "@/shared/contracts/extraction.schema";
-import { phoneticKey } from "@/entities/drone/name-key";
+import { phoneticKey, phoneticText } from "@/entities/drone/name-key";
 
 export interface PipelineDeps {
   tier1: IntelExtractor;
@@ -241,6 +242,30 @@ function applyRelatedSystems(
       createdAt: new Date().toISOString(),
       tier: primary.candidate.tier,
       extraction,
+      quality: {
+        confidence: extraction.confidence,
+        specCount: extraction.specs.length,
+        evidenceSpecCount: extraction.specs.filter((spec) => Boolean(spec.evidence)).length,
+        systemNames: extraction.systems?.length
+          ? extraction.systems.map((s) => s.name).filter((name): name is string => Boolean(name))
+          : (extraction.name ? [extraction.name] : []),
+        risks: [
+          ...new Set([
+            ...(extraction.metadata?.escalationReasons ?? []),
+            ...(extraction.systems?.length && extraction.systems.length > 1 ? ["multi-system-attribution"] : []),
+            ...(collidesWithCatalog(extraction, d.drones.list()) ? ["name collides with an existing catalog system"] : []),
+            ...(extraction.name && notASystemName(extraction.name, source) ? ["name resembles an organisation or source"] : []),
+            ...(extraction.confidence < (d.autoMergeThreshold ?? 0.85)
+              ? ["confidence below auto-merge threshold"]
+              : []),
+            ...(extraction.confidence >= (d.autoMergeThreshold ?? 0.85) &&
+            extraction.confidence < (d.autoPromoteThreshold ?? 0.9)
+              ? ["confidence below auto-promote threshold"]
+              : []),
+            ...(extraction.specs.some((s) => !s.evidence) ? ["some specs lack quoted evidence"] : []),
+          ]),
+        ],
+      },
       status: "pending",
     };
     const target = extraction.matchId ? d.drones.get(extraction.matchId) : undefined;
@@ -277,6 +302,7 @@ function applyRelatedSystems(
         candidate.status = "merged";
         candidate.resolvedInto = target.id;
         candidate.resolvedBy = "auto";
+        if (candidate.quality) candidate.quality.decision = "auto-merged";
         droneIds.add(target.id);
       }
     } else if (
@@ -294,6 +320,7 @@ function applyRelatedSystems(
       candidate.status = "promoted";
       candidate.resolvedInto = promoted.id;
       candidate.resolvedBy = "auto";
+      if (candidate.quality) candidate.quality.decision = "auto-promoted";
       droneIds.add(promoted.id);
       relatedCandidates.push(candidate);
       continue;
@@ -305,6 +332,7 @@ function applyRelatedSystems(
       // near-zero-confidence slices for review, burying the candidates worth an analyst's time.
       candidate.status = "discarded";
       candidate.resolvedBy = "auto";
+      if (candidate.quality) candidate.quality.decision = "auto-discarded";
     }
     d.candidates.add(candidate);
     relatedCandidates.push(candidate);
@@ -314,6 +342,34 @@ function applyRelatedSystems(
     ...(relatedCandidates.length ? { relatedCandidates } : {}),
     ...(droneIds.size ? { droneIds: [...droneIds] } : {}),
   };
+}
+
+function stemAndNumber(name: string): { stem: string; number: string } {
+  const key = phoneticText(name).replace(/\s+/g, "");
+  const match = key.match(/^(.*?)(\d+)$/);
+  if (!match) return { stem: key.replace(/[aeiou]+$/, ""), number: "" };
+  const [, stem, number] = match as [string, string, string];
+  return { stem: stem.replace(/[aeiou]+$/, ""), number };
+}
+
+function phoneticNameMatches(left: string, right: string): boolean {
+  const a = stemAndNumber(left);
+  const b = stemAndNumber(right);
+  if (a.number !== b.number) return false;
+  if (!a.number && !b.number) return a.stem === b.stem;
+  return a.stem === b.stem;
+}
+
+function findExistingSystemByIdentity(extraction: Extraction, catalog: Drone[]): string | undefined {
+  const candidate = extraction.name?.trim();
+  if (!candidate) return undefined;
+  const ids = new Set<string>();
+  for (const drone of catalog) {
+    for (const spelling of [drone.name, drone.cyrillic]) {
+      if (spelling && phoneticNameMatches(candidate, spelling)) ids.add(drone.id);
+    }
+  }
+  return ids.size === 1 ? [...ids][0] : undefined;
 }
 
 export async function runTwoTier(
@@ -452,9 +508,37 @@ export async function runTwoTier(
     createdAt: new Date().toISOString(),
     tier,
     extraction,
+    quality: {
+      confidence: extraction.confidence,
+      specCount: extraction.specs.length,
+      evidenceSpecCount: extraction.specs.filter((spec) => Boolean(spec.evidence)).length,
+      systemNames: extraction.systems?.length
+        ? extraction.systems.map((s) => s.name).filter((name): name is string => Boolean(name))
+        : (extraction.name ? [extraction.name] : []),
+      risks: [
+        ...new Set([
+          ...(extraction.metadata?.escalationReasons ?? []),
+          ...(extraction.systems?.length && extraction.systems.length > 1 ? ["multi-system-attribution"] : []),
+          ...(collidesWithCatalog(extraction, d.drones.list()) ? ["name collides with an existing catalog system"] : []),
+          ...(extraction.name && notASystemName(extraction.name, source) ? ["name resembles an organisation or source"] : []),
+          ...(extraction.confidence < (d.autoMergeThreshold ?? 0.85) ? ["confidence below auto-merge threshold"] : []),
+          ...(extraction.confidence >= (d.autoMergeThreshold ?? 0.85) && extraction.confidence < (d.autoPromoteThreshold ?? 0.9) ? ["confidence below auto-promote threshold"] : []),
+          ...(!extraction.specs.length ? ["no structured facts to merge: mention-only candidate"] : []),
+          ...(extraction.specs.some((spec) => !spec.evidence) ? ["some specs lack quoted evidence"] : []),
+        ]),
+      ],
+    },
     status: "pending",
   };
   const suppressed = learnedNegativeKeys(d.candidates.list());
+  if (!extraction.matchId) {
+    const inferredMatchId = findExistingSystemByIdentity(extraction, catalog);
+    if (inferredMatchId && extraction.confidence >= d.autoMergeThreshold && !collidesWithCatalog(extraction, catalog)) {
+      extraction.matchId = inferredMatchId;
+      if (candidate.extraction) candidate.extraction.matchId = inferredMatchId;
+    }
+  }
+
   if (extraction.matchId && extraction.confidence >= d.autoMergeThreshold) {
     // The guard above (re-checked synchronously, no awaits since) guarantees this exists.
     const target = d.drones.get(extraction.matchId)!;
@@ -490,6 +574,7 @@ export async function runTwoTier(
     candidate.status = "merged";
     candidate.resolvedInto = target.id;
     candidate.resolvedBy = "auto";
+    if (candidate.quality) candidate.quality.decision = "auto-merged";
     d.candidates.add(candidate);
     trace.specsMerged = withSpecs.specs.length - specsBefore;
     return applyRelatedSystems(
@@ -514,6 +599,7 @@ export async function runTwoTier(
   ) {
     d.candidates.add(candidate);
     const drone = promote(candidate, d);
+    if (candidate.quality) candidate.quality.decision = "auto-promoted";
     d.candidates.update(candidate.id, { resolvedBy: "auto" });
     return applyRelatedSystems(
       {
@@ -532,6 +618,7 @@ export async function runTwoTier(
   if (d.autoDiscardThreshold !== undefined && extraction.confidence < d.autoDiscardThreshold) {
     candidate.status = "discarded";
     candidate.resolvedBy = "auto";
+    if (candidate.quality) candidate.quality.decision = "auto-discarded";
     d.candidates.add(candidate);
     return applyRelatedSystems(
       { kind: "auto-discarded", candidate, trace },
@@ -542,6 +629,7 @@ export async function runTwoTier(
       degraded,
     );
   }
+  if (candidate.quality) candidate.quality.decision = "queued";
   d.candidates.add(candidate);
   return applyRelatedSystems(
     { kind: "queued", candidate, trace },
@@ -960,6 +1048,32 @@ const PROCURE_SYS = `You are a defense procurement analyst. Extract contract and
 Reply in json with keys: company (string), country (ISO2), amount (string|null), currency (string|null),
 program (string|null), product (string|null), customer (string|null), announcedAt (string|null), notes (string|null).
 Only report information that appears in the text. If no procurement info is found, return null for all fields.`;
+export function recordMention(
+  c: Candidate,
+  droneId: string,
+  d: Pick<PipelineDeps, "drones" | "candidates">,
+): Drone | undefined {
+  const target = d.drones.get(droneId);
+  if (!target) return undefined;
+  const now = new Date().toISOString();
+  const recorded = {
+    ...target,
+    evolution: [
+      ...target.evolution,
+      {
+        date: now,
+        kind: "mention" as const,
+        description: "Mentioned in source: " + (c.source || "unknown source"),
+        source: c.source,
+      },
+    ],
+    updatedAt: now,
+  };
+  d.drones.upsert(recorded);
+  d.candidates.update(c.id, { status: "merged", resolvedInto: droneId, resolvedBy: "analyst" });
+  return recorded;
+}
+
 
 export async function extractProcurement(
   raw: string,

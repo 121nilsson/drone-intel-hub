@@ -1,11 +1,7 @@
 import { useMemo } from "react";
 import { useDrones, useDispatches } from "@/shared/infra/services";
-import {
-  computeRelatedIntel,
-  type RelatedIntel,
-  type GraphEdge,
-  type GraphEdgeType,
-} from "./intel-graph.service";
+import { computeRelatedIntel } from "./intel-graph.service";
+import type { RelatedIntel, GraphEdge, GraphEdgeType } from "./intel-graph.contracts";
 
 interface UseRelatedIntelOptions {
   /** Filter to specific edge types */
@@ -86,6 +82,7 @@ export function useTopRelatedIntel(
   n: number = 3,
   types?: GraphEdgeType[],
 ): GraphEdge[] {
-  const intel = useRelatedIntel(sourceId, { types, limit: n });
+  const options = types ? { types, limit: n } : { limit: n };
+  const intel = useRelatedIntel(sourceId, options);
   return intel?.edges ?? [];
 }

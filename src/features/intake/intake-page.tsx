@@ -1,11 +1,11 @@
 import { Link } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { useCandidates, useDrones, useServices } from "@/shared/infra/services";
 import { translateText } from "@/shared/infra/ai-proxy.functions";
 import { fetchIntakeArticle, isBareUrl } from "@/shared/infra/sources/intake-fetch.functions";
 import { Btn, Panel, Tag } from "@/shared/ui/primitives";
-import { mergeInto, promote, runTwoTier } from "./pipeline";
+import { mergeInto, promote, runTwoTier, recordMention } from "./pipeline";
 import type { Candidate } from "@/entities/drone/types";
 
 function ExpandableText({ text, className = "" }: { text: string; className?: string }) {
@@ -97,6 +97,12 @@ function CandidateRow({ c }: { c: Candidate }) {
         </Tag>
         {e.domain && <Tag>{e.domain}</Tag>}
         {c.resolvedBy === "auto" && <Tag tone="accent">auto</Tag>}
+        {/\bdeep model:\s*not/i.test(c.extraction.rationale) && <Tag tone="danger">deep model questioned identity</Tag>}
+        {!c.extraction.specs.length && <Tag tone="accent">mention-only</Tag>}
+        {(c.quality?.risks.includes("multi-system-attribution") ||
+          (c.extraction.systems ?? []).some((s) => !s.matchId && s.variantOf)) && (
+          <Tag tone="danger">unresolved base/variant</Tag>
+        )}
         <span className="ml-auto max-w-full break-all font-mono text-xs text-muted-foreground">
           {c.source}
         </span>
@@ -189,6 +195,24 @@ function CandidateRow({ c }: { c: Candidate }) {
           {e.metadata.model ? ` · ${e.metadata.model}` : ""}
         </p>
       ) : null}
+      {c.quality && (
+        <div className="mt-2 space-y-1 font-mono text-[11px] text-muted-foreground">
+          <p>
+            Candidate quality: conf {Math.round(c.quality.confidence * 100)}%, specs {c.quality.evidenceSpecCount}/
+            {c.quality.specCount} with evidence
+            {c.quality.systemNames.length
+              ? " - " + c.quality.systemNames.join(", ")
+              : ""}
+          </p>
+          {c.quality.risks.length > 0 && (
+            <ul className="list-inside list-disc">
+              {c.quality.risks.map((risk) => (
+                <li key={risk}>{risk}</li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
       <p className="mt-2 break-words font-mono text-xs text-muted-foreground">{e.rationale}</p>
       {c.status === "pending" ? (
         <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -232,6 +256,15 @@ function CandidateRow({ c }: { c: Candidate }) {
           >
             Merge
           </Btn>
+           <Btn
+             variant="ghost"
+             disabled={!target}
+             onClick={() => {
+               recordMention(c, target, svc);
+             }}
+           >
+             Record mention
+           </Btn>
           <Btn
             variant="danger"
             onClick={() =>
@@ -344,6 +377,32 @@ export function IntakePage({
   const pending = candidates.filter((c) => c.status === "pending");
   const resolved = candidates.filter((c) => c.status !== "pending");
 
+  // Queue candidates that came from the same raw report are often the same base/variant family
+  // split during multi-system extraction. Group them together so an analyst can resolve one
+  // against the other instead of seeing them as unrelated queue items.
+  const unresolvedFamilies = useMemo(() => {
+    const families = new Map<string, Candidate[]>();
+    for (const c of pending) {
+      const hasUnresolvedRelation = (c.extraction.systems ?? []).some((s) => !s.matchId && Boolean(s.variantOf));
+      const isMultiSystem = (c.extraction.systems?.length ?? 0) > 1;
+      if (!hasUnresolvedRelation && !isMultiSystem) continue;
+      const key = c.raw.trim().slice(0, 240).toLowerCase();
+      const group = families.get(key) ?? [];
+      group.push(c);
+      families.set(key, group);
+    }
+    return [...families.values()].filter((g) => g.length > 0);
+  }, [pending]);
+
+  const familyCandidateIds = useMemo(
+    () => new Set(unresolvedFamilies.flat().map((c) => c.id)),
+    [unresolvedFamilies],
+  );
+  const ungroupedPending = useMemo(
+    () => pending.filter((c) => !familyCandidateIds.has(c.id)),
+    [pending, familyCandidateIds],
+  );
+
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
       <Panel
@@ -405,19 +464,46 @@ export function IntakePage({
       </Panel>
       <div className="min-w-0 space-y-6">
         <Panel title={`Triage queue · ${pending.length}`}>
+          {unresolvedFamilies.length > 0 && (
+            <div className="mb-4 space-y-3">
+              <p className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
+                Unresolved variant families
+              </p>
+              {unresolvedFamilies.map((family) => (
+                <div
+                  key={family.map((c) => c.id).join(":")}
+                  className="border border-accent/40 bg-background/50 p-3"
+                >
+                  <p className="font-mono text-xs text-accent">
+                    {family.map((c) => c.extraction.name ?? "Unnamed system").join(" / ")}
+                    {family.some((c) =>
+                      (c.extraction.systems ?? []).some((s) => s.variantOf),
+                    )
+                      ? " - resolve one as the base and one as its variant"
+                      : " - choose whether one is a variant of the other"}
+                  </p>
+                  <ul className="mt-3 space-y-3">
+                    {family.map((c) => (
+                      <CandidateRow key={c.id} c={c} />
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+          )}
           <ul className="space-y-3">
-            {pending.slice(0, visible).map((c) => (
+            {ungroupedPending.slice(0, visible).map((c) => (
               <CandidateRow key={c.id} c={c} />
             ))}
           </ul>
           {!pending.length && <p className="text-sm text-muted-foreground">Queue clear.</p>}
-          {pending.length > visible && (
+          {ungroupedPending.length > visible && (
             <div className="mt-4 flex items-center gap-3">
               <Btn variant="ghost" onClick={() => setVisible((v) => v + PAGE)}>
-                Show {Math.min(PAGE, pending.length - visible)} more
+                Show {Math.min(PAGE, ungroupedPending.length - visible)} more
               </Btn>
               <span className="font-mono text-xs text-muted-foreground">
-                {visible} of {pending.length}
+                {visible} of {ungroupedPending.length}
               </span>
             </div>
           )}
