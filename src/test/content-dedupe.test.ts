@@ -1,13 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
 import { collectSource, processPending } from "@/features/sources/auto-ingest";
-import { LocalDispatchRepository } from "@/shared/infra/local-repository";
+import { LocalDispatchRepository } from "@/shared/infra/storage/local-repository";
 import { MAX_ATTEMPTS, type RawDispatch } from "@/entities/dispatch/types";
 import { MIN_CHARS_FOR_DEDUPE } from "@/entities/dispatch/simhash";
 import type { MonitoredSource } from "@/entities/source/types";
 import type { Candidate, Drone, Extraction } from "@/entities/drone/types";
 import type { DispatchRepository } from "@/shared/contracts/repository";
 import type { PipelineDeps } from "@/features/intake/pipeline";
-import type { FetchedPost } from "@/shared/infra/fetch-posts";
+import type { FetchedPost } from "@/shared/infra/sources/fetch-posts";
 
 const REPORT_A = `A Geran-2 struck an energy substation in the Odesa region overnight. Ukrainian air defences downed twelve of the sixteen loitering munitions launched, and the remainder damaged transformer equipment causing rolling blackouts.`;
 const REPORT_A_REPRINTED = `${REPORT_A}\n\nvia @citeam`;

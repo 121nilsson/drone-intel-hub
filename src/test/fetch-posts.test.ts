@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, afterEach } from "vitest";
-import { fetchOne } from "@/shared/infra/fetch-posts";
+import { fetchOne } from "@/shared/infra/sources/fetch-posts";
 
 const ok = (body: string, status = 200) => Promise.resolve(new Response(body, { status }));
 

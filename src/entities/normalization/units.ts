@@ -51,7 +51,12 @@ const UNITS: UnitDef[] = [
     pattern: /(?:nm|nmi)(?![\p{L}\p{N}])/iu,
   },
   { token: "km/h", dimension: "speed", toCanonical: 1, pattern: /(?:km\/h|kmh|км\/ч|км\/год)/iu },
-  { token: "mph", dimension: "speed", toCanonical: MILE_KM, pattern: /mph(?![\p{L}\p{N}])/iu },
+  {
+    token: "mph",
+    dimension: "speed",
+    toCanonical: MILE_KM,
+    pattern: /(?:mph|miles?\s*per\s*hour)(?![\p{L}\p{N}])/iu,
+  },
   { token: "m/s", dimension: "speed", toCanonical: 3.6, pattern: /(?:m\/s|м\/с)/iu },
   {
     token: "kn",
@@ -91,7 +96,18 @@ const UNITS: UnitDef[] = [
     toCanonical: OZ_KG,
     pattern: /(?:oz|ounces?)(?![\p{L}\p{N}])/iu,
   },
-  { token: "kW", dimension: "power", toCanonical: 1000, pattern: /(?:kw|кВт)(?![\p{L}\p{N}])/iu },
+  {
+    token: "kW",
+    dimension: "power",
+    toCanonical: 1000,
+    pattern: /(?:kilowatts?|kw|кВт)(?![\p{L}\p{N}])/iu,
+  },
+  {
+    token: "hp",
+    dimension: "power",
+    toCanonical: 745.699872,
+    pattern: /(?:horsepower|hp|bhp|л\.с\.?)(?![\p{L}\p{N}])/iu,
+  },
   {
     token: "W",
     dimension: "power",

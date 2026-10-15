@@ -22,7 +22,7 @@ export const fetchSourcePosts = createServerFn({ method: "POST" })
     return d;
   })
   .handler(async ({ data }) => {
-    const { extractArticleText } = await import("./article.server");
+    const { extractArticleText } = await import("../article.server");
     return fetchOne(
       { platform: data.platform, handle: data.handle },
       {

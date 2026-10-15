@@ -20,7 +20,7 @@ const MAX_CHARS = 8000;
 const MIN_PARAGRAPHS = 2;
 
 // Import content filters for post-processing
-import { filterGeneralContent } from "./content-filters";
+import { filterGeneralContent } from "./sources/content-filters";
 
 export async function extractArticleText(html: string, url: string): Promise<string | null> {
   try {

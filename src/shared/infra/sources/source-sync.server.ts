@@ -8,7 +8,7 @@ import {
   type SyncReport,
   type WorkProgress,
 } from "@/features/sources/auto-ingest";
-import { db, dbConfigured } from "./postgres/db.server";
+import { db, dbConfigured } from "../postgres/db.server";
 import {
   parseSyncCooldown,
   parseSyncProgress,
@@ -16,9 +16,9 @@ import {
   SYNC_COOLDOWN_SLOT,
   SYNC_PROGRESS_SLOT,
   SYNC_SLOT,
-} from "./sync-state-read.server";
+} from "../sync-state-read.server";
 
-export type { SyncState } from "./sync-state-read.server";
+export type { SyncState } from "../sync-state-read.server";
 export { readSyncState };
 
 const SLOT = SYNC_SLOT;

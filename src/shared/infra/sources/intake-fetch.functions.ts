@@ -63,7 +63,7 @@ export const fetchIntakeArticle = createServerFn({ method: "POST" })
         return { ok: false as const, error: "The page is too large to read" };
       let html = await res.text();
       if (html.length > MAX_BYTES) html = html.slice(0, MAX_BYTES);
-      const { extractArticleText } = await import("./article.server");
+      const { extractArticleText } = await import("../article.server");
       const text = await extractArticleText(html, data.url);
       if (!text)
         return {

@@ -2,7 +2,7 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState, type ReactNode } from "react";
 import { Menu, Plus, Search, X, Radar } from "lucide-react";
 import { useDrones } from "@/shared/infra/services";
-import { droneHaystack } from "@/shared/infra/local-repository";
+import { droneHaystack } from "@/shared/infra/storage/local-repository";
 import { CountryBadge } from "@/shared/ui/country-badge";
 
 const NAV = [

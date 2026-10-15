@@ -4,8 +4,8 @@ import {
   LocalDroneRepository,
   LocalTaxonomyCandidateRepository,
   LocalTaxonomyRepository,
-} from "@/shared/infra/local-repository";
-import { LocalStorageStore } from "@/shared/infra/local-store";
+} from "@/shared/infra/storage/local-repository";
+import { LocalStorageStore } from "@/shared/infra/storage/local-store";
 import type { Drone } from "@/entities/drone/types";
 
 beforeEach(() => localStorage.clear());

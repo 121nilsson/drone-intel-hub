@@ -9,7 +9,7 @@ import {
   REFERENCE_LIMIT,
   truncateSummary,
 } from "@/shared/infra/wikipedia";
-import { fetchReferenceCatalog } from "@/shared/infra/wikipedia.server";
+import { fetchReferenceCatalog } from "@/shared/infra/wikipedia/server";
 
 const NOW = "2026-01-01T00:00:00.000Z";
 const LATER = "2026-02-01T00:00:00.000Z";

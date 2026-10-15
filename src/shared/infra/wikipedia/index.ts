@@ -1,5 +1,5 @@
 import type { Domain, ExtractedSpec, ReferenceCard } from "@/entities/drone/types";
-import { specsFromWikidataClaims, specsFromWikitext } from "./wiki-specs";
+import { specsFromWikidataClaims, specsFromWikitext } from "./specs";
 
 /**
  * Pinned vehicle classes. A single query that unions all five property paths times out on the

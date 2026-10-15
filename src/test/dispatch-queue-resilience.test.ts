@@ -11,7 +11,7 @@ import { MAX_ATTEMPTS, type RawDispatch } from "@/entities/dispatch/types";
 import type { MonitoredSource } from "@/entities/source/types";
 import type { DispatchRepository } from "@/shared/contracts/repository";
 import type { PipelineDeps } from "@/features/intake/pipeline";
-import type { FetchedPost } from "@/shared/infra/fetch-posts";
+import type { FetchedPost } from "@/shared/infra/sources/fetch-posts";
 import type { Candidate, Drone, Extraction } from "@/entities/drone/types";
 import type { IntelExtractor } from "@/shared/contracts/ai";
 

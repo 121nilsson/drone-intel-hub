@@ -21,11 +21,11 @@ import {
   LocalSourceRepository,
   LocalTaxonomyCandidateRepository,
   LocalTaxonomyRepository,
-} from "./local-repository";
+} from "./storage/local-repository";
 import type { DocumentStore } from "@/shared/contracts/store";
-import { LocalStorageStore } from "./local-store";
-import { RemoteStore } from "./remote-store";
-import { getStoreStatus } from "./store.functions";
+import { LocalStorageStore } from "./storage/local-store";
+import { RemoteStore } from "./storage/remote-store";
+import { getStoreStatus } from "./storage/store.functions";
 import { HeuristicExtractor, HeuristicSummarizer } from "./heuristic-ai";
 import { OpenAICompatibleExtractor, OpenAICompatibleSummarizer } from "./openai-compatible-ai";
 

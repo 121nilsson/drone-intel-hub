@@ -10,9 +10,9 @@ import {
   relatedIds,
   type ReferenceFetchResult,
   type WikiLang,
-} from "./wikipedia";
+} from "./index";
 
-export type { ReferenceFetchResult } from "./wikipedia";
+export type { ReferenceFetchResult } from "./index";
 
 const USER_AGENT = "DroneIntelHub/1.0 (catalog reference import)";
 const ENTITY_BATCH = 50;

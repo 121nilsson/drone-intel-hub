@@ -1,5 +1,5 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
-import { LocalStorageStore } from "@/shared/infra/local-store";
+import { LocalStorageStore } from "@/shared/infra/storage/local-store";
 
 const KEY = "dti.drones.v1";
 

@@ -83,7 +83,27 @@ function measurement(
       };
     }
   }
-  if (typeof claim.value !== "number") return undefined;
+  if (typeof claim.value !== "number") {
+    if (spec.unit) {
+      const converted = normalizeQuantity(`${claim.value} ${spec.unit}`);
+      if (converted?.canonicalValue !== undefined) {
+        const unit = converted.canonicalUnit ?? "";
+        const aligned = unit
+          ? alignUnit(converted.canonicalValue, unit, spec)
+          : { value: converted.canonicalValue, unit: "" };
+        return {
+          value: aligned.value,
+          ...(aligned.unit ? { unit: aligned.unit } : {}),
+          claimIndex,
+        };
+      }
+    }
+    const numeric = Number(claim.value);
+    if (Number.isFinite(numeric)) {
+      return { value: numeric, ...(spec.unit ? { unit: spec.unit } : {}), claimIndex };
+    }
+    return undefined;
+  }
   if (spec.unit) {
     const converted = normalizeQuantity(`${claim.value} ${spec.unit}`);
     if (converted?.canonicalValue !== undefined) {

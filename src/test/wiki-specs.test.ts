@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { specsFromWikidataClaims, specsFromWikitext } from "@/shared/infra/wiki-specs";
+import { specsFromWikidataClaims, specsFromWikitext } from "@/shared/infra/wikipedia/specs";
 import { applyReference } from "@/features/catalog/reference-import";
 import type { Drone, ReferenceCard } from "@/entities/drone/types";
 

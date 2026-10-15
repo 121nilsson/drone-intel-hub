@@ -8,7 +8,7 @@ import { ieeeLabel } from "@/entities/normalization/bands";
 import { effectiveInstallationId, effectivePropulsionId } from "@/entities/normalization/taxonomy";
 import { effectiveIeeeBands, linkIsFiber } from "@/entities/normalization/rf";
 import { useDrones, useServices } from "@/shared/infra/services";
-import { fetchWikipediaReference } from "@/shared/infra/wikipedia.functions";
+import { fetchWikipediaReference } from "@/shared/infra/wikipedia/functions";
 import type { CatalogFacets } from "@/shared/contracts/repository";
 import { Btn, Tag } from "@/shared/ui/primitives";
 import { cn } from "@/lib/utils";

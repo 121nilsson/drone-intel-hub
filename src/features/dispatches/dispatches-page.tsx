@@ -3,7 +3,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useMemo, useState } from "react";
 import { useDispatches, useServices, useSources } from "@/shared/infra/services";
 import type { DispatchStatus } from "@/entities/dispatch/types";
-import { getSyncState, type SyncState } from "@/shared/infra/source-sync.functions";
+import { getSyncState, type SyncState } from "@/shared/infra/sources/source-sync.functions";
 import { translateText } from "@/shared/infra/ai-proxy.functions";
 import { Btn, Panel, Tag } from "@/shared/ui/primitives";
 import { formatProviderError, requeueFailed } from "@/features/sources/auto-ingest";

@@ -1,5 +1,5 @@
 import { defineTask } from "nitro/task";
-import { runAutoSync } from "../../src/shared/infra/source-sync.server";
+import { runAutoSync } from "../../src/shared/infra/sources/source-sync.server";
 
 /**
  * Scheduled auto-ingest. Nitro drives this on the cron in vite.config.ts.

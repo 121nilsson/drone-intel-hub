@@ -16,16 +16,16 @@ const checkDoc = (d: unknown) => {
 /** DATABASE_URL (self-hosted PostgreSQL) wins; otherwise Lovable Cloud when configured. */
 async function store() {
   if (process.env["DATABASE_URL"]) {
-    const { PostgresStore } = await import("./postgres/postgres-store.server");
+    const { PostgresStore } = await import("../postgres/postgres-store.server");
     return new PostgresStore();
   }
-  const { CloudStore } = await import("./cloud/cloud-store.server");
+  const { CloudStore } = await import("../cloud/cloud-store.server");
   return new CloudStore();
 }
 
 /** Storage backend plus non-secret inference settings for the Settings UI. */
 export const getStoreStatus = createServerFn({ method: "POST" }).handler(async () => {
-  const { readProviderEnvConfig } = await import("./provider-env.server");
+  const { readProviderEnvConfig } = await import("../provider-env.server");
   return {
     postgres:
       !!process.env["DATABASE_URL"] ||

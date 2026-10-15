@@ -1,5 +1,5 @@
-import { chatCompletionOnce, providerRpm } from "./ai-proxy.server";
-import { HeuristicExtractor } from "./heuristic-ai";
+import { chatCompletionOnce, providerRpm } from "../ai-proxy.server";
+import { HeuristicExtractor } from "../heuristic-ai";
 import {
   LocalCandidateRepository,
   LocalDispatchRepository,
@@ -7,19 +7,19 @@ import {
   LocalSourceRepository,
   LocalTaxonomyCandidateRepository,
   LocalTaxonomyRepository,
-} from "./local-repository";
+} from "../storage/local-repository";
 import {
   OpenAICompatibleExtractor,
   openAICompatibleAdjudicator,
   openAIContradictionAdjudicator,
-} from "./openai-compatible-ai";
+} from "../openai-compatible-ai";
 import { autoTriage } from "@/features/intake/auto-triage";
 import { outletWeights } from "@/entities/source/outlet-record";
 import { adjudicateContradictions } from "@/features/intake/contradictions";
-import { dbConfigured } from "./postgres/db.server";
-import { PostgresStore } from "./postgres/postgres-store.server";
-import { DEFAULT_SETTINGS } from "./settings-defaults";
-import { readProviderEnvConfig } from "./provider-env.server";
+import { dbConfigured } from "../postgres/db.server";
+import { PostgresStore } from "../postgres/postgres-store.server";
+import { DEFAULT_SETTINGS } from "../settings-defaults";
+import { readProviderEnvConfig } from "../provider-env.server";
 import {
   QUEUE_ROW,
   collectSource,
@@ -139,7 +139,7 @@ export async function fetchAllSources(
   // Also import content filters for post-processing
   const articleText =
     process.env["FETCH_ARTICLE_BODIES"] !== "0"
-      ? (await import("./article.server")).extractArticleText
+      ? (await import("../article.server")).extractArticleText
       : undefined;
 
   // Content filters for reducing noise in extracted text

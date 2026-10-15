@@ -79,7 +79,8 @@ function normalizeSpec(spec: ExtractedSpec): ExtractedSpec {
   const targetUnit = canonicalUnitForSemantic(semantic);
   let measured =
     typeof spec.value === "string"
-      ? normalizeQuantity(spec.value)
+      ? normalizeQuantity(spec.value) ??
+        (spec.unit ? normalizeQuantity(`${spec.value} ${spec.unit}`) : undefined)
       : spec.unit
         ? normalizeQuantity(`${spec.value} ${spec.unit}`)
         : undefined;

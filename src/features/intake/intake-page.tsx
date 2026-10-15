@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { useCandidates, useDrones, useServices } from "@/shared/infra/services";
 import { translateText } from "@/shared/infra/ai-proxy.functions";
-import { fetchIntakeArticle, isBareUrl } from "@/shared/infra/intake-fetch.functions";
+import { fetchIntakeArticle, isBareUrl } from "@/shared/infra/sources/intake-fetch.functions";
 import { Btn, Panel, Tag } from "@/shared/ui/primitives";
 import { mergeInto, promote, runTwoTier } from "./pipeline";
 import type { Candidate } from "@/entities/drone/types";

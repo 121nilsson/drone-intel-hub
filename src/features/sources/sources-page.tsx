@@ -7,9 +7,9 @@ import { sampleDispatch } from "@/entities/source/seed";
 import { useDispatches, useServices, useSources } from "@/shared/infra/services";
 import type { DispatchStatus } from "@/entities/dispatch/types";
 import { outletRecords } from "@/entities/source/outlet-record";
-import { fetchSourcePosts } from "@/shared/infra/source-fetch.functions";
-import { FETCH_CONCURRENCY, sourceHost } from "@/shared/infra/fetch-posts";
-import { mapWithConcurrency } from "@/shared/infra/pool";
+import { fetchSourcePosts } from "@/shared/infra/sources/source-fetch.functions";
+import { FETCH_CONCURRENCY, sourceHost } from "@/shared/infra/sources/fetch-posts";
+import { mapWithConcurrency } from "@/shared/infra/sources/pool";
 import {
   FAILURES_BEFORE_PAUSE,
   healthAfterFetch,
@@ -22,8 +22,8 @@ import {
   getSyncState,
   triggerAutoSync,
   type SyncState,
-} from "@/shared/infra/source-sync.functions";
-import { getStoreStatus } from "@/shared/infra/store.functions";
+} from "@/shared/infra/sources/source-sync.functions";
+import { getStoreStatus } from "@/shared/infra/storage/store.functions";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Btn, Panel, Tag } from "@/shared/ui/primitives";
 import {

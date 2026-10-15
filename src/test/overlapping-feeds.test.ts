@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { collectSource, processPending } from "@/features/sources/auto-ingest";
-import { LocalDispatchRepository } from "@/shared/infra/local-repository";
+import { LocalDispatchRepository } from "@/shared/infra/storage/local-repository";
 import { ACTIVE_SEED_SOURCES, RETIRED_SOURCE_IDS, SEED_SOURCES } from "@/entities/source/seed";
 import type { MonitoredSource } from "@/entities/source/types";
 import type { Candidate, Drone, Extraction } from "@/entities/drone/types";
-import type { FetchedPost } from "@/shared/infra/fetch-posts";
+import type { FetchedPost } from "@/shared/infra/sources/fetch-posts";
 import type { PipelineDeps } from "@/features/intake/pipeline";
 
 /**

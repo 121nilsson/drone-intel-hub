@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ACTIVE_SEED_DRONES, RETIRED_SEED_IDS, SEED_DRONES } from "@/entities/drone/seed";
-import { LocalDroneRepository } from "@/shared/infra/local-repository";
+import { LocalDroneRepository } from "@/shared/infra/storage/local-repository";
 import type { Drone } from "@/entities/drone/types";
 import type { DocumentStore } from "@/shared/contracts/store";
 

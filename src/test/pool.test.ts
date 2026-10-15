@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mapWithConcurrency } from "@/shared/infra/pool";
+import { mapWithConcurrency } from "@/shared/infra/sources/pool";
 
 const tick = () => new Promise<void>((r) => setTimeout(r, 0));
 
