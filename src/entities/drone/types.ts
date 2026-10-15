@@ -109,6 +109,41 @@ export interface EvolutionEvent {
 }
 
 /** Wikipedia/Wikidata identity attached by the reference import. Not a spec claim. */
+export type OrganizationRole =
+  | "manufacturer"
+  | "developer"
+  | "supplier"
+  | "operator"
+  | "exporter"
+  | "sanctions subject"
+  | "other";
+
+export interface OrganizationLink {
+  /** Canonical key used to join mentions that do not share a full legal name. */
+  organizationId: string;
+  name: string;
+  role: OrganizationRole;
+  country?: string;
+  /** Preserves how we learned this association. */
+  source?: string;
+  evidence?: string;
+  confidence?: number;
+  firstSeen?: string;
+  lastSeen?: string;
+}
+
+export function organizationKey(name: string): string {
+  return (
+    name
+      .normalize("NFKC")
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9\u0430-\u044f]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 120) || "unknown"
+  );
+}
+
 export interface DroneReference {
   wikidataId: string;
   alsoIds: string[];
@@ -153,6 +188,7 @@ export interface Drone {
   domain: Domain;
   origin: string; // country of origin code
   manufacturer?: string; // company that designed/produces the system
+  organizationLinks?: OrganizationLink[]; // roles, evidence, and first/last-seen provenance
   operators: string[]; // battlefield operator codes
   /** Raw propulsion text. Never replaced by the canonical id. */
   propulsion: string;
@@ -163,6 +199,19 @@ export interface Drone {
   summary: string;
   /** Cached English translation of a non-English source-language summary. */
   summaryEnglish?: string;
+  /** AI-generated dossier brief. Long-lived and cached; refreshed on manual request or staleness. */
+  /** Structured AI dossier brief parsed from the model output. */
+  llmBrief?: {
+    overview: string;
+    verified: string[];
+    caveats: string[];
+    provenance: string[];
+    nextChecks: string[];
+  };
+  llmSummary?: string;  /** When the current AI brief was generated. */
+  llmSummaryGeneratedAt?: string;
+  /** Fingerprint of system facts used for the cached AI brief, so merges/edits invalidate it. */
+  llmSummaryFingerprint?: string;
   specs: SpecAttribute[];
   rf: RFLink[];
   components: SupplyComponent[];
@@ -203,8 +252,8 @@ export interface SystemExtraction extends DetectedSystem {
   domain?: Domain;
   origin?: string;
   manufacturer?: string;
-  operators?: string[];
-  propulsion?: string;
+  organizationLinks?: OrganizationLink[];
+  operators?: string[];  propulsion?: string;
   installation?: string;
   guidance?: string[];
   specs: ExtractedSpec[];

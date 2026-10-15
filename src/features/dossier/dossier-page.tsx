@@ -1,5 +1,5 @@
 import { Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import {
   DropdownMenu,
@@ -14,7 +14,7 @@ import { type Drone, type SpecAttribute } from "@/entities/drone/types";
 import { CountryBadge } from "@/shared/ui/country-badge";
 import { ClaimChip, ProvenanceSheet, type ClaimSelection } from "./provenance-sheet";
 import { useDrones, useServices } from "@/shared/infra/services";
-import { translateText } from "@/shared/infra/ai-proxy.functions";
+import { translateText, generateSystemSummary } from "@/shared/infra/ai-proxy.functions";
 import { removalImpact, removeDrone } from "@/features/intake/pipeline";
 import { Btn, ConfidenceTag, Panel, Tag } from "@/shared/ui/primitives";
 import { useRelatedIntel, RelatedRail } from "@/features/intel-graph";
@@ -203,24 +203,39 @@ function DeleteSystem({ drone }: { drone: Drone }) {
 
 function DossierSummary({ drone, svc }: { drone: Drone; svc: ReturnType<typeof useServices> }) {
   const translateFn = useServerFn(translateText);
-  const summary = drone.summary;
+  const generateFn = useServerFn(generateSystemSummary);
+  const generatedSummary = drone.llmSummary;
+  const sourceSummary = drone.summary;
+  const summary = generatedSummary ?? sourceSummary;
   const storageSummary = drone.summaryEnglish;
-  const likelyEnglish = /^[\w\s.,;:!?"'()\-[\]{}&%/]+$/.test(summary);
+  const likelyEnglish = Boolean(generatedSummary);
   const [translated, setTranslated] = useState<string | null>(null);
   const [translating, setTranslating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [briefGenerating, setBriefGenerating] = useState(false);
+  const [briefError, setBriefError] = useState<string | null>(null);
+  const briefAttempted = useRef<string | null>(null);
+  const briefFingerprint = [
+    "v1",
+    drone.updatedAt,
+    drone.specs.length,
+    drone.organizationLinks?.length ?? 0,
+    drone.counterpartIds.length,
+    drone.aliases.length,
+  ].join("|");
+  const briefStale =
+    !drone.llmSummaryGeneratedAt ||
+    Date.now() - Date.parse(drone.llmSummaryGeneratedAt) > 7 * 24 * 60 * 60 * 1000;
+  const briefNeedsWork = !generatedSummary || drone.llmSummaryFingerprint !== briefFingerprint || briefStale;
 
   useEffect(() => {
     if (storageSummary) {
-      setTranslated(storageSummary);
+      setTranslated(generatedSummary ? null : storageSummary);
       setError(null);
       setTranslating(false);
-      if (storageSummary && !likelyEnglish) {
-        // already cached in storage, so no translated request is needed on this view
-      }
       return;
     }
-    if (likelyEnglish) {
+    if (likelyEnglish || generatedSummary) {
       setTranslated(null);
       setError(null);
       setTranslating(false);
@@ -229,16 +244,14 @@ function DossierSummary({ drone, svc }: { drone: Drone; svc: ReturnType<typeof u
     let cancelled = false;
     setTranslating(true);
     setError(null);
-    void translateFn({ data: { text: summary, model: svc.settings.translateModel } })
+    void translateFn({ data: { text: sourceSummary, model: svc.settings.translateModel } })
       .then((res) => {
         if (cancelled) return;
         if (res.ok) {
           setTranslated(res.translated);
-          // Cache the result in the system record so the translation token is only paid once.
           try {
             svc.drones.upsert({ ...drone, summaryEnglish: res.translated });
           } catch (err) {
-            // Non-fatal: the browser still has this translation for this page render.
             console.warn("[dossier] could not persist translated summary", err);
           }
         } else setError(res.error);
@@ -250,10 +263,46 @@ function DossierSummary({ drone, svc }: { drone: Drone; svc: ReturnType<typeof u
       .finally(() => {
         if (!cancelled) setTranslating(false);
       });
-    return () => {
-      cancelled = true;
-    };
-  }, [drone, likelyEnglish, storageSummary, summary, svc, svc.settings.translateModel, translateFn]);
+    return () => { cancelled = true; };
+  }, [drone, generatedSummary, likelyEnglish, sourceSummary, storageSummary, svc, svc.settings.translateModel, translateFn]);
+
+  const runBriefGeneration = async (force = false) => {
+    if (!svc.aiConfigured) {
+      setBriefError("Configure an AI model in settings to generate a system brief.");
+      return;
+    }
+    if (!force && !briefNeedsWork) return;
+    setBriefGenerating(true);
+    setBriefError(null);
+    try {
+      const result = await generateFn({ data: { drone } });
+      if (!result.ok) {
+        setBriefError(result.error);
+        return;
+      }
+      const generatedAt = new Date().toISOString();
+      svc.drones.upsert({
+        ...drone,
+        llmSummary: result.summary,
+        llmBrief: result.brief,
+        llmSummaryGeneratedAt: generatedAt,
+        llmSummaryFingerprint: briefFingerprint,
+      });
+    } catch (err) {
+      setBriefError(err instanceof Error ? err.message : "AI brief failed");
+    } finally {
+      setBriefGenerating(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!svc.aiConfigured) return;
+    if (!briefNeedsWork) return;
+    const generationKey = `${drone.id}:${briefFingerprint}:${drone.llmSummaryGeneratedAt ?? "never"}`;
+    if (briefAttempted.current === generationKey) return;
+    briefAttempted.current = generationKey;
+    void runBriefGeneration(false);
+  }, [briefFingerprint, briefNeedsWork, drone.id, drone.llmSummaryGeneratedAt, svc.aiConfigured]);
 
   if (translated) {
     return (
@@ -270,16 +319,63 @@ function DossierSummary({ drone, svc }: { drone: Drone; svc: ReturnType<typeof u
   if (!likelyEnglish && translating) {
     return (
       <div className="space-y-2">
-        <p className="max-w-3xl animate-pulse font-mono text-sm text-muted-foreground">
-          Translating summary…
-        </p>
+        <p className="max-w-3xl animate-pulse font-mono text-sm text-muted-foreground">Translating summary...</p>
+        {drone.llmBrief ? (
+        <div className="max-w-3xl space-y-3 text-sm leading-relaxed text-muted-foreground">
+          <p className="text-base leading-relaxed text-foreground">{drone.llmBrief.overview}</p>
+          {drone.llmBrief.verified.length ? (
+            <section>
+              <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">Verified facts</p>
+              <ul className="mt-1 list-disc space-y-1 pl-5">
+                {drone.llmBrief.verified.map((item, i) => <li key={i}>{item}</li>)}
+              </ul>
+            </section>
+          ) : null}
+          {drone.llmBrief.caveats.length ? (
+            <section>
+              <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">Caveats and uncertainty</p>
+              <ul className="mt-1 list-disc space-y-1 pl-5">
+                {drone.llmBrief.caveats.map((item, i) => <li key={i}>{item}</li>)}
+              </ul>
+            </section>
+          ) : null}
+          {drone.llmBrief.provenance.length ? (
+            <section>
+              <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">Sources and provenance</p>
+              <ul className="mt-1 list-disc space-y-1 pl-5">
+                {drone.llmBrief.provenance.map((item, i) => <li key={i}>{item}</li>)}
+              </ul>
+            </section>
+          ) : null}
+          {drone.llmBrief.nextChecks.length ? (
+            <section>
+              <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">Suggested next checks</p>
+              <ul className="mt-1 list-disc space-y-1 pl-5">
+                {drone.llmBrief.nextChecks.map((item, i) => <li key={i}>{item}</li>)}
+              </ul>
+            </section>
+          ) : null}
+        </div>
+      ) : (
         <p className="max-w-3xl text-base leading-relaxed text-muted-foreground">{summary}</p>
+      )}
       </div>
     );
   }
 
   return (
-    <p className="max-w-3xl text-base leading-relaxed text-muted-foreground">{summary}</p>
+    <div className="space-y-2">
+      <p className="max-w-3xl text-base leading-relaxed text-muted-foreground">{summary}</p>
+      {briefGenerating && <p className="font-mono text-xs text-muted-foreground">Generating intelligence summary...</p>}
+      {!briefGenerating && (
+        <div className="flex flex-wrap gap-2 pt-1">
+          <Btn variant="ghost" onClick={() => void runBriefGeneration(true)} disabled={briefGenerating}>
+            {generatedSummary ? "Regenerate AI brief" : "Generate AI brief"}
+          </Btn>
+        </div>
+      )}
+      {briefError && <p className="font-mono text-xs text-destructive">{briefError}</p>}
+    </div>
   );
 }
 
@@ -312,6 +408,11 @@ export function DossierPage({ id }: { id: string }) {
             Origin <CountryBadge code={d.origin} />
           </Tag>
           {d.manufacturer && <Tag tone="accent">{d.manufacturer}</Tag>}
+{d.organizationLinks?.map((link) => (
+  <Tag key={`${link.organizationId}-${link.role}`} tone="accent" caps={false} mono={false}>
+    {link.role}: {link.name}{link.country ? ` (${link.country})` : ""}
+  </Tag>
+))}
           {d.operators.map((o) => (
             <Tag key={o} tone="accent" caps={false} mono={false}>
               Operator <CountryBadge code={o} />

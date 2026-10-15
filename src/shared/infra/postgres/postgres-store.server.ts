@@ -1,5 +1,6 @@
 import type { Collection, CollectionMap, DocumentStore } from "@/shared/contracts/store";
 import { db, type Sql } from "./db.server";
+import { sanitizeJson, sanitizeText } from "@/shared/infra/json-sanitize";
 
 const ORDER: Record<Collection, string> = {
   drones: "name asc",
@@ -88,11 +89,11 @@ export class PostgresStore implements DocumentStore {
   }
 
   private async upsert<C extends Collection>(db: Sql, c: C, doc: CollectionMap[C]) {
-    const data = db.json(doc as never);
+    const data = db.json(sanitizeJson(doc as never));
     if (c === "drones") {
       const d = doc as CollectionMap["drones"];
       await db`insert into drones (id, name, domain, origin, data, updated_at)
-        values (${d.id}, ${d.name}, ${d.domain}, ${d.origin}, ${data}, now())
+        values (${d.id}, ${sanitizeText(d.name)}, ${sanitizeText(d.domain)}, ${sanitizeText(d.origin)}, ${data}, now())
         on conflict (id) do update set name = excluded.name, domain = excluded.domain,
           origin = excluded.origin, data = excluded.data, updated_at = now()`;
     } else if (c === "candidates") {
@@ -115,24 +116,24 @@ export class PostgresStore implements DocumentStore {
     } else if (c === "procurements") {
       const d = doc as CollectionMap["procurements"];
       await db`insert into procurements (id, company, country, amount, currency, program, product, customer, announced_at, source, source_url, notes, created_at, data)
-        values (${d.id}, ${d.company}, ${d.country ?? ""}, ${d.amount ?? null}, ${d.currency ?? null}, ${d.program ?? null}, ${d.product ?? null}, ${d.customer ?? null}, ${d.announcedAt ?? null}, ${d.source}, ${d.sourceUrl ?? null}, ${d.notes ?? null}, ${d.createdAt}, ${data})
+        values (${d.id}, ${sanitizeText(d.company)}, ${sanitizeText(d.country ?? "")}, ${d.amount ?? null}, ${d.currency ?? null}, ${d.program ?? null}, ${d.product ?? null}, ${d.customer ?? null}, ${d.announcedAt ?? null}, ${d.source}, ${d.sourceUrl ?? null}, ${d.notes ?? null}, ${d.createdAt}, ${data})
         on conflict (id) do update set company = excluded.company, country = excluded.country, amount = excluded.amount, currency = excluded.currency, program = excluded.program, product = excluded.product, customer = excluded.customer, announced_at = excluded.announced_at, source = excluded.source, source_url = excluded.source_url, notes = excluded.notes, data = excluded.data`;
     } else if (c === "taxonomies") {
       const d = doc as CollectionMap["taxonomies"];
       await db`insert into taxonomies (id, taxonomy, canonical_id, label, parent_id, data, updated_at)
-        values (${d.id}, ${d.taxonomy}, ${d.canonicalId}, ${d.label}, ${d.parentId ?? null}, ${data}, now())
+        values (${d.id}, ${d.taxonomy}, ${sanitizeText(d.canonicalId)}, ${sanitizeText(d.label)}, ${d.parentId ?? null}, ${data}, now())
         on conflict (id) do update set taxonomy = excluded.taxonomy, canonical_id = excluded.canonical_id,
           label = excluded.label, parent_id = excluded.parent_id, data = excluded.data, updated_at = now()`;
     } else if (c === "taxonomy_candidates") {
       const d = doc as CollectionMap["taxonomy_candidates"];
       await db`insert into taxonomy_candidates (id, taxonomy, raw_term, status, occurrences, first_seen, last_seen, data)
-        values (${d.id}, ${d.taxonomy}, ${d.rawTerm}, ${d.status}, ${d.occurrences}, ${d.firstSeen}, ${d.lastSeen}, ${data})
+        values (${d.id}, ${d.taxonomy}, ${sanitizeText(d.rawTerm)}, ${d.status}, ${d.occurrences}, ${d.firstSeen}, ${d.lastSeen}, ${data})
         on conflict (id) do update set status = excluded.status, occurrences = excluded.occurrences,
           last_seen = excluded.last_seen, data = excluded.data`;
     } else if (c === "sources") {
       const d = doc as CollectionMap["sources"];
       await db`insert into sources (id, platform, handle, data)
-        values (${d.id}, ${d.platform}, ${d.handle}, ${data})
+        values (${d.id}, ${sanitizeText(d.platform)}, ${sanitizeText(d.handle)}, ${data})
         on conflict (id) do update set platform = excluded.platform, handle = excluded.handle, data = excluded.data`;
     } else {
       const _exhaustive: never = c;

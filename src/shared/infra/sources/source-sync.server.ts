@@ -9,6 +9,7 @@ import {
   type WorkProgress,
 } from "@/features/sources/auto-ingest";
 import { db, dbConfigured } from "../postgres/db.server";
+import { sanitizeJson } from "@/shared/infra/json-sanitize";
 import {
   parseSyncCooldown,
   parseSyncProgress,
@@ -38,7 +39,7 @@ async function writeCooldown(cooldown: Cooldown) {
   const conn = db();
   await conn`
     insert into sync_state (name, last_sync, last_result)
-    values (${COOLDOWN_SLOT}, now(), ${conn.json(cooldown as unknown as JSONValue)})
+    values (${COOLDOWN_SLOT}, now(), ${conn.json(sanitizeJson(cooldown as unknown as JSONValue))})
     on conflict (name) do update
       set last_sync = excluded.last_sync,
           last_result = excluded.last_result`;
@@ -56,7 +57,7 @@ async function writeProgress(progress: WorkProgress) {
   const conn = db();
   await conn`
     insert into sync_state (name, last_sync, last_result)
-    values (${PROGRESS_SLOT}, now(), ${conn.json(progress as unknown as JSONValue)})
+    values (${PROGRESS_SLOT}, now(), ${conn.json(sanitizeJson(progress as unknown as JSONValue))})
     on conflict (name) do update
       set last_sync = excluded.last_sync,
           last_result = excluded.last_result`;
@@ -91,7 +92,7 @@ async function claimSlot(minIntervalMs: number, force: boolean): Promise<boolean
 async function storeResult(result: SyncReport[]) {
   const conn = db();
   // Interface types lack an index signature, so postgres.js' JSONValue rejects them.
-  await conn`update sync_state set last_result = ${conn.json(result as unknown as JSONValue)} where name = ${SLOT}`;
+  await conn`update sync_state set last_result = ${conn.json(sanitizeJson(result as unknown as JSONValue))} where name = ${SLOT}`;
 }
 
 async function releaseSlot() {

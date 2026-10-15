@@ -1,9 +1,11 @@
-import type {
-  Drone,
-  Extraction,
-  PayloadObservation,
-  SensorObservation,
-  SupplyComponent,
+import {
+  type Drone,
+  type Extraction,
+  type PayloadObservation,
+  type SensorObservation,
+  type SupplyComponent,
+  type OrganizationLink,
+  organizationKey,
 } from "./types";
 
 const norm = (s: string) => s.trim().toLowerCase();
@@ -57,6 +59,40 @@ function sensors(
   );
 }
 
+function mergeOrganizationLinks(
+  existing: OrganizationLink[] | undefined,
+  incoming: OrganizationLink[] | undefined,
+  now: string,
+): OrganizationLink[] {
+  const out: OrganizationLink[] = [...(existing ?? [])];
+  const byId = new Map(out.map((link) => [`${link.organizationId}|${link.role}`, link]));
+  for (const link of incoming ?? []) {
+    const normalized: OrganizationLink = {
+      ...link,
+      organizationId: link.organizationId || organizationKey(link.name),
+      name: link.name.trim(),
+      firstSeen: link.firstSeen ?? now,
+      lastSeen: now,
+    };
+    const key = `${normalized.organizationId}|${normalized.role}`;
+    const current = byId.get(key);
+    if (current) {
+      current.name = current.name || normalized.name;
+      if (normalized.country) current.country = current.country ?? normalized.country;
+      // Do not overwrite established identity or evidence; only update recency on re-assertion.
+      if (!link.firstSeen) current.lastSeen = now;
+      const mergedConfidence = Math.max(current.confidence ?? 0, normalized.confidence ?? 0);
+      if (mergedConfidence) current.confidence = mergedConfidence;
+      if (!current.evidence && normalized.evidence) current.evidence = normalized.evidence;
+      if (!current.source && normalized.source) current.source = normalized.source;
+    } else {
+      byId.set(key, { ...normalized, firstSeen: normalized.firstSeen ?? now });
+      out.push(byId.get(key)!);
+    }
+  }
+  return out;
+}
+
 /** Conservative enrichment: fill gaps and union observations; never replace established identity. */
 export function mergeDroneIntelligence(
   drone: Drone,
@@ -67,6 +103,21 @@ export function mergeDroneIntelligence(
     (a) => norm(a) !== norm(drone.name),
   );
   const operators = [...new Set([...drone.operators, ...extraction.operators])];
+  const now = new Date().toISOString();
+  const incomingLinks =
+    extraction.manufacturer
+      ? [
+          {
+            organizationId: organizationKey(extraction.manufacturer),
+            name: extraction.manufacturer,
+            role: "manufacturer" as const,
+            evidence: extraction.rationale,
+            firstSeen: now,
+            lastSeen: now,
+          },
+        ]
+      : [];
+  const organizationLinks = mergeOrganizationLinks(drone.organizationLinks, incomingLinks, now);
   return {
     ...drone,
     aliases,
@@ -74,6 +125,8 @@ export function mergeDroneIntelligence(
     ...(drone.manufacturer || !extraction.manufacturer
       ? {}
       : { manufacturer: extraction.manufacturer }),
+    ...(organizationLinks.length ? { organizationLinks } : {}),
+
     ...((drone.propulsion && drone.propulsion !== "Unknown") || !extraction.propulsion
       ? {}
       : { propulsion: extraction.propulsion }),

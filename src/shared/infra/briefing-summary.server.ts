@@ -10,6 +10,7 @@ import { BRIEFING_SUMMARY_SYSTEM } from "@/shared/contracts/ai";
 import { chatCompletionOnce } from "@/shared/infra/ai-proxy.server";
 import { readProviderEnvConfig } from "@/shared/infra/provider-env.server";
 import { db, dbConfigured } from "@/shared/infra/postgres/db.server";
+import { sanitizeJson } from "@/shared/infra/json-sanitize";
 
 export const BRIEFING_SUMMARY_SLOT = "briefing:executive_summary";
 
@@ -29,7 +30,7 @@ async function writeStored(entry: BriefingSummaryStored) {
   const conn = db();
   await conn`
     insert into sync_state (name, last_sync, last_result)
-    values (${BRIEFING_SUMMARY_SLOT}, now(), ${conn.json(entry as unknown as JSONValue)})
+    values (${BRIEFING_SUMMARY_SLOT}, now(), ${conn.json(sanitizeJson(entry as unknown as JSONValue))})
     on conflict (name) do update
       set last_sync = excluded.last_sync,
           last_result = excluded.last_result`;

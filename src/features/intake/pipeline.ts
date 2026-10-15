@@ -24,6 +24,7 @@ import { outletKey } from "@/entities/source/outlet-record";
 import { linkVariant, mergeDroneIntelligence } from "@/entities/drone/merge-intelligence";
 import { ProcurementExtractionSchema } from "@/shared/contracts/extraction.schema";
 import { phoneticKey, phoneticText } from "@/entities/drone/name-key";
+import { organizationKey } from "@/entities/drone/types";
 
 export interface PipelineDeps {
   tier1: IntelExtractor;
@@ -664,7 +665,21 @@ export function promote(
     aliases: e.aliases,
     domain: e.domain ?? "Multi",
     origin: e.origin ?? "??",
-    ...(e.manufacturer ? { manufacturer: e.manufacturer } : {}),
+    ...(e.manufacturer
+      ? {
+          manufacturer: e.manufacturer,
+          organizationLinks: [
+            {
+              organizationId: organizationKey(e.manufacturer),
+              name: e.manufacturer,
+              role: "manufacturer",
+              source: c.source,
+              firstSeen: now,
+              lastSeen: now,
+            },
+          ],
+        }
+      : {}),
     operators: e.operators,
     propulsion: e.propulsion ?? "Unknown",
     ...(e.propulsionId ? { propulsionId: e.propulsionId } : {}),
