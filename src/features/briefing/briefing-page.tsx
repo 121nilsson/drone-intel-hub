@@ -16,7 +16,7 @@ import {
   fetchBriefingExecutiveSummary,
   storeBriefingExecutiveSummary,
 } from "@/shared/infra/briefing.functions";
-import { Btn, Loading, Num, Panel, Tag } from "@/shared/ui/primitives";
+import { Btn, Loading, Num, Panel, Tag, Card } from "@/shared/ui/primitives";
 import { useRelatedIntel, RelatedChips } from "@/features/intel-graph";
 
 export function BriefingPage() {
@@ -190,31 +190,31 @@ function Briefing() {
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="border border-border bg-card/80 p-4">
+        <Card className="p-4">
           <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">
             New systems
           </p>
           <p className="mt-2 font-mono text-3xl text-primary">
             <Num>{brief.newSystems.length}</Num>
           </p>
-        </div>
-        <div className="border border-border bg-card/80 p-4">
+        </Card>
+        <Card className="p-4">
           <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">
             Spec changes
           </p>
           <p className="mt-2 font-mono text-3xl text-primary">
             <Num>{brief.newClaims.length}</Num>
           </p>
-        </div>
-        <div className="border border-border bg-card/80 p-4">
+        </Card>
+        <Card className="p-4">
           <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">
             Reported systems
           </p>
           <p className="mt-2 font-mono text-3xl text-primary">
             <Num>{brief.reported.length}</Num>
           </p>
-        </div>
-        <div className="border border-border bg-card/80 p-4">
+        </Card>
+        <Card className="p-4">
           <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">
             Reports / outlets
           </p>
@@ -222,7 +222,7 @@ function Briefing() {
             <Num>{brief.reports}</Num>
             <span className="text-base text-muted-foreground"> / {brief.outlets}</span>
           </p>
-        </div>
+        </Card>
       </div>
 
       <Panel
@@ -294,7 +294,7 @@ function Briefing() {
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {pulse.map((p) => (
-          <div key={p.dom} className="border border-border bg-card/80 p-4">
+          <Card key={p.dom} className="p-4">
             <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">
               {p.dom} domain
             </p>
@@ -302,7 +302,7 @@ function Briefing() {
             <p className="font-mono text-xs text-muted-foreground">
               systems · <span className="text-accent">{p.reported} reported/7d</span>
             </p>
-          </div>
+          </Card>
         ))}
       </div>
 
@@ -310,7 +310,7 @@ function Briefing() {
         <Panel title="Latest reports" className="lg:col-span-2">
           <ul className="space-y-2.5">
             {brief.headlines.map((h) => (
-              <li key={h.id} className="border border-border bg-card/40 p-3">
+              <Card as="li" key={h.id} className="p-3">
                 <div className="flex flex-wrap items-baseline justify-between gap-2">
                   <ExternalSourceLink href={h.url} className="font-mono text-xs">
                     {h.outlet}
@@ -325,7 +325,7 @@ function Briefing() {
                     <SystemChip key={s.id} id={s.id} name={s.name} />
                   ))}
                 </div>
-              </li>
+              </Card>
             ))}
             {!brief.headlines.length && (
               <li className="text-sm text-muted-foreground">No reports this week.</li>
