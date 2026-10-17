@@ -39,7 +39,16 @@ describe("catalog search codec", () => {
 
   it("encodes nothing for the default view", () => {
     const state = fromSearchParams({});
+    expect(state.sort).toBe("updated");
     expect(toCatalogSearch(state)).toEqual({});
+  });
+
+  it("keeps 'recently updated' as the default and still round-trips an explicit sort", () => {
+    // An analyst opening a bare /catalog must land on the freshest evidence, not a–z.
+    expect(fromSearchParams({}).sort).toBe("updated");
+    expect(fromSearchParams({ sort: "name" }).sort).toBe("name");
+    expect(toCatalogSearch(fromSearchParams({ sort: "name" }))).toEqual({ sort: "name" });
+    expect(parseCatalogSearchParams({ sort: "updated" })).toEqual({ sort: "updated" });
   });
 
   it("drops non-CSV garbage, empty lists and unknown params", () => {

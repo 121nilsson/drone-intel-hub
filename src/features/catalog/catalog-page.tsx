@@ -17,6 +17,7 @@ import { duplicateGroups } from "@/entities/drone/duplicates";
 import { applyReference } from "@/features/catalog/reference-import";
 import { useRelatedIntel, RelatedChips } from "@/features/intel-graph";
 import {
+  DEFAULT_SORT,
   emptyFacets,
   fromSearchParams,
   toCatalogSearch,
