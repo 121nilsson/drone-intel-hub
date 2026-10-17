@@ -10,7 +10,7 @@ import { effectiveInstallationId, effectivePropulsionId } from "@/entities/norma
 import { effectiveIeeeBands, linkIsFiber } from "@/entities/normalization/rf";
 import { useDispatches, useDrones, useServices } from "@/shared/infra/services";
 import { fetchWikipediaReference } from "@/shared/infra/wikipedia/functions";
-import { Btn, Loading, Panel, Sparkline, Tag } from "@/shared/ui/primitives";
+import { Btn, Card, CardGrid, Loading, Panel, Sparkline, Tag } from "@/shared/ui/primitives";
 import { cn } from "@/lib/utils";
 import { mergeDrones } from "@/features/intake/pipeline";
 import { duplicateGroups } from "@/entities/drone/duplicates";

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { toast } from "sonner";
 import { useDrones, useServices } from "@/shared/infra/services";
-import { Btn, Loading, Panel, Tag } from "@/shared/ui/primitives";
+import { Btn, ListRow, Loading, Panel, PageTitle, Tag } from "@/shared/ui/primitives";
 import { allSpecKeys } from "./spec-engine";
 
 export function SpecsPage() {
@@ -36,13 +36,9 @@ export function SpecsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-semibold">Dynamic spec engine</h1>
-        <p className="mt-1 text-muted-foreground">
-          Schema-less attributes across the catalog. New keys discovered by AI appear here
-          instantly.
-        </p>
-      </div>
+      <PageTitle subtitle="Schema-less attributes across the catalog. New keys discovered by AI appear here instantly.">
+        Dynamic spec engine
+      </PageTitle>
       <Panel title={`${keys.length} attributes`}>
         {keys.length === 0 && (
           <p className="text-sm text-muted-foreground">
@@ -52,53 +48,64 @@ export function SpecsPage() {
         )}
         <ul className="divide-y divide-border">
           {keys.map((k) => (
-            <li key={k.key} className="flex flex-wrap items-center gap-3 py-2.5">
-              <code className="w-36 text-xs text-muted-foreground">{k.key}</code>
-              {editing === k.key ? (
-                <input
-                  autoFocus
-                  value={label}
-                  onChange={(e) => setLabel(e.target.value)}
-                  aria-label={`Display label for ${k.key}`}
-                  className="flex-1 border border-border bg-background px-2 py-1 text-sm"
-                />
-              ) : (
-                <span className="flex-1">{k.label}</span>
-              )}
-              <Tag tone={k.discoveredBy === "ai" ? "accent" : "default"}>{k.discoveredBy}</Tag>
-              <span className="font-mono text-xs text-muted-foreground">{k.count} systems</span>
-              {editing === k.key ? (
-                <Btn onClick={() => rename(k.key)}>Save</Btn>
-              ) : (
-                <Btn
-                  variant="ghost"
-                  onClick={() => {
-                    setEditing(k.key);
-                    setLabel(k.label);
-                  }}
-                >
-                  Rename
-                </Btn>
-              )}
-              {k.discoveredBy !== "seed" &&
-                (confirmingDrop === k.key ? (
-                  <span className="flex items-center gap-2 text-xs">
-                    <span className="text-muted-foreground">
-                      Remove this attribute from {k.count} system{k.count === 1 ? "" : "s"}?
-                    </span>
-                    <Btn variant="danger" onClick={() => remove(k.key)}>
-                      Confirm drop
-                    </Btn>
-                    <Btn variant="ghost" onClick={() => setConfirmingDrop(null)}>
-                      Cancel
-                    </Btn>
-                  </span>
+            <ListRow
+              key={k.key}
+              title={
+                editing === k.key ? (
+                  <input
+                    autoFocus
+                    value={label}
+                    onChange={(e) => setLabel(e.target.value)}
+                    aria-label={`Display label for ${k.key}`}
+                    className="w-full border border-border bg-background px-2 py-1 text-sm"
+                  />
                 ) : (
-                  <Btn variant="danger" onClick={() => setConfirmingDrop(k.key)}>
-                    Drop
-                  </Btn>
-                ))}
-            </li>
+                  <span className="font-medium">{k.label}</span>
+                )
+              }
+              subtitle={<code>{k.key}</code>}
+              meta={
+                <>
+                  <Tag tone={k.discoveredBy === "ai" ? "accent" : "default"}>{k.discoveredBy}</Tag>
+                  <span className="font-mono text-xs text-muted-foreground">{k.count} systems</span>
+                </>
+              }
+              actions={
+                <>
+                  {editing === k.key ? (
+                    <Btn onClick={() => rename(k.key)}>Save</Btn>
+                  ) : (
+                    <Btn
+                      variant="ghost"
+                      onClick={() => {
+                        setEditing(k.key);
+                        setLabel(k.label);
+                      }}
+                    >
+                      Rename
+                    </Btn>
+                  )}
+                  {k.discoveredBy !== "seed" &&
+                    (confirmingDrop === k.key ? (
+                      <span className="flex flex-wrap items-center gap-2 text-xs">
+                        <span className="text-muted-foreground">
+                          Remove from {k.count} system{k.count === 1 ? "" : "s"}?
+                        </span>
+                        <Btn variant="danger" onClick={() => remove(k.key)}>
+                          Confirm drop
+                        </Btn>
+                        <Btn variant="ghost" onClick={() => setConfirmingDrop(null)}>
+                          Cancel
+                        </Btn>
+                      </span>
+                    ) : (
+                      <Btn variant="danger" onClick={() => setConfirmingDrop(k.key)}>
+                        Drop
+                      </Btn>
+                    ))}
+                </>
+              }
+            />
           ))}
         </ul>
       </Panel>
