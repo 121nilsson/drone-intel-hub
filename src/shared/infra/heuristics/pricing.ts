@@ -1,4 +1,5 @@
-import { alt } from "@/shared/lexicons";
+import { parseMoney, parseMoneyRange, type Money, type MoneyRange } from "@/entities/normalization/currency";
+import { alt, compoundAlt, currencyAlt, magnitudeAlt } from "@/shared/lexicons";
 
 /**
  * Money extraction, driven by the lexicons. Magnitudes are flattened longest-first across all
@@ -7,8 +8,9 @@ import { alt } from "@/shared/lexicons";
  * dossier for a "$2 billion" arms deal.
  */
 const CUR = "[$€£₽₴]";
-const MAG = alt((l) => l.money.magnitudes);
-const CUR_WORD = alt((l) => l.money.currencyWords);
+const MAG = magnitudeAlt();
+const CUR_WORD = currencyAlt();
+const COMPOUND = compoundAlt();
 const AMT = `(\\d[\\d,. ]*\\d|\\d)\\s*(${MAG})?`;
 const END = "(?![\\p{L}])";
 
@@ -23,10 +25,20 @@ export function extractPrice(raw: string): string | undefined {
       `${m[1]}${a.trim()}${s ? (s.length > 2 ? ` ${s}` : s) : ""}`;
     return m[4] ? `${fmt(m[2]!, m[3])} - ${fmt(m[4], m[5])}` : fmt(m[2]!, m[3]);
   }
+  // Compounds first: "50 mkr" must not read as magnitude "m" + currency "kr".
+  const c = raw.match(new RegExp(`(\\d[\\d,. ]*\\d|\\d)\\s*(${COMPOUND})${END}`, "iu"));
+  if (c) return `${c[1]} ${c[2]!.toUpperCase()}`;
   const w = raw.match(
     new RegExp(`(\\d[\\d,. ]*\\d|\\d)\\s*(${MAG})?\\s*(${CUR_WORD})${END}`, "iu"),
   );
   return w ? `${w[1]}${w[2] ? ` ${w[2]}` : ""} ${w[3]!.toUpperCase()}` : undefined;
+}
+
+/** The figure extractPrice found, as a number in its written currency (range kept as a range). */
+export function extractPriceNumeric(raw: string): Money | MoneyRange | undefined {
+  const text = extractPrice(raw);
+  if (!text) return undefined;
+  return parseMoney(text) ?? parseMoneyRange(text);
 }
 
 /**

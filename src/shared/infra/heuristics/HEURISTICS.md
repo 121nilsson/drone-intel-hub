@@ -31,3 +31,9 @@ class's envelope (engagement/detection range) could be read as a vehicle's own f
 - `range`/`altitude`/`speed`: uav (guarded by `notAfter` against C-UAS/SHORAD cues).
 - `engagement_range`, `detection_range`, `target_*`: shorad / cuas.
 - `unit_cost` only with a per-unit cue and no total cue; otherwise `contract_value`.
+
+## Money vocabulary
+Lexicon `money.magnitudes` (by scale), `money.currencies` (by ISO code) and `money.compounds`
+("mkr" = million SEK) feed both `pricing.ts` and normalization (`parseMagnitude`, `parseMoney`).
+`extractPriceNumeric()` returns `{ amount, currency }` (or a range) for the found figure; the
+verbatim string stays the stored claim value.

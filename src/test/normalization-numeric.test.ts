@@ -41,3 +41,12 @@ describe("parseRange", () => {
     expect(parseRange("less than 50")).toEqual({ max: 50, qualifier: "less_than" });
   });
 });
+
+describe("parseMagnitude uses lexicon magnitudes", () => {
+  it("expands Swedish and Ukrainian words", () => {
+    expect(parseMagnitude("2 miljarder")).toBe(2e9);
+    expect(parseMagnitude("50 miljoner")).toBe(50e6);
+    expect(parseMagnitude("3 мільйонів")).toBe(3e6);
+    expect(parseMagnitude("15 тыс.")).toBe(15e3);
+  });
+});

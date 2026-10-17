@@ -4,8 +4,23 @@ import type { Lexicon } from "./types";
 export const en: Lexicon = {
   lang: "en",
   money: {
-    magnitudes: ["thousand", "million", "billion", "k", "K", "m", "M", "b", "bn", "mn"],
-    currencyWords: ["USD", "dollars", "EUR", "euros", "GBP", "pounds", "rubles", "roubles"],
+    magnitudes: {
+      thousand: ["thousand", "k", "K"],
+      million: ["million", "m", "M", "mn"],
+      billion: ["billion", "b", "bn"],
+    },
+    currencies: {
+      USD: ["USD", "US dollars?", "dollars?"],
+      EUR: ["EUR", "euros?"],
+      GBP: ["GBP", "pounds?(?: sterling)?"],
+      RUB: ["RUB", "rubles?", "roubles?"],
+      UAH: ["UAH", "hryvnias?"],
+      SEK: ["SEK"],
+      TRY: ["TRY", "lira"],
+      JPY: ["JPY", "yen"],
+      CAD: ["CAD"],
+      AUD: ["AUD"],
+    },
     unitPriceCues: [
       "unit\\s*(?:cost|price)",
       "per[- ]\\w+",

@@ -390,3 +390,11 @@ describe("HeuristicExtractor extraction", () => {
     expect(specOf(shahed?.specs ?? [], "speed")).toBe(220);
   });
 });
+
+describe("extractPriceNumeric", () => {
+  it("returns a numeric amount in the written currency", async () => {
+    const { extractPriceNumeric } = await import("@/shared/infra/heuristics");
+    expect(extractPriceNumeric("kostar 50 mkr per styck")).toMatchObject({ amount: 50e6, currency: "SEK" });
+    expect(extractPriceNumeric("signed a $2 billion deal")).toMatchObject({ amount: 2e9, currency: "USD" });
+  });
+});
