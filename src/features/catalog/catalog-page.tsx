@@ -335,7 +335,7 @@ export function CatalogPage({
   );
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[260px_1fr] lg:gap-6">
+    <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-[260px_minmax(0,1fr)] lg:gap-6">
       <button
         type="button"
         onClick={() => setShowFilters((v) => !v)}
