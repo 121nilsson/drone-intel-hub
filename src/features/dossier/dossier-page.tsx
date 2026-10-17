@@ -1,4 +1,5 @@
 import { Link, useNavigate } from "@tanstack/react-router";
+import { ExternalSourceLink } from "@/shared/ui/links";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import {
@@ -489,15 +490,11 @@ export function DossierPage({ id }: { id: string }) {
         <DossierSummary drone={d} svc={svc} />
         {d.reference && (
           <p className="mt-2 font-mono text-xs text-muted-foreground">
-            <a
-              href={d.reference.url}
-              target="_blank"
-              rel="noreferrer"
-              className="underline"
-              data-testid="reference-link"
-            >
-              {d.reference.url.includes("wikipedia.org") ? "Wikipedia, CC BY-SA 4.0" : "Wikidata"}
-            </a>
+            <span data-testid="reference-link">
+              <ExternalSourceLink href={d.reference.url}>
+                {d.reference.url.includes("wikipedia.org") ? "Wikipedia, CC BY-SA 4.0" : "Wikidata"}
+              </ExternalSourceLink>
+            </span>
           </p>
         )}
         {(() => {

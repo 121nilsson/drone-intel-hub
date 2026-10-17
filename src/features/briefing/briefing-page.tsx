@@ -1,4 +1,5 @@
 import { Link } from "@tanstack/react-router";
+import { ExternalSourceLink, SystemChip } from "@/shared/ui/links";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { DOMAINS } from "@/entities/drone/types";
 import type { Drone } from "@/entities/drone/types";
@@ -311,14 +312,9 @@ function Briefing() {
             {brief.headlines.map((h) => (
               <li key={h.id} className="border border-border bg-card/40 p-3">
                 <div className="flex flex-wrap items-baseline justify-between gap-2">
-                  <a
-                    href={h.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="font-mono text-xs text-primary hover:underline"
-                  >
+                  <ExternalSourceLink href={h.url} className="font-mono text-xs">
                     {h.outlet}
-                  </a>
+                  </ExternalSourceLink>
                   <span className="font-mono text-xs text-muted-foreground">
                     {h.date.slice(5, 10)}
                   </span>
@@ -326,11 +322,7 @@ function Briefing() {
                 <p className="mt-1.5 text-sm leading-relaxed text-foreground/90">{h.excerpt}</p>
                 <div className="mt-1.5 flex flex-wrap gap-1">
                   {h.systems.map((s) => (
-                    <Link key={s.id} to="/systems/$id" params={{ id: s.id }}>
-                      <Tag tone="primary" caps={false} mono={false}>
-                        {s.name}
-                      </Tag>
-                    </Link>
+                    <SystemChip key={s.id} id={s.id} name={s.name} />
                   ))}
                 </div>
               </li>

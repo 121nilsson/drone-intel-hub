@@ -1,4 +1,5 @@
 import { Link } from "@tanstack/react-router";
+import { ExternalSourceLink, SystemChip } from "@/shared/ui/links";
 import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useMemo, useState } from "react";
 import { useDispatches, useServices, useSources } from "@/shared/infra/services";
@@ -164,14 +165,7 @@ function DispatchItem({
         (d.status === "duplicate" && d.duplicateOf)) && (
         <div className="mt-2 flex flex-wrap gap-2 font-mono text-xs">
           {d.droneIds?.map((id) => (
-            <Link
-              key={id}
-              to="/systems/$id"
-              params={{ id }}
-              className="border border-primary/50 px-2 py-1 text-primary"
-            >
-              {id}
-            </Link>
+            <SystemChip key={id} id={id} name={id} />
           ))}
           {d.outcome === "queued" && (
             <Link to="/intake" className="border border-accent/50 px-2 py-1 text-accent">
@@ -202,14 +196,9 @@ function DispatchItem({
             Retry
           </Btn>
         )}
-        <a
-          href={d.url}
-          target="_blank"
-          rel="noreferrer"
-          className="font-mono text-xs text-muted-foreground underline"
-        >
-          Open original ↗
-        </a>
+        <ExternalSourceLink href={d.url} className="font-mono text-xs">
+          Open original
+        </ExternalSourceLink>
       </div>
     </li>
   );
