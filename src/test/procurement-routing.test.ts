@@ -33,9 +33,16 @@ describe("procurement routing", () => {
   });
 
   it("recognises AI-invented financial keys", () => {
-    for (const k of ["contractValue", "contract_value_usd", "batch_funding", "total_cost", "orderValue"])
+    for (const k of [
+      "contractValue",
+      "contract_value_usd",
+      "batch_funding",
+      "total_cost",
+      "orderValue",
+    ])
       expect(isFinancialSpecKey(k)).toBe(true);
-    for (const k of ["unit_cost", "range", "max_speed", "weight"]) expect(isFinancialSpecKey(k)).toBe(false);
+    for (const k of ["unit_cost", "range", "max_speed", "weight"])
+      expect(isFinancialSpecKey(k)).toBe(false);
   });
 
   it("$2 billion becomes a procurement in USD", () => {

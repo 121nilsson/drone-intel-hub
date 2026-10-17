@@ -11,7 +11,10 @@ const FINANCIAL_KEY =
   /^(?:contract|order|package|deal|delivery|batch|advance|fast_track|total|development|operating|sustainment|programme|program|associated)_?(?:value|cost|funding|amount|commitment|investment|budget)|^(?:contract|order|package)value|funding|investment|production_(?:rate|volume)|_(?:funding|budget)$/i;
 
 export function isFinancialSpecKey(key: string): boolean {
-  const k = key.trim().replace(/([a-z])([A-Z])/g, "$1_$2").toLowerCase();
+  const k = key
+    .trim()
+    .replace(/([a-z])([A-Z])/g, "$1_$2")
+    .toLowerCase();
   if (k === "unit_cost") return false;
   return FINANCIAL_KEY.test(k);
 }
