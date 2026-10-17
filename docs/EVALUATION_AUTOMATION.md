@@ -1,285 +1,268 @@
 # Spec: Autonom utvärderingsloop (självlärande eval)
 
-**Status:** Utkast — ej implementerat. Till för granskning innan bygge.
-**Fil:** `docs/EVALUATION_AUTOMATION.md`
-**Relaterad spec:** `docs/EVALUATION_MODE.md` (v1, implementerad) — detta dokument är dess direkt fortsättning och realiserar dess §9 (självlärande loop).
+**Status:** Utkast v2 — reviderat efter granskning. Ej implementerat (utom v1-delarna i §1).
+**Fil:** `docs/EVALUATION_AUTOMATION.md` (tidigare felstavad `EVALUTATION_AUTOMATION.md`)
+**Relaterad spec:** `docs/EVALUATION_MODE.md` (v1, implementerad) — detta dokument realiserar dess §9 (självlärande loop).
 **Relaterad kod:** `src/features/evaluation/evaluation.ts`, `src/features/evaluation/evaluation-page.tsx`, `src/test/eval-corpus.test.ts`, `src/test/eval-mismatches.test.ts`, `tasks/sources/sync.ts`, `src/shared/infra/sources/source-sync.server.ts`
 
 ---
 
-## 1. Bakgrund
+## 0. Driftmiljö (fastställd)
 
-Dagens loop är manuell och bruten på tre ställen:
-
-1. **Mätning är manuell** — utvärderingen körs bara när någon trycker "Kör utvärdering" på `/evaluation`.
-2. **Corpus-exporten slutar i webbläsaren** — "Ladda ner corpus" skapar en Blob och ett syntetiskt `<a>.click()`. Människan måste själv lägga filen i `src/test/fixtures/`.
-3. **Corpuset är tomt** — `eval-corpus.json` och `eval-mismatches.json` är båda `[]`, så regressionssviterna hoppar över (`it.skip`).
-
-Målet är att utvärderingen ska köras, lära sig och växa **utan mänsklig ingripande i datalagret**, medan kodändringar och lexikonändringar fortsatt kräver granskning.
-
-### 1.1 Kärnidé: corpuset bor i databasen, inte i git
-
-I stället för att en bot checkar in uppdaterade fixture-filer (vilket skulle tvinga fram maskinella commits i en Lovable-anslutet repo) lagras corpuset som **versionerade rader i databasen**. Testerna läser godkända fixtures från DB:
-
-- Hela loopen förblir data-driven — inga maskinella git-historikändringar.
-- Varje observation är append-only och spårbar till den rapport som producerade den.
-- Godkännande (approva) blir ett `UPDATE status` i samma transaktion som resten av förändringen — en audit trail, inte en commit.
-
-Den enda kompromissen är hermetisk CI (se §7.3): ett rött test kan nu betyda "corpuset ändrades" i stället för "koden regressionade". Det hanteras genom versionspinnbarhet + en liten checked-in guld-standardfil.
+- **Primär databas: PostgreSQL i Docker** — lokalt via `docker-compose.yml` och i produktion på egen server. Schemat är portabel plain SQL i `/migrations` (monteras av docker-compose).
+- Lovable Cloud är en sekundär väg (preview). Loopen ska fungera där via `DocumentStore`-kontraktet, men designbeslut optimeras för Postgres.
+- **CI har ingen databas.** Allt som CI kör måste vara hermetiskt och incheckat i git.
 
 ---
 
-## 2. Principer
+## 1. Bakgrund — nuläge
 
-1. **Autonomi i datalagret, granskning i kodlagret.** Systemet får själv mäta, samla corpus, klassificera tvister och föreslå förbättringar. Systemet får **inte** ändra `src/shared/infra/heuristics/**` eller lexikon-TS-filer på egen hand.
-2. **AI är inte fasit** (oförändrad från EVALUATION_MODE.md §2). Referensen är den lagrade kombinerade extractionen, stärkt med korroboration — aldrig en enskild AI-läsning.
-3. **Budgetkapar i alla autonoma steg**, mönstret från `MAX_ADJUDICATIONS` i `auto-triage.ts` och `LEARNED_NEGATIVE_REPEATS` i `pipeline.ts`. Varje steg som fattar beslut har ett max antal per körning.
-4. **Read-only-invarianten består.** `evaluateHeuristic()` skriver fortfarande ingenting. Det är *orchestratorn* (ny kodbas) som persistensrapporter och corpus i egna tabeller — utanför eval-funktionen.
-5. **Allt är repeterbart.** Fast seed, stratifierat urval, spolbar corpus-version: en rapport körd mot version N kan exakt återskapas.
+Implementerat i v1:
+
+- `/evaluation` kör read-only jämförelse (heuristik vs lagrad extraction) och exporterar corpus.
+- `src/test/fixtures/eval-corpus.json` innehåller **50 godkända positiva fall**, `eval-mismatches.json` **50 negativa fall**, och `eval-catalog.json` finns.
+- `eval-corpus.test.ts` passerar (50/50). `eval-mismatches.test.ts` fallerar 49/50 — se §2.1, det är ett tankefel i hur negativa fall skapats, inte en heuristikregression.
+
+Kvar att automatisera:
+
+1. Mätningen körs bara manuellt.
+2. Corpus-export slutar i webbläsaren (nedladdning) och måste checkas in för hand.
+3. Ingen trendhistorik mellan körningar.
+
+> **Felaktigt tänk (v1 av detta dokument):** "Corpuset är tomt (`[]`), regressionssviterna hoppar över."
+> **Så här bör det tänkas:** Corpuset finns redan och är värdefullt. Automationen ska *bygga vidare* på de incheckade filerna, inte ersätta dem.
 
 ---
 
-## 3. Datamodell (plain SQL i `/migrations`, monteras även av docker-compose)
+## 2. Rättelser — felaktigt tänk vs rätt tänk
+
+### 2.1 Negativa fixtures (`forbid`)
+
+> **Felaktigt tänk:** Varje mismatch mellan heuristik och referens blir en negativ fixture som *förbjuder* heuristikens värde. "Mismatch där heuristiken är mer korroborerad än AI → negativ fixture."
+>
+> Resultat: när heuristiken hade rätt förbjöd testet det korrekta svaret. Därför är 49/50 i `eval-mismatches.test.ts` röda.
+
+> **Så här bör det tänkas:**
+> - Heuristiken har rätt i en konflikt → **positiv fixture (`expect`)** med heuristikens värde. Referensens fel loggas separat som AI/referensfel; det testas inte mot heuristiken.
+> - Heuristiken har fel (verifierat) → negativ fixture (`forbid`) med det felaktiga värdet, **men** med `status = 'pending_fix'`.
+> - När koden rättats och fixturen passerar → `pending_fix` → `approved`, och den blir ett aktivt regressionstest.
+> - En test-svit får aldrig vara röd "by design". Kända, ej rättade fel är en arbetskö, inte ett test.
+
+Åtgärd för befintlig fil: klassificera om `eval-mismatches.json` — fall där heuristiken hade rätt flyttas till `eval-corpus.json` som `expect`; verkliga heuristikfel markeras `pending_fix` och hoppas över av testet tills de är fixade.
+
+### 2.2 CI läser inte från databasen
+
+> **Felaktigt tänk:** "Corpuset bor i databasen, inte i git. Testerna läser godkända fixtures från DB (`loadApprovedCorpus()`); utan `DATABASE_URL` → `it.skip`."
+>
+> Problem: CI har ingen databas, så hela regressionssviten skulle tyst hoppas över. Ett rött test kunde dessutom betyda "datat ändrades" i stället för "koden regressionade".
+
+> **Så här bör det tänkas — två lager:**
+>
+> | Lager | Var | Körs av | Syfte |
+> |---|---|---|---|
+> | **Hermetiskt** | `src/test/fixtures/*.json` i git | `bunx vitest run` i CI, alltid | Stoppar kodregressioner. Deterministiskt. |
+> | **Levande** | `eval_corpus` i Postgres | Schemalagd task + `bun run test:corpus-db` lokalt mot Docker | Växer automatiskt, mäter trend, föder förslag. |
+>
+> Flöde mellan lagren: godkända DB-fixtures **befordras** periodiskt till git via en exportknapp/skript som skriver JSON-filerna — en människa granskar diffen och committar. Ingen bot gör commits.
+
+### 2.3 Lexikon-overrides får inte göra extraktorer asynkrona
+
+> **Felaktigt tänk:** Lexikon-overrides "mergeas vid lexikon-inläsning" från DB — vilket i praktiken gör `extract()`/normalisering beroende av en async DB-läsning.
+
+> **Så här bör det tänkas:** Extraktorer och normalisering förblir **rena, synkrona och deterministiska**. Servern laddar `lexicon_overrides` till en **oföränderlig snapshot** i minnet vid uppstart och efter varje godkännande/synk. Extraktorn får snapshoten som indata (eller läser den cachade). Testerna kör med TS-default eller en explicit fixture-snapshot — aldrig mot DB.
+
+### 2.4 Regressionströsklar
+
+> **Felaktigt tänk:** Samma tröskel 0.05 för både per-nyckel och total F1.
+
+> **Så här bör det tänkas:** Totalen är ett medel över många nycklar och rör sig mindre. **Per nyckel: −0.05. Totalt: −0.02.** Nycklar med färre än 10 utvärderade fall rapporteras men larmar inte (för brusigt).
+
+### 2.5 Auto-godkännande
+
+> **Felaktigt tänk:** Otydligt vad som får auto-godkännas; adjudicerade fall "via Steg 3:s approve-knapp".
+
+> **Så här bör det tänkas:**
+> - Auto-godkänn **endast** positiva fall som klarar hela trust-filtret (§5.2).
+> - Allt som innehåller `forbid`, allt från AI-domare (Steg 2) och allt från mönstergrävning (Steg 3) → `pending` / `pending_fix`, granskas på `/evaluation`.
+
+### 2.6 Schemadetaljer
+
+> **Felaktigt tänk:** `eval_corpus_version` som `bigserial` + "radera pending-versionen" vid ny observation — strider mot append-only, och versionsnumret säger inget om innehållet.
+
+> **Så här bör det tänkas:** Pending-rader *ersätts* via `status = 'superseded'` (ingen DELETE). Versionen är en monoton räknare som höjs i samma transaktion som godkännanden, och testsviten pinnar `corpus_version` vid start.
+
+---
+
+## 3. Principer
+
+1. **Autonomi i datalagret, granskning i kodlagret.** Systemet får mäta, samla, klassificera och föreslå. Det ändrar aldrig `src/shared/infra/heuristics/**`, lexikon-TS-filer eller git.
+2. **AI är inte fasit.** Referensen är lagrad kombinerad extraction stärkt med korroboration och evidens i råtext.
+3. **Rätt svar är alltid `expect`.** `forbid` används bara för verifierade heuristikfel.
+4. **Budgettak i alla autonoma steg** (mönster: `MAX_ADJUDICATIONS`, `LEARNED_NEGATIVE_REPEATS`).
+5. **`evaluateHeuristic()` förblir read-only.** Bara orchestratorn skriver, i egna tabeller.
+6. **Repeterbart.** Fast seed, stratifierat urval, pinnad corpus-version.
+
+---
+
+## 4. Datamodell (plain SQL i `/migrations`)
 
 ```sql
--- Append-only historik av utvärderingsrapporter (trendlinjen, Steg 0)
 CREATE TABLE eval_reports (
   id             uuid PRIMARY KEY,
   generated_at   timestamptz NOT NULL,
   seed           int NOT NULL,
   sample_size    int NOT NULL,
-  corpus_version int,                -- vilken corpus-version denna körning validerade
-  report         jsonb NOT NULL      -- hela EvalReport (oförändrad struktur)
+  corpus_version int NOT NULL,
+  report         jsonb NOT NULL
 );
 
--- Corpuset: en rad per fixture-*observation*, versionerat
 CREATE TABLE eval_corpus (
-  id             text NOT NULL,      -- EvalFixture.id (stabil identitet, t.ex. "neg-<candidateId>-<specKey>")
-  version        int NOT NULL,       -- 1,2,3… per id
-  kind           text NOT NULL,      -- 'positive' | 'negative'
-  fixture        jsonb NOT NULL,     -- EvalFixture som sådan
-  status         text NOT NULL DEFAULT 'pending',  -- pending | approved | rejected
-  source_report  uuid REFERENCES eval_reports(id), -- provenans
+  id             text NOT NULL,          -- stabil EvalFixture.id
+  version        int  NOT NULL,          -- 1,2,3… per id
+  kind           text NOT NULL CHECK (kind IN ('positive','negative')),
+  fixture        jsonb NOT NULL,
+  status         text NOT NULL DEFAULT 'pending'
+                 CHECK (status IN ('pending','pending_fix','approved','rejected','superseded')),
+  origin         text NOT NULL CHECK (origin IN ('agreement','adjudication','pattern','analyst','git_import')),
+  source_report  uuid REFERENCES eval_reports(id),
   observed_at    timestamptz NOT NULL,
-  supersedes     int,                -- föregående version, eller NULL
-  decided_at     timestamptz,        -- tidpunkt för godkännande/avslag
+  supersedes     int,
+  decided_at     timestamptz,
+  decided_by     text,
   PRIMARY KEY (id, version)
 );
 
--- Monoton räknare: "corpus-version N" = N godkända rader vid det tillfället
 CREATE TABLE eval_corpus_version (
-  version     bigserial PRIMARY KEY,
+  version     int PRIMARY KEY,
   created_at  timestamptz NOT NULL,
   note        text
 );
+
+CREATE TABLE eval_lock (
+  name        text PRIMARY KEY,
+  held_until  timestamptz NOT NULL
+);
 ```
 
-### 3.1 Val i schemat och varför
-
-| Val | Motivering |
-|-----|------------|
-| **Append-only + `supersedes`, aldrig UPDATE-in-place** | En fixture som förändras (ny text för samma fälla) är en ny version, inte en redigering. Man kan alltid spela tillbaka exakt den corpus som en gammal rapport validerade mot. Audit trail utan git. |
-| **`status: pending → approved`** | Autonomi med en ärlighetsfattning. Steg 1-avtal (trust-filterade) kan **auto-godkännas**. Allt från tvistlöstning (Steg 2) eller mönstergrävning (Steg 3) startar `pending` och går via approve-knappen. Avslagna rader står kvar för historiken men ignoreras av testerna. |
-| **`source_report`** | Varje fixture är kopplad till rapporten som producerade den. När en fixture slutar sex månader senare kan man hämta ursprungsrapporten och mismatch-kontexten. |
-| **`kind` på raden** | Positiva och negativa fixtures har samma `EvalFixture`-format (`expect` vs `forbid`) men differentierad auto-godkännandepolicy (§5.2). |
-
-### 3.2 Skrivregler
-
-- Uppdatering av corpus sker **endast** via den autonoma orchestratorn (Steg 1–3) och via approve/reject-knapparna på `/evaluation`.
-- Inga rader tas någonsin bort. "Radera en fixture" = `status = 'rejected'`.
-- Ett nytt observationsskenario för samma `id` som redan har en `pending` version: ersätt den pending-versionen (ta bort den) i stället för att stapla — pending är en arbetskö, inte historik.
+Skrivregler: aldrig DELETE. "Radera" = `rejected`; ny pending-observation ersätter gammal via `superseded`. Vid första start importeras git-filerna med `origin = 'git_import'`, `status = 'approved'` så båda lagren börjar synkade.
 
 ---
 
-## 4. Steg 0 — Mätning utan uppsikt (ingen beteendeförändring)
+## 5. Steg 0+1 — Schemalagd mätning och corpus-tillväxt
 
-**Arbetsgång:** nytt Nitro-task + cron-rad.
-
-1. Ny fil `tasks/evaluation/run.ts` med `defineTask({ meta: { name: "evaluation:daily" } })`, scheduleras via `scheduledTasks` i `vite.config.ts` (t.ex. `"15 3 * * *"` — förskjuten från `sources:sync` för att inte krocka).
-2. Läser nyliga kandidater via `DocumentStore`-kontraktet, server-side med dynamisk import av `*.server.ts` (mönstret från `store.functions.ts`).
-3. Kör `evaluateHeuristic()` headless — ren TS + heuristik, **noll AI-kostnad**, bryter inte read-only-invarianten.
-4. Persistensar hela rapporten i `eval_reports` (skrivningen sker i orchestratorn, inte i `evaluateHeuristic`).
-5. Diff mot föregående rapport → per-nyckel F1-deltan. Faller en nyckel mer än 0.05 eller overall F1 mer än 0.05 är det en regressionssignal som visas på `/evaluation` (trendvy).
-6. Skriver `corpus_version` på rapportraden så varje mätning är förankrad i det corpus som då gällde.
-
-**Detaljer:**
-
-- Fast seed (t.ex. `seed = 1`) och stratifierat urval (~200) för jämförbarhet över tid.
-- Konkurrensskydd kopierat från `claimSlot()`/`releaseSlot()`-idioten i `source-sync.server.ts` (CAS på `sync_state` eller en `eval_lock`-rad) så att cron-tick och manuell körning inte kan överlappa.
-- Provider-outage-cooldown enligt samma mönster: om DB:n är nere nästa tick, hoppa över tyst.
-
----
-
-## 5. Steg 1 — Automatisk corpus-tillväxt
-
-Orchestratorn sköter corpuset i samma körning som mätningen.
+**Körning:** Nitro-task `tasks/evaluation/run.ts` (`evaluation:daily`, t.ex. `"15 3 * * *"`), förskjuten från `sources:sync`. Kan även triggas från `/evaluation`. Lås via `eval_lock` (CAS, mönster från `claimSlot()`). DB nere → hoppa över tyst med backoff.
 
 ### 5.1 Flöde
 
+```text
+1. Lås. Läs pinnad corpus_version.
+2. Stratifierat urval (~200, seed=1) via DocumentStore.
+3. evaluateHeuristic()  — ren TS, noll AI-kostnad.
+4. Spara rapport i eval_reports; diff mot förra → regressionssignal (§2.4).
+5. Skörda fixtures:
+   - avtal som klarar trust-filter     -> positive, approved
+   - konflikt där heuristik bevisat rätt -> positive, pending
+   - verifierat heuristikfel           -> negative, pending_fix
+6. Dedupe mot befintliga (samma innehåll → hoppa; nytt innehåll → ny version).
+7. Höj corpus_version om något godkändes. Släpp lås.
 ```
-1. Kör evaluateHeuristic() på det stratifierade urvalet
-2. Skörda "avtal" (agreements)  → positiva fixtures (EvalFixture med expect[])
-3. Skörda hög-trust-mismatcher  → negativa fixtures (förväntad: heuristiken har rätt)
-4. Sätt trust-filter (§5.2)
-5. For varje fixture: skriv ny observation till eval_corpus (append-only)
-   - Befintlig approved version med samma innehåll? -> hoppa (dedupe)
-   - Befintlig version med samma id men nytt innehåll? -> ny version, supersedes
-   - Annars: version 1
-6. Öka eval_corpus_version med en rad
-```
 
-`fixturesToCorpus(fixtures, existing)` behålls som ren formaterings-/merge-logik; bara lagringsskiktet är nytt.
+### 5.2 Trust-filter
 
-### 5.2 Trust-filter — vad som får bli fasit
+| Villkor | Positiv | Negativ |
+|---|---|---|
+| Evidens finns bokstavligen i `raw` (normaliserat) | krävs | krävs |
+| `raw` > 50 tecken | krävs | krävs |
+| Kandidat ej `discarded` | krävs | krävs |
+| Korroborerat av ≥2 kandidater, samma kanoniska värde | krävs för auto-godkännande | — |
+| Upphandlingsnycklar (`contract_value`, `*_funding` …) | uteslutna | uteslutna |
+| Felet bekräftat av analytiker eller domare | — | krävs |
 
-AI:n är inte sanningsreferens, så inget blir en fixture enbart för att AI:n sa det:
+### 5.3 Budgettak per körning
 
-| Villkor | För positiva fixtures | För negativa fixtures |
-|----------|----------------------|----------------------|
-| Evidence-braken passerade (spec-enheten förekommer bokstavlige i `raw`) | krävs | krävs |
-| Värdet korroborerat av ≥2 kandidater med samma kanoniska värde | krävs | — |
-| Kandidaten är inte `discarded` | krävs | krävs |
-| Heuristik och AI **samma** läsning (avtal) | ja | — |
-| Mismatch där heuristiken är mer korroborerad än AI | — | ja |
-| Inga `pending`-konflikter (samma semantic + motstridiga värden i mängden) | krävs | krävs |
-
-### 5.3 Budgetkapar (per körning)
-
-- Max **25** positiva och **15** negativa nya fixtures per körning.
-- Per-nyckelkvot: max 5 nya fixtures per `semanticKey` så att `range` inte tränger undan `unit_cost`.
-- Hård tak på corpusets storlek (t.ex. 2 000 godkända rader): vid överskridelse prunes äldsta godkända versionerna (men **aldrig** en version som en sparad `eval_reports.corpus_version` pekar på — de är spolbara).
+- Max 25 positiva, 15 negativa nya fixtures; max 5 per `semanticKey`.
+- Corpus-tak ~2 000 godkända, max 50 per spec-nyckel. Vid överskridelse markeras äldsta som `superseded` — aldrig en version som en sparad rapport pekar på.
 
 ---
 
-## 6. Steg 2 — Begränsad tvistlösning (adjudication)
+## 6. Steg 2 — Kapad tvistlösning
 
-Där heuristik och AI är oense och korroboration inte avgör, spänds en **kapad** AI-budget (t.ex. 10 per körning) genom den befintliga `chatCompletion`-proxy:n:
+Max 10 AI-domar per körning via `chatCompletion`-proxyn. Domaren får råtext + båda läsningarna och svarar `heuristic | ai | neither`.
 
-1. Billig domar-prompt får råtexten + båda läsningarna och svarar `"heuristic" | "ai" | "neither"`.
-2. Vinnaren uppdaterar corpuset:
-   - heuristik rätt → mismatchen blir en **negativ** fixture som pinnar AI-epokens misstag;
-   - AI rätt → **positiv** fixture;
-   - "ingen" → inget skrivs, mismatchen loggas som olöst.
-3. Alla domar loggas (i `eval_reports.report`-json:en eller en `adjudications`-delmängd) för granskning.
-4. Adjudicerade fixtures skrivs som `status = 'pending'` — de auto-godkänns **inte** i v1, utan går via Steg 3:s approve-knapp.
+- `heuristic` → **positiv** fixture med heuristikens värde, `pending`. *(Inte negativ — se §2.1.)*
+- `ai` → negativ fixture mot heuristikens felvärde, `pending_fix`, samt positiv med AI-värdet om evidensen bär.
+- `neither` → loggas som olöst.
 
-Detta är första steget där systemet aktivt avgör vad som är korrekt — därför kapat och loggat.
+Inget från domaren auto-godkänns.
 
 ---
 
-## 7. Steg 3 — Automatiskt föreslagna förbättringar, mänskligt godkända
+## 7. Steg 3 — Föreslagna förbättringar, mänskligt godkända
 
-### 7.1 Strukturell förutsättning: lexikon som data
+1. Gruppera felmönster (specKey, evidens-n-gram, kontext).
+2. Generera förslag: cue-regex, `notAfter`-fragment, magnitudterm, alias.
+3. Verifiera i minnet mot urval + **hela** corpuset (git + DB). Behåll bara om mål-F1 förbättras och noll fixtures bryts.
+4. Visa på `/evaluation` med Godkänn/Avvisa.
+5. Godkännande (en transaktion): skriv `lexicon_overrides`, uppdatera minnes-snapshot (§2.3), flytta berörda `pending_fix` → testas igen.
 
-Lägg till en `lexicon_overrides`-samling som mergeas vid lexikon-inläsning (`src/shared/lexicons/index.ts`): TS-filerna förbliver default/ fallback, override-lagret kommer från DB. Då blir godkännande av en förbättring en datarad — inget deploy, fullt spolbart.
-
-### 7.2 Förslagskedja
-
-```
-1. Mina mismatch-mönster: falsePositive/wrongKey grupperade på
-   (specKey, evidence n-gram, sammanhang före match)
-   — t.ex. "engagement altitude of 40 km → altitude.max" är ett lärbart notAfter-mönster;
-     "$832 мільйonи" är ett lexikon-luck-mönster
-2. Generera ett förslag: kandidat cue-regexp / notAfter-fragment / magnitud-term,
-   plus de konkreta mismatch-exempel som motiverade det
-3. Verifiera i-minnet FÖRE föreslående: spela förslaget mot urvalet + hela corpuset.
-   Behåll bara om mål-nyckelns F1 förbättras och noll fixtures bryts.
-   De flesta förslag dör här — det är poängen
-4. Yta överlevande förslag på /evaluation ("Föreslådda förbättringar") med
-   Godkänn/Avvisa-knapp
-5. Godkännande = ett transaktionellt val:
-   - skriv override-raden till lexicon_overrides
-   - godkänn de pending-fixtures som förslaget rör
-   - logga beslutet (vem/vad/when) i samma audit-skick som §3
-```
-
-### 7.3 Aldrig automatiskt
-
-- Systemet ändrar **inte** `src/shared/infra/heuristics/**` eller lexikon-TS-filer. Godkända overrides kan back-porteras till TS vid lugn stund.
-- Inga förslag mergeas utan verifiering mot hela corpuset.
+Aldrig automatiskt: ändring av TS-kod eller git. Godkända overrides back-porteras till TS-lexikon manuellt.
 
 ---
 
-## 8. Steg 4 — Analytikers åtgärder som träningsdata (delvis finns redan)
+## 8. Steg 4 — Analytikers rättelser som träningsdata
 
-`learnedNegativeKeys` (pipeline.ts) förvandlar redan analytikers kasseringar till kunskap. Utvidga samma idé:
-
-- En analytiker som rättar ett spec-värde på `/catalog` eller rensar ett felaktigt `matchId` genererar en provenans-tagad händelse som utvärderingsorchestratorn matar tillbaka som fixture/anti-fixture — varje mänsklig korrektion spelas först för alltid efter.
-- Korrektioner får `discoveredBy: "analyst"` och räknas som **högast** trust-nivå (högre än korroboration) i §5.2.
+Rättelser på `/catalog` eller borttagna felmatchningar blir fixtures med `origin = 'analyst'` — högsta trust, får auto-godkännas.
 
 ---
 
 ## 9. Testinfrastruktur
 
-### 9.1 DB-lästa tester
+| Kommando | Källa | Miljö |
+|---|---|---|
+| `bunx vitest run` | `src/test/fixtures/*.json` | CI + lokalt, alltid hermetiskt |
+| `bun run test:corpus-db` | `eval_corpus` (pinnad version) | Lokalt/server mot Docker-Postgres |
+| `bun run eval:export` | DB → `src/test/fixtures/*.json` | Människa granskar diff och committar |
 
-Testerna läser godkända fixtures via en ny `.server.ts`-loader (vitest kör i Node och får importera den direkt):
+Regler:
 
-```ts
-// src/test/eval-corpus.test.ts (ny version)
-const corpus = await loadApprovedCorpus(); // *.server.ts
-if (!process.env["DATABASE_URL"] || corpus.fixtures.length === 0) {
-  it.skip("eval corpus lever i DB — sätt DATABASE_URL", () => {});
-} else {
-  for (const fx of corpus.fixtures) {
-    it(`${fx.source} (${fx.id.slice(0, 8)}) @v${corpus.version}`, async () => {
-      const r = await checkFixture(fx, new HeuristicExtractor(1));
-      expect(r.missing).toEqual([]);
-      expect(r.missingNames).toEqual([]);
-    });
-  }
-}
-```
-
-`eval-mismatches.test.ts` likadant (assertar `missing` och `forbidden` tomma).
-
-### 9.2 Spolbarhet per körning
-
-- `loadApprovedCorpus()` resolverar **en** corpus-version vid svitens start och låser alla fixtures till den — svitern är internt konsekvent även om cron-tasken skriver mitt under körningen.
-- Varje testrun loggar den spinnade versionen. Ett nere­slag meddelar `corpus_version`, och "CI var röd på v47" är repeterbart: `WHERE id = … AND version <= …` rekonstruerar exakt v47.
-
-### 9.3 Hermetisk lager (den kompromiss vi tar)
-
-Corpuset i DB gör CI beroende av DB. För att behålla ett hermetiskt lager:
-
-- Den **checked-in** `src/test/fixtures/eval-corpus.json` behålls, men fylls **manuellt** med handskrivna guld-standardfällor enligt EVALUATION_MODE.md §6 (target-altitude, flerspråkiga pengar, generiskt "БПЛА") — ett litet, stabilt, hermetiskt lager som alltid körs.
-- DB-corpuset är det stora, levande lagret som växer automatiskt.
-- Alternativ (diskuteras i granskning): helt släppa filen och acceptera att CI kräver `DATABASE_URL`.
+- Testerna kör bara `approved`. `pending_fix` hoppas över med tydligt namn (`it.todo`), aldrig rött.
+- DB-sviten pinnar en `corpus_version` vid start och loggar den.
 
 ---
 
-## 10. Konkurrens, säkerhet och drift
+## 10. Drift
 
 | Ämne | Lösning |
-|------|---------|
-| Cron vs manuell körning | `claimSlot()`-CAS, mönstret från `source-sync.server.ts` |
-| Kö-säkring av kandidater | `evaluateHeuristic()` läser bara — inga leases behövs |
-| DB-nedtid vid tick | Tyst överhoppning + backoff, cooldown-mönstret från `runAutoSync` |
-| Storlek | Stratifierat urval ~200 per dygn; AI-budget Steg 2 = 10/dygn; corpus-tak 2 000 godkända |
-| Invariant-säkring | `evaluateHeuristic()` förblir read-only; endast orchestratorn skriver, i egna tabeller |
-| Raderadering | Förbjuden — "radera" = `status = 'rejected'` |
+|---|---|
+| Cron vs manuell körning | `eval_lock` CAS |
+| DB nere | Tyst överhoppning + backoff |
+| Volym | ~200 urval/dygn, 10 AI-domar/dygn, ~2 000 corpus-tak |
+| Read-only-invariant | Endast orchestratorn skriver |
+| Radering | Förbjuden — `rejected`/`superseded` |
+| Lovable Cloud | Samma tabeller via service-role server-funktioner; sekundärt |
 
 ---
 
-## 11. Byggnadsordning och uppskattning
+## 11. Byggordning
 
-| Steg | Omfattning | Autonomi |
-|------|-----------|----------|
-| **0.** Cron-eval + `eval_reports` + trendvy | liten — mesta plumbling av befintlig kod (`evaluateHeuristic`, cron-task-mönstret) | handfri mätning |
-| **1.** Server-side corpus-writer med trust-filter och kapar | liten (`fixturesToCorpus` + ny lagring) | självväxande regressionssvit |
-| **2.** Begränsad tvistlösning | medel | självavgörande facit (kapad, loggad) |
-| **3.** `lexicon_overrides`-samling + mönesgrävning + approve-knapp | stor | självförbättrande med mänsklig granskning |
-| **4.** Analytikers korrektioner som träningsdata | medel | mänskliga rättelser spelas först för alltid |
-
-Steg 0+1 är förutsättningen för allt annat — Steg 3:s verifiering är bara så god som corpuset som Steg 1 underhåller.
+| Steg | Innehåll | Förutsättning |
+|---|---|---|
+| **−1** | Klassificera om `eval-mismatches.json` (§2.1) så CI blir grön | — |
+| **0** | Schema, `eval_lock`, cron-task, `eval_reports`, trendvy | −1 |
+| **1** | Corpus-writer, trust-filter, git-import, `eval:export` | 0 |
+| **2** | Kapad tvistlösning | 1 |
+| **3** | `lexicon_overrides` + snapshot + förslag | 1 |
+| **4** | Analytikerrättelser | 1 |
 
 ---
 
-## 12. Öppna frågor för granskning
+## 12. Beslut (tidigare öppna frågor)
 
-1. **CloudStore-vägen (utan `DATABASE_URL`):** Ska DB-corpuset även leva i Lovable Cloud-tabellerna, eller är Postgres-only acceptabelt för v1 med rent skip annars? Schemat ovan porteras åt båda hållen men CloudStore går via service-role serverfunktioner — något mer plumbing.
-2. **Hermetiskt lager:** Behålls den checked-in guld-standardfilen (§9.3), eller accepterar vi att CI kräver `DATABASE_URL`?
-3. **Auto-godkännande i Steg 1:** Ska trust-filterade avtal auto-godkännas (färre klick, mer autonomi) eller landa som `pending` med veckovis granskningskö (säkrare, långsammare)?
-4. **Cron-frekvens:** Dygnsvist (rimligt med ~200 kandidater) eller var 6:e timme för snabbare trendlinje?
-5. **Regressionströskel:** 0.05 F1-delta som regressionssignal — för stram eller för slak för den datamängd vi har?
-6. **Corpus-tak:** 2 000 godkända rader — tillräckligt för de ~22 nycklar som används mer än 10 gånger?
+| Fråga | Beslut |
+|---|---|
+| Postgres eller Cloud? | Postgres i Docker är primärt; Cloud stöds via `DocumentStore` |
+| Hermetiskt lager? | Ja, alltid. CI kräver aldrig DB |
+| Auto-godkännande? | Endast trust-filtrerade positiva + analytikerrättelser |
+| Cron-frekvens? | Dygnsvis |
+| Regressionströskel? | −0.05 per nyckel (≥10 fall), −0.02 totalt |
+| Corpus-tak? | ~2 000 totalt, max 50 per spec-nyckel |
