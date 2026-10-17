@@ -77,7 +77,7 @@ export function ProvenanceSheet({
                 {dispatch && (
                   <Link
                     to="/dispatches"
-                    search={{ q: dispatch.externalId ?? dispatch.id }}
+                    search={{ q: dispatch.url ?? dispatch.externalId ?? dispatch.id }}
                     className="shrink-0 font-mono text-xs text-primary hover:underline"
                   >
                     Visa posten →
