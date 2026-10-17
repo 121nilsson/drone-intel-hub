@@ -15,6 +15,7 @@ const NAV = [
   { to: "/sources", label: "Sources" },
   { to: "/specs", label: "Spec Engine" },
   { to: "/taxonomy", label: "Taxonomy" },
+  { to: "/evaluation", label: "Evaluation" },
   { to: "/settings", label: "Settings" },
 ] as const;
 
