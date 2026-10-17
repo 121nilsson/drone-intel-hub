@@ -1,4 +1,4 @@
-import { cue, unit } from "../lexicons";
+import { cue, unit } from "@/shared/lexicons";
 import { type AddSpec, measureCue } from "./common";
 
 /** Jammers, domes and handheld guns: output power and suppression radius. */

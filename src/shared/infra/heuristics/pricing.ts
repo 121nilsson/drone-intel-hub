@@ -1,4 +1,4 @@
-import { alt } from "./lexicons";
+import { alt } from "@/shared/lexicons";
 
 /**
  * Money extraction, driven by the lexicons. Magnitudes are flattened longest-first across all

@@ -1,4 +1,4 @@
-import { cue, unit } from "../lexicons";
+import { cue, unit } from "@/shared/lexicons";
 import { type AddSpec, NUMBER, END, measureCue, num } from "./common";
 
 /** Mobile air defence and radars: engagement envelope, detection range, target channels. */

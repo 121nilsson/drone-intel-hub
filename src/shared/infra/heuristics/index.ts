@@ -10,7 +10,7 @@ import { extractUgv } from "./extractors/ugv";
 
 export type { AddSpec } from "./extractors/common";
 export { extractPrice, extractUnitPrice, extractContractValue } from "./pricing";
-export { LEXICONS } from "./lexicons";
+export { LEXICONS } from "@/shared/lexicons";
 
 export const SPEC_EXTRACTORS: Array<(raw: string, add: AddSpec) => void> = [
   extractUav,

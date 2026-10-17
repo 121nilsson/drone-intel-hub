@@ -1,7 +1,7 @@
 import { parseNumber } from "@/entities/normalization/numeric";
 import { measureCue, extractCountedNouns } from "./heuristics/extractors/common";
-import { cue, unit } from "./heuristics/lexicons";
-import type { Lexicon } from "./heuristics/lexicons";
+import { cue, unit } from "@/shared/lexicons";
+import type { Lexicon } from "@/shared/lexicons";
 import { mentionsPhonetic, phoneticKey } from "@/entities/drone/name-key";
 import type {
   DetectedSystem,
