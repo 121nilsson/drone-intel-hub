@@ -1,4 +1,5 @@
 import { parseNumber } from "@/entities/normalization/numeric";
+import { measureCue, extractCountedNouns } from "./heuristics/extractors/common";
 import { cue, unit } from "./heuristics/lexicons";
 import type { Lexicon } from "./heuristics/lexicons";
 import { mentionsPhonetic, phoneticKey } from "@/entities/drone/name-key";
@@ -14,6 +15,7 @@ import type {
   SystemExtraction,
 } from "@/entities/drone/types";
 import type { BriefingSummarizer, IntelExtractor } from "@/shared/contracts/ai";
+import { ExtractedSpecSchema } from "@/shared/contracts/extraction.schema";
 import {
   extractClassSpecs,
   extractContractValue,
@@ -203,113 +205,130 @@ function extractFacts(raw: string): Facts {
   ) => {
     const token = `${key}|${String(value)}|${unit ?? ""}|${evidence}`;
     if (seen.has(token)) return;
+    // Schema validation on heuristic output: matches how AI output is handled via
+    // lenientArray(ExtractedSpecSchema). Catches malformed keys/units at ingest so
+    // junk doesn't reach dossiers. Lenient — skips a bad spec rather than failing
+    // the whole extraction.
+    try {
+      ExtractedSpecSchema.parse({
+        key,
+        label,
+        value,
+        ...(unit ? { unit } : {}),
+        raw: evidence,
+        evidence,
+      });
+    } catch {
+      return;
+    }
     seen.add(token);
     specs.push({ key, label, value, ...(unit ? { unit } : {}), raw: evidence, evidence });
   };
-  const measure = (re: RegExp, key: string, label: string, unit: string, valueGroup = 1) => {
-    for (const m of raw.matchAll(re)) {
-      const value = num(m[valueGroup]!);
-      if (Number.isFinite(value)) add(key, label, value, unit, m[0]);
-    }
-  };
-
   // Speed, range, endurance, altitude and wingspan for drones, plus UGV, C-UAS and SHORAD
   // figures, in every registered language (EN/UK/RU/SV) - see ./heuristics.
   extractClassSpecs(raw, add);
 
-  const KG = unit("kg");
-  const weights: Array<[RegExp, string, string]> = [
-    [
-      new RegExp(`(?:${cue("weightMtow")})[^\\d]{0,20}(${NUMBER})\\s*(${KG})`, "giu"),
-      "weight_mtow",
-      "Maximum takeoff weight",
-    ],
-    [
-      new RegExp(`(?:${cue("weightEmpty")})[^\\d]{0,20}(${NUMBER})\\s*(${KG})`, "giu"),
-      "weight_empty",
-      "Empty weight",
-    ],
-    [
-      new RegExp(`(?:${cue("weightLaunch")})[^\\d]{0,20}(${NUMBER})\\s*(${KG})`, "giu"),
-      "weight_launch",
-      "Launch weight",
-    ],
-    [
-      new RegExp(`(?:${cue("warhead")})[^\\d]{0,20}(${NUMBER})\\s*(${KG})`, "giu"),
-      "warhead",
-      "Warhead weight",
-    ],
-    [
-      new RegExp(`(${NUMBER})\\s*(${KG})[^\\d.;\\n]{0,20}(?:${cue("warhead")})`, "giu"),
-      "warhead",
-      "Warhead weight",
-    ],
-    [
-      new RegExp(`(?:${cue("payload")})[^\\d]{0,20}(${NUMBER})\\s*(${KG})`, "giu"),
-      "payload",
-      "Payload capacity",
-    ],
-  ];
-  for (const [re, key, label] of weights) {
-    for (const m of raw.matchAll(re)) {
-      const value = num(m[1]!);
-      if (Number.isFinite(value)) add(key, label, value, m[2]!, m[0]);
-    }
-  }
+  // Weights (kg): MTOW, empty, launch — cue→number order, gap 20.
+  measureCue(raw, add, {
+    cue: cue("weightMtow"),
+    units: [[unit("kg"), "kg"]],
+    key: "weight_mtow",
+    label: "Maximum takeoff weight",
+    gap: 20,
+  });
+  measureCue(raw, add, {
+    cue: cue("weightEmpty"),
+    units: [[unit("kg"), "kg"]],
+    key: "weight_empty",
+    label: "Empty weight",
+    gap: 20,
+  });
+  measureCue(raw, add, {
+    cue: cue("weightLaunch"),
+    units: [[unit("kg"), "kg"]],
+    key: "weight_launch",
+    label: "Launch weight",
+    gap: 20,
+  });
 
-  const M = unit("m");
+  // Payload — cue→number order, gap 20.
+  measureCue(raw, add, {
+    cue: cue("payload"),
+    units: [[unit("kg"), "kg"]],
+    key: "payload",
+    label: "Payload capacity",
+    gap: 20,
+  });
+
+  // Warhead — cue→number order (gap 20) plus reversed number→cue order (gap 20).
+  measureCue(raw, add, {
+    cue: cue("warhead"),
+    units: [[unit("kg"), "kg"]],
+    key: "warhead",
+    label: "Warhead weight",
+    gap: 20,
+  });
+  measureCue(raw, add, {
+    cue: cue("warhead"),
+    units: [[unit("kg"), "kg"]],
+    key: "warhead",
+    label: "Warhead weight",
+    gap: 20,
+    order: "after",
+  });
+
+  // Dimensions (m): length, height, width, diameter — cue→number (gap 16) plus
+  // reversed number→cue (gap 16).
   for (const [cueKey, key, label] of [
     ["length", "length", "Length"],
     ["height", "height", "Height"],
     ["width", "width", "Width"],
     ["diameter", "diameter", "Diameter"],
   ] as const) {
-    measure(
-      new RegExp(
-        `(?:${cue(cueKey as keyof Lexicon["cues"])})[^\\d]{0,16}(${NUMBER})\\s*(${M})`,
-        "giu",
-      ),
+    measureCue(raw, add, {
+      cue: cue(cueKey as any),
+      units: [[unit("m"), "m"]],
       key,
       label,
-      "m",
-    );
-    measure(
-      new RegExp(
-        `(${NUMBER})\\s*(${M})[^.;\\n]{0,16}(?:${cue(cueKey as keyof Lexicon["cues"])})`,
-        "giu",
-      ),
+      gap: 16,
+    });
+    measureCue(raw, add, {
+      cue: cue(cueKey as any),
+      units: [[unit("m"), "m"]],
       key,
       label,
-      "m",
-    );
+      gap: 16,
+      order: "after",
+    });
   }
 
   // Left boundary matters: a designation's number is not a quantity. "UAV-300 MISSILE" used to
   // read as 300 missiles, which is how AKINCI's dossier came to carry "Number of missiles: 300"
   // from one press-release headline. `\b` cannot help here - the hyphen is a boundary - so the
   // lookbehind rejects a digit that follows a letter, digit or hyphen.
-  for (const m of raw.matchAll(
-    /(?<![-\p{L}\p{N}])(\d+)\s+(jammers?|cameras?|missiles?|rotors?|antennas?|bombs?)/giu,
-  )) {
-    const noun = m[2]!.toLowerCase().replace(/s$/, "");
-    add(`${noun}s`, `Number of ${noun}s`, Number(m[1]), undefined, m[0]);
-    if (noun === "camera")
-      sensors.push({
-        name: m[0],
-        category: "camera",
-        quantity: Number(m[1]),
-        evidence: m[0],
-        confidence: 0.8,
-      });
-    if (noun === "bomb" || noun === "missile")
-      payloads.push({
-        name: noun,
-        category: noun,
-        quantity: Number(m[1]),
-        evidence: m[0],
-        confidence: 0.8,
-      });
-  }
+  extractCountedNouns(
+    raw,
+    add,
+    ["jammers?", "cameras?", "missiles?", "rotors?", "antennas?", "bombs?"],
+    (noun, quantity, evidence) => {
+      if (noun === "camera")
+        sensors.push({
+          name: evidence,
+          category: "camera",
+          quantity,
+          evidence,
+          confidence: 0.8,
+        });
+      if (noun === "bomb" || noun === "missile")
+        payloads.push({
+          name: noun,
+          category: noun,
+          quantity,
+          evidence,
+          confidence: 0.8,
+        });
+    },
+  );
 
   for (const m of raw.matchAll(
     /(?:a |an )?([A-Z][\w-]*(?:\s+\d{2,4})?)\s+(thermal|EO\/IR|EO|IR|infrared)\s+camera/gi,

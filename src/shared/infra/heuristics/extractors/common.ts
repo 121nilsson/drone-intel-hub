@@ -17,9 +17,33 @@ export function num(s: string): number {
   return parseNumber(s) ?? Number.NaN;
 }
 
+/** Compiled-regex cache keyed on pattern + flags. Lexicons are static, so reuse across calls. */
+const reCache = new Map<string, RegExp>();
+
+function getRe(pattern: string, flags: string): RegExp {
+  const key = `${pattern}::${flags}`;
+  let re = reCache.get(key);
+  if (!re) {
+    re = new RegExp(pattern, flags);
+    reCache.set(key, re);
+  }
+  return re;
+}
+
 /**
  * Cue, up to `gap` non-digit characters, a number, then one of the unit alternatives. Each entry
  * in `units` is [regex fragment, canonical unit]; the first that matches the captured unit wins.
+ *
+ * `order: "before"` (default) matches cue→number→unit ("max takeoff weight 300 kg").
+ * `order: "after"` matches number→unit→cue ("300 kg warhead").
+ *
+ * Newlines are excluded from the gap window (`[^\d\n]`), so a cue and its measurement must sit
+ * on the same line. This is an intentional policy decision, not an accidental artifact.
+ *
+ * After-forms additionally clamp at sentence boundaries (`.` and `;`). The old inline reversed
+ * patterns used `[^.;\n]`: letting an after-form walk past a period lets it steal the value of a
+ * different spec — "12 m wide. Length otherwise unknown." read as length 12 m. Verified live
+ * before the clamp was restored, so pinning tests stay honest about the contract.
  */
 export function measureCue(
   raw: string,
@@ -32,13 +56,16 @@ export function measureCue(
     gap?: number;
     /** Reject a match when the text right before it contains this (e.g. a C-UAS cue). */
     notAfter?: RegExp;
+    /** "before" = cue→number→unit (default); "after" = number→unit→cue. */
+    order?: "before" | "after";
   },
 ) {
+  const { gap = 24, order = "before" } = opts;
   const unitAlt = opts.units.map(([u]) => u).join("|");
-  const re = new RegExp(
-    `(?:${opts.cue})[^\\d\\n]{0,${opts.gap ?? 24}}(${NUMBER})\\s*(${unitAlt})${END}`,
-    "giu",
-  );
+  const re =
+    order === "after"
+      ? getRe(`(${NUMBER})\\s*(${unitAlt})${END}[^.;\\d\\n]{0,${gap}}(?:${opts.cue})`, "giu")
+      : getRe(`(?:${opts.cue})[^\\d\\n]{0,${gap}}(${NUMBER})\\s*(${unitAlt})${END}`, "giu");
   for (const m of raw.matchAll(re)) {
     if (opts.notAfter) {
       const before = raw.slice(Math.max(0, m.index! - 24), m.index! + m[0].indexOf(m[1]!));
@@ -46,7 +73,28 @@ export function measureCue(
     }
     const value = num(m[1]!);
     if (!Number.isFinite(value)) continue;
-    const u = opts.units.find(([frag]) => new RegExp(`^(?:${frag})$`, "iu").test(m[2]!));
+    const u = opts.units.find(([frag]) => getRe(`^(?:${frag})$`, "iu").test(m[2]!));
     if (u) add(opts.key, opts.label, value, u[1], m[0]);
+  }
+}
+
+/**
+ * Count nouns like "4 jammers", "2 cameras", "6 missiles" with a left-boundary guard so a
+ * designation's number (e.g. "UAV-300") is not read as a quantity. The lookbehind rejects a digit
+ * that follows a letter, digit or hyphen.
+ */
+export function extractCountedNouns(
+  raw: string,
+  add: AddSpec,
+  nouns: string[],
+  /** Optional side effects per match (e.g. pushing to sensors/payloads arrays). */
+  onMatch?: (noun: string, quantity: number, evidence: string) => void,
+) {
+  const nounAlt = nouns.join("|");
+  for (const m of raw.matchAll(getRe(`(?<![-\\p{L}\\p{N}])(\\d+)\\s+(${nounAlt})`, "giu"))) {
+    const noun = m[2]!.toLowerCase().replace(/s$/, "");
+    const qty = Number(m[1]);
+    add(`${noun}s`, `Number of ${noun}s`, qty, undefined, m[0]);
+    onMatch?.(noun, qty, m[0]);
   }
 }

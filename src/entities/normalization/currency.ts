@@ -60,7 +60,7 @@ export function parseMoney(raw: string): Money | undefined {
   if (/\d\s*(?:-|–|—|\bto\b)\s*(?:[$€£₽₴₺¥]|[A-Z]{3})?\s*\d/i.test(text)) return undefined;
 
   const m = text.match(
-    /(?:(C\$|A\$|[$€£₽₴₺¥])\s*([+-]?\d[\d.,\s]*\d|\d)(?:\s*([kKmM]|thousand|million|млн|млрд))?|(?:([+-]?\d[\d.,\s]*\d|\d)\s*([kKmM]|thousand|million|млн|млрд)?\s*(USD|EUR|GBP|RUB|UAH|TRY|JPY|CAD|AUD|dollars?|euros?|rubles?|roubles?|hryvnias?)))/i,
+    /(?:(C\$|A\$|[$€£₽₴₺¥])\s*([+-]?\d[\d.,\s]*\d|\d)(?:\s*([kKmM]|thousand|million|мільйон\w*|мільярд\w*|млн|млрд|мільйон\w*|мільярд\w*|млн|млрд))?|(?:([+-]?\d[\d.,\s]*\d|\d)\s*([kKmM]|thousand|million|мільйон\w*|мільярд\w*|млн|млрд)?\s*(USD|EUR|GBP|RUB|UAH|TRY|JPY|CAD|AUD|dollars?|euros?|rubles?|roubles?|hryvnias?)))/i,
   );
   if (!m) return undefined;
 

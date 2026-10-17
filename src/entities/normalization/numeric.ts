@@ -35,7 +35,8 @@ export function parseNumber(s: string): number | undefined {
   return Number.isFinite(n) ? n : undefined;
 }
 
-const MAGNITUDE = /^(.*?)\s*(k|K|thousand|тыс\.?|тис\.?|M|million|млн\.?|млрд\.?|billion|bn)$/;
+const MAGNITUDE =
+  /^(.*?)\s*(k|K|thousand|тыс\.?|тис\.?|M|million|млн\.?|млрд\.?|billion|bn|мільйон\w*|мільярд\w*|млн|млрд)$/;
 
 /** "25k" → 25000, "2.5M" → 2_500_000, "500 млн" → 500e6. A bare "m" is not million. */
 export function parseMagnitude(s: string): number | undefined {
@@ -46,9 +47,9 @@ export function parseMagnitude(s: string): number | undefined {
   if (base === undefined) return undefined;
   const suf = m[2];
   const mult =
-    suf === "M" || /^million$/i.test(suf) || /^млн/i.test(suf)
+    suf === "M" || /^million$/i.test(suf) || /^мільйон/i.test(suf) || /^млн$/i.test(suf)
       ? 1e6
-      : /^млрд/i.test(suf) || /^billion$/i.test(suf) || /^bn$/i.test(suf)
+      : /^мільярд/i.test(suf) || /^млрд$/i.test(suf) || /^billion$/i.test(suf) || /^bn$/i.test(suf)
         ? 1e9
         : 1e3;
   return base * mult;
@@ -58,8 +59,8 @@ const QUALIFIER_PREFIX: Array<[RegExp, QuantityQualifier]> = [
   [/^(?:up\s*to|не\s+более)\s+/i, "up_to"],
   [/^(?:at\s+least|не\s+менее)\s+/i, "at_least"],
   [/^(?:less\s+than|under|меньше)\s+/i, "less_than"],
-  [/^(?:more\s+than|greater\s+than|over|свыше|более)\s+/i, "greater_than"],
-  [/^(?:~|≈|approx(?:imately)?|about|около|примерно)\s*/i, "approximate"],
+  [/^(?:more\s+than|greater\s+than|over|exceeding|свыше|более)\s+/i, "greater_than"],
+  [/^(?:~|≈|approx(?:imately)?|about|roughly|около|примерно)\s*/i, "approximate"],
 ];
 
 /**
