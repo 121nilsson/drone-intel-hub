@@ -15,21 +15,21 @@ describe("catalog search codec", () => {
   it("round-trips a fully specified view", () => {
     const state = fromSearchParams({
       q: "shahed",
-      sort: "updated",
+      sort: "domain",
       dom: "Air,Land",
       org: "RU,IR",
       band: "900 MHz",
       fiber: "1",
     });
 
-    expect(state.sort).toBe("updated");
+    expect(state.sort).toBe("domain");
     expect(state.facets.domains).toEqual(["Air", "Land"]);
     expect(state.facets.fiberOnly).toBe(true);
 
     const params = toCatalogSearch(state);
     expect(parseCatalogSearchParams(params)).toEqual({
       q: "shahed",
-      sort: "updated",
+      sort: "domain",
       dom: "Air,Land",
       org: "RU,IR",
       band: "900 MHz",
