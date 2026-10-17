@@ -9,7 +9,12 @@ import { SPEC_EXTRACTORS } from "./facts";
 export type { AddSpec } from "./extractors/common";
 export { extractFacts, SPEC_EXTRACTORS, type Facts } from "./facts";
 export { detectNames, mentions, mentionsName, resolveSystems } from "./names";
-export { extractPrice, extractUnitPrice, extractContractValue } from "./pricing";
+export {
+  extractPrice,
+  extractPriceNumeric,
+  extractUnitPrice,
+  extractContractValue,
+} from "./pricing";
 export { LEXICONS } from "@/shared/lexicons";
 
 export function extractClassSpecs(raw: string, add: AddSpec) {
