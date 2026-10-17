@@ -4,14 +4,18 @@
  * language means adding one object of this shape and registering it in ./index.ts - no
  * extractor changes.
  */
+export type MoneyScale = "thousand" | "million" | "billion";
+
 export interface Lexicon {
   /** ISO-ish language tag, for diagnostics only. */
   lang: string;
   money: {
-    /** Magnitude words/suffixes after a number: "billion", "млрд", "miljarder". */
-    magnitudes: string[];
-    /** Currency written as a word or code after the number: "dollars", "kronor", "грн". */
-    currencyWords: string[];
+    /** Magnitude words/suffixes after a number, by scale: "billion", "млрд", "miljarder". */
+    magnitudes: Record<MoneyScale, string[]>;
+    /** Currency written as a word or code after the number, by ISO 4217 code. */
+    currencies: Partial<Record<string, string[]>>;
+    /** One token carrying both magnitude and currency ("mkr" = million SEK). */
+    compounds?: Array<{ word: string; scale: MoneyScale; currency: string }>;
     /** Cues that a clause states a per-unit price. */
     unitPriceCues: string[];
     /** Cues that a clause states a programme / contract total, never a unit price. */

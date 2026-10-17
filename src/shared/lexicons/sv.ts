@@ -4,8 +4,22 @@ import type { Lexicon } from "./types";
 export const sv: Lexicon = {
   lang: "sv",
   money: {
-    magnitudes: ["miljarder", "miljard", "miljoner", "miljon", "tusen", "mdr", "mkr"],
-    currencyWords: ["kronor", "SEK", "kr"],
+    magnitudes: {
+      thousand: ["tusen"],
+      million: ["miljoner", "miljon", "milj"],
+      billion: ["miljarder", "miljard", "mdr"],
+    },
+    currencies: {
+      SEK: ["kronor", "SEK", "kr"],
+      USD: ["dollar"],
+      EUR: ["euro"],
+    },
+    // "50 mkr" is one token carrying both the magnitude and the currency.
+    compounds: [
+      { word: "tkr", scale: "thousand", currency: "SEK" },
+      { word: "mkr", scale: "million", currency: "SEK" },
+      { word: "mdkr", scale: "billion", currency: "SEK" },
+    ],
     unitPriceCues: ["styckpris", "per styck", "kostar", "\\bpris\\b", "à"],
     totalCues: ["\\bavtal", "\\bkontrakt", "\\bbeställning", "\\bbudget", "värt", "\\btotalt"],
   },
