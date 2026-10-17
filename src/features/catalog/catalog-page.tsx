@@ -10,7 +10,7 @@ import { effectiveInstallationId, effectivePropulsionId } from "@/entities/norma
 import { effectiveIeeeBands, linkIsFiber } from "@/entities/normalization/rf";
 import { useDispatches, useDrones, useServices } from "@/shared/infra/services";
 import { fetchWikipediaReference } from "@/shared/infra/wikipedia/functions";
-import { Btn, Loading, Panel, Sparkline, Tag } from "@/shared/ui/primitives";
+import { Btn, Card, CardGrid, Loading, Panel, Sparkline, Tag } from "@/shared/ui/primitives";
 import { cn } from "@/lib/utils";
 import { mergeDrones } from "@/features/intake/pipeline";
 import { duplicateGroups } from "@/entities/drone/duplicates";
@@ -73,14 +73,11 @@ function CatalogCard({ d, drones, cp }: { d: Drone; drones: Drone[]; cp: Drone |
     .map((x) => `${x.label} ${consensus(x).display}`);
   const relatedIntel = useRelatedIntel(d.id);
   return (
-    <div
-      key={d.id}
-      className="flex flex-col border border-border bg-card/80 transition-colors hover:border-primary"
-    >
-      <Link to="/systems/$id" params={{ id: d.id }} className="block flex-1 p-4">
+    <Card interactive>
+      <Link to="/systems/$id" params={{ id: d.id }} className="block min-w-0 flex-1 p-4">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
-            <h3 className="font-semibold">
+            <h3 className="break-words font-semibold">
               <span className="mr-1.5 text-xs text-muted-foreground">
                 <CountryBadge code={d.origin} />
               </span>
@@ -90,10 +87,10 @@ function CatalogCard({ d, drones, cp }: { d: Drone; drones: Drone[]; cp: Drone |
               {[d.cyrillic, ...d.aliases].filter(Boolean).join(" · ")}
             </p>
           </div>
-          <Tag tone="primary">{d.domain}</Tag>
+          <Tag tone="primary" className="shrink-0">{d.domain}</Tag>
         </div>
         {top.length > 0 && (
-          <p className="mt-2 font-mono text-xs text-foreground/80">{top.join(" · ")}</p>
+          <p className="mt-2 break-words font-mono text-xs text-foreground/80">{top.join(" · ")}</p>
         )}
         <div className="mt-3 flex flex-wrap gap-1.5">
           {d.operators.map((o) => (
@@ -126,7 +123,7 @@ function CatalogCard({ d, drones, cp }: { d: Drone; drones: Drone[]; cp: Drone |
           Compare vs {cp.name} →
         </Link>
       )}
-    </div>
+    </Card>
   );
 }
 
@@ -699,14 +696,14 @@ export function CatalogPage({
             )}
           </div>
         ) : (
-          <div className="grid gap-3 md:grid-cols-2">
+          <CardGrid>
             {sorted.map((d) => {
               const cp = d.counterpartIds
                 .map((id) => drones.find((x) => x.id === id))
                 .find(Boolean);
               return <CatalogCard key={d.id} d={d} drones={drones} cp={cp} />;
             })}
-          </div>
+          </CardGrid>
         )}
       </div>
     </div>

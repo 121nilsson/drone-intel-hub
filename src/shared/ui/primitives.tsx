@@ -184,3 +184,87 @@ export function Btn({
     />
   );
 }
+
+/** Shared card surface: never wider than its column, long content wraps or truncates. */
+export function Card({
+  children,
+  className,
+  interactive = false,
+}: {
+  children: ReactNode;
+  className?: string;
+  interactive?: boolean;
+}) {
+  return (
+    <div
+      className={cn(
+        "flex min-w-0 max-w-full flex-col overflow-hidden border border-border bg-card/80 [overflow-wrap:anywhere]",
+        interactive && "transition-colors hover:border-primary",
+        className,
+      )}
+    >
+      {children}
+    </div>
+  );
+}
+
+/** Responsive card grid: one column on phones, `cols` from md up. Columns can always shrink. */
+export function CardGrid({
+  children,
+  cols = 2,
+  className,
+}: {
+  children: ReactNode;
+  cols?: 2 | 3;
+  className?: string;
+}) {
+  return (
+    <div
+      className={cn(
+        "grid min-w-0 grid-cols-[minmax(0,1fr)] gap-3",
+        cols === 2 ? "md:grid-cols-2" : "md:grid-cols-2 xl:grid-cols-3",
+        className,
+      )}
+    >
+      {children}
+    </div>
+  );
+}
+
+/**
+ * Shared list row: title + optional subtitle on top, meta and actions below on phones;
+ * one line on wider screens. Pages pass content, never their own row layout.
+ */
+export function ListRow({
+  title,
+  subtitle,
+  meta,
+  actions,
+  className,
+}: {
+  title: ReactNode;
+  subtitle?: ReactNode;
+  meta?: ReactNode;
+  actions?: ReactNode;
+  className?: string;
+}) {
+  return (
+    <li
+      className={cn(
+        "flex min-w-0 flex-col gap-2 py-3 sm:flex-row sm:items-center sm:gap-3",
+        className,
+      )}
+    >
+      <div className="min-w-0 flex-1 [overflow-wrap:anywhere]">
+        <div className="min-w-0">{title}</div>
+        {subtitle && <div className="min-w-0 text-xs text-muted-foreground">{subtitle}</div>}
+      </div>
+      {(meta || actions) && (
+        <div className="flex min-w-0 flex-wrap items-center gap-2 sm:shrink-0 sm:justify-end">
+          {meta}
+          {actions}
+        </div>
+      )}
+    </li>
+  );
+}
