@@ -20,7 +20,7 @@ export function ExternalSourceLink({
 }: {
   href: string;
   children?: ReactNode;
-  className?: string;
+  className?: string | undefined;
 }) {
   return (
     <a
@@ -47,7 +47,7 @@ export function SystemChip({
 }: {
   id: string;
   name: string;
-  className?: string;
+  className?: string | undefined;
 }) {
   return (
     <Link
@@ -78,9 +78,9 @@ export function SourceRef({
   href,
   className,
 }: {
-  source?: string;
-  href?: string;
-  className?: string;
+  source?: string | undefined;
+  href?: string | undefined;
+  className?: string | undefined;
 }) {
   const s = (source ?? "").trim();
   const url = /^https?:\/\//i.test(s) ? s : href;
