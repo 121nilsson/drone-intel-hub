@@ -63,3 +63,33 @@ export function SystemChip({
     </Link>
   );
 }
+
+/** Append a unit unless the value already ends with it ("60 km" + "km" → "60 km"). */
+export function withUnit(value: unknown, unit?: string): string {
+  const v = String(value ?? "").trim();
+  const u = (unit ?? "").trim();
+  if (!u) return v;
+  return v.toLowerCase().endsWith(u.toLowerCase()) ? v : `${v} ${u}`;
+}
+
+/** Source label: URLs become a truncated external link, other text wraps safely. */
+export function SourceRef({
+  source,
+  href,
+  className,
+}: {
+  source?: string;
+  href?: string;
+  className?: string;
+}) {
+  const s = (source ?? "").trim();
+  const url = /^https?:\/\//i.test(s) ? s : href;
+  if (url) {
+    return (
+      <ExternalSourceLink href={url} className={className}>
+        {s && !/^https?:\/\//i.test(s) ? s : shortUrl(url)}
+      </ExternalSourceLink>
+    );
+  }
+  return <span className={cn("break-words [overflow-wrap:anywhere]", className)}>{s || "?"}</span>;
+}

@@ -1,5 +1,5 @@
 import { Link, useNavigate } from "@tanstack/react-router";
-import { ExternalSourceLink } from "@/shared/ui/links";
+import { ExternalSourceLink, SourceRef, withUnit } from "@/shared/ui/links";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import {
@@ -675,14 +675,16 @@ export function DossierPage({ id }: { id: string }) {
           {[...d.evolution]
             .sort((a, b) => b.date.localeCompare(a.date))
             .map((e, i) => (
-              <li key={i} className="mb-4 ml-4">
+              <li key={i} className="mb-4 ml-4 min-w-0">
                 <span className="absolute -left-1.5 mt-1.5 h-3 w-3 border border-primary bg-background" />
                 <p className="font-mono text-xs text-muted-foreground">
                   {e.date.slice(0, 10)} · {e.kind}
                 </p>
-                <p className="text-sm">
+                <p className="min-w-0 break-words text-sm [overflow-wrap:anywhere]">
                   {e.description}{" "}
-                  <span className="font-mono text-xs text-muted-foreground">— {e.source}</span>
+                  <span className="font-mono text-xs text-muted-foreground">
+                    — <SourceRef source={e.source} className="max-w-[16rem] align-bottom" />
+                  </span>
                 </p>
               </li>
             ))}
@@ -695,15 +697,19 @@ export function DossierPage({ id }: { id: string }) {
             .sort((a, b) => (b.claim.date ?? "").localeCompare(a.claim.date ?? ""))
             .slice(0, 40)
             .map(({ spec, claim, index }) => (
-              <li key={`${spec.key}-${index}`} className="mb-3 ml-4">
+              <li key={`${spec.key}-${index}`} className="mb-3 ml-4 min-w-0">
                 <span className="absolute -left-1.5 mt-1.5 h-2.5 w-2.5 border border-primary bg-background" />
                 <p className="font-mono text-xs text-muted-foreground">
                   {(claim.date ?? "").slice(0, 10)} · {spec.label}
                 </p>
-                <p className="text-sm">
-                  {String(claim.value)} {spec.unit ?? ""}{" "}
+                <p className="min-w-0 break-words text-sm [overflow-wrap:anywhere]">
+                  {withUnit(claim.value, spec.unit)}{" "}
                   <span className="font-mono text-xs text-muted-foreground">
-                    — {claim.source || claim.model || "?"}
+                    —{" "}
+                    <SourceRef
+                      source={claim.source || claim.model}
+                      className="max-w-[16rem] align-bottom"
+                    />
                   </span>
                 </p>
               </li>

@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { ExternalSourceLink } from "@/shared/ui/links";
+import { ExternalSourceLink, SourceRef } from "@/shared/ui/links";
 import type { SpecAttribute, SpecClaim } from "@/entities/drone/types";
 import { useDispatches, useServices } from "@/shared/infra/services";
 import {
@@ -71,8 +71,18 @@ export function ProvenanceSheet({
               <SheetTitle className="font-mono text-sm uppercase tracking-wider">
                 {selection.spec.label} · provenance
               </SheetTitle>
-              <SheetDescription>
-                {claim.source} · {claim.date?.slice(0, 10)}
+              <SheetDescription className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                <SourceRef source={claim.source} href={dispatch?.url} className="max-w-full" />
+                {claim.date && <span className="shrink-0">· {claim.date.slice(0, 10)}</span>}
+                {dispatch && (
+                  <Link
+                    to="/dispatches"
+                    search={{ q: dispatch.externalId ?? dispatch.id }}
+                    className="shrink-0 font-mono text-xs text-primary hover:underline"
+                  >
+                    Visa posten →
+                  </Link>
+                )}
               </SheetDescription>
             </SheetHeader>
             <div className="mt-4 space-y-4 text-sm">
