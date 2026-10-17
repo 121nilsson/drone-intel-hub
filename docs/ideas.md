@@ -169,21 +169,21 @@ relevance, queue) and [Heuristics engine](#heuristics-engine--modular-multilingu
 
 ## Quick wins (high leverage, small surface)
 
-| Idea                                              | Touches                                      |
-| ------------------------------------------------- | -------------------------------------------- |
-| Wire extraction corpus tests                      | `src/test/`, prompt JSON                     |
-| Feed outcome deep links                           | `dispatches-page.tsx`, dispatch types        |
-| `ExpandableText` shared component                 | `intake-page`, `dispatches-page`             |
-| `PIPELINE_TRACE` summary in Feed UI               | `pipeline.ts` persistence, Feed              |
-| “AI not configured” banner                        | `services.tsx`, `app-shell` or Settings link |
-| Drop specs whose evidence is absent from the post | merge/promote path, extraction prompt        |
-| Cap completion tokens per tier                    | `ai-proxy.server.ts`                         |
-| Last source run on the row                        | source record, `sources-page.tsx`            |
-| Catalog "updated this week" → Briefing changes    | `catalog-page.tsx`, briefing catalog changes |
-| Cyrillic designation regex in `detectNames`       | `heuristic-ai.ts`                            |
-| `heuristic-corpus.ru.ts` + vitest                 | `src/test/fixtures/`                         |
-| `lang` field on `RawDispatch` at collect           | `auto-ingest.ts`, dispatch types             |
-| Split `extractFacts` into `facts-core` + `facts-ru` | `entities/heuristic/`                       |
+| Idea                                                | Touches                                      |
+| --------------------------------------------------- | -------------------------------------------- |
+| Wire extraction corpus tests                        | `src/test/`, prompt JSON                     |
+| Feed outcome deep links                             | `dispatches-page.tsx`, dispatch types        |
+| `ExpandableText` shared component                   | `intake-page`, `dispatches-page`             |
+| `PIPELINE_TRACE` summary in Feed UI                 | `pipeline.ts` persistence, Feed              |
+| “AI not configured” banner                          | `services.tsx`, `app-shell` or Settings link |
+| Drop specs whose evidence is absent from the post   | merge/promote path, extraction prompt        |
+| Cap completion tokens per tier                      | `ai-proxy.server.ts`                         |
+| Last source run on the row                          | source record, `sources-page.tsx`            |
+| Catalog "updated this week" → Briefing changes      | `catalog-page.tsx`, briefing catalog changes |
+| Cyrillic designation regex in `detectNames`         | `heuristic-ai.ts`                            |
+| `heuristic-corpus.ru.ts` + vitest                   | `src/test/fixtures/`                         |
+| `lang` field on `RawDispatch` at collect            | `auto-ingest.ts`, dispatch types             |
+| Split `extractFacts` into `facts-core` + `facts-ru` | `entities/heuristic/`                        |
 
 ---
 
@@ -259,16 +259,16 @@ touching the AI contract (`IntelExtractor`).
 
 ### Split the monolith (same behavior, clearer tests)
 
-| Module (suggested) | Responsibility |
-| ------------------ | -------------- |
-| `entities/heuristic/names.ts` | `detectNames`, `mentions`, `mentionsName`, `resolveSystems`, `STOP`, title-line guard |
-| `entities/heuristic/prices.ts` | `MAGNITUDES`, `extractPrice`, `extractUnitPrice`, `PRICE_CUE` / `TOTAL_CUE` |
-| `entities/heuristic/facts-core.ts` | Shared `measure()`, weights, dimensions, cameras, guidance |
-| `entities/heuristic/facts-<lang>.ts` | Optional cue words and unit aliases per language |
-| `entities/heuristic/rf.ts` | MHz/GHz extraction, CRPA/Kometa hints, fiber spool |
-| `entities/heuristic/cuas.ts` | Engagement range, detection range, jam power — mirror extraction prompt checklist |
-| `entities/heuristic/scan.ts` | `scan()`, confidence formula, `systemExtractions` assembly |
-| `shared/infra/heuristic-ai.ts` | Thin `HeuristicExtractor` adapter |
+| Module (suggested)                   | Responsibility                                                                        |
+| ------------------------------------ | ------------------------------------------------------------------------------------- |
+| `entities/heuristic/names.ts`        | `detectNames`, `mentions`, `mentionsName`, `resolveSystems`, `STOP`, title-line guard |
+| `entities/heuristic/prices.ts`       | `MAGNITUDES`, `extractPrice`, `extractUnitPrice`, `PRICE_CUE` / `TOTAL_CUE`           |
+| `entities/heuristic/facts-core.ts`   | Shared `measure()`, weights, dimensions, cameras, guidance                            |
+| `entities/heuristic/facts-<lang>.ts` | Optional cue words and unit aliases per language                                      |
+| `entities/heuristic/rf.ts`           | MHz/GHz extraction, CRPA/Kometa hints, fiber spool                                    |
+| `entities/heuristic/cuas.ts`         | Engagement range, detection range, jam power — mirror extraction prompt checklist     |
+| `entities/heuristic/scan.ts`         | `scan()`, confidence formula, `systemExtractions` assembly                            |
+| `shared/infra/heuristic-ai.ts`       | Thin `HeuristicExtractor` adapter                                                     |
 
 Pure functions stay in `entities/`; only the adapter stays in `shared/infra/` (matches FSD).
 
@@ -348,10 +348,10 @@ Pure functions stay in `entities/`; only the adapter stays in `shared/infra/` (m
 
 ## Ingestion ↔ heuristics quick matrix
 
-| Ingest idea | Heuristic idea that pairs with it |
-| ----------- | --------------------------------- |
-| Language tag on dispatch | Per-language fact packs and STOP lists |
-| Structured markdown body | Table/list row attribution |
-| Segment long dispatches | Windowed `contextForSystem` per segment |
-| Tiered relevance | Tier 1 heuristic screen before model |
+| Ingest idea                         | Heuristic idea that pairs with it                       |
+| ----------------------------------- | ------------------------------------------------------- |
+| Language tag on dispatch            | Per-language fact packs and STOP lists                  |
+| Structured markdown body            | Table/list row attribution                              |
+| Segment long dispatches             | Windowed `contextForSystem` per segment                 |
+| Tiered relevance                    | Tier 1 heuristic screen before model                    |
 | Fetch metadata (`readabilityScore`) | Down-rank or skip deep regex when body is headline-only |

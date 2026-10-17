@@ -35,8 +35,14 @@ export function extractPrice(raw: string): string | undefined {
  * (contract, deal, budget, aid package - in any registered language). Under-claiming leaves the
  * text for an analyst; over-claiming writes a wrong figure into every consensus that reads it.
  */
-const PRICE_CUE = new RegExp(alt((l) => l.money.unitPriceCues), "iu");
-const TOTAL_CUE = new RegExp(alt((l) => l.money.totalCues), "iu");
+const PRICE_CUE = new RegExp(
+  alt((l) => l.money.unitPriceCues),
+  "iu",
+);
+const TOTAL_CUE = new RegExp(
+  alt((l) => l.money.totalCues),
+  "iu",
+);
 
 export function extractUnitPrice(raw: string): { value: string; evidence: string } | undefined {
   for (const clause of raw.split(/(?<=[.!?;\n])\s+/)) {

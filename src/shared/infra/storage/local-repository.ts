@@ -517,6 +517,21 @@ export class LocalTaxonomyCandidateRepository
     const doc = this.items.find((c) => c.id === id);
     if (doc) this.save(doc);
   }
+
+  /**
+   * Revert a resolved candidate back to an unresolved one. The UI undo for reject/map cannot go
+   * through resolve() because "candidate" is the absence of a decision, not one of its outcomes.
+   */
+  unresolve(id: string) {
+    this.items = this.items.map((c) => {
+      if (c.id !== id) return c;
+      const next: TaxonomyCandidate = { ...c, status: "candidate" };
+      delete next.resolvedCanonicalId;
+      return next;
+    });
+    const doc = this.items.find((c) => c.id === id);
+    if (doc) this.save(doc);
+  }
 }
 
 export class LocalProcurementRepository extends CachedRepository<"procurements"> {

@@ -3,9 +3,12 @@ import { type AddSpec, measureCue } from "./common";
 
 /** Counter-drone envelope cues; a vehicle's own range/altitude must not swallow these. */
 const ENVELOPE = new RegExp(
-  [cue("engagementRange"), cue("detectionRange"), cue("suppressionRadius"), cue("targetAltitude")].join(
-    "|",
-  ),
+  [
+    cue("engagementRange"),
+    cue("detectionRange"),
+    cue("suppressionRadius"),
+    cue("targetAltitude"),
+  ].join("|"),
   "iu",
 );
 

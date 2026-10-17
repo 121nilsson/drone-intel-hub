@@ -1,9 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { DispatchesPage } from "@/features/dispatches/dispatches-page";
+import { parseFeedSearchParams } from "@/features/dispatches/filters";
 
 export const Route = createFileRoute("/dispatches")({
-  validateSearch: (s: Record<string, unknown>): { q?: string } =>
-    typeof s["q"] === "string" && s["q"] ? { q: s["q"] } : {},
+  // The feed's text query, status tab and source pick are shareable state; params stay shallow.
+  validateSearch: (s: Record<string, unknown>) => parseFeedSearchParams(s),
   head: () => ({
     meta: [
       { title: "Intel Feed — DRONE//INT" },
@@ -26,6 +27,9 @@ export const Route = createFileRoute("/dispatches")({
 });
 
 function DispatchesRoute() {
-  const { q } = Route.useSearch();
-  return <DispatchesPage key={q ?? ""} initialQuery={q ?? ""} />;
+  const params = Route.useSearch();
+  const navigate = Route.useNavigate();
+  return (
+    <DispatchesPage url={params} setUrl={(next) => navigate({ search: next, replace: true })} />
+  );
 }

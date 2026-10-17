@@ -15,7 +15,7 @@ import {
   fetchBriefingExecutiveSummary,
   storeBriefingExecutiveSummary,
 } from "@/shared/infra/briefing.functions";
-import { Panel, Tag } from "@/shared/ui/primitives";
+import { Btn, Loading, Num, Panel, Tag } from "@/shared/ui/primitives";
 import { useRelatedIntel, RelatedChips } from "@/features/intel-graph";
 
 export function BriefingPage() {
@@ -49,7 +49,7 @@ function NewSpecClaimItem({ n, i }: { n: NewClaim; i: number }) {
       <p className="font-mono text-[11px] text-muted-foreground">
         {n.claim.source.split(" · ")[0]}
       </p>
-      {relatedIntel?.edges.length && (
+      {relatedIntel && relatedIntel.edges.length > 0 && (
         <div className="mt-1">
           <RelatedChips edges={relatedIntel.edges} maxChips={2} />
         </div>
@@ -72,7 +72,7 @@ function NewSystemItem({ d }: { d: Drone }) {
           {d.domain} · <CountryBadge code={d.origin} />
         </span>
       </Link>
-      {relatedIntel?.edges.length && (
+      {relatedIntel && relatedIntel.edges.length > 0 && (
         <div className="mt-1 ml-6">
           <RelatedChips edges={relatedIntel.edges} maxChips={2} />
         </div>
@@ -84,7 +84,7 @@ function NewSystemItem({ d }: { d: Drone }) {
 function Briefing() {
   const drones = useDrones();
   const dispatches = useDispatches();
-  const { summarizer, settings, aiConfigured } = useServices();
+  const { summarizer, settings, aiConfigured, attached } = useServices();
   const [now] = useState(() => Date.now());
   // Memoised so unrelated re-renders never rebuild the context (and with it, the summary request).
   const brief = useMemo(() => buildBriefing(drones, dispatches, now), [drones, dispatches, now]);
@@ -102,6 +102,9 @@ function Briefing() {
   );
   const [summaryShared, setSummaryShared] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [regenKey, setRegenKey] = useState(0);
+  const [generating, setGenerating] = useState(false);
+  const forceRegenRef = useRef(false);
   const summarizerRef = useRef(summarizer);
   summarizerRef.current = summarizer;
   // Summaries are slow (seconds to tens of seconds), so the context can change while one is in
@@ -119,43 +122,59 @@ function Briefing() {
       setSummaryShared(shared);
     };
 
+    setGenerating(true);
+    const force = forceRegenRef.current;
+    forceRegenRef.current = false;
+
     (async () => {
       try {
-        const remote = await fetchBriefingExecutiveSummary({ data: { context } });
-        if (remote.status === "hit") {
-          apply(remote.summary, remote.generatedAt, true);
-          return;
+        if (!force) {
+          const remote = await fetchBriefingExecutiveSummary({ data: { context } });
+          if (remote.status === "hit") {
+            apply(remote.summary, remote.generatedAt, true);
+            setGenerating(false);
+            return;
+          }
+
+          const cached = readBriefingSummaryCache();
+          if (cached) {
+            apply(cached.summary, cached.generatedAt, false);
+            setGenerating(false);
+            return;
+          }
         }
 
-        const cached = readBriefingSummaryCache();
-        if (cached) {
-          apply(cached.summary, cached.generatedAt, false);
+        if (id !== reqId.current) {
+          setGenerating(false);
           return;
         }
-
-        if (id !== reqId.current) return;
         setSummary(null);
         setSummaryAt(null);
         setSummaryShared(false);
 
         const s = await summarizerRef.current.summarize(context);
-        if (id !== reqId.current) return;
+        if (id !== reqId.current) {
+          setGenerating(false);
+          return;
+        }
         const generatedAt = Date.now();
         apply(s, generatedAt, false);
-        if (remote.status === "miss") {
-          void storeBriefingExecutiveSummary({
-            data: { context, summary: s, generatedAt },
-          });
-        }
+        void storeBriefingExecutiveSummary({
+          data: { context, summary: s, generatedAt },
+        });
       } catch (e) {
         if (id === reqId.current) setErr(e instanceof Error ? e.message : String(e));
+        setGenerating(false);
       }
     })();
 
     return () => {
       reqId.current = id + 1;
     };
-  }, [context]);
+  }, [context, regenKey]);
+
+  // Until the store attaches, the brief reads as an empty week — hold a loading state instead.
+  if (!attached) return <Loading label="Loading briefing…" />;
 
   return (
     <div className="space-y-6">
@@ -168,12 +187,60 @@ function Briefing() {
         </h1>
       </div>
 
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="border border-border bg-card/80 p-4">
+          <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">
+            New systems
+          </p>
+          <p className="mt-2 font-mono text-3xl text-primary">
+            <Num>{brief.newSystems.length}</Num>
+          </p>
+        </div>
+        <div className="border border-border bg-card/80 p-4">
+          <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">
+            Spec changes
+          </p>
+          <p className="mt-2 font-mono text-3xl text-primary">
+            <Num>{brief.newClaims.length}</Num>
+          </p>
+        </div>
+        <div className="border border-border bg-card/80 p-4">
+          <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">
+            Reported systems
+          </p>
+          <p className="mt-2 font-mono text-3xl text-primary">
+            <Num>{brief.reported.length}</Num>
+          </p>
+        </div>
+        <div className="border border-border bg-card/80 p-4">
+          <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">
+            Reports / outlets
+          </p>
+          <p className="mt-2 font-mono text-3xl text-primary">
+            <Num>{brief.reports}</Num>
+            <span className="text-base text-muted-foreground"> / {brief.outlets}</span>
+          </p>
+        </div>
+      </div>
+
       <Panel
         title="Executive summary"
         right={
-          <Tag tone={aiConfigured ? "primary" : "default"}>
-            {aiConfigured ? settings.tier2Model : "local engine"}
-          </Tag>
+          <div className="flex items-center gap-2">
+            <Tag tone={aiConfigured ? "primary" : "default"}>
+              {aiConfigured ? settings.tier2Model : "local engine"}
+            </Tag>
+            <Btn
+              variant="ghost"
+              disabled={generating}
+              onClick={() => {
+                forceRegenRef.current = true;
+                setRegenKey((k) => k + 1);
+              }}
+            >
+              {generating ? "Regenerating…" : "Regenerate"}
+            </Btn>
+          </div>
         }
       >
         {err ? (

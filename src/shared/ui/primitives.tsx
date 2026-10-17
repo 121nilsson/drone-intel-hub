@@ -46,7 +46,7 @@ export function Tag({
   mono = true,
 }: {
   children: ReactNode;
-  tone?: "default" | "primary" | "accent" | "danger";
+  tone?: "default" | "primary" | "accent" | "danger" | "success" | "warning" | "info" | "muted";
   className?: string;
   title?: string;
   caps?: boolean;
@@ -57,6 +57,10 @@ export function Tag({
     primary: "border-primary/50 text-primary",
     accent: "border-accent/50 text-accent",
     danger: "border-destructive/50 text-destructive",
+    success: "border-success/50 text-success",
+    warning: "border-warning/50 text-warning",
+    info: "border-chart-3/50 text-chart-3",
+    muted: "border-border/60 text-muted-foreground/80",
   };
   return (
     <span
@@ -80,6 +84,37 @@ export function ConfidenceTag({ level }: { level: "high" | "medium" | "low" }) {
       {level}
     </Tag>
   );
+}
+
+/**
+ * One page-title treatment for the whole app: mono is reserved for chrome and numbers, so
+ * page titles use the body font with consistent size and spacing.
+ */
+export function PageTitle({
+  children,
+  subtitle,
+  className,
+}: {
+  children: ReactNode;
+  subtitle?: ReactNode;
+  className?: string;
+}) {
+  return (
+    <header className={cn("space-y-1", className)}>
+      <h1 className="text-2xl font-semibold tracking-tight text-foreground">{children}</h1>
+      {subtitle && <p className="text-sm text-muted-foreground">{subtitle}</p>}
+    </header>
+  );
+}
+
+/** Numeric values: tabular, mono, so columns line up and change without layout shift. */
+export function Num({ children, className }: { children: ReactNode; className?: string }) {
+  return <span className={cn("font-mono tabular-nums", className)}>{children}</span>;
+}
+
+/** Shared loading affordance: repositories are async after SSR (see Services.attached). */
+export function Loading({ label = "Loading…" }: { label?: string }) {
+  return <p className="animate-pulse font-mono text-sm text-muted-foreground">{label}</p>;
 }
 
 export function Btn({

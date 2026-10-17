@@ -1,5 +1,5 @@
 import { Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import {
   DropdownMenu,
@@ -15,13 +15,15 @@ import { CountryBadge } from "@/shared/ui/country-badge";
 import { ClaimChip, ProvenanceSheet, type ClaimSelection } from "./provenance-sheet";
 import { useDrones, useServices } from "@/shared/infra/services";
 import { translateText, generateSystemSummary } from "@/shared/infra/ai-proxy.functions";
+import { buildSystemEvidenceDigest } from "@/shared/infra/system-evidence-digest";
 import { removalImpact, removeDrone } from "@/features/intake/pipeline";
-import { Btn, ConfidenceTag, Panel, Tag } from "@/shared/ui/primitives";
+import { Btn, ConfidenceTag, Loading, Panel, Tag } from "@/shared/ui/primitives";
 import { useRelatedIntel, RelatedRail } from "@/features/intel-graph";
 
 const DOSSIER_SECTIONS = [
   { id: "specs", label: "Specifications" },
   { id: "aliases", label: "Aliases" },
+  { id: "related", label: "Related intel" },
   { id: "rf", label: "RF spectrum" },
   { id: "supply", label: "Supply chain" },
   { id: "payloads", label: "Payloads" },
@@ -29,6 +31,7 @@ const DOSSIER_SECTIONS = [
   { id: "variants", label: "Variants" },
   { id: "counterparts", label: "Counterparts" },
   { id: "timeline", label: "Timeline" },
+  { id: "claims", label: "Claim timeline" },
 ] as const;
 
 function DossierSectionNav() {
@@ -215,18 +218,12 @@ function DossierSummary({ drone, svc }: { drone: Drone; svc: ReturnType<typeof u
   const [briefGenerating, setBriefGenerating] = useState(false);
   const [briefError, setBriefError] = useState<string | null>(null);
   const briefAttempted = useRef<string | null>(null);
-  const briefFingerprint = [
-    "v1",
-    drone.updatedAt,
-    drone.specs.length,
-    drone.organizationLinks?.length ?? 0,
-    drone.counterpartIds.length,
-    drone.aliases.length,
-  ].join("|");
+  const briefFingerprint = buildSystemEvidenceDigest(drone).fingerprint;
   const briefStale =
     !drone.llmSummaryGeneratedAt ||
     Date.now() - Date.parse(drone.llmSummaryGeneratedAt) > 7 * 24 * 60 * 60 * 1000;
-  const briefNeedsWork = !generatedSummary || drone.llmSummaryFingerprint !== briefFingerprint || briefStale;
+  const briefNeedsWork =
+    !generatedSummary || drone.llmSummaryFingerprint !== briefFingerprint || briefStale;
 
   useEffect(() => {
     if (storageSummary) {
@@ -263,37 +260,51 @@ function DossierSummary({ drone, svc }: { drone: Drone; svc: ReturnType<typeof u
       .finally(() => {
         if (!cancelled) setTranslating(false);
       });
-    return () => { cancelled = true; };
-  }, [drone, generatedSummary, likelyEnglish, sourceSummary, storageSummary, svc, svc.settings.translateModel, translateFn]);
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    drone,
+    generatedSummary,
+    likelyEnglish,
+    sourceSummary,
+    storageSummary,
+    svc,
+    svc.settings.translateModel,
+    translateFn,
+  ]);
 
-  const runBriefGeneration = async (force = false) => {
-    if (!svc.aiConfigured) {
-      setBriefError("Configure an AI model in settings to generate a system brief.");
-      return;
-    }
-    if (!force && !briefNeedsWork) return;
-    setBriefGenerating(true);
-    setBriefError(null);
-    try {
-      const result = await generateFn({ data: { drone } });
-      if (!result.ok) {
-        setBriefError(result.error);
+  const runBriefGeneration = useCallback(
+    async (force = false) => {
+      if (!svc.aiConfigured) {
+        setBriefError("Configure an AI model in settings to generate a system brief.");
         return;
       }
-      const generatedAt = new Date().toISOString();
-      svc.drones.upsert({
-        ...drone,
-        llmSummary: result.summary,
-        llmBrief: result.brief,
-        llmSummaryGeneratedAt: generatedAt,
-        llmSummaryFingerprint: briefFingerprint,
-      });
-    } catch (err) {
-      setBriefError(err instanceof Error ? err.message : "AI brief failed");
-    } finally {
-      setBriefGenerating(false);
-    }
-  };
+      if (!force && !briefNeedsWork) return;
+      setBriefGenerating(true);
+      setBriefError(null);
+      try {
+        const result = await generateFn({ data: { drone } });
+        if (!result.ok) {
+          setBriefError(result.error);
+          return;
+        }
+        const generatedAt = new Date().toISOString();
+        svc.drones.upsert({
+          ...drone,
+          llmSummary: result.summary,
+          llmBrief: result.brief,
+          llmSummaryGeneratedAt: generatedAt,
+          llmSummaryFingerprint: briefFingerprint,
+        });
+      } catch (err) {
+        setBriefError(err instanceof Error ? err.message : "AI brief failed");
+      } finally {
+        setBriefGenerating(false);
+      }
+    },
+    [briefNeedsWork, briefFingerprint, drone, svc, generateFn],
+  );
 
   useEffect(() => {
     if (!svc.aiConfigured) return;
@@ -302,14 +313,23 @@ function DossierSummary({ drone, svc }: { drone: Drone; svc: ReturnType<typeof u
     if (briefAttempted.current === generationKey) return;
     briefAttempted.current = generationKey;
     void runBriefGeneration(false);
-  }, [briefFingerprint, briefNeedsWork, drone.id, drone.llmSummaryGeneratedAt, svc.aiConfigured]);
+  }, [
+    briefFingerprint,
+    briefNeedsWork,
+    drone.id,
+    drone.llmSummaryGeneratedAt,
+    svc.aiConfigured,
+    runBriefGeneration,
+  ]);
 
   if (translated) {
     return (
       <div className="space-y-2">
         <p className="max-w-3xl text-base leading-relaxed">{translated}</p>
         <details className="font-mono text-xs text-muted-foreground">
-          <summary className="cursor-pointer">Original ({likelyEnglish ? "English" : "source language"})</summary>
+          <summary className="cursor-pointer">
+            Original ({likelyEnglish ? "English" : "source language"})
+          </summary>
           <p className="mt-1 max-w-3xl leading-relaxed text-muted-foreground">{summary}</p>
         </details>
       </div>
@@ -319,46 +339,64 @@ function DossierSummary({ drone, svc }: { drone: Drone; svc: ReturnType<typeof u
   if (!likelyEnglish && translating) {
     return (
       <div className="space-y-2">
-        <p className="max-w-3xl animate-pulse font-mono text-sm text-muted-foreground">Translating summary...</p>
+        <p className="max-w-3xl animate-pulse font-mono text-sm text-muted-foreground">
+          Translating summary...
+        </p>
         {drone.llmBrief ? (
-        <div className="max-w-3xl space-y-3 text-sm leading-relaxed text-muted-foreground">
-          <p className="text-base leading-relaxed text-foreground">{drone.llmBrief.overview}</p>
-          {drone.llmBrief.verified.length ? (
-            <section>
-              <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">Verified facts</p>
-              <ul className="mt-1 list-disc space-y-1 pl-5">
-                {drone.llmBrief.verified.map((item, i) => <li key={i}>{item}</li>)}
-              </ul>
-            </section>
-          ) : null}
-          {drone.llmBrief.caveats.length ? (
-            <section>
-              <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">Caveats and uncertainty</p>
-              <ul className="mt-1 list-disc space-y-1 pl-5">
-                {drone.llmBrief.caveats.map((item, i) => <li key={i}>{item}</li>)}
-              </ul>
-            </section>
-          ) : null}
-          {drone.llmBrief.provenance.length ? (
-            <section>
-              <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">Sources and provenance</p>
-              <ul className="mt-1 list-disc space-y-1 pl-5">
-                {drone.llmBrief.provenance.map((item, i) => <li key={i}>{item}</li>)}
-              </ul>
-            </section>
-          ) : null}
-          {drone.llmBrief.nextChecks.length ? (
-            <section>
-              <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">Suggested next checks</p>
-              <ul className="mt-1 list-disc space-y-1 pl-5">
-                {drone.llmBrief.nextChecks.map((item, i) => <li key={i}>{item}</li>)}
-              </ul>
-            </section>
-          ) : null}
-        </div>
-      ) : (
-        <p className="max-w-3xl text-base leading-relaxed text-muted-foreground">{summary}</p>
-      )}
+          <div className="max-w-3xl space-y-3 text-sm leading-relaxed text-muted-foreground">
+            <p className="text-base leading-relaxed text-foreground">{drone.llmBrief.overview}</p>
+            {drone.llmBrief.verified.length ? (
+              <section>
+                <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">
+                  Verified facts
+                </p>
+                <ul className="mt-1 list-disc space-y-1 pl-5">
+                  {drone.llmBrief.verified.map((item, i) => (
+                    <li key={i}>{item}</li>
+                  ))}
+                </ul>
+              </section>
+            ) : null}
+            {drone.llmBrief.caveats.length ? (
+              <section>
+                <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">
+                  Caveats and uncertainty
+                </p>
+                <ul className="mt-1 list-disc space-y-1 pl-5">
+                  {drone.llmBrief.caveats.map((item, i) => (
+                    <li key={i}>{item}</li>
+                  ))}
+                </ul>
+              </section>
+            ) : null}
+            {drone.llmBrief.provenance.length ? (
+              <section>
+                <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">
+                  Sources and provenance
+                </p>
+                <ul className="mt-1 list-disc space-y-1 pl-5">
+                  {drone.llmBrief.provenance.map((item, i) => (
+                    <li key={i}>{item}</li>
+                  ))}
+                </ul>
+              </section>
+            ) : null}
+            {drone.llmBrief.nextChecks.length ? (
+              <section>
+                <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">
+                  Suggested next checks
+                </p>
+                <ul className="mt-1 list-disc space-y-1 pl-5">
+                  {drone.llmBrief.nextChecks.map((item, i) => (
+                    <li key={i}>{item}</li>
+                  ))}
+                </ul>
+              </section>
+            ) : null}
+          </div>
+        ) : (
+          <p className="max-w-3xl text-base leading-relaxed text-muted-foreground">{summary}</p>
+        )}
       </div>
     );
   }
@@ -366,10 +404,18 @@ function DossierSummary({ drone, svc }: { drone: Drone; svc: ReturnType<typeof u
   return (
     <div className="space-y-2">
       <p className="max-w-3xl text-base leading-relaxed text-muted-foreground">{summary}</p>
-      {briefGenerating && <p className="font-mono text-xs text-muted-foreground">Generating intelligence summary...</p>}
+      {briefGenerating && (
+        <p className="font-mono text-xs text-muted-foreground">
+          Generating intelligence summary...
+        </p>
+      )}
       {!briefGenerating && (
         <div className="flex flex-wrap gap-2 pt-1">
-          <Btn variant="ghost" onClick={() => void runBriefGeneration(true)} disabled={briefGenerating}>
+          <Btn
+            variant="ghost"
+            onClick={() => void runBriefGeneration(true)}
+            disabled={briefGenerating}
+          >
             {generatedSummary ? "Regenerate AI brief" : "Generate AI brief"}
           </Btn>
         </div>
@@ -391,13 +437,17 @@ export function DossierPage({ id }: { id: string }) {
     : [];
 
   if (!d)
-    return (
+    return svc.attached ? (
       <p className="text-muted-foreground">
         System not found.{" "}
         <Link to="/catalog" className="text-primary">
           Back to catalog
         </Link>
       </p>
+    ) : (
+      // The repositories fill asynchronously after SSR; "not found" is only a verdict once the
+      // store has actually been read.
+      <Loading label="Loading system…" />
     );
   return (
     <div className="space-y-6">
@@ -408,11 +458,17 @@ export function DossierPage({ id }: { id: string }) {
             Origin <CountryBadge code={d.origin} />
           </Tag>
           {d.manufacturer && <Tag tone="accent">{d.manufacturer}</Tag>}
-{d.organizationLinks?.map((link) => (
-  <Tag key={`${link.organizationId}-${link.role}`} tone="accent" caps={false} mono={false}>
-    {link.role}: {link.name}{link.country ? ` (${link.country})` : ""}
-  </Tag>
-))}
+          {d.organizationLinks?.map((link) => (
+            <Tag
+              key={`${link.organizationId}-${link.role}`}
+              tone="accent"
+              caps={false}
+              mono={false}
+            >
+              {link.role}: {link.name}
+              {link.country ? ` (${link.country})` : ""}
+            </Tag>
+          ))}
           {d.operators.map((o) => (
             <Tag key={o} tone="accent" caps={false} mono={false}>
               Operator <CountryBadge code={o} />
@@ -453,10 +509,14 @@ export function DossierPage({ id }: { id: string }) {
       </div>
       <DossierSectionNav />
       <div className="grid gap-6 lg:grid-cols-3">
-        <Panel id="specs" title="Consensus specifications" className="lg:col-span-2">
+        <Panel
+          id="specs"
+          title="Consensus specifications"
+          className="lg:col-span-2 md:scroll-mt-24"
+        >
           <SpecTable drone={d} />
         </Panel>
-        <Panel id="aliases" title="Alias registry">
+        <Panel id="aliases" title="Alias registry" className="md:scroll-mt-24">
           <ul className="space-y-1 font-mono text-sm">
             <li>
               <span className="text-muted-foreground">canonical</span> {d.name}
@@ -473,10 +533,10 @@ export function DossierPage({ id }: { id: string }) {
             ))}
           </ul>
         </Panel>
-        <Panel id="related" title="Related Intelligence">
+        <Panel id="related" title="Related Intelligence" className="md:scroll-mt-24">
           <RelatedRail edges={relatedIntel?.edges ?? []} maxItems={10} />
         </Panel>
-        <Panel id="rf" title="RF spectrum">
+        <Panel id="rf" title="RF spectrum" className="md:scroll-mt-24">
           <ul className="space-y-2">
             {d.rf.map((r, i) => {
               const ieee = effectiveIeeeBands(r).map(ieeeLabel);
@@ -512,7 +572,7 @@ export function DossierPage({ id }: { id: string }) {
             })}
           </ul>
         </Panel>
-        <Panel id="supply" title="Supply chain">
+        <Panel id="supply" title="Supply chain" className="md:scroll-mt-24">
           <ul className="space-y-2 text-sm">
             {d.components.map((c, i) => (
               <li key={i}>
@@ -527,7 +587,7 @@ export function DossierPage({ id }: { id: string }) {
             )}
           </ul>
         </Panel>
-        <Panel id="payloads" title="Payload configurations">
+        <Panel id="payloads" title="Payload configurations" className="md:scroll-mt-24">
           <ul className="space-y-2 text-sm">
             {(d.payloads ?? []).map((p, i) => (
               <li key={`${p.name}-${i}`}>
@@ -548,7 +608,7 @@ export function DossierPage({ id }: { id: string }) {
             {!d.payloads?.length && <li className="text-muted-foreground">No payloads traced.</li>}
           </ul>
         </Panel>
-        <Panel id="sensors" title="Sensors & cameras">
+        <Panel id="sensors" title="Sensors & cameras" className="md:scroll-mt-24">
           <ul className="space-y-2 text-sm">
             {(d.sensors ?? []).map((s, i) => (
               <li key={`${s.name}-${i}`}>
@@ -564,7 +624,7 @@ export function DossierPage({ id }: { id: string }) {
             {!d.sensors?.length && <li className="text-muted-foreground">No sensors traced.</li>}
           </ul>
         </Panel>
-        <Panel id="variants" title="Variant family">
+        <Panel id="variants" title="Variant family" className="md:scroll-mt-24">
           {parent && (
             <Link
               data-testid={`parent-link-${parent.id}`}
@@ -590,7 +650,7 @@ export function DossierPage({ id }: { id: string }) {
             <p className="text-sm text-muted-foreground">No family relationship recorded.</p>
           )}
         </Panel>
-        <Panel id="counterparts" title="Counterparts">
+        <Panel id="counterparts" title="Counterparts" className="md:scroll-mt-24">
           {counterparts.map((c) => (
             <Link
               data-testid={`counterpart-link-${c.id}`}
@@ -609,7 +669,7 @@ export function DossierPage({ id }: { id: string }) {
           {!counterparts.length && <p className="text-sm text-muted-foreground">None linked.</p>}
         </Panel>
       </div>
-      <Panel id="timeline" title="Spec evolution timeline">
+      <Panel id="timeline" title="Spec evolution timeline" className="md:scroll-mt-24">
         <ol className="relative ml-2 border-l border-border">
           {[...d.evolution]
             .sort((a, b) => b.date.localeCompare(a.date))
@@ -627,7 +687,7 @@ export function DossierPage({ id }: { id: string }) {
             ))}
         </ol>
       </Panel>
-      <Panel id="claims" title="Spec claim timeline">
+      <Panel id="claims" title="Spec claim timeline" className="md:scroll-mt-24">
         <ol className="relative ml-2 border-l border-border">
           {d.specs
             .flatMap((s) => s.claims.map((claim, i) => ({ spec: s, claim, index: i })))
@@ -653,27 +713,31 @@ export function DossierPage({ id }: { id: string }) {
         </ol>
       </Panel>
       <div className="h-14 sm:hidden" />
-      <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-3 gap-2 border-t border-border bg-background/95 p-2 backdrop-blur sm:hidden">
-        <Link
-          data-testid="compare-link"
-          to="/counterparts"
-          search={{ a: d.id, b: counterparts[0]?.id ?? "" }}
-          className="border border-primary/50 py-2.5 text-center font-mono text-xs uppercase text-primary"
-        >
-          Compare
-        </Link>
+      <nav className="fixed inset-x-0 bottom-0 z-30 flex gap-2 border-t border-border bg-background/95 p-2 backdrop-blur sm:hidden">
+        {/* Compare would deep-link to an arbitrary fallback system when no counterpart is linked;
+            hiding it keeps "Jump to…" and "Posts" as the honest two actions. */}
+        {counterparts.length > 0 && (
+          <Link
+            data-testid="compare-link"
+            to="/counterparts"
+            search={{ a: d.id, b: counterparts[0]?.id ?? "" }}
+            className="flex-1 border border-primary/50 py-2.5 text-center font-mono text-xs uppercase text-primary"
+          >
+            Compare
+          </Link>
+        )}
         <Link
           data-testid="source-posts-link"
           to="/dispatches"
           search={{ q: d.name }}
-          className="border border-border py-2.5 text-center font-mono text-xs uppercase text-muted-foreground"
+          className="flex-1 border border-border py-2.5 text-center font-mono text-xs uppercase text-muted-foreground"
         >
           Posts
         </Link>
         <DropdownMenu>
           <DropdownMenuTrigger
             type="button"
-            className="border border-border py-2.5 text-center font-mono text-xs uppercase text-muted-foreground outline-none hover:text-primary"
+            className="flex-1 border border-border py-2.5 text-center font-mono text-xs uppercase text-muted-foreground hover:text-primary"
           >
             Jump to…
           </DropdownMenuTrigger>

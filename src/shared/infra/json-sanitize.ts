@@ -10,8 +10,7 @@
  * unrelated characters. This is a transport normalisation, not an interpretation decision,
  * so it is safe to apply in both the browser and server paths.
  */
-const LONE_SURROGATE =
-  /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g;
+const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g;
 
 export const sanitizeText = (value: string): string => value.replace(LONE_SURROGATE, "\uFFFD");
 

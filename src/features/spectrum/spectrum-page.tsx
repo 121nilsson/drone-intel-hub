@@ -8,8 +8,8 @@ import {
   type Exposure,
   type SegmentStatus,
 } from "@/entities/normalization/spectrum-bands";
-import { useDrones } from "@/shared/infra/services";
-import { Panel } from "@/shared/ui/primitives";
+import { useDrones, useServices } from "@/shared/infra/services";
+import { Loading, Panel } from "@/shared/ui/primitives";
 import { useRelatedIntel, RelatedRail } from "@/features/intel-graph";
 
 const EXPOSURE: Record<Exposure, { label: string; cls: string }> = {
@@ -91,6 +91,7 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 
 export function SpectrumPage() {
   const drones = useDrones();
+  const svc = useServices();
   const entries = useMemo(() => spectrumEntries(drones), [drones]);
   const segments = useMemo(() => segmentStatus(entries), [entries]);
   const radars = radarSystems(entries);
@@ -102,8 +103,11 @@ export function SpectrumPage() {
   const exposure = focused ? linkExposure(focused, entries) : [];
   const relatedIntel = useRelatedIntel(focus);
 
+  // Until the store attaches, every segment reads as "no documented RF" — hold instead.
+  if (!svc.attached) return <Loading label="Loading spectrum…" />;
+
   return (
-    <div className="mx-auto max-w-7xl space-y-6 px-4 py-6">
+    <div className="space-y-6">
       <header>
         <h1 className="font-mono text-xl font-bold tracking-widest text-primary">
           SPECTRUM CAT &amp; MOUSE
@@ -118,6 +122,7 @@ export function SpectrumPage() {
         <select
           value={focus ?? ""}
           onChange={(e) => setFocus(e.target.value || undefined)}
+          aria-label="Inspect system"
           className="w-full border border-border bg-background px-3 py-2 font-mono text-sm sm:w-80"
         >
           <option value="">-- All systems --</option>

@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import { DEFAULT_SETTINGS, useServices } from "@/shared/infra/services";
-import { Btn, Panel, Tag } from "@/shared/ui/primitives";
+import { Btn, PageTitle, Panel, Tag } from "@/shared/ui/primitives";
+import { DensityToggle } from "@/shared/ui/density";
 import type { ProviderEnvConfig, ProviderStatus } from "@/shared/contracts/ai";
 
 /** A model id like `nvidia/nemotron-3-super-120b-a12b` or `meta/muse-glimmer-30b` is namespaced to
@@ -179,7 +181,15 @@ export function SettingsPage() {
   );
   return (
     <div className="max-w-2xl space-y-6">
-      <h1 className="text-3xl font-semibold">Settings</h1>
+      <PageTitle subtitle="Thresholds, models, providers, and display.">Settings</PageTitle>
+      <Panel title="Display density">
+        <div className="flex items-center gap-3">
+          <DensityToggle />
+          <span className="text-xs text-muted-foreground">
+            Compact for triage, analyst for comparison.
+          </span>
+        </div>
+      </Panel>
       {providerEnv && <ProviderRouting env={providerEnv} />}
       <Panel title="Inference provider (NVIDIA NIM / OpenAI-compatible)">
         <div className="space-y-4">
@@ -221,7 +231,15 @@ export function SettingsPage() {
             >
               {saved ? "Saved" : "Save"}
             </Btn>
-            <Btn variant="ghost" onClick={() => setS(DEFAULT_SETTINGS)}>
+            <Btn
+              variant="ghost"
+              onClick={() => {
+                setS(DEFAULT_SETTINGS);
+                // Refill only: nothing is saved until Save is pressed, and operators have to know
+                // or they will assume the provider config was already reverted.
+                toast("Form reset — press Save to apply");
+              }}
+            >
               Reset
             </Btn>
           </div>

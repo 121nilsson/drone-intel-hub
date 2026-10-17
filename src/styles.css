@@ -108,6 +108,16 @@
     border-color: var(--color-border);
   }
 
+  /*
+   * One focus ring for the whole app (keyboard only, per :focus-visible) — border-color changes
+   * on focus are not perceivable enough as the sole indicator. Elements must not carry
+   * `outline-none` utilities or they suppress this.
+   */
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);
@@ -133,4 +143,33 @@
   kbd {
     font-family: "JetBrains Mono", ui-monospace, monospace;
   }
+}
+
+/*
+ * Density is applied as `data-density` on <html> by DensityProvider.
+ */
+html[data-density="compact"] {
+  font-size: 14px;
+}
+html[data-density="comfortable"] {
+  font-size: 16px;
+}
+html[data-density="analyst"] {
+  font-size: 16px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+.num,
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
 }

@@ -249,13 +249,21 @@ function applyRelatedSystems(
         evidenceSpecCount: extraction.specs.filter((spec) => Boolean(spec.evidence)).length,
         systemNames: extraction.systems?.length
           ? extraction.systems.map((s) => s.name).filter((name): name is string => Boolean(name))
-          : (extraction.name ? [extraction.name] : []),
+          : extraction.name
+            ? [extraction.name]
+            : [],
         risks: [
           ...new Set([
             ...(extraction.metadata?.escalationReasons ?? []),
-            ...(extraction.systems?.length && extraction.systems.length > 1 ? ["multi-system-attribution"] : []),
-            ...(collidesWithCatalog(extraction, d.drones.list()) ? ["name collides with an existing catalog system"] : []),
-            ...(extraction.name && notASystemName(extraction.name, source) ? ["name resembles an organisation or source"] : []),
+            ...(extraction.systems?.length && extraction.systems.length > 1
+              ? ["multi-system-attribution"]
+              : []),
+            ...(collidesWithCatalog(extraction, d.drones.list())
+              ? ["name collides with an existing catalog system"]
+              : []),
+            ...(extraction.name && notASystemName(extraction.name, source)
+              ? ["name resembles an organisation or source"]
+              : []),
             ...(extraction.confidence < (d.autoMergeThreshold ?? 0.85)
               ? ["confidence below auto-merge threshold"]
               : []),
@@ -263,7 +271,9 @@ function applyRelatedSystems(
             extraction.confidence < (d.autoPromoteThreshold ?? 0.9)
               ? ["confidence below auto-promote threshold"]
               : []),
-            ...(extraction.specs.some((s) => !s.evidence) ? ["some specs lack quoted evidence"] : []),
+            ...(extraction.specs.some((s) => !s.evidence)
+              ? ["some specs lack quoted evidence"]
+              : []),
           ]),
         ],
       },
@@ -361,7 +371,10 @@ function phoneticNameMatches(left: string, right: string): boolean {
   return a.stem === b.stem;
 }
 
-function findExistingSystemByIdentity(extraction: Extraction, catalog: Drone[]): string | undefined {
+function findExistingSystemByIdentity(
+  extraction: Extraction,
+  catalog: Drone[],
+): string | undefined {
   const candidate = extraction.name?.trim();
   if (!candidate) return undefined;
   const ids = new Set<string>();
@@ -515,17 +528,34 @@ export async function runTwoTier(
       evidenceSpecCount: extraction.specs.filter((spec) => Boolean(spec.evidence)).length,
       systemNames: extraction.systems?.length
         ? extraction.systems.map((s) => s.name).filter((name): name is string => Boolean(name))
-        : (extraction.name ? [extraction.name] : []),
+        : extraction.name
+          ? [extraction.name]
+          : [],
       risks: [
         ...new Set([
           ...(extraction.metadata?.escalationReasons ?? []),
-          ...(extraction.systems?.length && extraction.systems.length > 1 ? ["multi-system-attribution"] : []),
-          ...(collidesWithCatalog(extraction, d.drones.list()) ? ["name collides with an existing catalog system"] : []),
-          ...(extraction.name && notASystemName(extraction.name, source) ? ["name resembles an organisation or source"] : []),
-          ...(extraction.confidence < (d.autoMergeThreshold ?? 0.85) ? ["confidence below auto-merge threshold"] : []),
-          ...(extraction.confidence >= (d.autoMergeThreshold ?? 0.85) && extraction.confidence < (d.autoPromoteThreshold ?? 0.9) ? ["confidence below auto-promote threshold"] : []),
-          ...(!extraction.specs.length ? ["no structured facts to merge: mention-only candidate"] : []),
-          ...(extraction.specs.some((spec) => !spec.evidence) ? ["some specs lack quoted evidence"] : []),
+          ...(extraction.systems?.length && extraction.systems.length > 1
+            ? ["multi-system-attribution"]
+            : []),
+          ...(collidesWithCatalog(extraction, d.drones.list())
+            ? ["name collides with an existing catalog system"]
+            : []),
+          ...(extraction.name && notASystemName(extraction.name, source)
+            ? ["name resembles an organisation or source"]
+            : []),
+          ...(extraction.confidence < (d.autoMergeThreshold ?? 0.85)
+            ? ["confidence below auto-merge threshold"]
+            : []),
+          ...(extraction.confidence >= (d.autoMergeThreshold ?? 0.85) &&
+          extraction.confidence < (d.autoPromoteThreshold ?? 0.9)
+            ? ["confidence below auto-promote threshold"]
+            : []),
+          ...(!extraction.specs.length
+            ? ["no structured facts to merge: mention-only candidate"]
+            : []),
+          ...(extraction.specs.some((spec) => !spec.evidence)
+            ? ["some specs lack quoted evidence"]
+            : []),
         ]),
       ],
     },
@@ -534,7 +564,11 @@ export async function runTwoTier(
   const suppressed = learnedNegativeKeys(d.candidates.list());
   if (!extraction.matchId) {
     const inferredMatchId = findExistingSystemByIdentity(extraction, catalog);
-    if (inferredMatchId && extraction.confidence >= d.autoMergeThreshold && !collidesWithCatalog(extraction, catalog)) {
+    if (
+      inferredMatchId &&
+      extraction.confidence >= d.autoMergeThreshold &&
+      !collidesWithCatalog(extraction, catalog)
+    ) {
       extraction.matchId = inferredMatchId;
       if (candidate.extraction) candidate.extraction.matchId = inferredMatchId;
     }
@@ -1088,7 +1122,6 @@ export function recordMention(
   d.candidates.update(c.id, { status: "merged", resolvedInto: droneId, resolvedBy: "analyst" });
   return recorded;
 }
-
 
 export async function extractProcurement(
   raw: string,

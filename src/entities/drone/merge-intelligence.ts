@@ -104,19 +104,18 @@ export function mergeDroneIntelligence(
   );
   const operators = [...new Set([...drone.operators, ...extraction.operators])];
   const now = new Date().toISOString();
-  const incomingLinks =
-    extraction.manufacturer
-      ? [
-          {
-            organizationId: organizationKey(extraction.manufacturer),
-            name: extraction.manufacturer,
-            role: "manufacturer" as const,
-            evidence: extraction.rationale,
-            firstSeen: now,
-            lastSeen: now,
-          },
-        ]
-      : [];
+  const incomingLinks = extraction.manufacturer
+    ? [
+        {
+          organizationId: organizationKey(extraction.manufacturer),
+          name: extraction.manufacturer,
+          role: "manufacturer" as const,
+          evidence: extraction.rationale,
+          firstSeen: now,
+          lastSeen: now,
+        },
+      ]
+    : [];
   const organizationLinks = mergeOrganizationLinks(drone.organizationLinks, incomingLinks, now);
   return {
     ...drone,

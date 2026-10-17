@@ -28,8 +28,7 @@ export function buildSpecsLink(droneId: string, specKey: string): DeepLink {
 
 /** Build a deep link to the Feed filtered to a dispatch or search */
 export function buildDispatchLink(dispatchId?: string, searchQuery?: string): DeepLink {
-  const search =
-    dispatchId ? { q: dispatchId } : (searchQuery ? { q: searchQuery } : undefined);
+  const search = dispatchId ? { q: dispatchId } : searchQuery ? { q: searchQuery } : undefined;
   return search ? { route: "/dispatches", search } : { route: "/dispatches" };
 }
 

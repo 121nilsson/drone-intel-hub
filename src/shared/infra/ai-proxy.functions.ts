@@ -3,6 +3,7 @@ import { chatCompletionOnce, type ChatInput, type ChatResult } from "./ai-proxy.
 import { DEFAULT_SETTINGS } from "./settings-defaults";
 import type { Drone } from "@/entities/drone/types";
 import { sanitizeText } from "@/shared/infra/json-sanitize";
+import { buildSystemEvidenceDigest } from "@/shared/infra/system-evidence-digest";
 
 export type { ChatInput, ChatResult } from "./ai-proxy.server";
 
@@ -72,32 +73,12 @@ export const generateSystemSummary = createServerFn({ method: "POST" })
     const env = await (await import("./provider-env.server")).readProviderEnvConfig();
     if (!env.hasKey) return { ok: false as const, error: "AI provider not configured" };
     const d = data.drone;
-    const facts = {
-      id: d.id,
-      name: d.name,
-      aliases: d.aliases.slice(0, 20),
-      domain: d.domain,
-      origin: d.origin,
-      manufacturer: d.manufacturer,
-      operators: d.operators,
-      propulsion: d.propulsion,
-      installation: d.installation,
-      organizationLinks: d.organizationLinks,
-      specs: d.specs.slice(0, 24).map((spec) => ({
-        label: spec.label,
-        values: spec.claims.map((claim) => claim.value).slice(0, 5),
-        unit: spec.canonicalUnit ?? spec.unit,
-      })),
-      counterpartIds: d.counterpartIds,
-      variantOfId: d.variantOfId,
-      evolutionCount: d.evolution.length,
-      summary: d.summary?.slice(0, 1200),
-      summaryEnglish: d.summaryEnglish?.slice(0, 1200),
-    };
+    const digest = buildSystemEvidenceDigest(d);
+    const facts = digest;
     const result = await chatCompletionOnce({
       model: env.tier2Model ?? DEFAULT_SETTINGS.tier2Model,
       system: SYSTEM_SUMMARY_SYSTEM,
-      prompt: "SYSTEM DATA:\n" + JSON.stringify(facts, null, 2),
+      prompt: "SYSTEM EVIDENCE DIGEST:\n" + JSON.stringify(facts, null, 2),
       json: true,
       tier: "tier2",
     });
@@ -107,14 +88,27 @@ export const generateSystemSummary = createServerFn({ method: "POST" })
       const parsed = JSON.parse(result.content);
       brief = {
         overview: sanitizeText(String(parsed?.overview ?? "").trim()),
-        verified: Array.isArray(parsed?.verified) ? parsed.verified.map((x: unknown) => sanitizeText(String(x))) : [],
-        caveats: Array.isArray(parsed?.caveats) ? parsed.caveats.map((x: unknown) => sanitizeText(String(x))) : [],
-        provenance: Array.isArray(parsed?.provenance) ? parsed.provenance.map((x: unknown) => sanitizeText(String(x))) : [],
-        nextChecks: Array.isArray(parsed?.nextChecks) ? parsed.nextChecks.map((x: unknown) => sanitizeText(String(x))) : [],
+        verified: Array.isArray(parsed?.verified)
+          ? parsed.verified.map((x: unknown) => sanitizeText(String(x)))
+          : [],
+        caveats: Array.isArray(parsed?.caveats)
+          ? parsed.caveats.map((x: unknown) => sanitizeText(String(x)))
+          : [],
+        provenance: Array.isArray(parsed?.provenance)
+          ? parsed.provenance.map((x: unknown) => sanitizeText(String(x)))
+          : [],
+        nextChecks: Array.isArray(parsed?.nextChecks)
+          ? parsed.nextChecks.map((x: unknown) => sanitizeText(String(x)))
+          : [],
       };
     } catch {
-      brief = { overview: sanitizeText(result.content.trim()), verified: [], caveats: [], provenance: [], nextChecks: [] };
+      brief = {
+        overview: sanitizeText(result.content.trim()),
+        verified: [],
+        caveats: [],
+        provenance: [],
+        nextChecks: [],
+      };
     }
     return { ok: true as const, summary: brief.overview, brief };
   });
-

@@ -1,6 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useMemo, useRef, useState, type ReactNode } from "react";
+import { toast } from "sonner";
 import { consensus } from "@/entities/drone/consensus";
 import { DOMAINS, type Domain, type Drone } from "@/entities/drone/types";
 import { CountryBadge } from "@/shared/ui/country-badge";
@@ -9,13 +10,18 @@ import { effectiveInstallationId, effectivePropulsionId } from "@/entities/norma
 import { effectiveIeeeBands, linkIsFiber } from "@/entities/normalization/rf";
 import { useDrones, useServices } from "@/shared/infra/services";
 import { fetchWikipediaReference } from "@/shared/infra/wikipedia/functions";
-import type { CatalogFacets } from "@/shared/contracts/repository";
-import { Btn, Tag } from "@/shared/ui/primitives";
+import { Btn, Loading, Panel, Tag } from "@/shared/ui/primitives";
 import { cn } from "@/lib/utils";
 import { mergeDrones } from "@/features/intake/pipeline";
 import { duplicateGroups } from "@/entities/drone/duplicates";
 import { applyReference } from "@/features/catalog/reference-import";
 import { useRelatedIntel, RelatedChips } from "@/features/intel-graph";
+import {
+  emptyFacets,
+  fromSearchParams,
+  toCatalogSearch,
+  type CatalogSort,
+} from "@/features/catalog/catalog-state";
 
 function Facet({
   label,
@@ -41,6 +47,8 @@ function Facet({
           return (
             <button
               key={o}
+              type="button"
+              aria-pressed={on}
               onClick={() => onChange(on ? value.filter((x) => x !== o) : [...value, o])}
               className={cn(
                 "border px-2 py-0.5 font-mono text-xs",
@@ -103,7 +111,7 @@ function CatalogCard({ d, drones, cp }: { d: Drone; drones: Drone[]; cp: Drone |
             </Tag>
           ))}
         </div>
-        {relatedIntel?.edges.length && (
+        {relatedIntel && relatedIntel.edges.length > 0 && (
           <div className="mt-2">
             <RelatedChips edges={relatedIntel.edges} maxChips={3} />
           </div>
@@ -122,27 +130,40 @@ function CatalogCard({ d, drones, cp }: { d: Drone; drones: Drone[]; cp: Drone |
   );
 }
 
-export function CatalogPage() {
+export function CatalogPage({
+  url,
+  setUrl,
+}: {
+  url: Record<string, string>;
+  setUrl: (next: Record<string, string>) => void;
+}) {
   const drones = useDrones();
   const svc = useServices();
   const { drones: repo } = svc;
-  const [q, setQ] = useState("");
-  const [f, setF] = useState<Required<CatalogFacets>>({
-    domains: [],
-    origin: [],
-    operators: [],
-    bands: [],
-    propulsion: [],
-    ieeeBands: [],
-    natoBands: [],
-    propulsionIds: [],
-    installationIds: [],
-    protocols: [],
-    fiberOnly: false,
-  });
+  // Search, sort and facets are URL state: the URL is the single truth, changes navigate with a
+  // replace so a shared or refreshed link always restores the exact view. Session-only bits
+  // (merge targets, confirmation state, import notes, the mobile filter drawer) stay local.
+  const state = useMemo(() => fromSearchParams(url), [url]);
+  const f = state.facets;
+  const { q, sort } = state;
+  // Navigation is replace-only: a filter click is not a page the analyst wants in history.
+  const setQ = useCallback(
+    (next: string) => setUrl(toCatalogSearch({ ...state, q: next })),
+    [setUrl, state],
+  );
+  const setSort = useCallback(
+    (next: CatalogSort) => setUrl(toCatalogSearch({ ...state, sort: next })),
+    [setUrl, state],
+  );
+  const setF = useCallback(
+    (next: typeof f) => setUrl(toCatalogSearch({ ...state, facets: next })),
+    [setUrl, state],
+  );
+  const clearAll = () => setUrl(toCatalogSearch({ q: "", sort: "name", facets: emptyFacets() }));
   const [showFilters, setShowFilters] = useState(false);
-  const [sort, setSort] = useState<"name" | "updated" | "domain">("name");
+  const [view, setView] = useState<"compact" | "cards">("compact");
   const [mergeTargets, setMergeTargets] = useState<Record<string, string>>({});
+  const [confirmingMerge, setConfirmingMerge] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
   const [importNote, setImportNote] = useState<string | null>(null);
   const importingRef = useRef(false);
@@ -171,9 +192,9 @@ export function CatalogPage() {
         ),
       ],
     }),
-    [drones], // eslint-disable-line react-hooks/exhaustive-deps -- drones is stable from useDrones()
+    [drones],
   );
-  const results = useMemo(() => repo.search(q, f), [repo, q, f, drones]);
+  const results = useMemo(() => repo.search(q, f), [repo, q, f]);
   const sorted = useMemo(() => {
     const list = [...results];
     if (sort === "name") list.sort((a, b) => a.name.localeCompare(b.name));
@@ -188,76 +209,64 @@ export function CatalogPage() {
       chips.push({
         id: `domain-${d}`,
         label: d,
-        clear: () => setF((prev) => ({ ...prev, domains: prev.domains.filter((x) => x !== d) })),
+        clear: () => setF({ ...f, domains: f.domains.filter((x) => x !== d) }),
       });
     for (const o of f.origin)
       chips.push({
         id: `origin-${o}`,
         label: o,
-        clear: () => setF((prev) => ({ ...prev, origin: prev.origin.filter((x) => x !== o) })),
+        clear: () => setF({ ...f, origin: f.origin.filter((x) => x !== o) }),
       });
     for (const o of f.operators)
       chips.push({
         id: `op-${o}`,
         label: `Op ${o}`,
-        clear: () =>
-          setF((prev) => ({ ...prev, operators: prev.operators.filter((x) => x !== o) })),
+        clear: () => setF({ ...f, operators: f.operators.filter((x) => x !== o) }),
       });
     for (const b of f.bands)
       chips.push({
         id: `band-${b}`,
         label: b,
-        clear: () => setF((prev) => ({ ...prev, bands: prev.bands.filter((x) => x !== b) })),
+        clear: () => setF({ ...f, bands: f.bands.filter((x) => x !== b) }),
       });
     for (const b of f.ieeeBands)
       chips.push({
         id: `ieee-${b}`,
         label: ieeeLabel(b),
-        clear: () =>
-          setF((prev) => ({ ...prev, ieeeBands: prev.ieeeBands.filter((x) => x !== b) })),
+        clear: () => setF({ ...f, ieeeBands: f.ieeeBands.filter((x) => x !== b) }),
       });
     for (const p of f.propulsion)
       chips.push({
         id: `prop-${p}`,
         label: p,
-        clear: () =>
-          setF((prev) => ({ ...prev, propulsion: prev.propulsion.filter((x) => x !== p) })),
+        clear: () => setF({ ...f, propulsion: f.propulsion.filter((x) => x !== p) }),
       });
     for (const id of f.propulsionIds)
       chips.push({
         id: `pfam-${id}`,
         label: id,
-        clear: () =>
-          setF((prev) => ({
-            ...prev,
-            propulsionIds: prev.propulsionIds.filter((x) => x !== id),
-          })),
+        clear: () => setF({ ...f, propulsionIds: f.propulsionIds.filter((x) => x !== id) }),
       });
     for (const id of f.installationIds)
       chips.push({
         id: `inst-${id}`,
         label: id,
-        clear: () =>
-          setF((prev) => ({
-            ...prev,
-            installationIds: prev.installationIds.filter((x) => x !== id),
-          })),
+        clear: () => setF({ ...f, installationIds: f.installationIds.filter((x) => x !== id) }),
       });
     for (const p of f.protocols)
       chips.push({
         id: `proto-${p}`,
         label: p,
-        clear: () =>
-          setF((prev) => ({ ...prev, protocols: prev.protocols.filter((x) => x !== p) })),
+        clear: () => setF({ ...f, protocols: f.protocols.filter((x) => x !== p) }),
       });
     if (f.fiberOnly)
       chips.push({
         id: "fiber",
         label: "Fiber link",
-        clear: () => setF((prev) => ({ ...prev, fiberOnly: false })),
+        clear: () => setF({ ...f, fiberOnly: false }),
       });
     return chips;
-  }, [f]);
+  }, [f, setF]);
 
   function focusDuplicates() {
     setShowFilters(true);
@@ -293,6 +302,10 @@ export function CatalogPage() {
   }
   // Same name in another spelling, a name that is another entry's alias, or one Wikidata item.
   const duplicates = useMemo(() => duplicateGroups(drones), [drones]);
+
+  // The repositories fill asynchronously after SSR; until then every list reads empty, which
+  // would read as a legitimately empty catalog. Hold a loading state instead.
+  if (!svc.attached) return <Loading label="Loading catalog…" />;
 
   const activeFilters = Object.values(f).reduce(
     (n, v) => n + (Array.isArray(v) ? v.length : v ? 1 : 0),
@@ -368,6 +381,7 @@ export function CatalogPage() {
         />
         <button
           type="button"
+          aria-pressed={f.fiberOnly}
           onClick={() => setF({ ...f, fiberOnly: !f.fiberOnly })}
           className={cn(
             "border px-2 py-0.5 font-mono text-xs",
@@ -411,7 +425,7 @@ export function CatalogPage() {
                         onChange={(e) =>
                           setMergeTargets((prev) => ({ ...prev, [dup.key]: e.target.value }))
                         }
-                        className="w-full border border-border bg-background px-2 py-1 font-mono text-xs outline-none focus:border-primary"
+                        className="w-full border border-border bg-background px-2 py-1 font-mono text-xs"
                         aria-label="Keep system"
                       >
                         {dup.drones.map((d) => (
@@ -420,24 +434,48 @@ export function CatalogPage() {
                           </option>
                         ))}
                       </select>
-                      <Btn
-                        variant="ghost"
-                        className="w-full justify-center text-xs"
-                        disabled={!target || dup.ids.length < 2}
-                        onClick={() => {
-                          const toMerge = dup.ids.filter((x) => x !== target);
-                          for (const m of toMerge) {
-                            mergeDrones(target, m, { drones: repo, candidates: svc.candidates });
-                          }
-                          setMergeTargets((prev) => {
-                            const next = { ...prev };
-                            delete next[dup.key];
-                            return next;
-                          });
-                        }}
-                      >
-                        Merge {dup.ids.length - 1} into keep
-                      </Btn>
+                      {confirmingMerge === dup.key ? (
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-muted-foreground">
+                            Merge {dup.ids.length - 1} into {target}?
+                          </span>
+                          <Btn
+                            className="text-xs"
+                            onClick={() => {
+                              const toMerge = dup.ids.filter((x) => x !== target);
+                              for (const m of toMerge) {
+                                mergeDrones(target, m, {
+                                  drones: repo,
+                                  candidates: svc.candidates,
+                                });
+                              }
+                              setConfirmingMerge(null);
+                              setMergeTargets((prev) => {
+                                const next = { ...prev };
+                                delete next[dup.key];
+                                return next;
+                              });
+                              toast("Duplicate systems merged", {
+                                description: `${toMerge.length} folded into ${target}`,
+                              });
+                            }}
+                          >
+                            Confirm merge
+                          </Btn>
+                          <Btn variant="ghost" onClick={() => setConfirmingMerge(null)}>
+                            Cancel
+                          </Btn>
+                        </div>
+                      ) : (
+                        <Btn
+                          variant="ghost"
+                          className="w-full justify-center text-xs"
+                          disabled={!target || dup.ids.length < 2}
+                          onClick={() => setConfirmingMerge(dup.key)}
+                        >
+                          Merge {dup.ids.length - 1} into keep
+                        </Btn>
+                      )}
                     </div>
                   </div>
                 );
@@ -471,7 +509,7 @@ export function CatalogPage() {
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="Search Geran, Герань, Shahed, Kometa, NVIDIA…"
-          className="w-full border border-border bg-card px-3 py-2.5 font-mono text-sm outline-none focus:border-primary"
+          className="w-full border border-border bg-card px-3 py-2.5 font-mono text-sm focus:border-primary"
         />
         {filterChips.length > 0 && (
           <div className="mt-2 flex flex-wrap gap-1.5">
@@ -480,6 +518,7 @@ export function CatalogPage() {
                 key={chip.id}
                 type="button"
                 onClick={chip.clear}
+                aria-label={`Remove filter: ${chip.label}`}
                 className="inline-flex items-center gap-1 border border-primary/40 bg-primary/10 px-2 py-0.5 font-mono text-[11px] text-primary hover:bg-primary/15"
               >
                 {chip.label}
@@ -493,14 +532,40 @@ export function CatalogPage() {
             <p className="font-mono text-xs text-muted-foreground">{sorted.length} systems</p>
             <select
               value={sort}
-              onChange={(e) => setSort(e.target.value as "name" | "updated" | "domain")}
-              className="border border-border bg-background px-2 py-1 font-mono text-[11px] outline-none focus:border-primary"
+              onChange={(e) => setSort(e.target.value as CatalogSort)}
+              className="border border-border bg-background px-2 py-1 font-mono text-[11px] focus:border-primary"
               aria-label="Sort systems"
             >
               <option value="name">Sort: name</option>
               <option value="updated">Sort: recently updated</option>
               <option value="domain">Sort: domain</option>
             </select>
+            <div
+              className="inline-flex border border-border"
+              role="group"
+              aria-label="Catalog view"
+            >
+              <button
+                type="button"
+                aria-pressed={view === "compact"}
+                onClick={() => setView("compact")}
+                className={`px-2 py-1 font-mono text-[11px] ${
+                  view === "compact" ? "bg-primary/15 text-primary" : "text-muted-foreground"
+                }`}
+              >
+                Compact
+              </button>
+              <button
+                type="button"
+                aria-pressed={view === "cards"}
+                onClick={() => setView("cards")}
+                className={`border-l border-border px-2 py-1 font-mono text-[11px] ${
+                  view === "cards" ? "bg-primary/15 text-primary" : "text-muted-foreground"
+                }`}
+              >
+                Cards
+              </button>
+            </div>
           </div>
           <Btn
             type="button"
@@ -527,12 +592,91 @@ export function CatalogPage() {
           </Btn>
         </div>
         {importNote && <p className="mb-3 font-mono text-xs text-muted-foreground">{importNote}</p>}
-        <div className="grid gap-3 md:grid-cols-2">
-          {sorted.map((d) => {
-            const cp = d.counterpartIds.map((id) => drones.find((x) => x.id === id)).find(Boolean);
-            return <CatalogCard key={d.id} d={d} drones={drones} cp={cp} />;
-          })}
-        </div>
+        {sorted.length === 0 && (
+          <Panel className="mt-4">
+            {drones.length ? (
+              <p className="text-sm text-muted-foreground">
+                No systems match the current search and filters.{" "}
+                <button
+                  type="button"
+                  onClick={clearAll}
+                  className="font-mono text-xs text-primary underline"
+                >
+                  Clear everything
+                </button>
+              </p>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                No systems catalogued yet. Ingest a report from the{" "}
+                <Link to="/intake" className="text-primary underline">
+                  intake queue
+                </Link>{" "}
+                or import the reference catalog above.
+              </p>
+            )}
+          </Panel>
+        )}
+        {view === "compact" ? (
+          <div className="overflow-x-auto border border-border">
+            <table className="w-full border-collapse text-sm">
+              <thead>
+                <tr className="text-left font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
+                  <th className="px-3 py-2 font-normal">System</th>
+                  <th className="px-3 py-2 font-normal">Origin</th>
+                  <th className="px-3 py-2 font-normal">Domain</th>
+                  <th className="px-3 py-2 font-normal">Headline figure</th>
+                  <th className="px-3 py-2 font-normal">Updated</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sorted.map((d) => {
+                  const firstSpec = d.specs[0];
+                  const firstFigure = firstSpec ? consensus(firstSpec) : null;
+                  return (
+                    <tr key={d.id} className="border-t border-border hover:bg-secondary/40">
+                      <td className="px-3 py-2">
+                        <Link
+                          to="/systems/$id"
+                          params={{ id: d.id }}
+                          className="font-semibold hover:text-primary"
+                        >
+                          {d.name}
+                        </Link>
+                        {d.cyrillic && (
+                          <span className="ml-2 font-mono text-xs text-muted-foreground">
+                            {d.cyrillic}
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2">
+                        <CountryBadge code={d.origin} />
+                      </td>
+                      <td className="px-3 py-2 font-mono text-xs">{d.domain}</td>
+                      <td className="px-3 py-2 font-mono text-xs">
+                        {firstSpec ? `${firstSpec.label}: ${firstFigure?.display ?? "—"}` : "—"}
+                      </td>
+                      <td className="px-3 py-2 font-mono text-xs text-muted-foreground">
+                        {d.updatedAt ? d.updatedAt.slice(0, 10) : "—"}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            {!sorted.length && (
+              <p className="px-3 py-4 text-sm text-muted-foreground">No systems match.</p>
+            )}
+          </div>
+        ) : (
+          <div className="grid gap-3 md:grid-cols-2">
+            {sorted.map((d) => {
+              const cp = d.counterpartIds
+                .map((id) => drones.find((x) => x.id === id))
+                .find(Boolean);
+              return <CatalogCard key={d.id} d={d} drones={drones} cp={cp} />;
+            })}
+          </div>
+        )}
       </div>
     </div>
   );

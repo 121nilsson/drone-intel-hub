@@ -5,13 +5,19 @@ import { useDispatches, useServices, useSources } from "@/shared/infra/services"
 import type { DispatchStatus } from "@/entities/dispatch/types";
 import { getSyncState, type SyncState } from "@/shared/infra/sources/source-sync.functions";
 import { translateText } from "@/shared/infra/ai-proxy.functions";
-import { Btn, Panel, Tag } from "@/shared/ui/primitives";
+import { Btn, Loading, Panel, Tag } from "@/shared/ui/primitives";
 import { formatProviderError, requeueFailed } from "@/features/sources/auto-ingest";
 import { useRelatedIntel, RelatedInlineToast } from "@/features/intel-graph";
+import {
+  DISPATCH_FILTERS,
+  fromFeedParams,
+  toFeedSearch,
+  type DispatchFilter,
+} from "@/features/dispatches/filters";
 
-const STATUSES = ["all", "pending", "processed", "irrelevant", "failed", "duplicate"] as const;
+const STATUSES = DISPATCH_FILTERS;
 const field =
-  "w-full min-w-0 border border-border bg-background px-3 py-2 font-mono text-sm outline-none focus:border-primary";
+  "w-full min-w-0 border border-border bg-background px-3 py-2 font-mono text-sm focus:border-primary";
 
 function ExpandableText({ text }: { text: string }) {
   const [expanded, setExpanded] = useState(false);
@@ -145,7 +151,7 @@ function DispatchItem({
         {d.eventId && (eventSizes.get(d.eventId) ?? 0) > 1 && (
           <Tag
             tone="accent"
-            title={`Correlated with ${(eventSizes.get(d.eventId) ?? 1) - 1} other post(s) about the same event}`}
+            title={`Correlated with ${(eventSizes.get(d.eventId) ?? 1) - 1} other post(s) about the same event`}
           >
             event · {eventSizes.get(d.eventId)} posts
           </Tag>
@@ -186,7 +192,7 @@ function DispatchItem({
         </p>
       )}
       <AnalysisDetail d={d} />
-      {relatedIntel?.edges.length && (
+      {relatedIntel && relatedIntel.edges.length > 0 && (
         <RelatedInlineToast edges={relatedIntel.edges} sourceLabel={d.sourceName} maxVisible={2} />
       )}
       <div className="mt-3 flex flex-wrap items-center gap-3">
@@ -209,14 +215,28 @@ function DispatchItem({
   );
 }
 
-export function DispatchesPage({ initialQuery = "" }: { initialQuery?: string } = {}) {
+export function DispatchesPage({
+  url,
+  setUrl,
+}: {
+  url: Record<string, string>;
+  setUrl: (next: Record<string, string>) => void;
+}) {
   const svc = useServices();
   const dispatches = useDispatches();
   const sources = useSources();
   const stateFn = useServerFn(getSyncState);
-  const [filter, setFilter] = useState<DispatchStatus | "all">("all");
-  const [sourceId, setSourceId] = useState("");
-  const [q, setQ] = useState(initialQuery);
+  const state = useMemo(() => fromFeedParams(url), [url]);
+  const { q, status, sourceId } = state;
+  const setQ = (next: string) => setUrl(toFeedSearch({ ...state, q: next }));
+  const setFilter = (next: DispatchFilter) => {
+    setUrl(toFeedSearch({ ...state, status: next }));
+    setLimit(20);
+  };
+  const setSourceId = (next: string) => {
+    setUrl(toFeedSearch({ ...state, sourceId: next }));
+    setLimit(20);
+  };
   const [limit, setLimit] = useState(20);
   const [syncState, setSyncState] = useState<SyncState | null>(null);
 
@@ -250,13 +270,13 @@ export function DispatchesPage({ initialQuery = "" }: { initialQuery?: string } 
     const needle = q.trim().toLowerCase();
     return dispatches.filter(
       (d) =>
-        (filter === "all" || d.status === filter) &&
+        (status === "all" || d.status === status) &&
         (!sourceId || d.sourceId === sourceId) &&
         (!needle ||
           d.text.toLowerCase().includes(needle) ||
           d.sourceName.toLowerCase().includes(needle)),
     );
-  }, [dispatches, filter, sourceId, q]);
+  }, [dispatches, status, sourceId, q]);
   const shown = filtered.slice(0, limit);
   const remote = syncState?.progress;
   const workingId = remote?.phase === "analysing" ? remote.currentId : undefined;
@@ -288,11 +308,10 @@ export function DispatchesPage({ initialQuery = "" }: { initialQuery?: string } 
           {STATUSES.map((k) => (
             <button
               key={k}
-              onClick={() => {
-                setFilter(k);
-                setLimit(20);
-              }}
-              className={`shrink-0 border px-3 py-2 uppercase ${filter === k ? "border-primary text-primary" : "border-border text-muted-foreground"}`}
+              type="button"
+              aria-pressed={status === k}
+              onClick={() => setFilter(k)}
+              className={`shrink-0 border px-3 py-2 uppercase ${status === k ? "border-primary text-primary" : "border-border text-muted-foreground"}`}
             >
               {k} {k === "all" ? dispatches.length : counts[k]}
             </button>
@@ -311,10 +330,8 @@ export function DispatchesPage({ initialQuery = "" }: { initialQuery?: string } 
           <select
             className={field}
             value={sourceId}
-            onChange={(e) => {
-              setSourceId(e.target.value);
-              setLimit(20);
-            }}
+            onChange={(e) => setSourceId(e.target.value)}
+            aria-label="Filter by source"
           >
             <option value="">All sources</option>
             {sources.map((s) => (
@@ -326,16 +343,39 @@ export function DispatchesPage({ initialQuery = "" }: { initialQuery?: string } 
         </div>
       </div>
 
+      {/* A filtered view that matches nothing is not the same situation as an empty archive. */}
       {shown.length === 0 ? (
-        <Panel>
-          <p className="text-sm text-muted-foreground">
-            Nothing here yet.{" "}
-            <Link to="/sources" className="text-primary underline">
-              Fetch some feeds
-            </Link>
-            .
-          </p>
-        </Panel>
+        svc.attached ? (
+          <Panel>
+            {dispatches.length > 0 && q.trim() === "" && status === "all" && !sourceId ? (
+              <p className="text-sm text-muted-foreground">
+                Nothing here yet.{" "}
+                <Link to="/sources" className="text-primary underline">
+                  Fetch some feeds
+                </Link>
+                .
+              </p>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                No posts match the current filters.
+                {(status !== "all" || sourceId || q.trim() !== "") && (
+                  <>
+                    {" "}
+                    Try a{" "}
+                    <Link to="/dispatches" className="text-primary underline">
+                      wide-open feed
+                    </Link>
+                    .
+                  </>
+                )}
+              </p>
+            )}
+          </Panel>
+        ) : (
+          <Panel>
+            <Loading label="Loading feed…" />
+          </Panel>
+        )
       ) : (
         <ul className="space-y-3">
           {shown.map((d) => (

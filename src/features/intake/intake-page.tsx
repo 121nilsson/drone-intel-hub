@@ -1,10 +1,11 @@
 import { Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import { useCandidates, useDrones, useServices } from "@/shared/infra/services";
+import { toast } from "sonner";
+import { useCandidates, useDispatches, useDrones, useServices } from "@/shared/infra/services";
 import { translateText } from "@/shared/infra/ai-proxy.functions";
 import { fetchIntakeArticle, isBareUrl } from "@/shared/infra/sources/intake-fetch.functions";
-import { Btn, Panel, Tag } from "@/shared/ui/primitives";
+import { Btn, Loading, Panel, Tag } from "@/shared/ui/primitives";
 import { mergeInto, promote, runTwoTier, recordMention } from "./pipeline";
 import type { Candidate } from "@/entities/drone/types";
 
@@ -97,7 +98,9 @@ function CandidateRow({ c }: { c: Candidate }) {
         </Tag>
         {e.domain && <Tag>{e.domain}</Tag>}
         {c.resolvedBy === "auto" && <Tag tone="accent">auto</Tag>}
-        {/\bdeep model:\s*not/i.test(c.extraction.rationale) && <Tag tone="danger">deep model questioned identity</Tag>}
+        {/\bdeep model:\s*not/i.test(c.extraction.rationale) && (
+          <Tag tone="danger">deep model questioned identity</Tag>
+        )}
         {!c.extraction.specs.length && <Tag tone="accent">mention-only</Tag>}
         {(c.quality?.risks.includes("multi-system-attribution") ||
           (c.extraction.systems ?? []).some((s) => !s.matchId && s.variantOf)) && (
@@ -198,11 +201,9 @@ function CandidateRow({ c }: { c: Candidate }) {
       {c.quality && (
         <div className="mt-2 space-y-1 font-mono text-[11px] text-muted-foreground">
           <p>
-            Candidate quality: conf {Math.round(c.quality.confidence * 100)}%, specs {c.quality.evidenceSpecCount}/
-            {c.quality.specCount} with evidence
-            {c.quality.systemNames.length
-              ? " - " + c.quality.systemNames.join(", ")
-              : ""}
+            Candidate quality: conf {Math.round(c.quality.confidence * 100)}%, specs{" "}
+            {c.quality.evidenceSpecCount}/{c.quality.specCount} with evidence
+            {c.quality.systemNames.length ? " - " + c.quality.systemNames.join(", ") : ""}
           </p>
           {c.quality.risks.length > 0 && (
             <ul className="list-inside list-disc">
@@ -220,7 +221,7 @@ function CandidateRow({ c }: { c: Candidate }) {
             value={name}
             onChange={(ev) => setName(ev.target.value)}
             placeholder="System name"
-            className="w-full min-w-0 max-w-full border border-border bg-card px-2 py-2 font-mono text-xs outline-none focus:border-primary sm:w-48"
+            className="w-full min-w-0 max-w-full border border-border bg-card px-2 py-2 font-mono text-xs focus:border-primary sm:w-48"
             aria-label="Candidate name"
           />
           <Btn
@@ -228,6 +229,9 @@ function CandidateRow({ c }: { c: Candidate }) {
             onClick={() => {
               promote(c, svc, name);
               svc.candidates.update(c.id, { resolvedBy: "analyst" });
+              toast("Candidate promoted", {
+                description: `New system “${name}” added to the catalog`,
+              });
             }}
             disabled={!name.trim()}
           >
@@ -252,24 +256,43 @@ function CandidateRow({ c }: { c: Candidate }) {
             onClick={() => {
               mergeInto(c, target, svc);
               svc.candidates.update(c.id, { resolvedBy: "analyst" });
+              const targetName = drones.find((d) => d.id === target)?.name ?? target;
+              toast("Merged into existing system", {
+                description: targetName,
+              });
             }}
           >
             Merge
           </Btn>
-           <Btn
-             variant="ghost"
-             disabled={!target}
-             onClick={() => {
-               recordMention(c, target, svc);
-             }}
-           >
-             Record mention
-           </Btn>
+          <Btn
+            variant="ghost"
+            disabled={!target}
+            onClick={() => {
+              recordMention(c, target, svc);
+            }}
+          >
+            Record mention
+          </Btn>
           <Btn
             variant="danger"
-            onClick={() =>
-              svc.candidates.update(c.id, { status: "discarded", resolvedBy: "analyst" })
-            }
+            onClick={() => {
+              // Snapshot the fields triage decisions touch so Undo can restore the exact
+              // pre-discard state; optional fields are omitted rather than written as undefined.
+              const prev: Partial<Candidate> = {
+                status: c.status,
+                ...(c.resolvedBy !== undefined ? { resolvedBy: c.resolvedBy } : {}),
+                ...(c.resolvedInto !== undefined ? { resolvedInto: c.resolvedInto } : {}),
+                ...(c.supersededBy !== undefined ? { supersededBy: c.supersededBy } : {}),
+              };
+              svc.candidates.update(c.id, { status: "discarded", resolvedBy: "analyst" });
+              toast("Candidate discarded", {
+                description: e.name ?? c.source,
+                action: {
+                  label: "Undo",
+                  onClick: () => svc.candidates.update(c.id, prev),
+                },
+              });
+            }}
           >
             Discard
           </Btn>
@@ -310,6 +333,15 @@ export function IntakePage({
   const [deep, setDeep] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [visible, setVisible] = useState(PAGE);
+  const [dragOver, setDragOver] = useState(false);
+  const [startedAt, setStartedAt] = useState<number | null>(null);
+  const [nowTick, setNowTick] = useState(Date.now());
+  const dispatches = useDispatches();
+  useEffect(() => {
+    if (!busy || !startedAt) return;
+    const id = setInterval(() => setNowTick(Date.now()), 500);
+    return () => clearInterval(id);
+  }, [busy, startedAt]);
   useEffect(() => {
     if (draft) {
       setRaw(draft);
@@ -320,6 +352,7 @@ export function IntakePage({
   const submit = async () => {
     if (!raw.trim()) return;
     setBusy(true);
+    setStartedAt(Date.now());
     setMsg(null);
     try {
       const {
@@ -338,6 +371,7 @@ export function IntakePage({
             `Could not read the link: ${fetched.error}. Paste the article text directly instead.`,
           );
           setBusy(false);
+          setStartedAt(null);
           return;
         }
         // Keep the URL in the record for provenance; the extractor sees it plus the article body.
@@ -373,6 +407,7 @@ export function IntakePage({
       setMsg(`Extraction failed: ${(e as Error).message}`);
     }
     setBusy(false);
+    setStartedAt(null);
   };
   const pending = candidates.filter((c) => c.status === "pending");
   const resolved = candidates.filter((c) => c.status !== "pending");
@@ -383,7 +418,9 @@ export function IntakePage({
   const unresolvedFamilies = useMemo(() => {
     const families = new Map<string, Candidate[]>();
     for (const c of pending) {
-      const hasUnresolvedRelation = (c.extraction.systems ?? []).some((s) => !s.matchId && Boolean(s.variantOf));
+      const hasUnresolvedRelation = (c.extraction.systems ?? []).some(
+        (s) => !s.matchId && Boolean(s.variantOf),
+      );
       const isMultiSystem = (c.extraction.systems?.length ?? 0) > 1;
       if (!hasUnresolvedRelation && !isMultiSystem) continue;
       const key = c.raw.trim().slice(0, 240).toLowerCase();
@@ -403,6 +440,24 @@ export function IntakePage({
     [pending, familyCandidateIds],
   );
 
+  // Repositories fill asynchronously after SSR; until they attach, "Queue clear" would be a lie.
+  const detectedLang = /[\u0400-\u04ff]/.test(raw)
+    ? /[A-Za-z]/.test(raw)
+      ? "Mixed script"
+      : "Cyrillic"
+    : raw.trim()
+      ? "Latin"
+      : null;
+  const bareUrl = isBareUrl(raw);
+  const possibleDuplicate = useMemo(() => {
+    const m = raw.match(/https?:\/\/\S+/);
+    if (!m) return false;
+    const url = m[0];
+    return dispatches.some((d) => d.url === url || d.text.includes(url));
+  }, [raw, dispatches]);
+
+  if (!svc.attached) return <Loading label="Loading queue…" />;
+
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
       <Panel
@@ -414,13 +469,41 @@ export function IntakePage({
           </Tag>
         }
       >
-        <textarea
-          value={raw}
-          onChange={(e) => setRaw(e.target.value)}
-          rows={9}
-          placeholder="Paste a dispatch, link, or raw text…"
-          className="w-full border border-border bg-background p-3 font-mono text-sm outline-none focus:border-primary"
-        />
+        <div
+          onDragOver={(e) => {
+            e.preventDefault();
+            setDragOver(true);
+          }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={(e) => {
+            e.preventDefault();
+            setDragOver(false);
+            const file = e.dataTransfer.files?.[0];
+            if (file) {
+              const reader = new FileReader();
+              reader.onload = () => setRaw(String(reader.result ?? ""));
+              reader.readAsText(file);
+              return;
+            }
+            const text = e.dataTransfer.getData("text/plain");
+            if (text) setRaw(text);
+          }}
+          className={`border ${dragOver ? "border-primary bg-primary/5" : "border-border"} bg-background`}
+        >
+          <textarea
+            value={raw}
+            onChange={(e) => setRaw(e.target.value)}
+            rows={9}
+            placeholder="Paste a dispatch, link, or raw text… (or drop a file)"
+            className="w-full bg-transparent p-3 font-mono text-sm focus:outline-none"
+          />
+        </div>
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          {detectedLang && <Tag tone="default">{detectedLang}</Tag>}
+          {bareUrl && <Tag tone="accent">URL - article will be fetched on ingest</Tag>}
+          {possibleDuplicate && <Tag tone="danger">Possible duplicate dispatch</Tag>}
+          {dragOver && <Tag tone="primary">Drop to load</Tag>}
+        </div>
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <input
             value={source}
@@ -435,6 +518,12 @@ export function IntakePage({
             {busy ? "Analyzing…" : deep ? "Ingest (tier 2)" : "Ingest"}
           </Btn>
         </div>
+        {busy && startedAt && (
+          <p className="mt-2 font-mono text-xs text-muted-foreground">
+            Step: {deep ? "Heuristic → Tier 1 → Tier 2" : "Heuristic → Tier 1 (gates)"} ·{" "}
+            {Math.max(1, Math.round((nowTick - startedAt) / 1000))}s elapsed
+          </p>
+        )}
         <label className="mt-2 flex items-start gap-2 text-xs text-muted-foreground">
           <input
             type="checkbox"
@@ -476,9 +565,7 @@ export function IntakePage({
                 >
                   <p className="font-mono text-xs text-accent">
                     {family.map((c) => c.extraction.name ?? "Unnamed system").join(" / ")}
-                    {family.some((c) =>
-                      (c.extraction.systems ?? []).some((s) => s.variantOf),
-                    )
+                    {family.some((c) => (c.extraction.systems ?? []).some((s) => s.variantOf))
                       ? " - resolve one as the base and one as its variant"
                       : " - choose whether one is a variant of the other"}
                   </p>

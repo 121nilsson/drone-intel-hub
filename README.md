@@ -15,8 +15,8 @@ history (see `AGENTS.md`).
 | **Briefing**     | `/`             | 7-day summary: new systems, spec changes, merges, and an executive summary from the tier-2 model                                      |
 | **Catalog**      | `/catalog`      | Every known system; imports the Wikipedia/Wikidata reference catalog                                                                  |
 | System dossier   | `/systems/$id`  | One system's specs with their claims and sources, RF links, components, history; delete a wrong entry (it is not auto-promoted again) |
-| **Counterparts** | `/counterparts` | Systems linked as variants or adversary counterparts; EW and kinetic envelope comparison                                             |
-| **Spectrum**     | `/spectrum`     | RF band map: which catalog systems operate or jam in each segment, and fiber-immune links                                           |
+| **Counterparts** | `/counterparts` | Systems linked as variants or adversary counterparts; EW and kinetic envelope comparison                                              |
+| **Spectrum**     | `/spectrum`     | RF band map: which catalog systems operate or jam in each segment, and fiber-immune links                                             |
 | **Queue**        | `/intake`       | Paste a link or text to analyse; triage candidates the pipeline could not auto-resolve                                                |
 | **Feed**         | `/dispatches`   | Archive of collected posts, with outcome, provenance, and event grouping across outlets                                               |
 | **Sources**      | `/sources`      | Monitored sources, sync status, and "Analyse queue" for pending posts                                                                 |
@@ -205,7 +205,7 @@ into the app container too. Values here override the browser's Settings page, fi
 | `PROVIDER_TIMEOUT_MS`                                                     | Per-request timeout. Defaults to 90 s so a hung connection cannot stall a sync pass. `0` disables it.                                                         |
 | `FETCH_TIMEOUT_MS`                                                        | Per-request timeout when polling a source or fetching an article. Defaults to 15 s. `0` disables it.                                                          |
 | `FETCH_ARTICLE_BODIES`                                                    | Set to `0` to stop extracting article bodies from web pages and RSS teasers, falling back to headlines and feed text.                                         |
-| `PIPELINE_TRACE`                                                          | Per-item ingestion tracing to the server console (`[pipeline] …`). Unset = one line per item; `verbose` adds excerpts; `0` = off. See `.env.example`.          |
+| `PIPELINE_TRACE`                                                          | Per-item ingestion tracing to the server console (`[pipeline] …`). Unset = one line per item; `verbose` adds excerpts; `0` = off. See `.env.example`.         |
 | `X_BRIDGE_BASE`                                                           | Optional https base URL of an RSS bridge serving X/Twitter timelines. Without it, X sources report that they need a paid API. Env only, never a source field. |
 
 Settings → **Inference** shows which providers the server resolved, which model each one serves
@@ -327,16 +327,16 @@ pointing at the `db` service. For `npm run dev`, `DATABASE_URL` must use the pub
 The authoritative schema is the SQL files under `migrations/` (not `drizzle/`, which is not used
 at runtime). Applied in order on a fresh volume:
 
-| File | Purpose |
-| ---- | ------- |
-| `001_init.sql` | Core collections as JSONB documents |
-| `002_sync_state.sql` | Auto-sync throttle and briefing summary slot |
-| `003_dispatches.sql` | Dispatch archive fields |
-| `004_dispatch_lease.sql` | Per-dispatch claim leases |
-| `004_procurements.sql` | Procurement collection |
-| `005_normalization.sql` | Taxonomy collections |
-| `006_dispatch_content_hash.sql` | Content fingerprint for dedupe |
-| `007_source_endpoints.sql` | Per-source fetch endpoints |
+| File                            | Purpose                                      |
+| ------------------------------- | -------------------------------------------- |
+| `001_init.sql`                  | Core collections as JSONB documents          |
+| `002_sync_state.sql`            | Auto-sync throttle and briefing summary slot |
+| `003_dispatches.sql`            | Dispatch archive fields                      |
+| `004_dispatch_lease.sql`        | Per-dispatch claim leases                    |
+| `004_procurements.sql`          | Procurement collection                       |
+| `005_normalization.sql`         | Taxonomy collections                         |
+| `006_dispatch_content_hash.sql` | Content fingerprint for dedupe               |
+| `007_source_endpoints.sql`      | Per-source fetch endpoints                   |
 
 To start from an empty database, drop the volume: `docker compose down -v`.
 

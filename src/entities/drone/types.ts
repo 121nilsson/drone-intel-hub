@@ -208,7 +208,7 @@ export interface Drone {
     provenance: string[];
     nextChecks: string[];
   };
-  llmSummary?: string;  /** When the current AI brief was generated. */
+  llmSummary?: string; /** When the current AI brief was generated. */
   llmSummaryGeneratedAt?: string;
   /** Fingerprint of system facts used for the cached AI brief, so merges/edits invalidate it. */
   llmSummaryFingerprint?: string;
@@ -253,7 +253,8 @@ export interface SystemExtraction extends DetectedSystem {
   origin?: string;
   manufacturer?: string;
   organizationLinks?: OrganizationLink[];
-  operators?: string[];  propulsion?: string;
+  operators?: string[];
+  propulsion?: string;
   installation?: string;
   guidance?: string[];
   specs: ExtractedSpec[];

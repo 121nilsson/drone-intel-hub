@@ -61,6 +61,13 @@ interface Services {
   /** Built-in heuristic engine the pipeline degrades to when an AI tier throws. */
   fallback: IntelExtractor;
   summarizer: BriefingSummarizer;
+  /**
+   * False until the repositories have attached their store. Until then every list reads empty,
+   * which is indistinguishable from "no data" and would render false empty states (dossier
+   * shows "System not found", catalog shows "0 systems"). Pages that can show an empty state
+   * must gate on this.
+   */
+  attached: boolean;
 }
 
 const Ctx = createContext<Services | null>(null);
@@ -80,6 +87,7 @@ export function ServicesProvider({ children }: { children: ReactNode }) {
   const [taxonomyCandidates] = useState(() => new LocalTaxonomyCandidateRepository());
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
   const [envCfg, setEnvCfg] = useState<EnvProviderConfig | null>(null);
+  const [attached, setAttached] = useState(false);
   useEffect(() => {
     try {
       const s = localStorage.getItem(SETTINGS_KEY);
@@ -119,6 +127,8 @@ export function ServicesProvider({ children }: { children: ReactNode }) {
           taxonomies.attach(local),
           taxonomyCandidates.attach(local),
         ]);
+      } finally {
+        setAttached(true);
       }
     })();
   }, [drones, candidates, sources, dispatches, procurements, taxonomies, taxonomyCandidates]);
@@ -170,6 +180,7 @@ export function ServicesProvider({ children }: { children: ReactNode }) {
       heuristic: new HeuristicExtractor(1),
       fallback: new HeuristicExtractor(1),
       summarizer: remote ? new OpenAICompatibleSummarizer(resolved) : new HeuristicSummarizer(),
+      attached,
     };
   }, [
     drones,
@@ -181,6 +192,7 @@ export function ServicesProvider({ children }: { children: ReactNode }) {
     taxonomyCandidates,
     settings,
     envCfg,
+    attached,
   ]);
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

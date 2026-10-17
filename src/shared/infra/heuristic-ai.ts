@@ -1,5 +1,6 @@
 import { parseNumber } from "@/entities/normalization/numeric";
 import { cue, unit } from "./heuristics/lexicons";
+import type { Lexicon } from "./heuristics/lexicons";
 import { mentionsPhonetic, phoneticKey } from "@/entities/drone/name-key";
 import type {
   DetectedSystem,
@@ -264,13 +265,19 @@ function extractFacts(raw: string): Facts {
     ["diameter", "diameter", "Diameter"],
   ] as const) {
     measure(
-      new RegExp(`(?:${cue(cueKey as any)})[^\\d]{0,16}(${NUMBER})\\s*(${M})`, "giu"),
+      new RegExp(
+        `(?:${cue(cueKey as keyof Lexicon["cues"])})[^\\d]{0,16}(${NUMBER})\\s*(${M})`,
+        "giu",
+      ),
       key,
       label,
       "m",
     );
     measure(
-      new RegExp(`(${NUMBER})\\s*(${M})[^.;\\n]{0,16}(?:${cue(cueKey as any)})`, "giu"),
+      new RegExp(
+        `(${NUMBER})\\s*(${M})[^.;\\n]{0,16}(?:${cue(cueKey as keyof Lexicon["cues"])})`,
+        "giu",
+      ),
       key,
       label,
       "m",

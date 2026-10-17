@@ -1,6 +1,7 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
 import { DOMAINS, type Domain } from "@/entities/drone/types";
 import { PLATFORMS, type MonitoredSource, type SourcePlatform } from "@/entities/source/types";
 import { sampleDispatch } from "@/entities/source/seed";
@@ -24,8 +25,9 @@ import {
   type SyncState,
 } from "@/shared/infra/sources/source-sync.functions";
 import { getStoreStatus } from "@/shared/infra/storage/store.functions";
+import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Btn, Panel, Tag } from "@/shared/ui/primitives";
+import { Btn, Loading, Panel, Tag } from "@/shared/ui/primitives";
 import {
   collectSource,
   fetchingProgress,
@@ -40,7 +42,7 @@ import {
 } from "./auto-ingest";
 
 const field =
-  "w-full min-w-0 max-w-full border border-border bg-background px-2 py-1.5 font-mono text-xs outline-none focus:border-primary";
+  "w-full min-w-0 max-w-full border border-border bg-background px-2 py-1.5 font-mono text-xs focus:border-primary";
 /** Matches the cron in vite.config.ts. */
 const AUTO_MIN = 10;
 
@@ -361,113 +363,168 @@ export function SourcesPage() {
   const sample = (s: MonitoredSource) =>
     nav({ to: "/intake", search: { draft: sampleDispatch(s.domain), source: s.name } });
 
+  // Until the store attaches, an empty watchlist would tell the analyst to add sources when
+  // their sources are simply still loading.
+  if (!svc.attached) return <Loading label="Loading sources…" />;
+
   const sourceList = (
-    <ul className="divide-y divide-border">
-      {visibleSources.map((s) => (
-        <li
-          key={s.id}
-          className="flex min-w-0 flex-col gap-3 py-3 sm:flex-row sm:flex-wrap sm:items-start"
-        >
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="font-medium">{s.name}</span>
-              <Tag tone="primary">{s.platform}</Tag>
-              <Tag>{s.domain}</Tag>
-              {(() => {
-                // Collected plenty, produced nothing: the fetch works, the source is just
-                // noise, and this is the only place that says so.
-                const y = yieldBySource.get(s.id);
-                return y && y.analysed + y.queued === 0 && y.stored >= 20 ? (
-                  <Tag
-                    tone="danger"
-                    title="Posts are collected but none turn out to be drone-related"
-                  >
-                    no signal
+    <>
+      {visibleSources.length === 0 && (
+        <div className="py-3 text-sm text-muted-foreground">
+          {sources.length === 0 ? (
+            <p>
+              No sources monitored yet.{" "}
+              <button
+                type="button"
+                onClick={() => setTab("add")}
+                className="text-primary underline"
+              >
+                Add your first source
+              </button>
+            </p>
+          ) : (
+            <p>No watched source matches the search.</p>
+          )}
+        </div>
+      )}
+      <ul className="divide-y divide-border">
+        {visibleSources.map((s) => (
+          <li
+            key={s.id}
+            className="flex min-w-0 flex-col gap-3 py-3 sm:flex-row sm:flex-wrap sm:items-start"
+          >
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-medium">{s.name}</span>
+                <Tag tone="primary">{s.platform}</Tag>
+                <Tag>{s.domain}</Tag>
+                {isPaused(s) && (
+                  <Tag tone="warning" title="Paused after repeated fetch failures">
+                    paused
                   </Tag>
-                ) : null;
-              })()}
-            </div>
-            <p className="mt-1 break-all font-mono text-xs text-muted-foreground">{s.handle}</p>
-            {s.notes && <p className="mt-1 text-sm text-muted-foreground">{s.notes}</p>}
-            {s.lastFetched && (
-              <p className="mt-1 font-mono text-[11px] text-muted-foreground">
-                Last synced {new Date(s.lastFetched).toLocaleString()} ·{" "}
+                )}
+                {s.autoSync === false && (
+                  <Tag tone="danger" title="Excluded from scheduled auto-sync">
+                    auto off
+                  </Tag>
+                )}
                 {(() => {
+                  // Collected plenty, produced nothing: the fetch works, the source is just
+                  // noise, and this is the only place that says so.
                   const y = yieldBySource.get(s.id);
-                  if (!y) return "0 posts stored";
-                  return [
-                    `${y.stored} stored`,
-                    y.waiting ? `${y.waiting} waiting` : "",
-                    `${y.analysed} analysed`,
-                    y.queued ? `${y.queued} queued` : "",
-                    y.filtered ? `${y.filtered} filtered` : "",
-                    y.duplicates ? `${y.duplicates} duplicates` : "",
-                    y.failed ? `${y.failed} failed` : "",
-                  ]
-                    .filter(Boolean)
-                    .join(" · ");
+                  return y && y.analysed + y.queued === 0 && y.stored >= 20 ? (
+                    <Tag
+                      tone="danger"
+                      title="Posts are collected but none turn out to be drone-related"
+                    >
+                      no signal
+                    </Tag>
+                  ) : null;
                 })()}
-              </p>
-            )}
-            {s.lastError && (
-              <p className="mt-1 font-mono text-[11px] text-destructive">{s.lastError}</p>
-            )}
-            {silenceNotice(s) && (
-              <p className="mt-1 font-mono text-[11px] text-accent">{silenceNotice(s)}</p>
-            )}
-            {isPaused(s) && (
-              <p className="mt-1 font-mono text-[11px] text-accent">
-                Paused after {FAILURES_BEFORE_PAUSE} failed fetches; retried automatically from{" "}
-                {new Date(s.pausedUntil!).toLocaleDateString()}. A manual Sync that works resumes it
-                now.
-              </p>
-            )}
-            {s.disabledReason && s.autoSync === false && (
-              <p className="mt-1 font-mono text-[11px] text-destructive">
-                {s.disabledReason}. Tick Auto to turn it back on.
-              </p>
-            )}
-          </div>
-          <div className="grid grid-cols-4 items-center gap-2 sm:flex sm:flex-wrap">
-            <label
-              className="flex items-center gap-1 font-mono text-xs text-muted-foreground"
-              title="Include this source in the scheduled server-side auto-sync"
-            >
-              <input
-                type="checkbox"
-                checked={s.autoSync !== false}
-                onChange={(e) =>
-                  svc.sources.update(
-                    s.id,
-                    e.target.checked ? reenable() : { autoSync: false, pausedUntil: undefined },
-                  )
-                }
-              />
-              Auto
-            </label>
-            <Btn
-              disabled={!!busy}
-              onClick={async () => {
-                setBusy(s.id);
-                try {
-                  await syncOne(s);
-                } finally {
-                  setBusy(null);
-                }
-              }}
-            >
-              {busy === s.id ? "Syncing…" : "Sync"}
-            </Btn>
-            <Btn variant="ghost" onClick={() => sample(s)}>
-              Sample
-            </Btn>
-            <Btn variant="danger" onClick={() => svc.sources.remove(s.id)}>
-              Remove
-            </Btn>
-          </div>
-        </li>
-      ))}
-    </ul>
+              </div>
+              {/^https?:\/\//i.test(s.handle) ? (
+                <a
+                  href={s.handle}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-1 block break-all font-mono text-xs text-primary hover:underline"
+                >
+                  {s.handle}
+                </a>
+              ) : (
+                <p className="mt-1 break-all font-mono text-xs text-muted-foreground">{s.handle}</p>
+              )}
+              {s.notes && <p className="mt-1 text-sm text-muted-foreground">{s.notes}</p>}
+              {s.lastFetched && (
+                <p className="mt-1 font-mono text-[11px] text-muted-foreground">
+                  Last synced {new Date(s.lastFetched).toLocaleString()} ·{" "}
+                  {(() => {
+                    const y = yieldBySource.get(s.id);
+                    if (!y) return "0 posts stored";
+                    return [
+                      `${y.stored} stored`,
+                      y.waiting ? `${y.waiting} waiting` : "",
+                      `${y.analysed} analysed`,
+                      y.queued ? `${y.queued} queued` : "",
+                      y.filtered ? `${y.filtered} filtered` : "",
+                      y.duplicates ? `${y.duplicates} duplicates` : "",
+                      y.failed ? `${y.failed} failed` : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" · ");
+                  })()}
+                </p>
+              )}
+              {s.lastError && (
+                <p className="mt-1 font-mono text-[11px] text-destructive">{s.lastError}</p>
+              )}
+              {silenceNotice(s) && (
+                <p className="mt-1 font-mono text-[11px] text-accent">{silenceNotice(s)}</p>
+              )}
+              {isPaused(s) && (
+                <p className="mt-1 font-mono text-[11px] text-accent">
+                  Paused after {FAILURES_BEFORE_PAUSE} failed fetches; retried automatically from{" "}
+                  {new Date(s.pausedUntil!).toLocaleDateString()}. A manual Sync that works resumes
+                  it now.
+                </p>
+              )}
+              {s.disabledReason && s.autoSync === false && (
+                <p className="mt-1 font-mono text-[11px] text-destructive">
+                  {s.disabledReason}. Tick Auto to turn it back on.
+                </p>
+              )}
+            </div>
+            <div className="grid grid-cols-4 items-center gap-2 sm:flex sm:flex-wrap">
+              <label
+                className="flex items-center gap-2 font-mono text-xs text-muted-foreground"
+                title="Include this source in the scheduled server-side auto-sync"
+              >
+                <Switch
+                  checked={s.autoSync !== false}
+                  onCheckedChange={(checked) =>
+                    svc.sources.update(
+                      s.id,
+                      checked ? reenable() : { autoSync: false, pausedUntil: undefined },
+                    )
+                  }
+                />
+                Auto
+              </label>
+              <Btn
+                disabled={!!busy}
+                onClick={async () => {
+                  setBusy(s.id);
+                  try {
+                    await syncOne(s);
+                  } finally {
+                    setBusy(null);
+                  }
+                }}
+              >
+                {busy === s.id ? "Syncing…" : "Sync"}
+              </Btn>
+              <Btn variant="ghost" onClick={() => sample(s)}>
+                Sample
+              </Btn>
+              <Btn
+                variant="danger"
+                onClick={() => {
+                  // Undo restores the exact pre-removal snapshot; nothing else depended on the
+                  // source between remove and undo in normal analyst reaction time.
+                  svc.sources.remove(s.id);
+                  toast("Source removed", {
+                    description: s.name,
+                    action: { label: "Undo", onClick: () => svc.sources.add(s) },
+                  });
+                }}
+              >
+                Remove
+              </Btn>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </>
   );
 
   const addForm = (
@@ -477,12 +534,14 @@ export function SourcesPage() {
         placeholder="Name"
         value={f.name}
         onChange={(e) => setF({ ...f, name: e.target.value })}
+        aria-label="Source name"
       />
       <div className="grid grid-cols-2 gap-2">
         <select
           className={field}
           value={f.platform}
           onChange={(e) => setF({ ...f, platform: e.target.value as SourcePlatform })}
+          aria-label="Platform"
         >
           {PLATFORMS.map((p) => (
             <option key={p}>{p}</option>
@@ -492,6 +551,7 @@ export function SourcesPage() {
           className={field}
           value={f.domain}
           onChange={(e) => setF({ ...f, domain: e.target.value as Domain })}
+          aria-label="Domain"
         >
           {DOMAINS.map((d) => (
             <option key={d}>{d}</option>
@@ -503,6 +563,7 @@ export function SourcesPage() {
         placeholder="URL or @handle"
         value={f.handle}
         onChange={(e) => setF({ ...f, handle: e.target.value })}
+        aria-label="URL or @handle"
       />
       <textarea
         className={field}
@@ -510,6 +571,7 @@ export function SourcesPage() {
         placeholder="Notes"
         value={f.notes}
         onChange={(e) => setF({ ...f, notes: e.target.value })}
+        aria-label="Notes"
       />
       <Btn onClick={add} disabled={!f.name.trim() || !f.handle.trim()}>
         Add to watchlist

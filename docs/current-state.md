@@ -7,19 +7,19 @@ today. For planned work see [roadmap.md](./roadmap.md). For operator setup see [
 
 ## App surface
 
-| Page | Route | Feature slice |
-| ---- | ----- | ------------- |
-| Briefing | `/` | `src/features/briefing/` |
-| Catalog | `/catalog` | `src/features/catalog/` |
-| System dossier | `/systems/$id` | `src/features/dossier/` |
-| Counterparts | `/counterparts` | `src/features/counterparts/` |
-| Spectrum | `/spectrum` | `src/features/spectrum/` |
-| Queue | `/intake` | `src/features/intake/` |
-| Feed | `/dispatches` | `src/features/dispatches/` |
-| Sources | `/sources` | `src/features/sources/` |
-| Spec Engine | `/specs` | `src/features/dynamic-specs/` |
-| Taxonomy | `/taxonomy` | `src/features/taxonomy/` |
-| Settings | `/settings` | `src/features/settings/` |
+| Page           | Route           | Feature slice                 |
+| -------------- | --------------- | ----------------------------- |
+| Briefing       | `/`             | `src/features/briefing/`      |
+| Catalog        | `/catalog`      | `src/features/catalog/`       |
+| System dossier | `/systems/$id`  | `src/features/dossier/`       |
+| Counterparts   | `/counterparts` | `src/features/counterparts/`  |
+| Spectrum       | `/spectrum`     | `src/features/spectrum/`      |
+| Queue          | `/intake`       | `src/features/intake/`        |
+| Feed           | `/dispatches`   | `src/features/dispatches/`    |
+| Sources        | `/sources`      | `src/features/sources/`       |
+| Spec Engine    | `/specs`        | `src/features/dynamic-specs/` |
+| Taxonomy       | `/taxonomy`     | `src/features/taxonomy/`      |
+| Settings       | `/settings`     | `src/features/settings/`      |
 
 Shell navigation and ⌘K search live in `src/shared/ui/app-shell.tsx`.
 

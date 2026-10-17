@@ -14,6 +14,8 @@ import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { ServicesProvider } from "@/shared/infra/services";
 import { AppShell } from "@/shared/ui/app-shell";
+import { DensityProvider } from "@/shared/ui/density";
+import { Toaster } from "@/components/ui/sonner";
 
 function NotFoundComponent() {
   return (
@@ -123,9 +125,14 @@ function RootComponent() {
     <QueryClientProvider client={queryClient}>
       {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
       <ServicesProvider>
-        <AppShell>
-          <Outlet />
-        </AppShell>
+        <DensityProvider>
+          <AppShell>
+            <Outlet />
+          </AppShell>
+        </DensityProvider>
+        {/* Toasts are app-wide feedback for triage/merge/delete; actions carry Undo where the
+            repository can restore the previous state. */}
+        <Toaster position="bottom-right" theme="dark" />
       </ServicesProvider>
     </QueryClientProvider>
   );

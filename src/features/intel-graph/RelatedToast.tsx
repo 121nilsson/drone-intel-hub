@@ -60,9 +60,17 @@ export function RelatedToast({ edges, sourceLabel, maxItems = 5, onDismiss }: Re
 
   const handleDeepLink = (deepLink: DeepLink) => {
     if (deepLink.route.startsWith("/systems/")) {
-      navigate({ to: deepLink.route, ...(deepLink.search ? { search: deepLink.search } : {}), ...(deepLink.hash ? { hash: deepLink.hash } : {}) });
+      navigate({
+        to: deepLink.route,
+        ...(deepLink.search ? { search: deepLink.search } : {}),
+        ...(deepLink.hash ? { hash: deepLink.hash } : {}),
+      });
     } else {
-      navigate({ to: deepLink.route, ...(deepLink.search ? { search: deepLink.search } : {}), ...(deepLink.hash ? { hash: deepLink.hash } : {}) });
+      navigate({
+        to: deepLink.route,
+        ...(deepLink.search ? { search: deepLink.search } : {}),
+        ...(deepLink.hash ? { hash: deepLink.hash } : {}),
+      });
     }
   };
 
@@ -124,8 +132,8 @@ function RelatedToastItem({
     <li>
       <Link
         to={edge.deepLink.route}
-          {...(edge.deepLink.search ? { search: edge.deepLink.search } : {})}
-          {...(edge.deepLink.hash ? { hash: edge.deepLink.hash } : {})}
+        {...(edge.deepLink.search ? { search: edge.deepLink.search } : {})}
+        {...(edge.deepLink.hash ? { hash: edge.deepLink.hash } : {})}
         className="flex items-start gap-2 p-2 border border-border/50 bg-background/50 rounded hover:bg-secondary transition-colors"
         onClick={(e) => {
           // Prevent default link behavior, use navigate instead
@@ -176,9 +184,17 @@ export function RelatedInlineToast({
 
   const handleDeepLink = (deepLink: DeepLink) => {
     if (deepLink.route.startsWith("/systems/")) {
-      navigate({ to: deepLink.route, ...(deepLink.search ? { search: deepLink.search } : {}), ...(deepLink.hash ? { hash: deepLink.hash } : {}) });
+      navigate({
+        to: deepLink.route,
+        ...(deepLink.search ? { search: deepLink.search } : {}),
+        ...(deepLink.hash ? { hash: deepLink.hash } : {}),
+      });
     } else {
-      navigate({ to: deepLink.route, ...(deepLink.search ? { search: deepLink.search } : {}), ...(deepLink.hash ? { hash: deepLink.hash } : {}) });
+      navigate({
+        to: deepLink.route,
+        ...(deepLink.search ? { search: deepLink.search } : {}),
+        ...(deepLink.hash ? { hash: deepLink.hash } : {}),
+      });
     }
   };
 
@@ -202,8 +218,8 @@ export function RelatedInlineToast({
           <li key={`${edge.type}:${edge.targetId}`}>
             <Link
               to={edge.deepLink.route}
-          {...(edge.deepLink.search ? { search: edge.deepLink.search } : {})}
-          {...(edge.deepLink.hash ? { hash: edge.deepLink.hash } : {})}
+              {...(edge.deepLink.search ? { search: edge.deepLink.search } : {})}
+              {...(edge.deepLink.hash ? { hash: edge.deepLink.hash } : {})}
               className="flex items-center gap-2 px-2 py-1.5 text-sm hover:text-primary transition-colors"
               onClick={(e) => {
                 e.preventDefault();

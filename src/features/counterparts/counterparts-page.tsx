@@ -9,8 +9,8 @@ import {
 } from "@/entities/normalization/ew-matrix";
 import { type Drone } from "@/entities/drone/types";
 import { CountryBadge } from "@/shared/ui/country-badge";
-import { useDrones } from "@/shared/infra/services";
-import { Panel, Tag } from "@/shared/ui/primitives";
+import { useDrones, useServices } from "@/shared/infra/services";
+import { Loading, Panel, Tag } from "@/shared/ui/primitives";
 
 function overlap(a: Drone, b: Drone) {
   const shared: string[] = [];
@@ -96,8 +96,11 @@ function KineticColumn({ target, defender }: { target: Drone; defender: Drone })
 
 export function CounterpartsPage({ a, b }: { a?: string | undefined; b?: string | undefined }) {
   const drones = useDrones();
+  const svc = useServices();
   const nav = useNavigate();
-  // Comparison is meaningless with fewer than two systems.
+  // Comparison is meaningless with fewer than two systems. The early "not enough" verdict is
+  // also given while the store is still attaching, which would otherwise flash misleadingly.
+  if (!svc.attached) return <Loading label="Loading comparison…" />;
   if (drones.length < 2)
     return (
       <div className="space-y-6">
@@ -127,7 +130,8 @@ export function CounterpartsPage({ a, b }: { a?: string | undefined; b?: string 
         <select
           value={d.id}
           onChange={(e) => set(k, e.target.value)}
-          className="bg-transparent font-mono text-xs uppercase outline-none"
+          aria-label={k === "a" ? "First system to compare" : "Second system to compare"}
+          className="bg-transparent font-mono text-xs uppercase"
         >
           {drones
             .filter((x) => x.id !== (k === "a" ? B.id : A.id))
@@ -198,39 +202,42 @@ export function CounterpartsPage({ a, b }: { a?: string | undefined; b?: string 
         )}
       </Panel>
       <Panel title="Specification delta">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="font-mono text-[11px] uppercase text-muted-foreground">
-              <th className="pb-2 text-left">Attribute</th>
-              <th className="pb-2 text-right">{A.name}</th>
-              <th className="pb-2 text-right">{B.name}</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border">
-            {keys.map((k) => {
-              const sa = A.specs.find((s) => s.key === k),
-                sb = B.specs.find((s) => s.key === k);
-              return (
-                <tr key={k}>
-                  <td className="py-2">{(sa ?? sb)!.label}</td>
-                  {[sa, sb].map((s, i) => {
-                    const c = s ? consensus(s) : null;
-                    return (
-                      <td key={i} className="py-2 text-right font-mono">
-                        {c ? c.display : "—"}
-                        {c?.disputed && (
-                          <Tag tone="danger" className="ml-1">
-                            Disputed
-                          </Tag>
-                        )}
-                      </td>
-                    );
-                  })}
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+        {/* Long attribute names squeeze three live columns on phones without this. */}
+        <div className="-mx-0 overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="font-mono text-[11px] uppercase text-muted-foreground">
+                <th className="pb-2 text-left">Attribute</th>
+                <th className="pb-2 text-right">{A.name}</th>
+                <th className="pb-2 text-right">{B.name}</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {keys.map((k) => {
+                const sa = A.specs.find((s) => s.key === k),
+                  sb = B.specs.find((s) => s.key === k);
+                return (
+                  <tr key={k}>
+                    <td className="py-2">{(sa ?? sb)!.label}</td>
+                    {[sa, sb].map((s, i) => {
+                      const c = s ? consensus(s) : null;
+                      return (
+                        <td key={i} className="py-2 text-right font-mono">
+                          {c ? c.display : "—"}
+                          {c?.disputed && (
+                            <Tag tone="danger" className="ml-1">
+                              Disputed
+                            </Tag>
+                          )}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       </Panel>
     </div>
   );

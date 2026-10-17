@@ -76,9 +76,17 @@ export function RelatedRail({
     }
 
     if (deepLink.route.startsWith("/systems/")) {
-      navigate({ to: deepLink.route, ...(deepLink.search ? { search: deepLink.search } : {}), ...(deepLink.hash ? { hash: deepLink.hash } : {}) });
+      navigate({
+        to: deepLink.route,
+        ...(deepLink.search ? { search: deepLink.search } : {}),
+        ...(deepLink.hash ? { hash: deepLink.hash } : {}),
+      });
     } else {
-      navigate({ to: deepLink.route, ...(deepLink.search ? { search: deepLink.search } : {}), ...(deepLink.hash ? { hash: deepLink.hash } : {}) });
+      navigate({
+        to: deepLink.route,
+        ...(deepLink.search ? { search: deepLink.search } : {}),
+        ...(deepLink.hash ? { hash: deepLink.hash } : {}),
+      });
     }
   };
 

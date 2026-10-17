@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { extractClassSpecs, extractContractValue, extractUnitPrice } from "@/shared/infra/heuristics";
+import {
+  extractClassSpecs,
+  extractContractValue,
+  extractUnitPrice,
+} from "@/shared/infra/heuristics";
 
 function specs(raw: string) {
   const out: Array<{ key: string; value: number | string; unit: string | undefined }> = [];
