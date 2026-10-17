@@ -190,13 +190,15 @@ export function Card({
   children,
   className,
   interactive = false,
+  as: Tag = "div",
 }: {
   children: ReactNode;
   className?: string;
   interactive?: boolean;
+  as?: "div" | "li" | "article";
 }) {
   return (
-    <div
+    <Tag
       className={cn(
         "flex min-w-0 max-w-full flex-col overflow-hidden border border-border bg-card/80 [overflow-wrap:anywhere]",
         interactive && "transition-colors hover:border-primary",
@@ -204,7 +206,7 @@ export function Card({
       )}
     >
       {children}
-    </div>
+    </Tag>
   );
 }
 

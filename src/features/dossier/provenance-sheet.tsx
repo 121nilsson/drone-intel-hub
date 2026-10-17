@@ -1,4 +1,5 @@
 import { Link } from "@tanstack/react-router";
+import { ExternalSourceLink } from "@/shared/ui/links";
 import type { SpecAttribute, SpecClaim } from "@/entities/drone/types";
 import { useDispatches, useServices } from "@/shared/infra/services";
 import {
@@ -123,14 +124,9 @@ export function ProvenanceSheet({
                       <TranslateButton text={dispatch.text} model={svc.settings.translateModel} />
                     )}
                     {dispatch.url && (
-                      <a
-                        href={dispatch.url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="font-mono text-xs text-primary underline"
-                      >
-                        Open original ↗
-                      </a>
+                      <ExternalSourceLink href={dispatch.url} className="font-mono text-xs">
+                        Open original
+                      </ExternalSourceLink>
                     )}
                   </div>
                 </div>

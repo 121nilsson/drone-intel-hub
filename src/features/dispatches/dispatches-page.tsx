@@ -1,11 +1,12 @@
 import { Link } from "@tanstack/react-router";
+import { ExternalSourceLink, SystemChip } from "@/shared/ui/links";
 import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useMemo, useState } from "react";
 import { useDispatches, useServices, useSources } from "@/shared/infra/services";
 import type { DispatchStatus } from "@/entities/dispatch/types";
 import { getSyncState, type SyncState } from "@/shared/infra/sources/source-sync.functions";
 import { translateText } from "@/shared/infra/ai-proxy.functions";
-import { Btn, Loading, Panel, Tag } from "@/shared/ui/primitives";
+import { Btn, Loading, Panel, Tag, Card } from "@/shared/ui/primitives";
 import { formatProviderError, requeueFailed } from "@/features/sources/auto-ingest";
 import { useRelatedIntel, RelatedInlineToast } from "@/features/intel-graph";
 import {
@@ -140,7 +141,7 @@ function DispatchItem({
   const relatedIntel = useRelatedIntel(d.id);
 
   return (
-    <li key={d.id} className="min-w-0 border border-border bg-card/80 p-4">
+    <Card as="li" key={d.id} className="p-4">
       <div className="flex min-w-0 flex-wrap items-center gap-2 font-mono text-[11px] text-muted-foreground">
         <Tag
           tone={d.status === "processed" ? "primary" : d.status === "failed" ? "danger" : "default"}
@@ -164,14 +165,7 @@ function DispatchItem({
         (d.status === "duplicate" && d.duplicateOf)) && (
         <div className="mt-2 flex flex-wrap gap-2 font-mono text-xs">
           {d.droneIds?.map((id) => (
-            <Link
-              key={id}
-              to="/systems/$id"
-              params={{ id }}
-              className="border border-primary/50 px-2 py-1 text-primary"
-            >
-              {id}
-            </Link>
+            <SystemChip key={id} id={id} name={id} />
           ))}
           {d.outcome === "queued" && (
             <Link to="/intake" className="border border-accent/50 px-2 py-1 text-accent">
@@ -202,16 +196,11 @@ function DispatchItem({
             Retry
           </Btn>
         )}
-        <a
-          href={d.url}
-          target="_blank"
-          rel="noreferrer"
-          className="font-mono text-xs text-muted-foreground underline"
-        >
-          Open original ↗
-        </a>
+        <ExternalSourceLink href={d.url} className="font-mono text-xs">
+          Open original
+        </ExternalSourceLink>
       </div>
-    </li>
+    </Card>
   );
 }
 

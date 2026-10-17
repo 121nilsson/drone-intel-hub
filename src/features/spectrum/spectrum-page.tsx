@@ -9,7 +9,7 @@ import {
   type SegmentStatus,
 } from "@/entities/normalization/spectrum-bands";
 import { useDrones, useServices } from "@/shared/infra/services";
-import { Loading, Panel } from "@/shared/ui/primitives";
+import { Loading, Panel, Card } from "@/shared/ui/primitives";
 import { useRelatedIntel, RelatedRail } from "@/features/intel-graph";
 
 const EXPOSURE: Record<Exposure, { label: string; cls: string }> = {
@@ -48,7 +48,7 @@ function Chips({
 
 function SegmentCard({ s, focus }: { s: SegmentStatus; focus: string | undefined }) {
   return (
-    <div className="border border-border bg-card p-3">
+    <Card className="p-3">
       <div className="flex items-baseline justify-between gap-2">
         <span className="font-mono text-sm font-semibold text-foreground">{s.segment.label}</span>
         {s.evasionGap && (
@@ -74,7 +74,7 @@ function SegmentCard({ s, focus }: { s: SegmentStatus; focus: string | undefined
           </Row>
         )}
       </dl>
-    </div>
+    </Card>
   );
 }
 

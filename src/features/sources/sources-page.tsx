@@ -1,4 +1,5 @@
 import { Link, useNavigate } from "@tanstack/react-router";
+import { ExternalSourceLink } from "@/shared/ui/links";
 import { useServerFn } from "@tanstack/react-start";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -423,14 +424,7 @@ export function SourcesPage() {
                 })()}
               </div>
               {/^https?:\/\//i.test(s.handle) ? (
-                <a
-                  href={s.handle}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="mt-1 block break-all font-mono text-xs text-primary hover:underline"
-                >
-                  {s.handle}
-                </a>
+                <ExternalSourceLink href={s.handle} className="mt-1 flex font-mono text-xs" />
               ) : (
                 <p className="mt-1 break-all font-mono text-xs text-muted-foreground">{s.handle}</p>
               )}
