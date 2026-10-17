@@ -16,6 +16,14 @@ export type CatalogSort = "name" | "updated" | "domain";
 
 const SORTS: CatalogSort[] = ["name", "updated", "domain"];
 
+/**
+ * The view an analyst sees with no params in the URL. "updated" leads because the catalog's value
+ * is freshness — the systems whose evidence moved are the ones worth reopening, and a name-sorted
+ * list buries them under a–z. It is also the value toCatalogSearch() leaves out of the URL, so a
+ * bare /catalog must land on it.
+ */
+export const DEFAULT_SORT: CatalogSort = "updated";
+
 const FACET_PARAMS: { field: keyof CatalogFacets; param: string }[] = [
   { field: "domains", param: "dom" },
   { field: "origin", param: "org" },
@@ -74,7 +82,7 @@ export function fromSearchParams(p: Record<string, string>): CatalogState {
   if (p[FIBER_PARAM] === "1") facets.fiberOnly = true;
   return {
     q: p["q"] ?? "",
-    sort: (SORTS.find((x) => x === p["sort"]) ?? "name") as CatalogSort,
+    sort: (SORTS.find((x) => x === p["sort"]) ?? DEFAULT_SORT) as CatalogSort,
     facets,
   };
 }
@@ -83,7 +91,7 @@ export function fromSearchParams(p: Record<string, string>): CatalogState {
 export function toCatalogSearch(state: CatalogState): Record<string, string> {
   const out: Record<string, string> = {};
   if (state.q) out["q"] = state.q;
-  if (state.sort !== "name") out["sort"] = state.sort;
+  if (state.sort !== DEFAULT_SORT) out["sort"] = state.sort;
   for (const { field, param } of FACET_PARAMS) {
     const values = state.facets[field] as string[];
     if (values.length) out[param] = values.join(",");
