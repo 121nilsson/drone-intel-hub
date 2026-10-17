@@ -12,7 +12,9 @@ import type {
   CandidateRepository,
   DispatchRepository,
   DroneRepository,
+  ProcurementRepository,
 } from "@/shared/contracts/repository";
+import { procurementsFrom, splitFinancialSpecs } from "./procurement-routing";
 import type { TaxonomyCandidateRepository } from "@/shared/contracts/taxonomy";
 import type { Procurement } from "@/entities/procurement/types";
 import { mergeLinks, normalizeExtraction, toRFLink } from "@/entities/normalization/apply";
@@ -47,6 +49,8 @@ export interface PipelineDeps {
   candidates: CandidateRepository;
   /** When set, unknown propulsion terms are queued for an analyst. Absent in tests and older callers. */
   taxonomyCandidates?: TaxonomyCandidateRepository;
+  /** Receives contract/deal figures routed out of drone specs. Absent in tests and older callers. */
+  procurements?: ProcurementRepository;
   escalationThreshold: number;
   autoMergeThreshold: number;
   /** Unset disables auto-promotion; every new system then waits for review. */
@@ -489,6 +493,15 @@ export async function runTwoTier(
   }
   const normalized = applyNormalization(extraction);
   extraction = normalized.extraction;
+  // Deal figures leave the drone specs here and become procurement records.
+  {
+    const routed = splitFinancialSpecs(extraction);
+    extraction = routed.extraction;
+    if (d.procurements && routed.financial.length) {
+      for (const p of procurementsFrom(routed.financial, extraction, source, context.url))
+        d.procurements.add(p);
+    }
+  }
   // Autonomy brake: a model-produced figure is only actionable if its evidence actually
   // appears in the original post. Identity fields are untouched.
   const fold = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase();

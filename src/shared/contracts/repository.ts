@@ -1,6 +1,13 @@
 import type { MonitoredSource } from "@/entities/source/types";
 import type { RawDispatch } from "@/entities/dispatch/types";
 import type { Candidate, Domain, Drone } from "@/entities/drone/types";
+import type { Procurement } from "@/entities/procurement/types";
+
+/** Contract, grant and production-deal records, kept apart from drone specs. */
+export interface ProcurementRepository {
+  list(): Procurement[];
+  add(p: Procurement): void;
+}
 
 export interface CatalogFacets {
   domains?: Domain[];
