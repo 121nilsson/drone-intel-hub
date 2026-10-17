@@ -104,6 +104,7 @@ function Briefing() {
   const [err, setErr] = useState<string | null>(null);
   const [regenKey, setRegenKey] = useState(0);
   const [generating, setGenerating] = useState(false);
+  const [copied, setCopied] = useState(false);
   const forceRegenRef = useRef(false);
   const summarizerRef = useRef(summarizer);
   summarizerRef.current = summarizer;
@@ -232,6 +233,22 @@ function Briefing() {
             </Tag>
             <Btn
               variant="ghost"
+              disabled={!summary}
+              onClick={async () => {
+                if (!summary) return;
+                try {
+                  await navigator.clipboard.writeText(summary);
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 1500);
+                } catch {
+                  /* clipboard may be unavailable */
+                }
+              }}
+            >
+              {copied ? "Copied" : "Copy"}
+            </Btn>
+            <Btn
+              variant="ghost"
               disabled={generating}
               onClick={() => {
                 forceRegenRef.current = true;
@@ -247,10 +264,21 @@ function Briefing() {
           <p className="text-sm text-destructive">{err}</p>
         ) : summary ? (
           <>
-            <p className="whitespace-pre-line leading-relaxed">{summary}</p>
+            <div className="space-y-3 text-sm leading-relaxed text-foreground/90">
+              {summary
+                .split(/\n{2,}/)
+                .map((para, i) => para.trim())
+                .filter(Boolean)
+                .map((para, i) => (
+                  <p key={i} className="whitespace-pre-line">
+                    {para}
+                  </p>
+                ))}
+            </div>
             {summaryAt && (
               <p className="mt-3 font-mono text-[11px] text-muted-foreground">
-                {summaryShared ? "Shared summary" : "Summary"} cached until{" "}
+                {summaryShared ? "Shared summary" : "Summary"} generated{" "}
+                {new Date(summaryAt).toLocaleString()} · cached until{" "}
                 {new Date(summaryAt + BRIEFING_SUMMARY_TTL_MS).toLocaleString()} (refreshes about
                 twice per day)
               </p>
