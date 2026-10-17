@@ -1,7 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { ExternalSourceLink, SourceRef } from "@/shared/ui/links";
 import type { SpecAttribute, SpecClaim } from "@/entities/drone/types";
-import { useDispatches, useServices } from "@/shared/infra/services";
+import { useDispatches, useServices, useSources } from "@/shared/infra/services";
 import {
   Sheet,
   SheetContent,
@@ -56,11 +56,18 @@ export function ProvenanceSheet({
   onClose: () => void;
 }) {
   const dispatches = useDispatches();
+  const sources = useSources();
   const svc = useServices();
   const claim = selection?.claim;
   const dispatch = claim?.sourceId
     ? dispatches.find((d) => d.id === claim.sourceId || d.externalId === claim.sourceId)
     : undefined;
+  const srcName = (claim?.source ?? "").trim().toLowerCase();
+  const monitored = srcName
+    ? sources.find((s) => s.name.trim().toLowerCase() === srcName)
+    : undefined;
+  const sourceHref =
+    monitored && /^https?:\/\//i.test(monitored.handle) ? monitored.handle : undefined;
   const n = claim?.normalized;
   return (
     <Sheet open={!!selection} onOpenChange={(o) => !o && onClose()}>
@@ -72,17 +79,23 @@ export function ProvenanceSheet({
                 {selection.spec.label} · provenance
               </SheetTitle>
               <SheetDescription className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-                <SourceRef source={claim.source} href={dispatch?.url} className="max-w-full" />
+                <SourceRef
+                  source={claim.source}
+                  href={dispatch?.url ?? sourceHref}
+                  className="max-w-full"
+                />
                 {claim.date && <span className="shrink-0">· {claim.date.slice(0, 10)}</span>}
-                {dispatch && (
-                  <Link
-                    to="/dispatches"
-                    search={{ q: dispatch.url ?? dispatch.externalId ?? dispatch.id }}
-                    className="shrink-0 font-mono text-xs text-primary hover:underline"
-                  >
-                    Visa posten →
-                  </Link>
-                )}
+                <Link
+                  to="/dispatches"
+                  search={{
+                    q: dispatch
+                      ? (dispatch.url ?? dispatch.externalId ?? dispatch.id)
+                      : (claim.source ?? droneName),
+                  }}
+                  className="shrink-0 font-mono text-xs text-primary hover:underline"
+                >
+                  {dispatch ? "Visa posten →" : "Sök i flödet →"}
+                </Link>
               </SheetDescription>
             </SheetHeader>
             <div className="mt-4 space-y-4 text-sm">
