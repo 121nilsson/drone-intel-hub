@@ -1,9 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  extractClassSpecs,
-  extractPrice,
-  extractUnitPrice,
-} from "@/shared/infra/heuristics";
+import { extractClassSpecs, extractPrice, extractUnitPrice } from "@/shared/infra/heuristics";
 import { HeuristicExtractor } from "@/shared/infra/heuristic-ai";
 
 /**

@@ -34,7 +34,9 @@ export function ExternalSourceLink({
       )}
     >
       <span className="min-w-0 truncate">{children ?? shortUrl(href)}</span>
-      <span aria-hidden className="shrink-0">↗</span>
+      <span aria-hidden className="shrink-0">
+        ↗
+      </span>
     </a>
   );
 }

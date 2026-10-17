@@ -17,11 +17,7 @@ import { extractStructure } from "./extractors/structure";
 import { extractUav } from "./extractors/uav";
 import { extractUgv } from "./extractors/ugv";
 import { extractUsv } from "./extractors/usv";
-import {
-  extractContractValue,
-  extractPriceNumeric,
-  extractUnitPrice,
-} from "./pricing";
+import { extractContractValue, extractPriceNumeric, extractUnitPrice } from "./pricing";
 
 export interface Facts extends ObservationSink {
   specs: ExtractedSpec[];

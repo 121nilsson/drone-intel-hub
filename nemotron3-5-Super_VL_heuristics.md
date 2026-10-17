@@ -29,11 +29,11 @@ plus 3 multi-system attribution pins in `src/test/heuristic-ai.test.ts`
 
 - Ukrainian magnitude is **мiльярд** (soft sign, Cyrillic і), not "мілліARD" — that's Russian.
 - Fiber spool lives at `heuristic-ai.ts:380`, not ~373.
-  *(2026-10-18: moved into `facts.ts` as `extractFiberSpool()`, running through the schema-gated
-  sink — see Addendum 2.)*
-- `measureCue` compiles **two** regexes per call: the cue regex (`common.ts:39`) *and* a per-match unit-fragment regex (`^(?:frag)$` at `common.ts:49`). The per-match unit test scales with matches, not calls — it matters more as alternations grow with added languages. *(2026-10-18: both are now cached — cue/unit patterns via `getRe` in `regex-cache.ts`; see Step 7.)*
-- Inline weight/dimension regexes in `heuristic-ai.ts` use `[^\d]` which spans newlines; `measureCue` uses `[^\d\n]` which stops at line breaks. Unifying is a **behavior change in both directions**, not a no-op. *(Resolved by Step 2 with the exclude-`\n` policy and characterization pins.)*
-- The warhead reversed pattern (`heuristic-ai.ts:242-245`, number *before* cue) is not expressible in `measureCue`, which only supports cue→number order. *(Superseded by Step 2's `order: "after"` support, with the sentence-boundary clamp documented in Addendum 1.)*
+  _(2026-10-18: moved into `facts.ts` as `extractFiberSpool()`, running through the schema-gated
+  sink — see Addendum 2.)_
+- `measureCue` compiles **two** regexes per call: the cue regex (`common.ts:39`) _and_ a per-match unit-fragment regex (`^(?:frag)$` at `common.ts:49`). The per-match unit test scales with matches, not calls — it matters more as alternations grow with added languages. _(2026-10-18: both are now cached — cue/unit patterns via `getRe` in `regex-cache.ts`; see Step 7.)_
+- Inline weight/dimension regexes in `heuristic-ai.ts` use `[^\d]` which spans newlines; `measureCue` uses `[^\d\n]` which stops at line breaks. Unifying is a **behavior change in both directions**, not a no-op. _(Resolved by Step 2 with the exclude-`\n` policy and characterization pins.)_
+- The warhead reversed pattern (`heuristic-ai.ts:242-245`, number _before_ cue) is not expressible in `measureCue`, which only supports cue→number order. _(Superseded by Step 2's `order: "after"` support, with the sentence-boundary clamp documented in Addendum 1.)_
 - The existing corpus (8 fixtures) is **all positive** — nothing protects against regressions like `"Geran-25 → 25 missiles"`. Characterization tests pin current behavior; they don't add new protection.
 
 ---
@@ -42,26 +42,26 @@ plus 3 multi-system attribution pins in `src/test/heuristic-ai.test.ts`
 
 Sequenced so no step is reordered without explicit agreement:
 
-| # | Step | What | Why this position |
-|---|------|------|-------------------|
-| 1 | **Characterization tests** | Pin current outputs before changing anything | Existing corpus is all positive; thin paths (reversed warhead, dimension variants, newline joining) are uncovered | ✅ done |
-| 2 | **DRY unify** (tests-first) | Weights/dims/warhead through `measureCue`; exclude `\n` everywhere as explicit policy; reversed warhead `order` option; per-match unit regex cache; move "number of X" lookbehind to `common.ts` | One code path, consistent gap windows, language additions stop needing edits in two places | ✅ done |
-| 3 | **Heuristic schema validation** | `ExtractedSpecSchema.parse()` (lenient) at the `add()` boundary | Matches how AI output is handled; catches malformed keys/units at ingest | ✅ done |
-| 4 | **HEURISTICS.md** | Document `measureCue` contract + `notAfter` convention | Cheap enough to land alongside #3; the one invariant contributors can't infer from code shape | ✅ done |
-| 5 | **Languages: pl, tr (+ fr/de)** | One lexicon file each + one line in `index.ts`; native-speaker review required; derive from sv/en; fixtures grow to ≥14 per PR | Polish/Turkish have clear OSINT relevance; zh/ar need `numeric.ts` work first |
-| 6 | **Money numeric (optional)** | Wire `money.magnitudes` into `parseMagnitude`; add `extractPriceNumeric()`; consensus wiring only after stable | Strings stay the system of record today; `parseMagnitude` suffix table lacks miljard/per-lexicon words | ✅ done *(2026-10-18: magnitudes/currencies/compounds lexicon-fed via `@/shared/lexicons`; `parseMoney`/`parseMoneyRange` in `currency.ts`, `extractPriceNumeric` in `pricing.ts` with corpus; verbatim string stays the stored claim)* |
-| 7 | **Regex caching** | Rider on the DRY pass — compile once per lexicon set | Free and safe; not a standalone project | ✅ done *(2026-10-18: shared `getRe` in `regex-cache.ts`; `measureCue` cue/unit patterns, `extractCountedNouns` and `names.ts` `mentions` all cached. Residual, not agreed work: `pricing.ts` still builds its per-call patterns with `new RegExp`)* |
-| 8 | **USV extractor** | New system class, one at a time with `notAfter` discipline | Clean win; nautical miles, knots, endurance, draft | ✅ done *(2026-10-18: `extractors/usv.ts` — knots, nautical miles, draft; endurance gained a days unit for `3 діб`/`суток`; uk/ru Sea-domain words; uk knots added to the normalization table; shared envelope guard moved to `common.ts`. Residuals: `beam`, sv usvDraft cues (native review))* |
-| 9 | **Loitering-munitions split** | Project-sized; after USV | Touches taxonomy, existing cards, `notAfter` boundaries |
-| 10 | **HEURISTICS.md (final)** | Add ownership map: which extractor owns range/altitude/frequency for overlapping classes | Prevents EW/radar from doubling SHORAD claims | *(2026-10-18: exists at `src/shared/infra/heuristics/HEURISTICS.md`; ownership map present incl. `rfBands` — EW/radar overlap row: todo)* |
+| #   | Step                            | What                                                                                                                                                                                             | Why this position                                                                                                 |
+| --- | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------- |
+| 1   | **Characterization tests**      | Pin current outputs before changing anything                                                                                                                                                     | Existing corpus is all positive; thin paths (reversed warhead, dimension variants, newline joining) are uncovered | ✅ done                                                                                                                                                                                                                                                                                          |
+| 2   | **DRY unify** (tests-first)     | Weights/dims/warhead through `measureCue`; exclude `\n` everywhere as explicit policy; reversed warhead `order` option; per-match unit regex cache; move "number of X" lookbehind to `common.ts` | One code path, consistent gap windows, language additions stop needing edits in two places                        | ✅ done                                                                                                                                                                                                                                                                                          |
+| 3   | **Heuristic schema validation** | `ExtractedSpecSchema.parse()` (lenient) at the `add()` boundary                                                                                                                                  | Matches how AI output is handled; catches malformed keys/units at ingest                                          | ✅ done                                                                                                                                                                                                                                                                                          |
+| 4   | **HEURISTICS.md**               | Document `measureCue` contract + `notAfter` convention                                                                                                                                           | Cheap enough to land alongside #3; the one invariant contributors can't infer from code shape                     | ✅ done                                                                                                                                                                                                                                                                                          |
+| 5   | **Languages: pl, tr (+ fr/de)** | One lexicon file each + one line in `index.ts`; native-speaker review required; derive from sv/en; fixtures grow to ≥14 per PR                                                                   | Polish/Turkish have clear OSINT relevance; zh/ar need `numeric.ts` work first                                     |
+| 6   | **Money numeric (optional)**    | Wire `money.magnitudes` into `parseMagnitude`; add `extractPriceNumeric()`; consensus wiring only after stable                                                                                   | Strings stay the system of record today; `parseMagnitude` suffix table lacks miljard/per-lexicon words            | ✅ done _(2026-10-18: magnitudes/currencies/compounds lexicon-fed via `@/shared/lexicons`; `parseMoney`/`parseMoneyRange` in `currency.ts`, `extractPriceNumeric` in `pricing.ts` with corpus; verbatim string stays the stored claim)_                                                          |
+| 7   | **Regex caching**               | Rider on the DRY pass — compile once per lexicon set                                                                                                                                             | Free and safe; not a standalone project                                                                           | ✅ done _(2026-10-18: shared `getRe` in `regex-cache.ts`; `measureCue` cue/unit patterns, `extractCountedNouns` and `names.ts` `mentions` all cached. Residual, not agreed work: `pricing.ts` still builds its per-call patterns with `new RegExp`)_                                             |
+| 8   | **USV extractor**               | New system class, one at a time with `notAfter` discipline                                                                                                                                       | Clean win; nautical miles, knots, endurance, draft                                                                | ✅ done _(2026-10-18: `extractors/usv.ts` — knots, nautical miles, draft; endurance gained a days unit for `3 діб`/`суток`; uk/ru Sea-domain words; uk knots added to the normalization table; shared envelope guard moved to `common.ts`. Residuals: `beam`, sv usvDraft cues (native review))_ |
+| 9   | **Loitering-munitions split**   | Project-sized; after USV                                                                                                                                                                         | Touches taxonomy, existing cards, `notAfter` boundaries                                                           |
+| 10  | **HEURISTICS.md (final)**       | Add ownership map: which extractor owns range/altitude/frequency for overlapping classes                                                                                                         | Prevents EW/radar from doubling SHORAD claims                                                                     | _(2026-10-18: exists at `src/shared/infra/heuristics/HEURISTICS.md`; ownership map present incl. `rfBands` — EW/radar overlap row: todo)_                                                                                                                                                        |
 
 ---
 
 ## Step 1 — Characterization tests (done)
 
-`src/test/heuristics-characterization.test.ts` — 17 tests, all passing, pinning: *(2026-10-18:
+`src/test/heuristics-characterization.test.ts` — 17 tests, all passing, pinning: _(2026-10-18:
 now 22 — boundary-restore flip plus warhead pins; and 3 multi-system attribution pins live in
-`heuristic-ai.test.ts`, see Addendum 2)*
+`heuristic-ai.test.ts`, see Addendum 2)_
 
 - **Newline joining**: `"payload\n20 kg"` → payload 20 kg (inline `[^\d]` spans `\n`)
 - **Gap boundaries**: weight gap 20, dimension gap 16 (dot-padding edge cases)
@@ -77,11 +77,13 @@ now 22 — boundary-restore flip plus warhead pins; and 3 multi-system attributi
 ## Step 2 — DRY unify (done)
 
 **Files changed:**
+
 - `src/shared/infra/heuristics/extractors/common.ts` — added `order` option (`"before"` default, `"after"` for reversed patterns), regex compilation cache, and extracted `extractCountedNouns()`
 - `src/shared/infra/heuristic-ai.ts` — replaced inline weight/dimension/warhead/payload regexes with `measureCue` calls; replaced inline counted-nouns loop with `extractCountedNouns()`; removed local `measure()` helper
 - `src/test/heuristics-characterization.test.ts` — updated newline tests to reflect the announced exclude-`\n` behavior change
 
 **Behavior deltas (intentional, not accidental):**
+
 1. **Exclude `\n` everywhere:** `"payload\n20 kg"` no longer joins into a payload spec. `measureCue` uses `[^\d\n]`; old inline code used `[^\d]` which spanned newlines.
 2. **Warhead reversed order:** `"50 kg warhead"` still works via new `order: "after"` option in `measureCue`.
 3. **Gap widths parametrized:** weight gap 20, dimension gap 16 — pinned in characterization tests.
@@ -121,11 +123,11 @@ Document alongside the DRY change:
 
 **Derive new lexicons from sv/en** so structure/units/gaps stay right and only cue words get touched — less review surface, fewer false-positive transports.
 
-| Language | Why | What to add |
-|----------|-----|-------------|
-| Polish (pl) | Warmate, FlyEye, BS-4; Ukrainian frontline reporting | tys., mln, mld; zł, PLN; km, m, kg, godz., min, km/h |
-| Turkish (tr) | Bayraktar, STM Kargu; domestic OSINT | bin, milyon, milyar; TL, lira; km, m, kg, saat, dakika, km/s |
-| French (fr) / German (de) | European OSINT, export reporting | mille, million, milliard / Tausend, Million, Milliarde |
+| Language                  | Why                                                  | What to add                                                  |
+| ------------------------- | ---------------------------------------------------- | ------------------------------------------------------------ |
+| Polish (pl)               | Warmate, FlyEye, BS-4; Ukrainian frontline reporting | tys., mln, mld; zł, PLN; km, m, kg, godz., min, km/h         |
+| Turkish (tr)              | Bayraktar, STM Kargu; domestic OSINT                 | bin, milyon, milyar; TL, lira; km, m, kg, saat, dakika, km/s |
+| French (fr) / German (de) | European OSINT, export reporting                     | mille, million, milliard / Tausend, Million, Milliarde       |
 
 **Fixture gate:** every language PR grows the corpus (8 → ≥14), 2 per language minimum. Ukrainian `мільярд` (UA) vs Russian `миллиард` (RU) — fix the typo in docs before onboarding.
 
@@ -137,16 +139,16 @@ Document alongside the DRY change:
 
 - Keep verbatim strings as primary stored value (for dossiers).
 - `parseNumber` already disambiguates European decimals vs thousands separators (`0,500` → 0.5; `1,500` → 1500).
-- `parseMagnitude` (`numeric.ts:38`) suffix table stops at `k|K|thousand|тыс|тис|M|million|млн|млрд|billion|bn` — misses Swedish `miljard` and every future `milyar`/`мільярд`/Polish `mld` word. *(Resolved: normalization now reads magnitudes, currency words and compounds (`"mkr"` = million SEK) from `@/shared/lexicons` — `magnitudeAlt`/`scaleOf`/`currencyAlt`/`compoundAlt`; the per-lexicon word list is data, not code.)*
-- **Prerequisite for "stable":** `money.magnitudes` from lexicons must be wired into `parseMagnitude` first. Otherwise the first Swedish `miljard` normalization is wrong. *(Done — same change.)*
-- Add `extractPriceNumeric()` returning `{ amount, currency, raw }` alongside verbatim strings; wire into consensus only after stable. *(Done — `pricing.ts:43`, with `$2 billion`, `50 mkr` and range cases in `heuristic-ai.test.ts`; normalization applies money specs via `apply.ts`. Strings remain the stored figure.)*
+- `parseMagnitude` (`numeric.ts:38`) suffix table stops at `k|K|thousand|тыс|тис|M|million|млн|млрд|billion|bn` — misses Swedish `miljard` and every future `milyar`/`мільярд`/Polish `mld` word. _(Resolved: normalization now reads magnitudes, currency words and compounds (`"mkr"` = million SEK) from `@/shared/lexicons` — `magnitudeAlt`/`scaleOf`/`currencyAlt`/`compoundAlt`; the per-lexicon word list is data, not code.)_
+- **Prerequisite for "stable":** `money.magnitudes` from lexicons must be wired into `parseMagnitude` first. Otherwise the first Swedish `miljard` normalization is wrong. _(Done — same change.)_
+- Add `extractPriceNumeric()` returning `{ amount, currency, raw }` alongside verbatim strings; wire into consensus only after stable. _(Done — `pricing.ts:43`, with `$2 billion`, `50 mkr` and range cases in `heuristic-ai.test.ts`; normalization applies money specs via `apply.ts`. Strings remain the stored figure.)_
 
 ---
 
 ## Verification notes
 
-All claims double-checked against the repository on 2026-10-17; *(paths and line pointers
-refreshed 2026-10-18 after the lexicon move and the names/facts split, see Addendum 2):*
+All claims double-checked against the repository on 2026-10-17; _(paths and line pointers
+refreshed 2026-10-18 after the lexicon move and the names/facts split, see Addendum 2):_
 
 - `src/shared/infra/heuristics/index.ts` — re-exports each module; `extractFacts` is the entry
 - `src/shared/infra/heuristics/facts.ts` — `extractFacts` + `SPEC_EXTRACTORS` (uav, ugv, cuas,
@@ -174,6 +176,7 @@ refreshed 2026-10-18 after the lexicon move and the names/facts split, see Adden
 - `src/test/fixtures/heuristic-corpus.ts` — 8 fixtures, 2 per language, all positive
 
 **Test results (2026-10-18):**
+
 - `heuristics-characterization.test.ts`: 22 passed
 - `heuristics-multilingual.test.ts`: 8 passed
 - `heuristic-ai.test.ts`: 58 passed (incl. multi-system attribution pins)
@@ -184,9 +187,9 @@ refreshed 2026-10-18 after the lexicon move and the names/facts split, see Adden
 
 ## Addendum — after-form sentence-boundary restore (2026-10-17)
 
-*For nemotron3-5-Super_VL: this section documents changes made after this plan was compiled, so
+_For nemotron3-5-Super_VL: this section documents changes made after this plan was compiled, so
 the provenance is on record. Written and signed by GLM-5.3-Flash Free (agent session via
-OpenCode), with the user's decision on record for each behavioral choice.*
+OpenCode), with the user's decision on record for each behavioral choice._
 
 ### What was found
 
@@ -220,8 +223,8 @@ cross `.` and `;` inside their gap window.
 ### Notes for the next session
 
 - The Step 4 checkbox (`HEURISTICS.md`) is ahead of the artifact — no such file exists in the
-  repo yet at the time of this addendum. *(2026-10-18: resolved — it now exists at
-  `src/shared/infra/heuristics/HEURISTICS.md`.)*
+  repo yet at the time of this addendum. _(2026-10-18: resolved — it now exists at
+  `src/shared/infra/heuristics/HEURISTICS.md`.)_
 - The historical test-result lines above this section are the numbers nemotron saw at
   compile time; they are superseded by the sign-off numbers below.
 
@@ -239,9 +242,9 @@ Signed: **GLM-5.3-Flash Free** — agent via OpenCode · 2026-10-17
 
 ## Addendum 2 — fact-layer cleanup after the names/facts split (2026-10-18)
 
-*For nemotron3-5-Super_VL: provenance again from GLM-5.3-Flash Free (agent via OpenCode), with
+_For nemotron3-5-Super_VL: provenance again from GLM-5.3-Flash Free (agent via OpenCode), with
 user approval at each step. This documents the slice agreed after the review of your refactor:
-three items from your recommended order, done in that order.*
+three items from your recommended order, done in that order._
 
 ### What was agreed and done
 
@@ -299,13 +302,13 @@ findings drove this slice. Evidence-first, same discipline as always.
 1. **Altitude contamination (your #1)** — the polluted `altitude` claims on PAC-2/PAC-3/THAAD are
    all `"discoveredBy": "ai"`; the heuristic `notAfter` path never wrote them. The leak phrases
    were "maximum **interception** altitude of 24 to 36 km" and "altitudes of up to 32 km" — the
-   `targetAltitude` cues only had "engagement altitude". Where the AI *did* see "engagement
+   `targetAltitude` cues only had "engagement altitude". Where the AI _did_ see "engagement
    altitude" it wrote `target_altitude_max` correctly — and also duplicated the figure under
    `altitude` ("altitudes of up to 32 km" appears in both keys for PAC-2).
 2. **Starlink → Lyutyi (your #2)** — not a generic "БПЛА" match. The catalog alias **"Февраль"**
    (Russian for February) sat on lyutyi; the post used the word in its calendar sense, the alias
    matched, confidence 0.9 ≥ 0.85 auto-merged. Bonus finding: the 160 km/h figure in that article
-   is the Starlink *terminal's* speed — even a correct name match would have mis-attributed it.
+   is the Starlink _terminal's_ speed — even a correct name match would have mis-attributed it.
 3. **"Nothing adjudicates" (your #6)** — false for live data: Thunder's range claims carry full
    verdicts (800 km "supported", 15/10 km "outlier", `contradictionCheckedAt` set). The real gap:
    `consensus()` still aggregated adjudicated outliers into the median/display.
@@ -428,9 +431,9 @@ New user reports from the running app: `/systems/-3a3f` shows "45 хвилин" 
 uncaptured; `/systems/red-wolf-0a83` shows "spred: 370.40000000000003–undefined". Verified against
 the live DB before coding:
 
-1. **Миротворець (-3a3f)** — the claims *exist* (AI-captured, raw "45 хвилин" / "15 л") but carry
+1. **Миротворець (-3a3f)** — the claims _exist_ (AI-captured, raw "45 хвилин" / "15 л") but carry
    no `normalized`: normalization can't parse them. `units.ts` (the hardcoded normalization table,
-   separate from the lexicons) had no Ukrainian minute words — though the *extractor* lexicon
+   separate from the lexicons) had no Ukrainian minute words — though the _extractor_ lexicon
    already had `хв` — and no volume dimension at all.
 2. **Red Wolf** — "exceeding 200 nautical miles" → 200 × 1.852 = 370.40000000000003 stored
    unrounded in `normalized.range.min`; the dossier Spread cell renders `${c.min}–${c.max}` guarded

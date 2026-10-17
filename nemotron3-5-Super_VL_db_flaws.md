@@ -12,15 +12,15 @@ on 2026-10-17. All findings below are backed by actual row counts and sampled va
 
 ## Live data snapshot
 
-| Table | Rows |
-|-------|------|
-| drones | 491 |
-| candidates | 4,646 |
-| dispatches | 3,170 (1,632 processed, 1,275 irrelevant, 247 duplicate, 16 pending) |
-| sources | 91 |
-| procurements | 0 |
-| taxonomies | — |
-| taxonomy_candidates | — |
+| Table               | Rows                                                                 |
+| ------------------- | -------------------------------------------------------------------- |
+| drones              | 491                                                                  |
+| candidates          | 4,646                                                                |
+| dispatches          | 3,170 (1,632 processed, 1,275 irrelevant, 247 duplicate, 16 pending) |
+| sources             | 91                                                                   |
+| procurements        | 0                                                                    |
+| taxonomies          | —                                                                    |
+| taxonomy_candidates | —                                                                    |
 
 **Dispatch outcomes** (processed only): auto-discarded 1,116 (68%), auto-merged 334 (20%),
 queued 107 (7%), auto-promoted 75 (5%).
@@ -38,27 +38,28 @@ on nearly every dispatch.
 **Evidence:** Querying `drones.data->'specs'` across all 491 rows yields **469 distinct spec keys**.
 Only 17 keys appear more than 10 times:
 
-| Key | Count |
-|-----|-------|
-| range | 102 |
-| speed | 55 |
-| length | 48 |
-| endurance | 37 |
-| payload | 36 |
-| wingspan | 35 |
-| unit_cost | 32 |
-| max_speed | 26 |
-| service_ceiling | 20 |
-| contract_value | 20 |
-| guidance | 20 |
-| weight_launch | 18 |
-| engine | 17 |
-| max_altitude | 15 |
-| cruise_speed | 14 |
-| warhead | 12 |
-| height | 11 |
+| Key             | Count |
+| --------------- | ----- |
+| range           | 102   |
+| speed           | 55    |
+| length          | 48    |
+| endurance       | 37    |
+| payload         | 36    |
+| wingspan        | 35    |
+| unit_cost       | 32    |
+| max_speed       | 26    |
+| service_ceiling | 20    |
+| contract_value  | 20    |
+| guidance        | 20    |
+| weight_launch   | 18    |
+| engine          | 17    |
+| max_altitude    | 15    |
+| cruise_speed    | 14    |
+| warhead         | 12    |
+| height          | 11    |
 
 **Same concept, 5–10 different keys:**
+
 - Range: `range`, `range_max`, `range_link`, `combat_range`, `combat_radius`, `operational_range`, `ferry_range`, `strike_range_high`, `strike_range_low`, `remote_control_range`, `detection_range`, `detection_range_micro_drone`, `detection_range_small_uav`, `engagement_range`, `ballistic_intercept_range`, `tbm_intercept_range`
 - Speed: `speed`, `max_speed`, `cruise_speed`, `cruise_speed_min`, `speed_cruise`, `speed_max`, `speedMax`, `top_speed`, `dive_speed`
 - Weight: `weight`, `weight_empty`, `weight_mtow`, `weight_launch`, `weight_gross`, `system_weight`, `systemWeight`, `total_mass`, `mass`
@@ -89,18 +90,18 @@ variants added.
 
 **Evidence:** Sample of units per key (from `drones.data->'specs'`):
 
-| Key | Units observed | Count |
-|-----|---------------|-------|
-| endurance | h, min, hours, minutes, days, hour | 6 |
-| speed | km/h, Mach, knots, mph, км/год, (blank) | 6 |
-| range | km, nautical miles, км, NM, meters, mile | 6 |
-| weight | kg, pounds, tonnes, lb, (blank) | 5 |
-| wingspan | m, ft, м, mm | 4 |
-| payload | kg, lb, кг | 3 |
-| warhead | kg, g, кг | 3 |
-| altitude | km, m, feet, ft | 4 |
-| service_ceiling | m, ft | 2 |
-| length | m, м | 2 |
+| Key             | Units observed                           | Count |
+| --------------- | ---------------------------------------- | ----- |
+| endurance       | h, min, hours, minutes, days, hour       | 6     |
+| speed           | km/h, Mach, knots, mph, км/год, (blank)  | 6     |
+| range           | km, nautical miles, км, NM, meters, mile | 6     |
+| weight          | kg, pounds, tonnes, lb, (blank)          | 5     |
+| wingspan        | m, ft, м, mm                             | 4     |
+| payload         | kg, lb, кг                               | 3     |
+| warhead         | kg, g, кг                                | 3     |
+| altitude        | km, m, feet, ft                          | 4     |
+| service_ceiling | m, ft                                    | 2     |
+| length          | m, м                                     | 2     |
 
 **Language mixing in units:** `кг`, `км`, `м` (Cyrillic) appear alongside `kg`, `km`, `m`.
 Currency units mixed: `USD`, `RUB`, `₽`, `фунтів стерлінга`, `фунтів стерлінгів`.
@@ -144,6 +145,7 @@ $500 (2026)
 ```
 
 **Problems visible in the live data:**
+
 - Mixed currencies: USD, UAH (hryvnias), RUB (rubles) — no currency code normalization
 - Mixed formats: `"$1.50"` vs `"100K"` vs `"$2.5 million"` vs `"45.6 млн грн"`
 - Typos: `"t0"` instead of `"to"` in ranges
@@ -242,6 +244,7 @@ dedicated evaluation mode that runs heuristic-only on a sample of processed disp
 227 pending (5%).
 
 **Impact:** Two-thirds of all extraction candidates are thrown away. This could mean:
+
 - The heuristic is over-detecting system names (false positives from `detectNames`)
 - The auto-discard threshold is too aggressive
 - Non-system names (organizations, outlets) are slipping through `notASystemName`
@@ -249,7 +252,7 @@ dedicated evaluation mode that runs heuristic-only on a sample of processed disp
 Without per-source breakdowns of discard reasons, it's impossible to tell whether the heuristic
 is producing noise or the gates are too tight.
 
-**Fix:** Add a `discard_reason` field to candidates so you can analyze *why* candidates are
+**Fix:** Add a `discard_reason` field to candidates so you can analyze _why_ candidates are
 discarded (below confidence threshold, org name, no specs, duplicate, etc.). Add per-source
 discard rates to the Sources page health dashboard.
 
@@ -336,17 +339,17 @@ Lovable Cloud is configured.
 
 ## Suggested priority order (based on live data evidence)
 
-| Priority | Flaw | Evidence from live data | Effort |
-|----------|------|------------------------|--------|
-| 1 | Spec key explosion (469 keys) | 469 distinct keys, only 17 used >10x | Medium |
-| 2 | Money as opaque strings | 20+ unparseable unit_cost formats | Medium |
-| 3 | Unit chaos | 6+ unit strings per dimension | Medium |
-| 4 | Non-measurement fields as specs | `description`, `status`, `type` as spec keys | Low |
-| 5 | Procurements table empty | 0 rows, financial keys in drone specs | Medium |
-| 6 | Values in claims[], not spec level | unit_cost/range have NULL spec-level value | Low |
-| 7 | Schema validation on heuristic output | Heuristic bypasses ExtractedSpecSchema | Low |
-| 8 | content_hash no backfill | Pre-migration dups not fingerprinted | Low |
-| 9 | CloudStore missing | Import fails without DATABASE_URL | Medium |
-| 10 | No FK dispatch→drone | droneIds JSONB-only, O(n) cleanup | Medium |
-| 11 | High auto-discard rate (67%) | 3,131/4,646 discarded | Medium (needs discard_reason) |
-| 12 | Heuristic never used standalone | 1631 combined vs 1 heuristic | Low (evaluation mode) |
+| Priority | Flaw                                  | Evidence from live data                      | Effort                        |
+| -------- | ------------------------------------- | -------------------------------------------- | ----------------------------- |
+| 1        | Spec key explosion (469 keys)         | 469 distinct keys, only 17 used >10x         | Medium                        |
+| 2        | Money as opaque strings               | 20+ unparseable unit_cost formats            | Medium                        |
+| 3        | Unit chaos                            | 6+ unit strings per dimension                | Medium                        |
+| 4        | Non-measurement fields as specs       | `description`, `status`, `type` as spec keys | Low                           |
+| 5        | Procurements table empty              | 0 rows, financial keys in drone specs        | Medium                        |
+| 6        | Values in claims[], not spec level    | unit_cost/range have NULL spec-level value   | Low                           |
+| 7        | Schema validation on heuristic output | Heuristic bypasses ExtractedSpecSchema       | Low                           |
+| 8        | content_hash no backfill              | Pre-migration dups not fingerprinted         | Low                           |
+| 9        | CloudStore missing                    | Import fails without DATABASE_URL            | Medium                        |
+| 10       | No FK dispatch→drone                  | droneIds JSONB-only, O(n) cleanup            | Medium                        |
+| 11       | High auto-discard rate (67%)          | 3,131/4,646 discarded                        | Medium (needs discard_reason) |
+| 12       | Heuristic never used standalone       | 1631 combined vs 1 heuristic                 | Low (evaluation mode)         |

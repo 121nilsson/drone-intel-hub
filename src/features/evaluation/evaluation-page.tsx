@@ -2,7 +2,13 @@ import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useCandidates, useDrones, useServices } from "@/shared/infra/services";
 import { Btn, Card, CardGrid, ListRow, PageTitle, Panel, Tag } from "@/shared/ui/primitives";
-import { evaluateHeuristic, fixturesToCorpus, type EvalReport, type Prf } from "./evaluation";
+import {
+  evaluateHeuristic,
+  fixturesToCorpus,
+  mismatchesToFixtures,
+  type EvalReport,
+  type Prf,
+} from "./evaluation";
 
 const pct = (n: number) => `${Math.round(n * 100)}%`;
 const SIZES = [50, 100, 250, 500];
@@ -39,16 +45,19 @@ export function EvaluationPage() {
   const [size, setSize] = useState(100);
   const [discarded, setDiscarded] = useState(false);
   const [running, setRunning] = useState(false);
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [report, setReport] = useState<EvalReport | null>(null);
   const [openKey, setOpenKey] = useState<string | null>(null);
 
   const run = async () => {
     setRunning(true);
     try {
+      setProgress({ done: 0, total: size });
       const r = await evaluateHeuristic(candidates, drones, heuristic, {
         sampleSize: size,
         includeDiscarded: discarded,
         seed: Date.now() % 100000,
+        onProgress: (done, total) => setProgress({ done, total }),
       });
       setReport(r);
       setOpenKey(null);
@@ -56,6 +65,7 @@ export function EvaluationPage() {
       toast.error(`Utvärderingen misslyckades: ${(e as Error).message}`);
     } finally {
       setRunning(false);
+      setProgress(null);
     }
   };
 
@@ -74,6 +84,20 @@ export function EvaluationPage() {
       <PageTitle subtitle="Kör heuristiken isolerat mot redan bearbetade rapporter och jämför med lagrad extraction. Skriver aldrig till databasen och anropar aldrig AI.">
         Heuristic evaluation
       </PageTitle>
+      <Panel title="Så läser du resultaten">
+        <p className="text-sm text-muted-foreground">
+          <strong>P (Precision)</strong> = andel heuristik-träffar som också finns i den lagrade
+          extractionen (få falska positiva). <strong>R (Recall)</strong> = andel lagrade värden som
+          heuristiken hittade (få missar). <strong>F1</strong> = balanserat mått (2·P·R/(P+R)); 1.0
+          = perfekt.
+          <br />
+          <strong>tp</strong> = träffar, <strong>fp</strong> = falska positiva, <strong>fn</strong>{" "}
+          = missar. Mismatch-typer: <em>exact/semantic</em> = match, <em>differentReading</em> =
+          samma värde men annan läsning (t.ex. "up to 120 km"), <em>wrongKey</em> = rätt värde men
+          fel nyckel, <em>falsePositive</em> = heuristiken hittade något AI inte hade,
+          <em>miss</em> = AI hittade något heuristiken missade.
+        </p>
+      </Panel>
 
       <Panel title="Urval">
         <div className="flex flex-wrap items-center gap-2">
@@ -91,7 +115,11 @@ export function EvaluationPage() {
             inkl. kasserade
           </label>
           <Btn onClick={run} disabled={running || candidates.length === 0}>
-            {running ? "Kör…" : "Kör utvärdering"}
+            {running && progress
+              ? `Kör… ${progress.done}/${progress.total}`
+              : running
+                ? "Kör…"
+                : "Kör utvärdering"}
           </Btn>
         </div>
         <p className="mt-2 font-mono text-xs text-muted-foreground">
@@ -136,16 +164,42 @@ export function EvaluationPage() {
           <Panel
             title="Regressionstester"
             right={
-              <Btn
-                variant="ghost"
-                disabled={report.fixtures.length === 0}
-                onClick={() => {
-                  download("eval-corpus.json", fixturesToCorpus(report.fixtures));
-                  toast.success("Lägg filen i src/test/fixtures/ — testerna körs automatiskt");
-                }}
-              >
-                Ladda ner corpus
-              </Btn>
+              <div className="flex flex-wrap gap-2">
+                <Btn
+                  variant="ghost"
+                  disabled={report.fixtures.length === 0}
+                  onClick={() => {
+                    download("eval-corpus.json", fixturesToCorpus(report.fixtures));
+                    toast.success("Lägg filen i src/test/fixtures/ — testerna körs automatiskt");
+                  }}
+                >
+                  Ladda ner corpus
+                </Btn>
+                <Btn
+                  variant="ghost"
+                  disabled={report.mismatches.length === 0}
+                  onClick={() => {
+                    download("eval-mismatches.json", mismatchesToFixtures(report.mismatches));
+                    toast.success(
+                      "Lägg filen i src/test/fixtures/ — negativa tester körs automatiskt",
+                    );
+                  }}
+                >
+                  Ladda ner mismatch-corpus
+                </Btn>
+                <Btn
+                  variant="ghost"
+                  disabled={drones.length === 0}
+                  onClick={() => {
+                    download("eval-catalog.json", drones);
+                    toast.success(
+                      "Lägg filen i src/test/fixtures/ — samma katalog som utvärderingen använde",
+                    );
+                  }}
+                >
+                  Ladda ner katalog
+                </Btn>
+              </div>
             }
           >
             <p className="text-sm text-muted-foreground">
@@ -195,6 +249,10 @@ export function EvaluationPage() {
                                 {m.source}
                               </span>
                             </div>
+                            <div className="mt-1 font-mono">
+                              nyckel: {m.specKey} · {m.matchType}
+                            </div>
+
                             <div className="mt-1 font-mono">
                               heuristik: {m.heuristicValue ?? "—"} {m.heuristicUnit ?? ""} · lagrad:{" "}
                               {m.referenceValue ?? "—"} {m.referenceUnit ?? ""}

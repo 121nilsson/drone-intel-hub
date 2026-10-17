@@ -1,1 +1,823 @@
-[]
+[
+  {
+    "id": "8d703c43-fb1c-4fe0-becf-e434328a2022",
+    "source": "https://www.rafael.co.il/system/spike-lr2/",
+    "text": "SPIKE® LR2\n5th Generation, Precision, Long-Range, EO-Guided Missile System for Ground, Air and Sea\n________________\n\nPowerful, Versatile, and Precise\n\nSPIKE LR2 is a state-of-the-art, EO, multipurpose, multi-platform, 5th generation missile system that meets the complex needs of modern warfare.\n\nThe missile weapon system ‒ which can be used for infantry, armored vehicles, naval vessels and helicopters ‒ operates at long range, up to 5.5 km, with unparalleled precision. It successfully engages direct, non-line-of-sight, and beyond-line-of-sight targets.\n\nSPIKE LR2 includes a powerful tandem HEAT warhead that can defeat any of today’s tanks, vehicles, or maritime vessels ‒ and can be used in urban combat against structural targets found in urban settings for in-structure detonation.\n\nBenefits\n\nEnhanced lethality against all types of targets; high hit probability\nRange 5.5 km; pinpoint accuracy at long range\nMultiple operational modes: Fire & Forget/Fire & Observe/Fire to Target Coordinates\nImmune to GPS Jamming\nFull commonality with all SPIKE missiles & launchers (ground, air, sea); interoperability with 34 user nations (19 in EU/NATO)\nReduced weight enables carrying two rounds by one soldier\nMultipurpose/Multi-platform\nVery low Life Cycle Cost (LCC)\nCutting-Edge Technologies\n\nThe SPIKE LR2 missile has an advanced high-end electro-optical seeker which includes a high-quality uncooled IR sensor and an advanced high-resolution day sensor. The system implements sensor data fusion via simultaneous operation of both VIS and IR sensors. This feature enables stronger and smarter tracking capabilities, even under the harshest weather conditions.\n\nUnmatched Performance\n\nThe EO guidance system with real-time fiber-optic data link delivers multiple cutting-edge capabilities including man-in-the-loop retargeting, engagement of non-line-of-sight targets, and pinpoint precision. A novel multispectral tracker allows hot swapping (in-flight swapping IR/VIS channels), under the gunner’s control ‒ allowing the detection of hidden target IR signature as well as shape and color. Simple and easy to operate, the SPIKE LR2 system is immune to RF, GPS, or other jamming measures.\n\n \n\nOptional Configurations\n\nSPIKE LR2 can be supplied as a dismounted man portable system as well as a vehicle-mounted guided missile. Also available is a multipurpose missile configuration that includes gunner-controlled fusing for control of the desired effect, offering both breaching of bunkers with in-structure detonation upon breaching of up to 20cm of reinforced concrete (including steel reinforcing bars). It can also be used in air burst mode against combatants.\n\nMain Capabilities\n\nEmbedded IMU for missions of 3rd party target allocation, network-enabled\nMultispectral target tracker\nSelectable flight trajectories offering low, medium or high angles of attack\nMid-flight abort-mission capability\nPowerful warhead for increased lethality\nMultipurpose configuration for breaching/peripheral blast\n\nWhat does a \"5th-generation\" guided missile mean?\nA 5th-generation guided missile combines advanced electro-optical sensing, multispectral target acquisition, real-time communication, multiple engagement modes, and enhanced battlefield flexibility. SPIKE LR2 integrates these capabilities with man-in-the-loop control, fiber-optic communication, multispectral IR/VIS sensing, GPS- and RF-jamming immunity, and precision engagement against both visible and concealed targets.\n\nIs SPIKE LR2 an anti-tank guided missile (ATGM) or a multi-purpose missile?\nSPIKE LR2 is both an advanced Anti-Tank Guided Missile (ATGM) and a multi-purpose precision-guided missile. While highly effective against modern armored vehicles, it is also designed to engage fortified structures, field fortifications, maritime targets, and other high-value objectives using different warhead configurations and operational modes.\n\nWhat guidance modes does SPIKE LR2 support?\n(Fire-and-Forget, Fire-and-Observe, Fire-to-Target Coordinates) SPIKE LR2 supports three primary guidance modes: Fire-and-Forget, Fire-and-Observe, and Fire-to-Target Coordinates. These modes provide operational flexibility for different mission scenarios, allowing autonomous engagement, real-time operator observation, or precision strikes against predefined coordinates. Combined with its fiber-optic data link and multispectral seeker, operators can maintain control, update engagements when required, and optimize mission effectiveness under changing battlefield conditions.\n\nIs SPIKE LR2 immune to GPS and RF jamming?\nYes. SPIKE LR2 is designed to operate in contested electromagnetic environments and is immune to GPS and RF jamming. Its advanced electro-optical seeker, multispectral sensors, and fiber-optic communication link allow the missile to maintain accurate target tracking and engagement without relying on GPS signals or vulnerable radio-frequency guidance. Instead, guidance is primarily based on electro-optical tracking and fiber-optic communication, ensuring reliable performance even in GPS- and RF-denied environments.\n\nWhat warhead options does SPIKE LR2 offer?\n(Tandem HEAT, Multipurpose, In-Structure Detonation) SPIKE LR2 offers multiple warhead configurations to support diverse mission requirements. The Tandem HEAT warhead is optimized for defeating modern main battle tanks and armored vehicles, while the Multipurpose warhead supports engagement of structures, fortified positions, and other battlefield targets. The missile also supports in-structure detonation and configurable effects, enabling operators to match the warhead to different operational scenarios.",
+    "expect": [
+      {
+        "semantic": "range.max",
+        "value": 5.5,
+        "unit": "km"
+      }
+    ],
+    "expectNames": ["Spike LR2"]
+  },
+  {
+    "id": "849f0fa2-8aa7-41be-837f-7a279469db25",
+    "source": "Analyst paste",
+    "text": "https://www.swedendynamics.com/adam-01.html\n\nADAM-01\n\nADAM-01 is a 5-inch tactical FPV platform optimized for high-agility operations in tight terrain where rapid verification, target custody, and functional tasks must be executed by dismounted users with minimal setup friction.\n\nTop View\n\nFront View\n\nPerspective View\n\nUnique flight performance enabled by a special-developed carbon-fiber frame and an optimized electronics combination (high agility, precise control authority, durable under hard handling).\n\nEncrypted digital video with up to 35 km theoretical line-of-sight range (actual range depends on terrain, RF environment, antenna configuration, and spectrum conditions).\n\nTilt camera module enabling observation upward and downward, improving ISR utility and functional work (e.g., precise payload placement/release).\n\nOptional LED or IR illumination adjacent to the camera module.\n\nPayload release enabling multi-mission functional tasks; payload class: up to 0.5 kg.\n\nDesigned and manufactured in Sweden, with NDAA-aligned critical parts and a continuous transition path toward 100% EU/NATO sourcing. Designed for scalable mass production when required.\n\nArctic-capable and ruggedized for cold-weather operations; impact-tolerant build—in many collision cases the propeller is the primary consumable.\n\nModular, dismounted-first ecosystem: supports a flexible setup philosophy (batteries, controllers) and avoids heavy dependency on laptops, Pelican cases, and power-hungry ground stations.\n\nMission-proven use cases for dismounted operators.\n\nOperator-led FPV execution baseline with GPS pilot support.\n\nDeveloped to support total defence actors including:\n\nNote: Range and performance are mission-dependent. The stated 35 km link value is a theoretical line-of-sight figure; operational range varies with terrain, antenna configuration, spectrum conditions, and electromagnetic environment. Payload, wind, and temperature influence endurance and handling.",
+    "expect": [
+      {
+        "semantic": "payload.capacity",
+        "value": 0.5,
+        "unit": "kg"
+      }
+    ],
+    "expectNames": ["ADAM-01"]
+  },
+  {
+    "id": "ee23c26b-545b-4f94-a88f-a3fa0ec3f3ee",
+    "source": "Defence Industry Europe · https://defence-industry.eu/chaos-industries-unveils-vespid-counter-drone-interceptors-with-10-kilometer-range-and-annual-production-target-of-12000-units/",
+    "text": "CHAOS Industries unveils VESPID counter-drone interceptors with 10-kilometer range and annual production target of 12,000 units\n\nCHAOS Industries has unveiled VESPID, a family of autonomous counter-drone interceptors that it plans to manufacture at an initial rate of 12,000 a year. The Los Angeles-based company says the design can cut costs by up to 90% compared with conventional solid-rocket-motor and turbojet interceptors.\n\nThe family includes the man-portable Mk 0 and the faster, more maneuverable Mk 1 for multitube launchers. Both are designed to defend against Group 1–3 unmanned aircraft and one-way attack threats.\n\nVESPID uses an electric ducted fan and commercial off-the-shelf drone electronics. CHAOS says the interceptor weighs less than 12 pounds, launches in under five seconds and can engage targets up to 10 kilometers away in under 100 seconds.\n\nThrust vector control enables maneuvering against targets attempting to evade interception. The weapon destroys its target through direct impact rather than an explosive warhead.\n\n“The United States and its allies require more than expensive, exquisite systems that take years to develop and are produced in limited quantities,” said Dr. Bo Marr, co-founder and chief technology officer of CHAOS Industries. “We need effective interceptors that can be built quickly, fielded broadly, and employed at a cost that makes sense against threats arriving at scale.”\n\nCHAOS has not disclosed a unit price. Its manufacturing architecture is designed to support expansion to 50,000 interceptors annually as customer demand grows.\n\nDuring the midcourse phase, VESPID receives guidance from CHAOS radars or an external command-and-control system. A direct-to-radar datalink narrows the area the terminal seeker must search and, according to the company, improves resistance to jamming.\n\nThe interceptor then switches to a commercial long-wave infrared seeker with AI-enabled target acquisition and guidance. CHAOS says engagement requires no operator input after launch and does not depend on GPS.\n\nVESPID can integrate with existing sensors, command systems and launch platforms. Its connection to CHAOS’ NEXUS command-and-control system is intended to coordinate responses to drone swarms.\n\nThe family is interoperable with CHAOS’ multistatic radars, including VANQUISH PRIME systems. When paired with a CHAOS radar, the interceptor’s datalink signal also helps NEXUS distinguish it from hostile aircraft.\n\nThe Mk 0 can be assembled in under a minute without special tools. It launches vertically under electric fan power from the ground or a truck bed, with its battery and wings removed for transport.\n\nThe Mk 1 uses a tubular launcher with a pyrotechnic launch cartridge. CHAOS says a 10-round trainable launcher is available and gives an engagement velocity of 150 meters per second, or more than 300 miles per hour.\n\nA planned version would carry more than 100 interceptors in a 20-foot ISO container. That configuration is intended for integration with uncrewed ground or surface vehicles.\n\nCHAOS is relying on commercial components and simplified assembly to support high-volume production. The company’s stated aim is to give forces enough affordable interceptors to sustain protection against repeated drone attacks.\n\n“Affordability and the ability to rapidly replace capability are not secondary considerations,” Marr said. “They are operational advantages.”\n\nThe company announced VESPID on October 12 and scheduled the Mk 1’s first public display aboard a Forterra MESA vehicle at AUSA 2026 in Washington. Founded in 2022, CHAOS manufactures its systems in the United States and has raised $1 billion from investors including 8VC, Accel and Valor Equity Partners.",
+    "expect": [
+      {
+        "semantic": "altitude.target_max",
+        "value": 10,
+        "unit": "km"
+      }
+    ],
+    "expectNames": ["VESPID"]
+  },
+  {
+    "id": "466c445b-1540-41a6-8fda-654fb3519eb1",
+    "source": "Analyst paste",
+    "text": "https://sv.wikipedia.org/wiki/Giraffe_1X\n\nGiraffe 1X\n\nFrån Wikipedia\n\nGiraffe 1X är en 3D spaningsradar utvecklad av SAAB för upptäckt av luftmål.[1][2] Radarsystemet kan användas mobilt på ett fordon av pickup-storlek (väger under 300 kg), eller monterat på marken.[2] Systemet har en räckvidd på 75 km och antenntypen är AESA.[1] Radarsystemet kan följa mer än 100 mål samtidigt och identifiera vilken sorts mål det är.[1] Systemet har en varningsfunktion när radarn upptäcker inkommande artillerield, raketer eller projektiler från granatkastare.[1] Elkonsumtionen är 2,3 kW.[2] Radarsystemet är lämpligt i alla klimatzoner.[2]\n\nDen 20 september 2017 fick SAAB beställningar på radarsystemet från en okänd kund.[3][4]",
+    "expect": [
+      {
+        "semantic": "range.max",
+        "value": 75,
+        "unit": "km"
+      }
+    ],
+    "expectNames": ["Giraffe 1X"]
+  },
+  {
+    "id": "b9add82f-7e72-4b23-adf9-b6167436c3b0",
+    "source": "Naval News · https://www.navalnews.com/naval-news/2026/10/hd-hhi-launches-third-2400-ton-opv-brp-rajah-humabon-for-philippine-navy/",
+    "text": "HD HHI Launches Third 2,400-Ton OPV ‘BRP Rajah Humabon’ for Philippine Navy\n\nHD Hyundai Heavy Industries has launched BRP Rajah Humabon, the third of six 2,400-ton Offshore Patrol Vessels (OPVs) built for the Philippine Navy.\n\nHD Hyundai Heavy Industries press release\n\nMarking another milestone in a decade-long defense partnership, HD Hyundai Heavy Industries (HD HHI) launched the BRP Rajah Humabon, the third of six 2,400-ton Offshore Patrol Vessels (OPVs) built for the Philippine Navy, at its primary shipyard in Ulsan on Monday.\n\nThe ceremonial launching—HD HHI’s first export naval vessel launch of the year—was attended by prominent diplomatic and military leaders from both nations, including Vice Admiral Jose Ma. Ambrosio Ezpeleta, Flag Officer in Command of the Philippine Navy; Bernadette Therese Fernandez, Philippine Ambassador to South Korea; Lieutenant General Rommel P. Roldan, Vice Chief of Staff of the Armed Forces of the Philippines; and Won-ho Joo, President & Head of Naval & Medium Size Ships Business Unit at HD HHI.\n\nNamed after the 16th-century ruler of Cebu who played a pivotal role in early Philippine history, the Rajah Humabon is scheduled for official delivery in February 2027.\n\nAdvanced Maritime Capabilities\n\nDesigned to enhance maritime domain awareness and coastal defense capabilities across the Philippine archipelago, the state-of-the-art 2,400-ton vessel measures 94 meters in length and 14 meters in width. Capable of maintaining a cruising speed of 15 knots (approximately 28 km/h) with an impressive operational range of 5,500 nautical miles (10,186 km), the patrol ship is built for extended endurance at sea.\n\nThe vessel is equipped with advanced defense systems, including a 76mm main naval gun, a 30mm secondary gun, decoy launching systems, surveillance radar, and electro-optical tracking equipment.\n\nA Decade of Naval Partnership\n\nThe launch of the Rajah Humabon marks a decade of continuous naval cooperation between HD HHI and the Philippine Armed Forces. The relationship began in 2016 with a milestone contract for the Philippine Navy’s first modern frigates. Since then, HD HHI has secured orders for 12 naval vessels from the Philippines—comprising four frigates, two corvettes, and six OPVs—six of which have already been delivered.\n\nThe first vessel in this OPV class, the Rajah Sulayman, was delivered in February ahead of its scheduled deadline, while the second, the Rajah Lakandula, was commissioned into active service in June. The remaining three vessels (numbers 4 through 6) are scheduled for sequential delivery through 2028.\n\n“With the trust placed in us by the Philippines, we have established ourselves as a steadfast partner in the modernization of the Philippine Navy by delivering six vessels on time or ahead of schedule,” said Won-ho Joo, President & Head of Naval & Medium Size Ships Business Unit at HD HHI. “We will continue to fulfill our role as a strategic partner, ensuring stable operational support through maintenance, repair, and overhaul (MRO) services.”\n\nBeyond Ship Construction: MRO and Global Expansion\n\nThe collaboration between South Korea and the Philippines has evolved beyond shipbuilding into long-term sustainment. In November 2022, HD HHI established a dedicated Logistics Support Center at the Subic Naval Base in the Philippines, providing spare parts storage and technical training facilities to support the operational readiness of previously delivered frigates.\n\nHD HHI is leveraging its successful track record in the Philippines to expand its global naval enterprise, pursuing a strategy termed the “Pan-Pacific Belt.” This initiative focuses on establishing localized construction frameworks, standardized technology transfer packages, and strategic regional partnerships in key defense markets, including Peru, Saudi Arabia, and the United States.\n\nDemonstrating this global momentum, HD HHI recently launched the Chimbote, the Peruvian Navy’s new landing support ship, at the SIMA Shipyard in Peru.",
+    "expect": [
+      {
+        "semantic": "speed.cruise",
+        "value": 28,
+        "unit": "km/h"
+      },
+      {
+        "semantic": "speed",
+        "value": 15,
+        "unit": "kn"
+      },
+      {
+        "semantic": "range.max",
+        "value": 10186,
+        "unit": "km"
+      },
+      {
+        "semantic": "dimension.length",
+        "value": 14,
+        "unit": "m"
+      },
+      {
+        "semantic": "dimension.length",
+        "value": 94,
+        "unit": "m"
+      },
+      {
+        "semantic": "dimension.width",
+        "value": 14,
+        "unit": "m"
+      }
+    ],
+    "expectNames": ["AHEAD"]
+  },
+  {
+    "id": "f01c101c-11ed-436f-9209-e7bf65f6336e",
+    "source": "Analyst paste",
+    "text": "\nAttribute\tBERTIL-02\nPlatform class\t10\" Tactical FPV (34×34 cm frame)\nPrimary use\tHigh-agility close terrain, indoor/outdoor transitions\nPilot support\tGPS + Indoor Positioning\nIndoor positioning\tYes\nAutonomy software\tYes — QGroundControl\nFlight stack\tPX4\nControl option\tELRS-compatible commercial control station. Android phone/tablet or laptop\nDigital video\tEncrypted digital video\nLink range\tUp to 35 km theoretical LoS (conditions apply)\nCamera\tTilt camera (up/down viewing), LED or IR option\nFlight time\t45+ min\nPayload release\tYes\nPayload capacity\tUp to 2 kg\nRuggedization\tArctic-capable, impact-tolerant\nManufacturing\tDesigned & made in Sweden; NDAA-aligned critical parts; EU/NATO transition\nScalability\tDesigned for mass production\n",
+    "expect": [
+      {
+        "semantic": "range.max",
+        "value": 35,
+        "unit": "km"
+      },
+      {
+        "semantic": "payload.capacity",
+        "value": 2,
+        "unit": "kg"
+      }
+    ]
+  },
+  {
+    "id": "076c46f3-2a83-4aad-915b-b81303132493",
+    "source": "Militarnyi (UA RSS) · https://militarnyi.com/uk/news/190-rozviduvalnyh-sokil-sergiya-prytuly/?utm_source=rss&#038;utm_medium=rss&#038;utm_campaign=190-rozviduvalnyh-sokil-sergiya-prytuly",
+    "text": "Українські військові отримали 190 розвідувальних БпЛА Sokil від Фонду Сергія Притули\n\nВолонтери передали дев’яти підрозділам Сил оборони України 190 розвідувальних безпілотних літальних апаратів Sokil загальною вартістю 50,8 мільйона гривень.\n\nПро це «Мілітарному» повідомили у Благодійному фонді Сергія Притули.\n\nТехніку отримали 1-й корпус НГУ «Азов», 79-та, 80-та, 82-га та 95-та десантно-штурмові бригади, 3-й загін оперативного призначення, 421-й батальйон безпілотних систем, 132-й розвідувальний батальйон та 228-й батальйон матеріального забезпечення.\n\nЧерез високу потребу десантників у розвідувальних бортах фонд разом із мережею АЗК WOG запустив проєкт «WOGОНЬ ДОПОМОГИ. «Розвідники» для ДШВ», щоб зібрати 8,5 мільйона гривень на додаткову партію безпілотників Sokil.\n\nДрони призначені для роботи на оперативній і тактичній глибині. БпЛА запускаються з руки, а їхня навігація дає змогу вести розвідку та коригувати вогонь в умовах активної дії радіоелектронної боротьби без сигналу GPS.\n\nПередача військовим БпЛА Sokil. Жовтень 2026 року. Фото: Благодійний фонд Сергія Притули\n\nДрон розробки української компанії Vyriy Industries важить 8 кг та розгортається силами трьох осіб за 20 хвилин. Він розвиває крейсерську швидкість 75 км/год і має запас ходу до 130 км із тривалістю польоту до 2,5 годин.\n\nКамера з 10-кратним оптичним і 3-кратним цифровим зумом дозволяє виявляти техніку на відстані кількох кілометрів, а керування здійснюється в автоматичному, напівавтоматичному або ручному режимах.",
+    "expect": [
+      {
+        "semantic": "speed.cruise",
+        "value": 75,
+        "unit": "km/h"
+      },
+      {
+        "semantic": "weight.launch",
+        "value": 8,
+        "unit": "kg"
+      }
+    ],
+    "expectNames": ["Sokil"]
+  },
+  {
+    "id": "fc6b6154-baa6-401e-b52c-d6ea6466b999",
+    "source": "Defence Industry Europe · https://defence-industry.eu/new-zealand-orders-five-mh-60r-seahawk-helicopters-from-united-states-to-replace-seasprite-fleet-with-deliveries-from-2030/",
+    "text": "New Zealand orders five MH-60R Seahawk helicopters from United States to replace Seasprite fleet, with deliveries from 2030\n\nNew Zealand has signed an agreement with the United States to buy five MH-60R Seahawk maritime helicopters to replace its Kaman SH-2G Super Seasprite fleet. Deliveries will begin in 2030 under a project carrying NZ$1.648 billion in capital investment.\n\nThe Ministry of Defence announced the purchase on October 16 following approval of an intergovernmental Letter of Offer and Acceptance. The agreement includes weapons, spare parts, associated systems and supporting equipment.\n\nAverage annual operating funding will be NZ$110 million over the next 10 years. Funding has also been reserved for infrastructure design and temporary facilities at RNZAF Base Auckland in Whenuapai.\n\nThe Seahawks will support anti-surface and underwater warfare, search and rescue, and maritime counterterrorism operations. They will also transport personnel and supplies between ships and shore.\n\nThe ministry said the helicopters’ greater speed and ability to fly farther from ships would extend the surveillance range of New Zealand’s frigates. The aircraft will also strengthen the ships’ offensive and defensive capabilities and be interoperable with Australian and other partner defense forces.\n\nLockheed Martin subsidiary Sikorsky manufactures the MH-60R. The ministry lists its maximum speed at 333 kilometers per hour and its range at 963 kilometers.\n\nThe helicopter operates with a crew of three. In utility configuration, it can carry more than 1,500 kilograms of cargo.\n\nThe proposed weapons package included 225 APKWS-equipped 70 mm rockets and 65 AGM-114R Hellfire missiles, according to U.S. State Department information cited in the additional reporting. It also included five M240D machine guns and 20 Mk 54 Mod 0 lightweight anti-submarine torpedoes.\n\nThe ministry’s announcement confirmed the purchase of weapons but did not specify quantities. Its published specifications list Mk 54 torpedoes, Hellfire missiles, crew-served machine guns and APKWS among the MH-60R’s weapon systems.\n\nThe purchase makes New Zealand a new customer for the MH-60R program. Further investment decisions are expected to cover infrastructure, training systems and complementary uncrewed aerial systems.",
+    "expect": [
+      {
+        "semantic": "range.max",
+        "value": 963,
+        "unit": "km"
+      }
+    ],
+    "expectNames": ["MH-60R"]
+  },
+  {
+    "id": "4041feb6-6461-4df3-99f9-2e94801fed65",
+    "source": "Analyst paste",
+    "text": "https://krakentechnology.com/platforms/k3-scout\n\nPlatforms\n\nKraken deliver technically advanced littoral, surface, and subsurface capabilities in order to meet current and future operational demands.\n\nLength Overall8.4m\n\nBeam Overall1.93m\n\nDraft Overall0.8m\n\nMax Displacement2,500kg\n\nPowertrainInboard Diesel - Stern Drive\n\nMax Speed55kt\n\nRange650NM at 25kt\n\nEndurance30 days - mission dependent\n\nCrewAutonomous\n\nStructureComposite\n\nPayload600kg\n\nOperating DepthSurface\n\nA low signature and high performance Uncrewed Surface Vessel designed to support maritime operations. Modular in nature, K3 SCOUT is rapidly re-rolled to support a wide range of mission profiles including maritime awareness, force protection, logistics and precision strike.\n\nASuWMaritime Strike\n\nASuWMaritime forward screening\n\nLittoralInfiltration and Extraction\n\nLittoralForward force Support and Resupply\n\nLittoral Casualty Evacuation\n\nLittoralStrike\n\nC4ISRConduct Littoral C4ISR\n\nEffectsCEMA - EW Offensive and Defensive\n\nEffectsOff board Kinetic - Non-Kinetic effects\n\nEffectsC-UAS Detect and Defeat\n\nAttackTeamed multi-axis\n\nK3 SCOUT is designed for rapid deployment across diverse maritime environments. Automated launch and recovery systems support deployment from shore and sea-based assets and infrastructure.\n\nTransportability is baked into the platform. Air, land and maritime mobility is assured without complex preparation.\n\nDeployment is measured in speed and reliability. K3 SCOUT launches smoothly, establishing connectivity and transitioning into mission mode immediately and without operational friction. Reduced crew requirements and simplified logistics mean lower operational overhead.\n\nDEPLOY is ion and onboard processing support real-time awareness, while secure communications ensure actionable intelligence reaches commanders in near real-time. Human-on-the-loop oversight ensures accountability and control, while autonomous navigation systems manage route holding, collision avoidance and mission execution.\n\nOPERATE allows platforms to behave predictably under pressure, maintaining stability, responsiveness, and clarity of telemetry.\n\nVersatility defines K3 SCOUT’s modular architecture. Payload bays are engineered for rapid reconfiguration, allowing mission profiles to change in minutes rather than days.\n\nA wide range of specialist mission modules can be integrated on board, even when forward deployed and without structural redesign. Interfaces are standardised, mounting systems are robust and integration pathways are streamlined.\n\nADAPT ensures K3 SCOUT is rapidly re-roled in the face of emerging maritime challenges, protecting long-term investment and supporting evolving operational demands.\n\nK3 SCOUT is designed for scalable production and integration across the fleet. Engineering decisions prioritise manufacturability, repeatability and supply chain resilience.\n\nOne to many K3 SCOUT craft operate independently or as part of a distributed fleet, increasing mass at sea without proportional increases in crew exposure. Standardised components and modular systems simplify maintenance and sustainment.\n\nSCALE is not theoretical. It requires disciplined production processes and realistic cost structures to ensure end users receive value for money and multiply mission capability at sea.",
+    "expect": [
+      {
+        "semantic": "dimension.depth",
+        "value": 0.8,
+        "unit": "m"
+      },
+      {
+        "semantic": "payload.capacity",
+        "value": 600,
+        "unit": "kg"
+      },
+      {
+        "semantic": "dimension.length",
+        "value": 8.4,
+        "unit": "m"
+      }
+    ],
+    "expectNames": ["K3 SCOUT"]
+  },
+  {
+    "id": "148a384a-1991-4873-bae7-7c32db34416a",
+    "source": "Analyst paste",
+    "text": "https://www.swedendynamics.com/bertil-01.html\n\nBERTIL-01\n\nBERTIL-01 is a 10-inch tactical FPV platform designed to combine range, payload capacity, and robustness for functional missions and wide-area overwatch. Built for dismounted and light-vehicle teams requiring high-performance without heavy ground infrastructure.\n\nFront View\n\nTop View\n\nPerspective View\n\nUnique flight performance enabled by a special-developed carbon-fiber frame and optimized electronics combination — high agility, precise control authority, durable under hard handling.\n\nEncrypted digital video with up to 35 km theoretical line-of-sight range. Actual range depends on terrain, RF environment, antenna configuration, and spectrum conditions.\n\nTilt camera module enabling observation upward and downward, improving ISR utility and functional work (e.g., precise payload placement and release).\n\nOptional LED or IR illumination adjacent to the camera module for low-light and night operations.\n\nPayload release enabling multi-mission functional tasks; payload class up to 2 kg.\n\nDesigned and manufactured in Sweden, with NDAA-aligned critical parts and a continuous transition path toward 100% EU/NATO sourcing. Designed for scalable mass production when required.\n\nArctic-capable and ruggedized for cold-weather operations. Impact-tolerant build — in many collision cases the propeller is the primary consumable.\n\nModular, dismounted-first ecosystem: supports a flexible setup philosophy (batteries, controllers) and avoids heavy dependency on laptops, Pelican cases, and power-hungry ground stations.\n\nMission-proven use cases for dismounted operators and light-vehicle teams.\n\nOperator-led FPV execution baseline with GPS pilot support.\n\nDeveloped to support total defence actors across the full spectrum of operations.\n\nNote: Range and performance are mission-dependent. The stated 35 km link value is a theoretical line-of-sight figure; operational range varies with terrain, antenna configuration, spectrum conditions, and electromagnetic environment. Payload, wind, and temperature influence endurance and handling.",
+    "expect": [
+      {
+        "semantic": "payload.capacity",
+        "value": 2,
+        "unit": "kg"
+      }
+    ],
+    "expectNames": ["BERTIL-01"]
+  },
+  {
+    "id": "de1c8ce7-b182-4c7b-a87a-9e656b9bb78d",
+    "source": "Analyst paste",
+    "text": "Attribute\tADAM-02\nPlatform class\t5\" Tactical FPV (30×30 cm frame)\nPrimary use\tHigh-agility close terrain, indoor/outdoor transitions\nPilot support\tGPS + Indoor Positioning\nIndoor positioning\tYes\nAutonomy software\tYes, QGround\nFlight stack\tPX4\nControl option\tELRS-compatible commercial control station. Android phone/tablet or laptop\nDigital video\tEncrypted digital video\nLink range\tUp to 35 km theoretical LoS (conditions apply)\nCamera\tTilt camera (up/down viewing), LED or IR option\nFlight time\t25+ min\nPayload release\tYes\nPayload capacity\tUp to 0.5 kg\nRuggedization\tArctic-capable, impact-tolerant\nManufacturing\tDesigned & made in Sweden; NDAA-aligned critical parts; EU/NATO transition\nScalability\tDesigned for mass production\n",
+    "expect": [
+      {
+        "semantic": "range.max",
+        "value": 35,
+        "unit": "km"
+      },
+      {
+        "semantic": "payload.capacity",
+        "value": 0.5,
+        "unit": "kg"
+      }
+    ],
+    "expectNames": ["ADAM-02"]
+  },
+  {
+    "id": "176870d7-915b-49a6-86c8-c431ea7cbbd9",
+    "source": "Militarnyi (UA RSS) · https://militarnyi.com/uk/news/gretsiyi-vyprobuvaly-morski-drony-corsair/?utm_source=rss&#038;utm_medium=rss&#038;utm_campaign=gretsiyi-vyprobuvaly-morski-drony-corsair",
+    "text": "ВМС Греції випробували морські дрони Corsair, які США використовували проти Ірану\n\nВійськово-морські сили Греції випробовують американські морські дрони Corsair і подали запит на закупівлю щонайменше 30 таких комплексів.\n\nПро це повідомляє профільне видання Naval News з посиланням на заяви Міністерства оборони Греції.\n\nВипробування дронів розробки американської компанії Saronic відбулися в межах відкриття Навчального центру об’єднаних безпілотних та автономних морських систем на базі ВМС у Скарамангасі.\n\nМіністр оборони Греції Нікос Дендіас під час заходу заявив про прагнення країни стати європейським лідером у сфері розробки та застосування автономних платформ до 2030 року.\n\nУ ході маневрів щонайменше два катери Corsair успішно пройшли оцінювання та відпрацювали взаємодію з кількома бойовими кораблями грецького флоту.\n\nМБеК Corsair та грецький корабель забезпечення HS Aias. 13 жовтня 2026 року. Фото: МО Греції\n\nЯк носії для катерів під час випробувань залучалися кораблі забезпечення HS Perseas та HS Aias.\n\nПісля завершення тестувань грецький уряд надіслав офіційний запит до США щодо закупівлі цих систем у межах міжурядової програми Foreign Military Sales (FMS).\n\nМорські апарати Corsair уже перебувають на озброєнні Військово-морського флоту США та залучаються до бойових операцій на Близькому Сході.\n\nУ липні три катери Corsair завдали удару по об’єктах на території військово-морської бази в іранському порту Бандар-Аббас.\n\nYesterday, using multiple one-way attack surface drones, CENTCOM forces successfully struck a submarine and ship maintenance facility in Iran. Three Corsair unmanned surface vessels hit the port at Bandar Abbas Naval Base, marking the first time American forces have employed sea drones in combat operations. Last night’s strikes degraded Iran’s ability to continue attacking commercial shipping.\n\n— U.S. Central Command (@CENTCOM) July 13, 2026\n\nЦіллю атаки став іранський надмалий підводний човен класу Ghadir.\n\nCorsair є 7-метровим морським дроном із дальністю ходу понад 1000 морських миль і здатністю переносити корисне навантаження до 454 кг.\n\nМаксимальна швидкість судна становить понад 35 вузлів, а бортові системи штучного інтелекту дозволяють діяти у складі «рою» та виконувати завдання розвідки й ураження цілей.",
+    "expect": [
+      {
+        "semantic": "payload.capacity",
+        "value": 454,
+        "unit": "kg"
+      }
+    ],
+    "expectNames": ["Corsair"]
+  },
+  {
+    "id": "f5246c76-f0dc-4ed1-89f9-76f57cba3e15",
+    "source": "Analyst paste",
+    "text": "Attribute\tADAM-01\nPlatform class\t5\" Tactical FPV (30×30 cm frame)\nPrimary use\tHigh-agility close terrain / rapid verification\nPilot support\tGPS (outdoor)\nIndoor positioning\tNo\nAutonomy software\tNo (operator-led baseline)\nFlight stack\tBetaflight\nControl option\tELRS-compatible commercial control station.\nDigital video\tEncrypted digital video\nLink range\tUp to 35 km theoretical LoS (conditions apply)\nCamera\tTilt camera (up/down viewing), LED or IR option\nFlight time\t25+ min\nPayload release\tYes\nPayload capacity\tUp to 0.5 kg\nRuggedization\tArctic-capable, impact-tolerant\nManufacturing\tDesigned & made in Sweden; NDAA-aligned critical parts; EU/NATO transition\nScalability\tDesigned for mass production",
+    "expect": [
+      {
+        "semantic": "range.max",
+        "value": 35,
+        "unit": "km"
+      },
+      {
+        "semantic": "payload.capacity",
+        "value": 0.5,
+        "unit": "kg"
+      }
+    ],
+    "expectNames": ["ADAM-01"]
+  },
+  {
+    "id": "74584a87-4e2c-4041-ac0b-5543dc4ef5e2",
+    "source": "Analyst paste",
+    "text": "https://www.swedendynamics.com/bertil-02.html\n\nBERTIL-02\n\nBERTIL-02 is a 10-inch tactical FPV platform optimized for high-agility operations where rapid verification, target custody, and functional tasks must be executed by dismounted users with minimal setup friction. Adds indoor positioning and PX4-based autonomy architecture for seamless indoor/outdoor transitions — including GPS-denied environments.\n\nTop View\n\nSide View\n\nPerspective View\n\nUnique flight performance enabled by a special-developed carbon-fiber frame and optimized electronics combination — high agility, precise control authority, durable under hard handling.\n\nEncrypted digital video with up to 35 km theoretical line-of-sight range. Actual range depends on terrain, antenna configuration, and spectrum conditions.\n\nIndoor positioning + GPS: enables controlled, stable flight both indoors and outdoors — including GPS-denied environments.\n\nAutonomy software baseline: PX4 architecture with QGroundControl to facilitate autonomy-driven functions and mission planning.\n\nTilt camera module enabling observation upward and downward, improving ISR utility and functional work (e.g., precise payload placement and release).\n\nOptional LED or IR illumination adjacent to the camera module for low-light and night operations.\n\nPayload release enabling multi-mission functional tasks; payload class up to 2 kg.\n\nDesigned and manufactured in Sweden, with NDAA-aligned critical parts and a continuous transition path toward 100% EU/NATO sourcing. Designed for scalable mass production when required.\n\nArctic-capable and ruggedized for cold-weather operations. Impact-tolerant build — in many collision cases the propeller is the primary consumable.\n\nModular, dismounted-first ecosystem (BYOD philosophy): supports flexible battery and controller choices and avoids heavy dependency on laptops, Pelican cases, and power-hungry ground stations.\n\nDesigned for complex environments where GPS-dependent systems fail.\n\nPX4 baseline with indoor positioning enables full autonomy across GPS-denied spaces.\n\nDeveloped to support total defence actors across the full spectrum of operations.\n\nNote: Range and performance are mission-dependent. The stated 35 km link value is a theoretical line-of-sight figure; operational range varies with terrain, antenna configuration, spectrum conditions, and electromagnetic environment. Payload, wind, and temperature influence endurance and handling.",
+    "expect": [
+      {
+        "semantic": "payload.capacity",
+        "value": 2,
+        "unit": "kg"
+      }
+    ],
+    "expectNames": ["BERTIL-02"]
+  },
+  {
+    "id": "63708a1f-f63a-4a86-8492-6e685cbe6e8b",
+    "source": "Analyst paste",
+    "text": "https://www.janes.com/defence-intelligence-insights/defence-news/air/azerbaijan-displays-hero-120-loitering-munition\n\nAzerbaijan displays Hero-120 loitering munition\n\nNews\n\nThe Hero-120SF loitering munition and probable Spike SR were displayed with a launcher for the longer-range versions of the Spike family and Russian Konkurs and Kornet anti-tank guided missile systems. (Ministry of Defence of the Republic of Azerbaijan)\n\nAzerbaijan's Ministry of Defence (MoD) revealed that it has acquired the Israeli-made Uvision Hero-120 loitering munition on 8 October, when it released a photograph of one at a location it identified as a base were special forces recruits were being trained.\n\nThe photograph showed the loitering munition displayed next to an information board identifying it as the Hero-120SF variant.\n\nThe Hero-120 is an electrically powered weapon that unfolds two sets of cruciform wings after it is launched from a tube that can be carried by a soldier or mounted on a vehicle. The weapon has a gimbaled camera that the operator can use to identify and attack a target. Uvision says it weighs 24 kg with a 4.5 kg warhead, has a range of up to 60 km, and an endurance of up to 60 minutes.\n\nWhen Uvision announced in June 2024 that it and its US partner Mistral Inc had secured a USD73.5 million contract to supply an unspecified number of Hero-120SFs to US Special Operations Command (SOCOM), it said this version “includes enhancements such as improved payload capacity, advanced guidance systems, and increased flexibility for deployment from various platforms”.\n\nThat corresponded with a US Department of Defense announcement on 17 May 2024 that a contract worth the same amount had been awarded to Mistral to supply SOCOM with GOLAM II munitions, a reference to the Ground Organic Loitering Aerial Munition.\n\nGet full access to validated equipment, military capabilities, and market insights.",
+    "expect": [
+      {
+        "semantic": "range.max",
+        "value": 60,
+        "unit": "km"
+      },
+      {
+        "semantic": "endurance.flight",
+        "value": 60,
+        "unit": "min"
+      },
+      {
+        "semantic": "weight.launch",
+        "value": 24,
+        "unit": "kg"
+      },
+      {
+        "semantic": "payload.warhead",
+        "value": 4.5,
+        "unit": "kg"
+      }
+    ],
+    "expectNames": ["Uvision Hero-120"]
+  },
+  {
+    "id": "73e7bc15-ee33-40f3-9a85-fef4f32543ec",
+    "source": "Militarnyi (UA RSS) · https://militarnyi.com/uk/news/nodrics-rozrobyla-amfibijnyj-nrk-mat1lda/?utm_source=rss&#038;utm_medium=rss&#038;utm_campaign=nodrics-rozrobyla-amfibijnyj-nrk-mat1lda",
+    "text": "Українська NODRICS розробила амфібійний НРК MAT1LDA\n\nУкраїнська компанія NODRICS розробила логістичний амфібійний НРК MAT1LDA, що входить до екосистеми наземних роботизованих комплексів TENCORE ECOSYSTEM.\n\nПро це повідомила компанія TENCORE.\n\nРух наземного дрона забезпечує бензиновий двигун внутрішнього згоряння. Платформа має колісну формулу 8×8 та бічні понтони й здатна долати водні перешкоди, заболочену місцевість і складний рельєф без попередньої підготовки.\n\nЗа заявленими характеристиками, НРК MAT1LDA здатний перевозити до 500 кг корисного навантаження на суші та до 400 кг на плаву. Запас ходу становить до 160 км на суші та до 50 км на воді.\n\nАмфібійний НРК MAT1LDA у воді. Стоп-кадр з відео TENCORE\n\nВідкрита рама дрона дає змогу швидко змінювати оснащення залежно від завдань — встановлювати вантажні контейнери або евакуаційні ноші.\n\nMAT1LDA входить до TENCORE ECOSYSTEM — екосистеми наземних роботизованих комплексів, яка об’єднує чотири класи платформ для військових і цивільних завдань.\n\nУ компанії TENCORE її називають першою в Україні цілісною екосистемою такого типу. Вона має охоплювати широкий спектр завдань — від логістики, евакуації та вогневої підтримки до подолання водних перешкод і пожежно-рятувальних робіт.\n\nЗа задумом розробників, об’єднання різних платформ в одну систему має спростити їхнє застосування, обслуговування та інтеграцію додаткового обладнання.\n\nНРК від TENCORE (по годинниковій стрілці): TerMIT, 4×4 TOR, 8×8 MAT1LDA, TRAX. Колаж: Мілітарний\n\nОкремим елементом нової екосистеми має стати уніфіковане додаткове обладнання. Одним із перших таких рішень є AI KIT — програмно-апаратний модуль, який дає змогу наземному комплексу продовжувати рух за маршрутом або повертатися після втрати зв’язку з оператором.",
+    "expect": [
+      {
+        "semantic": "payload.capacity",
+        "value": 400,
+        "unit": "kg"
+      }
+    ],
+    "expectNames": ["MAT1LDA"]
+  },
+  {
+    "id": "fe49cf07-66b3-417c-9a1f-6aed7d0b0c6d",
+    "source": "Analyst paste",
+    "text": "https://www.swedendynamics.com/adam-02.html\n\nADAM-02\n\nADAM-02 is a 5-inch tactical FPV platform optimized for high-agility operations in tight terrain where rapid verification, target custody, and functional tasks must be executed by dismounted users with minimal setup friction. Adds indoor positioning and PX4-based autonomy architecture for seamless indoor/outdoor transitions — including GPS-denied spaces.\n\nTop View\n\nFront View\n\nSide View\n\nUnique flight performance enabled by a special-developed carbon-fiber frame and an optimized electronics combination\n\nEncrypted digital video with up to 35 km theoretical line-of-sight range (actual range depends on terrain, antenna configuration etc).\n\nIndoor positioning + GPS: enables controlled flight indoors and outdoors.\n\nAutonomy software baseline: QGround to facilitate autonomy-driven functions.\n\nTilt camera module enabling observation upward and downward, improving ISR utility and functional work (e.g., precise payload placement/release).\n\nOptional LED or IR illumination adjacent to the camera module.\n\nPayload release enabling multi-mission functional tasks; payload class: up to 0.5 kg.\n\nDesigned and manufactured in Sweden, with NDAA-aligned critical parts and a continuous transition path toward 100% EU/NATO sourcing. Designed for scalable mass production when required.\n\nArctic-capable and ruggedized for cold-weather operations; impact-tolerant build—in many collision cases the propeller is the primary consumable.\n\nModular, dismounted-first ecosystem: supports a flexible BYOD setup philosophy (batteries, controllers) and avoids heavy dependency on laptops, Pelican cases, and power-hungry ground stations.\n\nDesigned for complex environments where indoor/outdoor transitions matter.\n\nPX4 baseline with indoor positioning enables autonomy-enabled workflows.\n\nDeveloped to support total defence actors including:\n\nNote: Range and performance are mission-dependent. The stated 35 km link value is a theoretical line-of-sight figure; operational range varies with terrain, antenna configuration, spectrum conditions, and electromagnetic environment. Payload, wind, and temperature influence endurance and handling.",
+    "expect": [
+      {
+        "semantic": "payload.capacity",
+        "value": 0.5,
+        "unit": "kg"
+      }
+    ],
+    "expectNames": ["ADAM-02"]
+  },
+  {
+    "id": "d59415cc-fc94-4ac2-b233-198a53348442",
+    "source": "Analyst paste",
+    "text": "https://www.janes.com/defence-intelligence-insights/defence-news/air/ideaforge-launches-hybrid-and-ucav-variants-of-zolt-uav\n\nideaForge launches hybrid and UCAV variants of Zolt UAV\n\nNews\n\nideaForge's Zolt UAV. (ideaForge)\n\nMumbai-based unmanned aerial vehicle (UAV) firm ideaForge has launched two new variants of its Zolt vertical take-off and landing (VTOL) intelligence, surveillance and reconnaissance (ISR) UAV, which is in service with the Indian Army.\n\nideaForge announced on 6 October that it had developed a hybrid and unmanned combat aerial vehicle (UCAV) variants of Zolt to support longer range ISR and combat missions, respectively.\n\nAccording to the company, the baseline Zolt and Zolt UCAV are battery-powered, while Zolt Hybrid combines an internal combustion engine with battery power.\n\nideaForge's CEO and co-founder Ankit Mehta told Janes in September that the company has secured multiple Indian Army contracts for Zolt UAVs, including an INR750 million (USD7.7 million) order announced in November 2025.\n\nAlthough Mehta said deliveries have commenced, it remains unclear which Zolt variants are being supplied under these contracts.\n\nAccording to company specifications, Zolt has an endurance of more than three hours, a line of sight (LOS) transmission range of up to 50 km, and a maximum operating altitude of 3,500 m above mean sea level (AMSL).\n\nZolt Hybrid, which is designed for persistent ISR missions, has an endurance of more than six hours, a LOS transmission range of up to 100 km, and a maximum operating altitude of 4,000 m AMSL.\n\nA company spokesperson told Janes on 7 October that Zolt Hybrid was developed in response to “evolving customer needs and structural industry gaps”. The spokesperson added that the platform incorporates lessons from recent conflicts to enhance operational resilience.\n\nThe company said it plans to launch a high-altitude variant of Zolt Hybrid “soon”. The new version is expected to support take-offs at altitudes of up to 4,000 m AMSL.\n\nGet full access to validated equipment, military capabilities, and market insights.",
+    "expect": [
+      {
+        "semantic": "range.max",
+        "value": 50,
+        "unit": "km"
+      }
+    ],
+    "expectNames": ["Zolt"]
+  },
+  {
+    "id": "db4d43f1-0398-4cf1-8fa6-23ab5b60561c",
+    "source": "Militarnyi (UA RSS) · https://militarnyi.com/uk/news/atakuvala-sochi-brytanskymy-dronamy-k3scout/?utm_source=rss&#038;utm_medium=rss&#038;utm_campaign=atakuvala-sochi-brytanskymy-dronamy-k3scout",
+    "text": "Україна атакувала російське судно в порту Сочі британськими морськими дронами K3 Scout — The Times\n\nУкраїна використала британські безекіпажні надводні катери K3 Scout під час атаки на російське судно в порту Сочі.\n\nПро це повідомляє видання The Times із посиланням на джерела в оборонній промисловості.\n\nЗа даними видання, 3 вересня щонайменше два безекіпажні апарати увійшли до порту Сочі та атакували російське судно Nefrit.\n\nОдин із дронів подолав оборонний периметр і пошкодив лівий борт судна. Другий не дістався цілі та вибухнув.\n\nЗа даними The Times, для атаки використали катери K3 Scout виробництва британської компанії Kraken Technology.\n\nГалузеві джерела підтвердили The Times, що компанія поставила ці апарати для використання щонайменше під час одного бойового удару по російському судну.\n\nМорський безпілотник, помічений очевидцями під час удару в Сочі, 3 вересня 2026 року. Кадр з відео ЗМІ РФ\n\nK3 Scout — це безекіпажний надводний катер завдовжки близько 8,5 метра.\n\nМаксимальна швидкість апарата становить приблизно 55 вузлів, або 102 км/год, а корисне навантаження може сягати 600 кг. Такі характеристики дають змогу використовувати його для ударних місій.\n\nКрім того, катер можна обладнати для транспортування FPV-дронів.\n\nЗаявлена дальність ходу K3 Scout становить близько 650 морських миль, або 1200 км. Цього показника достатньо для подолання відстані від Одеси до Сочі.\n\nВодночас компанія випробовує й альтернативні способи доставки катерів до віддалених районів.\n\nДесантування K3 SCOUT з борту A400M. Джерело: Kraken.\n\nНа початку року під час випробувань біля узбережжя Великої Британії Королівський військово-морський флот і Королівські Повітряні сили відпрацьовували десантування K3 Scout із вантажного літака.\n\nКатер скидали на парашуті у відкрите море, звідки він міг вирушати до визначеного району. За даними британського флоту, апарат успішно витримав чотири послідовні скидання.\n\nЩе однією особливістю K3 Scout є можливість встановлення тривимірної радіолокаційної станції для виявлення повітряних і надводних цілей.\n\nДля невеликих безекіпажних катерів таке обладнання є нетиповим.\n\nБезекіпажний катер K3 SCOUT з радаром Giraffe 1X. 2026 рік. Фото: Saab\n\nРадар призначений, зокрема, для виявлення малорозмірних повітряних об’єктів на великих відстанях і може використовуватися для раннього попередження.\n\nКомпанія Kraken Technology швидко нарощує виробничі можливості. На початку року вона залучила 175 млн доларів інвестицій. Підприємство у Фарегемі має площу близько 3250 квадратних метрів, а компанія планує вийти на виробництво до 1000 катерів на рік.",
+    "expect": [
+      {
+        "semantic": "payload.capacity",
+        "value": 600,
+        "unit": "kg"
+      }
+    ],
+    "expectNames": ["K3 SCOUT"]
+  },
+  {
+    "id": "f3bd923f-c160-44d1-9ee2-a3971a400d18",
+    "source": "Militarnyi (UA RSS) · https://militarnyi.com/uk/news/drony-kamikadze-klyn-urazyly-vyrobnytstvo/?utm_source=rss&#038;utm_medium=rss&#038;utm_campaign=drony-kamikadze-klyn-urazyly-vyrobnytstvo",
+    "text": "На Ростовщині уразили підприємство, яке виготовляє дрони камікадзе «Клин»\n\nСили оборони уразили виробничо-складську будівлю підприємства «Робоавиа», яке виготовляє дрони камікадзе «Клин» оснащені ШІ, поблизу населеного пункту хутор Леніна Ростовської області РФ.\n\nПро це повідомила пресслужба Генерального штабу Збройних Сил України.\n\nЗа інформацією відомства, унаслідок удару 16 жовтня пошкоджень зазнала інфраструктура підприємства. Компанія також виготовляє розвідувальні безпілотники «Сарыч-2» та квадрокоптери «Сюрприз».\n\nЗа інформацією «Центру журналістських розслідувань», компанія наразі має чотири виробничі та одну навчальну локацію в окупованому Криму й Росії. За інформацією розслідувачів, у 2023–2025 роках дохід ТОВ «Робоавиа» зріс із 450 млн до 1,7 млрд рублів, а чистий прибуток за 2025 рік збільшився вп’ятеро.\n\nУ 2015 році компанія розпочала роботу на базі авіаклубу на вул. Данилова, 62А в окупованому Сімферополі й продовжує працювати там донині. За цією адресою в базах даних значаться відділ програмного забезпечення та служба безпеки сімферопольського підрозділу ТОВ «Робоавиа».\n\nДруга сімферопольська виробнича локація «Робоавиа» розміщена за адресою: вулиця Крилова, 133. За даними ЦЖР, у приміщеннях колишньої швейної фабрики УТОГ розташовані цех полімерних і композитних виробів та кілька дільниць: механічної обробки, електроніки, збирання й комплектації літальних апаратів, їхнього налаштування та випробування, цільових навантажень.\n\nУ грудні 2023 року компанія «Робоавиа» змінила юридичну адресу із Сімферополя на Ростовську область, Аксайський район, хутір Леніна, вул. Степова, будівля 1, споруда 1. У 2024 році повідомлялось, що компанія інвестує понад 752 млн рублів (близько 8 млн доларів за середнім курсом 2024 року) у створення виробництва БпЛА в Аксайському районі Ростовської області.\n\nЗа даними з відкритих джерел, у виробничих спорудах на хуторі Леніна можуть працювати близько 40 співробітників. До штату цього підрозділу входять генеральний директор компанії, його заступник із безпеки, головні та провідні інженери, технологи, електроніки й енергетики.\n\nНайбільший виробничий підрозділ «Робоавиа» розміщений у Ростові-на-Дону, на вул. Червоноармійській, 9. За цією адресою ще з 1960-х років діє оборонно-космічне підприємство, наразі відоме під назвою АТ «Виробничо-конструкторське підприємство «ИРИС»», що підпорядковане Роскосмосу.\n\n«Сарыч-2» — розвідувальний безпілотник компанії «Робоавиа», призначений для повітряного спостереження та виявлення цілей. Апарат виконаний за схемою «літаюче крило» й оснащений електродвигуном. За повідомленнями 2023 року, він пройшов апробацію на Чорноморському флоті РФ. Заявлена злітна маса безпілотника становить 14 кг, розмах крила — 3,1 м. Максимальна висота польоту сягає 5 км, а швидкість — 108 км/год.\n\nДрони камікадзе «Клин», призначені для пошуку та ураження наземних цілей. Заявлено, що він здатний автономно виявляти й атакувати цілі за допомогою ШІ, має тактичний радіус до 120 км за наявності ретранслятора та тривалість польоту близько 80 хвилин. Злітна маса апарата становить 13,5 кг, із них маса бойової частини — 5 кг. Довжина фюзеляжу — 1,6 м, розмах крил — 1,9 м, заявлена швидкість польоту — 108–300 км/год, максимальна висота — 2 км.\n\n«Сюрприз» — ударний квадрокоптер компанії «Робоавиа», який розробили для Сухопутних військ РФ. Він призначений для ураження наземних цілей скиданням боєприпасів. Конструкція складається, що дозволяє переносити апарат у рюкзаку. Заявлено, що маса квадрокоптера становить 24 кг, а максимальне корисне навантаження — 7 кг. Як варіант озброєння заявлені дві 82-мм мінометні міни.",
+    "expect": [
+      {
+        "semantic": "endurance.flight",
+        "value": 80,
+        "unit": "min"
+      },
+      {
+        "semantic": "altitude.max",
+        "value": 2,
+        "unit": "km"
+      },
+      {
+        "semantic": "dimension.wingspan",
+        "value": 1.9,
+        "unit": "m"
+      },
+      {
+        "semantic": "weight.launch",
+        "value": 13.5,
+        "unit": "kg"
+      },
+      {
+        "semantic": "dimension.length",
+        "value": 1.6,
+        "unit": "m"
+      }
+    ],
+    "expectNames": ["Клин"]
+  },
+  {
+    "id": "119f5b82-8fb2-42c8-903c-62569b33ad58",
+    "source": "Kyiv Post · https://www.kyivpost.com/post/87379",
+    "text": "Zelensky: Starlink Capped at 161 km/h, Disabling Interceptors. President Volodymyr Zelensky has announced that Starlink operations in Ukraine are subjected to an artificial speed limit of 161 km/h, causing terminals to shut down and crash interceptor drones targeting Russian jet-powered Shahed munitions. Zelensky revealed that cross-border tests showed the system functioning at 180 km/h in EU countries, characterizing the restriction as a deliberate operation. Zelensky noted that SpaceX has avoided direct  President Donald Trump.",
+    "expect": [
+      {
+        "semantic": "speed.cruise",
+        "value": 161,
+        "unit": "km/h"
+      }
+    ],
+    "expectNames": ["Shahed"]
+  },
+  {
+    "id": "9343aa98-e924-48b0-a44a-7bece0862bb8",
+    "source": "Analyst paste",
+    "text": "https://www.janes.com/defence-intelligence-insights/defence-news/air/ideaforge-launches-hybrid-and-ucav-variants-of-zolt-uav\n\nideaForge launches hybrid and UCAV variants of Zolt UAV\n\nNews\n\nideaForge's Zolt UAV. (ideaForge)\n\nMumbai-based unmanned aerial vehicle (UAV) firm ideaForge has launched two new variants of its Zolt vertical take-off and landing (VTOL) intelligence, surveillance and reconnaissance (ISR) UAV, which is in service with the Indian Army.\n\nideaForge announced on 6 October that it had developed a hybrid and unmanned combat aerial vehicle (UCAV) variants of Zolt to support longer range ISR and combat missions, respectively.\n\nAccording to the company, the baseline Zolt and Zolt UCAV are battery-powered, while Zolt Hybrid combines an internal combustion engine with battery power.\n\nideaForge's CEO and co-founder Ankit Mehta told Janes in September that the company has secured multiple Indian Army contracts for Zolt UAVs, including an INR750 million (USD7.7 million) order announced in November 2025.\n\nAlthough Mehta said deliveries have commenced, it remains unclear which Zolt variants are being supplied under these contracts.\n\nAccording to company specifications, Zolt has an endurance of more than three hours, a line of sight (LOS) transmission range of up to 50 km, and a maximum operating altitude of 3,500 m above mean sea level (AMSL).\n\nZolt Hybrid, which is designed for persistent ISR missions, has an endurance of more than six hours, a LOS transmission range of up to 100 km, and a maximum operating altitude of 4,000 m AMSL.\n\nA company spokesperson told Janes on 7 October that Zolt Hybrid was developed in response to “evolving customer needs and structural industry gaps”. The spokesperson added that the platform incorporates lessons from recent conflicts to enhance operational resilience.\n\nThe company said it plans to launch a high-altitude variant of Zolt Hybrid “soon”. The new version is expected to support take-offs at altitudes of up to 4,000 m AMSL.\n\nGet full access to validated equipment, military capabilities, and market insights.",
+    "expect": [
+      {
+        "semantic": "range.max",
+        "value": 100,
+        "unit": "km"
+      }
+    ],
+    "expectNames": ["Zolt Hybrid"]
+  },
+  {
+    "id": "82fe61e2-3ec1-4f4e-a9d1-497612ba5e4d",
+    "source": "Militarnyi (UA RSS) · https://militarnyi.com/uk/news/u-kanadi-vyroblyatymut-nrk-termit/?utm_source=rss&#038;utm_medium=rss&#038;utm_campaign=u-kanadi-vyroblyatymut-nrk-termit",
+    "text": "У Канаді вироблятимуть НРК TerMIT для України та країн НАТО\n\nУкраїнська компанія TENCORE та канадська Dominion Dynamics запустять виробництво НРК TerMIT у Канаді для потреб України та партнерів НАТО.\n\nПро це у компанії TENCORE розповіли Мілітарному.\n\nУ межах міжнародної оборонної виставки AUSA 2026 українська компанія TENCORE та канадська Dominion Dynamics підписали меморандум про взаєморозуміння.\n\nПартнерство української та канадської компанії, окрім локалізації, передбачає також інтеграцію канадської системи автономного керування та навігації AuraNet.\n\nУ межах партнерства TENCORE забезпечить трансфер технологій та навчання канадських фахівців для виходу на серійне виробництво.\n\nЗі свого боку, Dominion Dynamics інтегрує власний софтверно-апаратний комплекс командного керування та автономії AuraNet, а також розробить спеціалізовану модифікацію TerMIT для роботи в екстремальних арктичних умовах.\n\nПередача НРК TerMIT Фото: Tencore\n\nВипуск перших серійних зразків канадського виробництва заплановано на 2027 рік.\n\n«Партнерство з Канадою дає нам масштабовану виробничу базу, стійкі ланцюги постачання та надійну енергосистему, щоб запускати цей цикл разом із союзниками, яким потрібні перевірені рішення», — зазначає співзасновник TENCORE Роман Ткаченко.\n\nБазова версія НРК НРК TerMIT створена для транспортування вантажів із запасом ходу до 40 км, швидкістю до 15 км/год та балістичним захистом для стабільної роботи під час логістичних місій.\n\nТакож є версії TerMIT з бойовим модулем «Хижак» виробництва UGV Robotics.\n\nУ червні стало відомо, що також у Німеччині вироблятимуть НРК для України на спільному підприємстві Quantum Systems і Tencore.",
+    "expect": [
+      {
+        "semantic": "speed.cruise",
+        "value": 15,
+        "unit": "km/h"
+      }
+    ],
+    "expectNames": ["TerMIT"]
+  },
+  {
+    "id": "4d3a9286-50eb-4c26-8bdf-2483cfc1d64a",
+    "source": "Analyst paste",
+    "text": "Attribute\tBERTIL-01\nPlatform class\t10\" Tactical FPV (34×34 cm frame)\nPrimary use\tHigh-agility + range + payload + overwatch\nPilot support\tGPS (outdoor)\nIndoor positioning\tNo\nAutonomy software\tNo — operator-led baseline\nFlight stack\tBetaflight\nControl option\tELRS-compatible commercial control station\nDigital video\tEncrypted digital video\nLink range\tUp to 35 km theoretical LoS (conditions apply)\nCamera\tTilt camera (up/down viewing), LED or IR option\nFlight time\t45+ min\nPayload release\tYes\nPayload capacity\tUp to 2 kg\nRuggedization\tArctic-capable, impact-tolerant\nManufacturing\tDesigned & made in Sweden; NDAA-aligned critical parts; EU/NATO transition\nScalability\tDesigned for mass production\n",
+    "expect": [
+      {
+        "semantic": "range.max",
+        "value": 35,
+        "unit": "km"
+      },
+      {
+        "semantic": "payload.capacity",
+        "value": 2,
+        "unit": "kg"
+      }
+    ],
+    "expectNames": ["BERTIL-01"]
+  },
+  {
+    "id": "a9536797-a4e9-4013-884c-468ad3fb5a9b",
+    "source": "Analyst paste",
+    "text": "https://www.janes.com/defence-intelligence-insights/defence-news/air/ideal-aerosmith-unveils-troublemaker-attack-drone\n\nIdeal Aerosmith unveils Troublemaker attack drone\n\nNews\n\nAn artistic impression of Ideal Aerosmith's Troublemaker long-range, attritable UAV (Ideal Aerosmith)\n\nIdeal Aerosmith announced its Troublemaker Group 3 unmanned aircraft system (UAS) in a statement on 8 October. The system is intended for one-way attack, intelligence, surveillance, and reconnaissance (ISR) and electronic warfare (EW), and teaming and decoy operations, according to a factsheet provided to Janes .\n\nThe company established its Government Systems division 2.5 years ago to pursue defence contracts, Dave Markert, senior vice-president and general manager of Ideal Aerosmith Government Systems, told Janes on 8 October.\n\nThe division started with a US Navy sponsorship and funding, taking Troublemaker from contract award to first flight in four months and 10 days, he said.\n\nTroublemaker has a maximum take-off weight of 110 lb (50 kg), payload of 30 lb (13.6 kg), wingspan of 15.19 ft (4.6 m), fuselage length of 6.95 ft (2.1 m), and is powered by a 6-hp internal combustion engine, the factsheet said.\n\nIt can be equipped with EMB5 radios or Starlink satellite communications. Unit cost is estimated at less than USD150,000 at scale production, the factsheet noted.\n\nThe aircraft has a “long, slim main fuselage, it's about a foot wide, high-mounted [wing], high-aspect wing ratio”, Shane Brady, vice-president of advanced programs for Ideal Aerosmith, told Janes during the same interview, noting that it is built for endurance.\n\nGet full access to validated equipment, military capabilities, and market insights.",
+    "expect": [
+      {
+        "semantic": "dimension.length",
+        "value": 4.6,
+        "unit": "m"
+      }
+    ],
+    "expectNames": ["Troublemaker"]
+  },
+  {
+    "id": "2fd5e8f1-4e33-4cdd-b03e-170641832e16",
+    "source": "Militarnyi (UA RSS) · https://militarnyi.com/uk/news/edrone-dlya-rozvidky-stvoryla-drakon/?utm_source=rss&#038;utm_medium=rss&#038;utm_campaign=edrone-dlya-rozvidky-stvoryla-drakon",
+    "text": "EDRONE розробила БпАК DRAKON із власною системою переналаштування частоти\n\nУкраїнська компанія EDRONE розробила новий безпілотний комплекс DRAKON, призначений для розвідувально-спостережних завдань.\n\nУ компанії розповіли, що однією з особливостей DRAKON є власна система псевдовипадкового переналаштування робочої частоти.\n\nЦе дає змогу безпілотнику виконувати завдання в умовах застосування засобів радіоелектронної боротьби (РЕБ).\n\nМаксимальна тривалість польоту DRAKON становить до 50 хвилин. Крейсерська швидкість — 70 км/год, а максимальна — до 100 км/год.\n\nЗаявлена максимальна робоча висота становить 300 метрів.\n\nБезпілотний авіаційний комплекс DRAKON. Фото: компанія EDRONE\n\nГарантована дальність зв’язку з безпілотником сягає 10 км.\n\nВодночас заявлена максимальна дистанція польоту становить не менше ніж 20 км.\n\nDRAKON оснащений камерою SIYI ZR-10 із 10-кратним оптичним збільшенням.\n\nКамера встановлена на триосьовому підвісі, який забезпечує стабілізацію зображення під час польоту та спостереження за об’єктами.\n\nБезпілотний авіаційний комплекс DRAKON. Фото: компанія EDRONE\n\nКорисне навантаження безпілотника становить до 0,5 кг. Апарат може працювати за швидкості вітру до 12 м/с.\n\nКонструкція передбачає карбонову раму, посилену алюмінієвими вузлами.\n\nРаніше EDRONE налагодила виробництво власних компонентів для безпілотників, зокрема рам, моторів, пропелерів та електроніки.",
+    "expect": [
+      {
+        "semantic": "speed.cruise",
+        "value": 70,
+        "unit": "km/h"
+      },
+      {
+        "semantic": "speed.cruise",
+        "value": 100,
+        "unit": "km/h"
+      },
+      {
+        "semantic": "endurance.flight",
+        "value": 50,
+        "unit": "min"
+      },
+      {
+        "semantic": "dimension.height",
+        "value": 300,
+        "unit": "m"
+      }
+    ],
+    "expectNames": ["DRAKON"]
+  },
+  {
+    "id": "6658c60a-6b49-4b94-b196-cebeddc05133",
+    "source": "Militarnyi (UA RSS) · https://militarnyi.com/uk/news/starlink-obmezhyv-perehoplennya-geran/?utm_source=rss&#038;utm_medium=rss&#038;utm_campaign=starlink-obmezhyv-perehoplennya-geran",
+    "text": "Зв’язок зникає після 161 км/год: Starlink обмежив перехоплення «Герань-4», «Герань-5» і «Бандероль» реактивними дронами-перехоплювачами\n\nОбмеження швидкості роботи Starlink на території України зберігаються — це перешкоджає використанню супутникових терміналів у дронах-перехоплювачах реактивних «Шахедів».\n\nПро це президент України Володимир Зеленський повідомив в аудіоповідомленні журналістам.\n\nЗа словами президента, Україна веде діалог щодо роботи Starlink і Starshield на рівні військових, Міністерства оборони та дипломатів. Українська сторона намагається зв’язатися з усіма причетними, зокрема з компанією SpaceX. Однак наразі компанія не відповідає українським військовим і Міністерству оборони, тоді як на різних рівнях американці пояснюють ситуацію «технічними проблемами».\n\nПрезидент наголосив, що проблеми виникають лише на території України: після перевищення швидкості 161 км/год приблизно на другій хвилині зв’язок повністю зникає, що призводить до втрати дронів. Водночас у країнах Європейського Союзу цих проблем немає, що українська сторона вже перевірила.\n\n«Ми відправили пару машин на території країн Європейського Союзу зі Starlink, і вони їхали зі швидкістю, там, де це можна, зі швидкістю 180 км/год плюс, і Starlink працює. У нас є відповідні фіксації, є відповідні докази. Висновок наступний: обмеження діють на території України, і обмеження не діють на території країн Європейського Союзу. Тобто це спланована операція», — наголосив він.\n\nТакі обмеження унеможливлюють застосування оснащених Starlink дронів-перехоплювачів проти реактивних «Шахедів» та інших швидкісних безпілотників. Тому для протидії цим загрозам Сили оборони вимушені продовжувати використовувати авіацію, ракети та інші засоби ППО.\n\nЗагалом, за словами президента, українська авіація збиває близько 55–60% реактивних «Шахедів». Водночас це створює значне навантаження на українські винищувачі, які мають значний строк експлуатації, та на обмежену кількість пілотів.\n\nЗокрема, близько половини винищувачів F-16 тривалий час перебувають у Європі на ремонті та технічному обслуговуванні. Проблеми з обслуговуванням цих літаків пов’язані, зокрема, з тим, що деякі компоненти для ранніх модифікацій F-16 більше не виробляють, а закуповувати їх дедалі складніше.\n\nДля вирішення цієї проблеми країни-партнери України працюють над прискоренням ремонту українських F-16. Так, бельгійська компанія Sabena Engineering, яка відповідає за технічне обслуговування українських винищувачів, щомісяця ремонтує чотири F-16 й планує невдовзі збільшити обсяги обслуговування до шести літаків на місяць.\n\nНаразі публічно повідомлено про декілька моделей дронів, які використовують для перехоплення реактивних «Шахедів»: P1-SUN JetKiller, SPYS, Sting S та перехоплювач, імовірно, створений на основі ракети-дрона «Барс». При цьому перші три є подальшим розвитком електричних квадрокоптерів, тоді як дрон-перехоплювач «Барс», імовірно, оснащений реактивним двигуном.\n\nМалогабаритна крилата ракета Герань-5 в прицилі дрона-перехоплювача STING S. Стоп-кадр з відео Дикі Шершні\n\nЯк розповів міністр оборони Євген Хмара на зустрічі з журналістами, на якій був присутній кореспондент «Мілітарного», Україна вже має успішні результати застосування дронів-перехоплювачів проти реактивних безпілотників. Один із підрозділів під час бойового застосування знищив п’ять повітряних цілей п’ятьма перехоплювачами «Барс». Тобто результативність у цьому випадку становила 100%.\n\n«Зараз цей досвід вивчають і масштабують, до роботи долучають додаткових фахівців та підрозділи. Завдання — підвищувати загальний відсоток знищення реактивних безпілотників і швидко масштабувати рішення, які підтверджують ефективність у бойових умовах», — наголосив він.",
+    "expect": [
+      {
+        "semantic": "speed.cruise",
+        "value": 161,
+        "unit": "km/h"
+      }
+    ],
+    "expectNames": ["Banderol"]
+  },
+  {
+    "id": "5c8bf501-3fba-48b7-a042-c7e679b28eb6",
+    "source": "Analyst paste",
+    "text": "https://www.janes.com/defence-intelligence-insights/defence-news/air/ausa-2026-heaviside-industries-debuts-new-loitering-munition\n\nAUSA 2026: Heaviside Industries debuts new loitering munition\n\nNews\n\nHeaviside Industries is debuting their new loitering munition Tyr at the Association of the United States Army's annual conference. (Courtesy of Heaviside Industries)\n\nThe first of a new line of Heaviside Industries loitering munitions will be unveiled at the Association of the United States Army's annual conference on 12 October, an executive told Janes .\n\nThe “miniaturised” unmanned aerial vehicle (UAV), called Tyr, can be customised with different Nammo warheads for anti-armour and anti-personnel operations, said Nils Haagenrud, president of Heaviside Industries, in an interview on 30 September. Haagenrud said the company is already on contract with the Department of Defense (DoD) but declined to say to which service or programme.\n\nThe fixed-wing UAV weighs less than 15 lbs (6.8 kg) and can fly up to 150 mph (241.4 km/h), according to a Heaviside Industries statement released on 12 October. It has a wingspan so-Ukrainian conflict, the company learned that “something that is man packable, man portable, small enough that you can put it on every soldier, and also have the range and the penetration effect to take out a main battle tank was much needed”. In addition to the anti-armour and anti-personnel warheads, the munition is also designed to host anti-structural material and explosively formed penetrator Nammo warheads.\n\nHeaviside is using its own dual-band radios, but Haagenrud declined to disclose frequency ranges. The air vehicle is designed to fly in denied communications environments. If communications are lost, operators can choose between waving off the strike, continuing the mission, landing it in a safe zone, or destroying it, Haagenrud explained.\n\nGet full access to validated equipment, military capabilities, and market insights.",
+    "expect": [
+      {
+        "semantic": "speed.cruise",
+        "value": 241.4,
+        "unit": "km/h"
+      }
+    ],
+    "expectNames": ["Tyr"]
+  },
+  {
+    "id": "cbbf8fa4-7168-46f8-8faa-045fd12060e6",
+    "source": "Defense News · https://www.defensenews.com/global/2026/10/14/ukraine-races-to-field-faster-interceptors-as-russia-hammers-its-energy-grid/",
+    "text": "Ukraine races to field faster interceptors as Russia hammers its energy grid\n\nKYIV, Ukraine — Russia is still using fast jet-powered drones to batter Ukraine’s energy facilities, bridges and other critical infrastructure at speeds beyond the reach of most of Kyiv’s drone interceptors, despite U.S. President Donald Trump’s unilateral announcement on Sunday of an energy ceasefire between the two countries.\n\nRussia began using the jets heavily in July, when their numbers jumped fivefold from the previous month. They can now reach speeds of up to 373 mph (600 km/h) — more than three times the speed of the propeller-driven Geran-2 drones they evolved from — far exceeding the top velocity of the average Ukrainian interceptor drone, air force officials told lawmakers last week.\n\nTo stop the drones, Ukraine must instead rely on F-16s, newly installed machine gun turrets that use artificial intelligence to aim and costly air-defense missiles that are in short supply globally.\n\n“Ukraine did not strike Russian oil refining and the energy sector in general for two days after the American president announced a ceasefire in the energy sector. But Russia did not listen to the American president,” Ukrainian President Volodymyr Zelenskyy wrote after jets seriously damaged a gas production facility in the northeastern Kharkiv region on Sunday night.\n\nRussia launched 167 missiles and drones overnight Tuesday into Wednesday, including 77 jet-powered drones, which officials said struck one of Kyiv’s main power plants and left 600,000 without power.\n\nUkraine’s Air Force says they are beginning to field more effective countermeasures, but with Russia continuing to optimize the design of jet-powered drones to destroy critical infrastructure, the development of jets and anti-jet interceptors has become the latest neck-and-neck technology race on the battlefield.\n\nIran shipped Russia its first Shahed-131 and Shahed-136 drones in mid-August 2022, and Moscow rebranded them the Geran-1 and Geran-2 and was firing them at Ukrainian civilian infrastructure by that October.\n\nThose propeller-driven drones were slow enough for Ukraine to build an economical defense around mobile fire teams and cheap interceptor drones rather than spending scarce missiles on every Shahed, and in February the interceptors accounted for more than 70% of Shahed downings over Kyiv.\n\nThe jet-powered Gerans are outrunning that defense, and Russia has since stopped building the slower Geran-3 and ramped up production of the Geran-4, which cruises at 217 to 311 mph (350 to 500 km/h), and the missile-shaped Geran-5, which carries a 90-kilogram (198-pound) warhead, Militarnyi reported in August, citing Ukraine’s military intelligence agency, known as HUR.\n\n“The Geran-5 flies 150km/h faster than the Geran-4, so the goal is to intercept from the front rather than the rear — a much harder problem to solve,” an engineer at a Ukrainian defense contractor told the Kyiv Independent.\n\nAnd they are still getting faster, with the Air Force projecting speeds of 500 to 560 mph (800 to 900 km/h), though none have been recorded yet, its deputy commander, Col. Yurii Cherevashenko, told a parliamentary commission Oct. 6.\n\nA Geran-4 version Russia began flying this autumn is built to take out infrastructure, navigating by a U.S.-made magnetometer and an optical system and carrying a new warhead designed to cut bridges and power line supports, HUR said in an Oct. 5 statement.\n\nThe new 88-pound (40-kilogram) warhead “was created specifically to destroy high-voltage pylons and iron bridge structures,” Serhii “Flash” Beskrestnov, an EW expert and adviser to Zelenskyy, wrote on Telegram Sept. 30 when Russia was first spotted using the upgrade on a jet drone.\n\nThese optimized Russian jet drones hit Kyiv’s South Bridge, which carries cars and metro trains across the Dnipro River, at least five times on Oct. 1 and 2, once exploding near a pier as a train crossed overhead, then struck the city’s North Bridge on Oct. 3, officials said.\n\nUkrainian interceptors stopped roughly 90% of the older propeller-driven drones, but against the jets, the interception rate has been significantly lower.\n\n“Initially, we saw a very low interception rate in Ukraine. It then rose to more than 30%, and in recent nights it has increased to over 50%,” Matthias Lehna, vice president of German drone maker Quantum Systems, told Ukrinform last week.\n\nAir force officials reported downing 77% of incoming jet-powered drones on Tuesday night.\n\nUkraine put its first jet interceptor, the Alexa Spatium, into service only on Aug. 21, and a handful of other prototypes, including Wild Hornets’ STING S and SkyFall’s P1-SUN Jetkiller, have successfully downed a small number of Geran-5s, according to officials speaking to the Kyiv Independent.\n\nFourteen companies are flight-testing jet interceptors with the Air Force, and three have shown promising results, but the deputy air force commander said officials don’t expect the jet interceptors to be delivered at the scale Ukraine needs until the end of November at the earliest.\n\nJet drones already make up approximately 40% of the drones Russia launches and the Air Force expects that share to reach up to 80% of total attacks.\n\nKatie Livingstone is the Ukraine correspondent for Defense News and Military Times. Based in Kyiv, she has covered Russia's full-scale invasion since its first days. She is a former Fulbright fellow whose award-winning work has appeared in outlets across Europe and the U.S.",
+    "expect": [
+      {
+        "semantic": "speed.cruise",
+        "value": 600,
+        "unit": "km/h"
+      }
+    ],
+    "expectNames": ["Geran-2"]
+  },
+  {
+    "id": "88a04489-74e0-492e-b2f7-343408c53b70",
+    "source": "Defense Express · https://en.defence-ua.com/industries/russia_tests_15kg_jet_interceptor_drone_df_1_roscherk_at_500kmh_while_developing_850kmh_df_3_gadyuka_based_on_italian_fighter_shape-20046.html",
+    "text": "russia Tests 15kg Jet Interceptor Drone DF-1 Roscherk at 500km/h While Developing 850km/h DF-3 Gadyuka Based on Italian Fighter Shape\n\nrussian company DOFA-Tek during DronCongress 2026 forum first announced development of its new jet air-defense drone DF-1 Roscherk, designed for intercepting jet unmanned aerial vehicles.\n\nQuite impressive characteristics were announced for new DF-1 Roscherk. Specifically, declared maximum range is up to 250 km, flight duration up to 50 minutes, maximum speed up to 500 km/h, cruising speed up to 400 km/h, or in economy flight mode up to 200 km/h.\n\nDespite such large range of entire 250 km, DF-1 Roscherk has mass of only 15 kg, of which warhead can account for up to 1.5 kg. Additionally, construction of this air-defense drone is all-metal, which according to developers will simplify production.\n\nDF-1 Roscherk is launched from guide rails using solid-fuel rocket booster, which provides acceleration and brings drone to required altitude and speed. Details regarding guidance and communications system have not been announced yet.\n\nAs of now DF-1 Roscherk is at factory testing stage, with next public tests planned for November this year. Meaning DF-1 Roscherk is no longer just project, but working solution that may soon pose obstacle to Ukrainian long-range unmanned aerial vehicles.\n\nBesides DF-1 Roscherk, rashists are developing other jet drones as well. Specifically this concerns more powerful air-defense drone DF-3 Gadyuka and long-range strike unmanned aerial vehicle DF-5 Iskra. Most interesting among them is DF-3 Gadyuka.\n\nFor DF-3 Gadyuka, maximum range of entire 800 km is declared. It has cruising speed of 650 km/h, and also maximum speed up to 850 km/h, which may be sufficient for intercepting some cruise missiles.\n\nAt same time, DF-3 Gadyuka mass compared to DF-1 Roscherk increased significantly, now standing at gigantic for air-defense drone 240 kg. Meaning in size and range this is almost deep strike, but designed for intercepting drones, and here one can recall Ukrainian jet long-range drone Bars, which was converted into interceptor.\n\nInterestingly on sole published image of DF-3 Gadyuka, it has shape suspiciously similar to Italian light fighter-bomber Aeritalia G.91. Meaning rashists could have simply taken successful aerodynamic design of that aircraft as basis for their drone.\n\nRegarding DF-5 Iskra, following characteristics are declared: maximum range up to 1,200 km, speed 850 km/h, and also takeoff mass of 120 kg, of which warhead accounts for 20 kg.\n\nHowever both DF-3 Gadyuka and DF-5 Iskra, unlike DF-1 Roscherk, judging by everything are currently only at early development stages. Therefore they appear to be still far from serial examples and factory testing.",
+    "expect": [
+      {
+        "semantic": "speed.cruise",
+        "value": 850,
+        "unit": "km/h"
+      },
+      {
+        "semantic": "range.max",
+        "value": 1200,
+        "unit": "km"
+      },
+      {
+        "semantic": "payload.warhead",
+        "value": 20,
+        "unit": "kg"
+      },
+      {
+        "semantic": "payload.warhead",
+        "value": 120,
+        "unit": "kg"
+      }
+    ],
+    "expectNames": ["DF-5 Iskra"]
+  },
+  {
+    "id": "66c53230-885f-44b3-b7b0-c7d0096cff91",
+    "source": "Militarnyi (UA RSS) · https://militarnyi.com/uk/news/kndr-vidstrilyalasya-na-910-km-raketoyu-kn-30-taki-rakety-vona-postachala-rosiyi/?utm_source=rss&#038;utm_medium=rss&#038;utm_campaign=kndr-vidstrilyalasya-na-910-km-raketoyu-kn-30-taki-rakety-vona-postachala-rosiyi",
+    "text": "КНДР відстрілялася на 910 км ракетою KN-30 — такі ракети вона раніше постачала Росії\n\nПівнічна Корея 12 жовтня здійснила пуск балістичної ракети KN-30 на дальність понад 910 км. Ракети цієї моделі КНДР раніше передала Росії.\n\nПро це повідомило північнокорейське державне інформаційне агентство KCNA, яке оприлюднило фотографії запуску.\n\nЗа даними Yonhap, генеральний секретар Корейського форуму оборони та безпеки за фотографіями п’ятивісної пускової установки ідентифікував ракету як Hwasong-11Da-2.5, відому також за західним позначенням KN-30.\n\nЦе північнокорейська твердопаливна балістична ракета малої дальності із сімейства Hwasong-11, заявлена маса бойової частини якої становить 2,5 тонни.\n\nЯк раніше повідомляв «Мілітарний», 12 жовтня КНДР здійснила щонайменше два пуски балістичних ракет у напрямку Японського моря. За даними Міністерства оборони Японії, одна ракета подолала близько 220 км, а інша — понад 910 км, досягнувши максимальної висоти близько 70 км.\n\nНапрямки польоту двох балістичних ракет, які Північна Корея запустила 12 жовтня 2026 року. Карта: Міністерство оборони Японії.\n\nKCNA повідомило, що метою випробування була перевірка результатів модернізації ключових компонентів ракетного озброєння.\n\nВодночас Пхеньян не розкрив, які саме компоненти модернізували, а також офіційно не назвав модель випробуваної ракети та дальність її польоту.\n\nРаніше повідомлялось, що Росія отримала від КНДР балістичні ракети KN-30, які потенційно може використовувати для ударів по Україні.\n\nПро їх передачу стало відомо 20 серпня з відповіді Головного управління розвідки Міністерства оборони України на запит журналістів «Української правди». За даними ГУР, станом на липень 2026 року Росія мала сумарно близько 50 північнокорейських балістичних ракет KN-23, KN-24 та KN-30.\n\nРосійські війська раніше застосовували північнокорейські ракети KN-23 та KN-24 для ударів по Україні. Водночас підтвердженої інформації про бойове застосування KN-30 проти України наразі немає.\n\nДокладніше про розвиток північнокорейського ракетного озброєння та роль Росії у цьому процесі «Мілітарний» розповідав у матеріалі «Ракетна програма КНДР за підтримки РФ: нова загроза для США та їхніх союзників».",
+    "expect": [
+      {
+        "semantic": "range.max",
+        "value": 910,
+        "unit": "km"
+      }
+    ],
+    "expectNames": ["KN-30"]
+  },
+  {
+    "id": "7cb72ec6-cc38-4681-aae1-6c077b8c436d",
+    "source": "Kyiv Post · https://www.kyivpost.com/post/87379",
+    "text": "Zelensky: Starlink Capped at 161 km/h, Disabling Interceptors. President Volodymyr Zelensky has announced that Starlink operations in Ukraine are subjected to an artificial speed limit of 161 km/h, causing terminals to shut down and crash interceptor drones targeting Russian jet-powered Shahed munitions. Zelensky revealed that cross-border tests showed the system functioning at 180 km/h in EU countries, characterizing the restriction as a deliberate operation. Zelensky noted that SpaceX has avoided direct  President Donald Trump.",
+    "expect": [
+      {
+        "semantic": "speed.cruise",
+        "value": 161,
+        "unit": "km/h"
+      }
+    ],
+    "expectNames": ["Shahed"]
+  },
+  {
+    "id": "b1008600-d3ad-4743-bcbf-24d05ee725b8",
+    "source": "Defence Blog (RSS) · https://defence-blog.com/german-startup-tests-rdx-1-tracked-ground-drone-with-troops/",
+    "text": "German startup tests RDX 1 tracked ground drone with troops\n\nTest of RDX 1 tracked UGV\n\nPhoto by ReactiveDynamics\n\nKey Points\n\nGerman startup Reactive Dynamics says combat troops have put its RDX 1 tracked unmanned ground vehicle through its first tactical trials, using it to haul supplies and carry soldiers, evacuate casualties and run reconnaissance patrols by day and night.\n\nThe company said the tests took place last week with frontline units and also covered using the vehicle as a lead element ahead of manned systems, a role that sends the uncrewed platform first into ground where mines or ambushes are a risk. Reactive Dynamics did not identify the units, the country whose troops took part, or where the trials were held.\n\nThe company said it plans to add more payloads over the coming weeks and keep testing with the same units.\n\n- \n“Their feedback goes directly into the next RDX1 iterations,” Reactive Dynamics wrote.\n\nRegistered in Eching, just north of Munich, Reactive Dynamics describes the RDX 1 on its website as a fully electric tracked platform running on rubber tracks with full suspension. The company lists a top speed of 80 km/h (50 mph), a range of 150 km (93 miles) and a payload of 1,200 kg (tic sensors.\n\nFor now the RDX 1 is driven by remote control, with Reactive Dynamics planning to push autonomy features to the fleet through over-the-air software updates until the system can operate on its own. The company’s longer-term concept is a “Reactive Squad,” in which several vehicles carrying different payloads move together under the command of a single operator.\n\nPayloads plug into an open architecture, and the company names German drone maker Quantum Systems and turret specialist Valhalla Turrets as partners. Its website shows mission modules for combat and reconnaissance, alongside supply, protection and casualty evacuation versions, although the LinkedIn post described no armed configuration in last week’s trials.\n\nUnmanned ground vehicles have moved from experiments to daily use in Ukraine, where both sides rely on them to move ammunition and food to frontline positions and to pull wounded soldiers out under drone and artillery fire. Several European firms are now chasing the same market, among them Munich-based ARX Robotics, which also builds tracked UGVs and partners with Quantum Systems.\n\n- ADVERTISEMENT - CONTINUE READING BELOW -",
+    "expect": [
+      {
+        "semantic": "speed.cruise",
+        "value": 80,
+        "unit": "km/h"
+      },
+      {
+        "semantic": "range.max",
+        "value": 150,
+        "unit": "km"
+      },
+      {
+        "semantic": "payload.capacity",
+        "value": 1200,
+        "unit": "kg"
+      }
+    ],
+    "expectNames": ["AHEAD"]
+  },
+  {
+    "id": "f42b552c-a286-4a15-ada1-61620b535778",
+    "source": "Defense Express · https://en.defence-ua.com/weapon_and_tech/why_does_russia_need_df_3_viper_jet_powered_interceptor_drone_with_800_km_range_how_could_it_actually_be_used-20058.html",
+    "text": "Why Does russia Need DF-3 Gadyuka Jet-Powered Interceptor Drone With 800 km Range, How Could It Actually Be Used?\n\nThe russian company DOFA-Tek recently announced the development of its own jet-powered interceptor drones. One of the drones presented was the DF-1 Roscherk, with a substantial range of 250 km, a speed of up to 500 km/h, and a total mass of just 15 kg, including a 1.5 kg warhead. The company also presented a concept for a future the DF-3 Viper (Gadyuka) jet-powered interceptor drone, with a range of 800 km.\n\nThe DF-1 Roscherk’s range of 250 km can be explained by the need to intercept a target dozens of kilometres away from a protected site or to loiter in the air while waiting for a target to appear, then move in to intercept it. In the case of the DF-3 Viper (Gadyuka), however, the need for an 800 km range remains unclear.\n\nThe reason is simple: the longer a drone needs to remain airborne, the more fuel it must carry. This means the drone must either become larger or have sufficient lift to take off with the additional fuel. All of this would evidently lead to a significant increase in the system’s cost.\n\nAt some point, the cost of intercepting a UAV with such a drone could make the engagement economically unviable. For now, the future DF-3 Viper (Gadyuka) appears to present precisely this problem.\n\nHowever, it is important to note that russia has disclosed very little information able interceptor, its 800 km range would make considerably more sense. In this configuration, it could potentially engage several targets during a single sortie across an entire region before returning to its launch point.\n\nDespite these possibilities, there is currently no way to confirm that the DF-3 Viper will have such capabilities. For now, these remain hypotheses, and further details picious resemblance to the Italian Aeritalia G.91 light fighter-bomber. It is therefore possible that the russian developers used this aircraft’s aerodynamic design as the basis for their proposed interceptor.\n\nFrom the Defense Express side, we urge readers to join a fundraiser for a solution that is already proving effective: the One United Fundraiser, organized by the Serhiy Prytula Charity Foundation to support interceptor drones.",
+    "expect": [
+      {
+        "semantic": "speed.cruise",
+        "value": 500,
+        "unit": "km/h"
+      },
+      {
+        "semantic": "range.max",
+        "value": 250,
+        "unit": "km"
+      },
+      {
+        "semantic": "payload.warhead",
+        "value": 1.5,
+        "unit": "kg"
+      }
+    ],
+    "expectNames": ["DF-1 Roscherk"]
+  },
+  {
+    "id": "9eb11bf8-46e5-45d7-ad5e-b874a2ab665e",
+    "source": "Kyiv Post · https://www.kyivpost.com/post/87169",
+    "text": "Ukraine Seeks 450 Kph Starlink Limit to Counter Jet Drones. Ukraine is seeking unrestricted operation of military satellite terminals after speed limits disrupted drone missions. Journalist Alex Raufoglu reported that Germany funds the service under a contract running through April 2027, while Ukrainian sources said connectivity at speeds of at least 450 kph is needed against jet-powered Shaheds. Former Defense Minister Mykhailo Fedorov announced partial restoration, but the broader restrictions remain unresolved.",
+    "expect": [
+      {
+        "semantic": "speed.cruise",
+        "value": 450,
+        "unit": "km/h"
+      }
+    ],
+    "expectNames": ["Шахед"]
+  },
+  {
+    "id": "c9024838-d157-426e-8d14-af718e909268",
+    "source": "Covert Shores (H I Sutton) · https://www.hisutton.com/Shadowfin-AUV.html",
+    "text": "Shadowfin: New Danish Ultra-Low-Cost Underwater Drone. Few countries are contributing as much as Denmark to Ukraine’s defence. A 7-meter (23 ft) underwater drone exhibited at the DALO Industry Days 2026 in Denmark on 19th-20th August is of particular interest. Unlike most new AUV (autonomous underwater vehicle) designs it is unambiguously low cost (around €50k) and geared to the expendable nature of modern drone warfare. This purposeful design is expected to be arriving in Ukraine later this year. \n\n \n\n The Shadowfin drone is designed and built by Danish company Søens Tech , which has a background in innovative Mechatronics technologies to support underwater infrastructure projects, especially in Horizontal Directional Drilling (HDD). The Shadowfin is thus, while innovative and unconventional, developed by engineers intimately acquainted with watery arena. \n\n Among Western designs Shadowfin stands out as being engineered for truly low-cost warfare. Its hull is a simple fiberglass tube, and the thrusters are commercial off the shelf units. While this will limited its operating depth, it results in a very affordable platform. \n\n \n Shadowfin on display at DALO Industry Day 2026. Photo Naval News . \n\n Specifications (estimates)\n\nLength: 7 meters\n\nDiameter: ~0.5 m\n\nDisplacement: 1.5 tons\n\nPayload: ~300 kg\n \n\n The thrusters are unusual. Shadowfin uses two rim-drive pumpjets where the blades rotate around the outside of the rim, leaving the center where the axel normally is completely clear. This arrangement is increasingly available in commercial thrusters, but has yet to be widely seen in defence projects. \n\n The rim-drive pumpjets appear to be an underwater-optimised type built by Copenhagen Subsea . Rim drive designs use the rim itself as the motor, eliminating the need for the complexity and moving parts of the hub. Passing electricity through the rim spins the ring directly, removing the need for a gearbox, drive shaft, or seals. This means that it should, in general, be quieter too. \n\n \n Shadowfin on display at DALO Industry Day 2026. Photo Naval News . \n\n The design features a tall, fixed mast which can house cameras and other sensors, as well as navigation and communications antenna. It is also proposed that it could include a short mast to allow an internal combustion engine in the hull, which would significantly increase endurance. \n\n Shadowfin is intended to carry a 300kg payload, about the same as a heavyweight torpedo, enabling both ISR (intelligence, surveillance and reconnaissance) missions and direct strike. Soens Tech propose an improved version, Shadowfin Enhanced , armed with a MU90 Impact lightweight torpedo. This weapon is not used by Denmark but has been sold to Ukraine for use aboard their future Ada Class corvettes. Soens intend it to provide an anti-submarine warfare capability. Being low cost, it can also be used as a decoy or forward sensor node. We can therefore envisage a formation of Shadowfins with some drawing the target",
+    "expect": [
+      {
+        "semantic": "payload.capacity",
+        "value": 300,
+        "unit": "kg"
+      },
+      {
+        "semantic": "dimension.length",
+        "value": 7,
+        "unit": "m"
+      },
+      {
+        "semantic": "dimension.diameter",
+        "value": 0.5,
+        "unit": "m"
+      }
+    ],
+    "expectNames": ["Shadowfin"]
+  },
+  {
+    "id": "5f42ec78-1487-4777-9efa-b12d76e1b2a3",
+    "source": "Ukrinform (War) · https://www.ukrinform.net/rubric-ato/4174375-ukraines-mod-in-contact-with-us-spacex-nato-partners-over-starshield-restrictions-source.html",
+    "text": "Ukrinform - Ukrainian National News Agency\n\nUkraine’s Ministry of Defense is in ing the connection to be lost when that speed is exceeded. Depending on the equipment and unit, the connection is lost at different speeds, ranging from approximately 72 to 161 km/h.\n\nThis is complicating the operation of drone missions, including interceptor and mid-strike missions, and reducing capabilities for frontline logistics, reconnaissance and communications relay.\n\n“As of now, the Defense Ministry is in contact with the United States, SpaceX and NATO partners, collecting data from all units, while backup communications channels are being reviewed and established,” the source said.\n\nAs Ukrinform reported, Serhii “Flash” Beskrestnov, a freelance adviser to the President on technology, said SpaceX had imposed speed restrictions on Starlink terminals while in motion overnight without warning Ukraine’s Defense Forces.\n\nA Defense Ministry source also said the Starlink restrictions detected overnight had complicated the operation of Ukraine’s unmanned systems, logistics and mid-strike capabilities.",
+    "expect": [
+      {
+        "semantic": "speed.cruise",
+        "value": 161,
+        "unit": "km/h"
+      }
+    ],
+    "expectNames": ["Ukrinform"]
+  },
+  {
+    "id": "a17a0d53-9e85-417e-b0f5-e92103c01cfe",
+    "source": "Militarnyi (UA RSS) · https://militarnyi.com/uk/news/starlink-obmezhyv-perehoplennya-geran/?utm_source=rss&#038;utm_medium=rss&#038;utm_campaign=starlink-obmezhyv-perehoplennya-geran",
+    "text": "Зв’язок зникає після 161 км/год: Starlink обмежив перехоплення «Герань-4», «Герань-5» і «Бандероль» реактивними дронами-перехоплювачами\n\nОбмеження швидкості роботи Starlink на території України зберігаються — це перешкоджає використанню супутникових терміналів у дронах-перехоплювачах реактивних «Шахедів».\n\nПро це президент України Володимир Зеленський повідомив в аудіоповідомленні журналістам.\n\nЗа словами президента, Україна веде діалог щодо роботи Starlink і Starshield на рівні військових, Міністерства оборони та дипломатів. Українська сторона намагається зв’язатися з усіма причетними, зокрема з компанією SpaceX. Однак наразі компанія не відповідає українським військовим і Міністерству оборони, тоді як на різних рівнях американці пояснюють ситуацію «технічними проблемами».\n\nПрезидент наголосив, що проблеми виникають лише на території України: після перевищення швидкості 161 км/год приблизно на другій хвилині зв’язок повністю зникає, що призводить до втрати дронів. Водночас у країнах Європейського Союзу цих проблем немає, що українська сторона вже перевірила.\n\n«Ми відправили пару машин на території країн Європейського Союзу зі Starlink, і вони їхали зі швидкістю, там, де це можна, зі швидкістю 180 км/год плюс, і Starlink працює. У нас є відповідні фіксації, є відповідні докази. Висновок наступний: обмеження діють на території України, і обмеження не діють на території країн Європейського Союзу. Тобто це спланована операція», — наголосив він.\n\nТакі обмеження унеможливлюють застосування оснащених Starlink дронів-перехоплювачів проти реактивних «Шахедів» та інших швидкісних безпілотників. Тому для протидії цим загрозам Сили оборони вимушені продовжувати використовувати авіацію, ракети та інші засоби ППО.\n\nЗагалом, за словами президента, українська авіація збиває близько 55–60% реактивних «Шахедів». Водночас це створює значне навантаження на українські винищувачі, які мають значний строк експлуатації, та на обмежену кількість пілотів.\n\nЗокрема, близько половини винищувачів F-16 тривалий час перебувають у Європі на ремонті та технічному обслуговуванні. Проблеми з обслуговуванням цих літаків пов’язані, зокрема, з тим, що деякі компоненти для ранніх модифікацій F-16 більше не виробляють, а закуповувати їх дедалі складніше.\n\nДля вирішення цієї проблеми країни-партнери України працюють над прискоренням ремонту українських F-16. Так, бельгійська компанія Sabena Engineering, яка відповідає за технічне обслуговування українських винищувачів, щомісяця ремонтує чотири F-16 й планує невдовзі збільшити обсяги обслуговування до шести літаків на місяць.\n\nНаразі публічно повідомлено про декілька моделей дронів, які використовують для перехоплення реактивних «Шахедів»: P1-SUN JetKiller, SPYS, Sting S та перехоплювач, імовірно, створений на основі ракети-дрона «Барс». При цьому перші три є подальшим розвитком електричних квадрокоптерів, тоді як дрон-перехоплювач «Барс», імовірно, оснащений реактивним двигуном.\n\nМалогабаритна крилата ракета Герань-5 в прицилі дрона-перехоплювача STING S. Стоп-кадр з відео Дикі Шершні\n\nЯк розповів міністр оборони Євген Хмара на зустрічі з журналістами, на якій був присутній кореспондент «Мілітарного», Україна вже має успішні результати застосування дронів-перехоплювачів проти реактивних безпілотників. Один із підрозділів під час бойового застосування знищив п’ять повітряних цілей п’ятьма перехоплювачами «Барс». Тобто результативність у цьому випадку становила 100%.\n\n«Зараз цей досвід вивчають і масштабують, до роботи долучають додаткових фахівців та підрозділи. Завдання — підвищувати загальний відсоток знищення реактивних безпілотників і швидко масштабувати рішення, які підтверджують ефективність у бойових умовах», — наголосив він.",
+    "expect": [
+      {
+        "semantic": "speed.cruise",
+        "value": 161,
+        "unit": "km/h"
+      }
+    ],
+    "expectNames": ["Geran"]
+  },
+  {
+    "id": "496ea4e6-f490-4b69-a1d5-e0c62de0c629",
+    "source": "Kyiv Post · https://www.kyivpost.com/post/87379",
+    "text": "Zelensky: Starlink Capped at 161 km/h, Disabling Interceptors. President Volodymyr Zelensky has announced that Starlink operations in Ukraine are subjected to an artificial speed limit of 161 km/h, causing terminals to shut down and crash interceptor drones targeting Russian jet-powered Shahed munitions. Zelensky revealed that cross-border tests showed the system functioning at 180 km/h in EU countries, characterizing the restriction as a deliberate operation. Zelensky noted that SpaceX has avoided direct  President Donald Trump.",
+    "expect": [
+      {
+        "semantic": "speed.cruise",
+        "value": 161,
+        "unit": "km/h"
+      }
+    ],
+    "expectNames": ["Шахед"]
+  },
+  {
+    "id": "f8d4f0d7-b688-4221-be82-715ee32fcb6d",
+    "source": "Naval News · https://www.navalnews.com/naval-news/2026/10/u-s-navy-to-integrate-lrasm-into-usafs-b-52-strategic-bombers/",
+    "text": "U.S. Navy to Integrate LRASM into USAF’s B-52 Strategic Bombers\n\nThe U.S. Navy announced plans to contract Lockheed Martin to integrate AGM-158C Long-Range Anti-Ship Missiles (LRASM) on the Air Force’s B-52 strategic bomber. This is the latest development from the U.S. military this year to enhance and showcase its aerial maritime strike capabilities.\n\nWith its range and payload capacity, a B-52 Stratofortress equipped with LRASM can take off with a payload of 20 missiles. This capability, combined with the strategic bomber’s immense range, could prove crucial in a potential conflict against China.\n\nLast Wednesday, Naval Air Systems Command released its intent to award Lockheed Martin for work to integrate LRASM with the B-52. The contract will involve associated testing, missile software updates and test asset repair.\n\nThe Air Force has already integrated the munition of which LRASM is derived from, the AGM-158 Joint Air-to-Surface Standoff Missile (JASSM), across its bomber and fighter fleets. B-52 and B-1 fleets have extensively deployed the missile during the U.S.-Iran War, according to Pentagon media.\n\nFor its maritime strike-focused derivative, the Air Force first fielded the missile from the B-1 Lancer. In June, the service revealed that the B-2 Spirit stealth bomber can launch LRASM during a sinking exercise in the Indo-Pacific.\n\nCapable of striking maritime targets at ranges exceeding 370 kilometers, the stealthy cruise missile is one of the most capable ship-sinking munitions in active U.S. service. The Lockheed Martin missiles were fired across at least four instances this summer at exercises around Hawaii and the Western Pacific. Washington showcased its operational capability from bombers, maritime patrol aircraft and naval fighters. Before the integration of LRASM, American air-based maritime strike missions solely relied on the Cold War-era AGM-84 Harpoon missile.\n\nThe U.S. Navy plans to field LRASM against enemy warships in a future high-low munitions mix. According to a Tailhook 2026 presentation, the stealthy long-range cruise missile and the low-cost Blackbeard High-Speed Long Range Maritime Strike Weapon will be key components for the future carrier air wing.",
+    "expect": [
+      {
+        "semantic": "missiles",
+        "value": 20
+      }
+    ],
+    "expectNames": ["Бомбер"]
+  },
+  {
+    "id": "2374c5af-174b-4c70-b491-1a95aa80fbfc",
+    "source": "Militarnyi (UA RSS) · https://militarnyi.com/uk/news/starlink-obmezhyv-perehoplennya-geran/?utm_source=rss&#038;utm_medium=rss&#038;utm_campaign=starlink-obmezhyv-perehoplennya-geran",
+    "text": "Зв’язок зникає після 161 км/год: Starlink обмежив перехоплення «Герань-4», «Герань-5» і «Бандероль» реактивними дронами-перехоплювачами\n\nОбмеження швидкості роботи Starlink на території України зберігаються — це перешкоджає використанню супутникових терміналів у дронах-перехоплювачах реактивних «Шахедів».\n\nПро це президент України Володимир Зеленський повідомив в аудіоповідомленні журналістам.\n\nЗа словами президента, Україна веде діалог щодо роботи Starlink і Starshield на рівні військових, Міністерства оборони та дипломатів. Українська сторона намагається зв’язатися з усіма причетними, зокрема з компанією SpaceX. Однак наразі компанія не відповідає українським військовим і Міністерству оборони, тоді як на різних рівнях американці пояснюють ситуацію «технічними проблемами».\n\nПрезидент наголосив, що проблеми виникають лише на території України: після перевищення швидкості 161 км/год приблизно на другій хвилині зв’язок повністю зникає, що призводить до втрати дронів. Водночас у країнах Європейського Союзу цих проблем немає, що українська сторона вже перевірила.\n\n«Ми відправили пару машин на території країн Європейського Союзу зі Starlink, і вони їхали зі швидкістю, там, де це можна, зі швидкістю 180 км/год плюс, і Starlink працює. У нас є відповідні фіксації, є відповідні докази. Висновок наступний: обмеження діють на території України, і обмеження не діють на території країн Європейського Союзу. Тобто це спланована операція», — наголосив він.\n\nТакі обмеження унеможливлюють застосування оснащених Starlink дронів-перехоплювачів проти реактивних «Шахедів» та інших швидкісних безпілотників. Тому для протидії цим загрозам Сили оборони вимушені продовжувати використовувати авіацію, ракети та інші засоби ППО.\n\nЗагалом, за словами президента, українська авіація збиває близько 55–60% реактивних «Шахедів». Водночас це створює значне навантаження на українські винищувачі, які мають значний строк експлуатації, та на обмежену кількість пілотів.\n\nЗокрема, близько половини винищувачів F-16 тривалий час перебувають у Європі на ремонті та технічному обслуговуванні. Проблеми з обслуговуванням цих літаків пов’язані, зокрема, з тим, що деякі компоненти для ранніх модифікацій F-16 більше не виробляють, а закуповувати їх дедалі складніше.\n\nДля вирішення цієї проблеми країни-партнери України працюють над прискоренням ремонту українських F-16. Так, бельгійська компанія Sabena Engineering, яка відповідає за технічне обслуговування українських винищувачів, щомісяця ремонтує чотири F-16 й планує невдовзі збільшити обсяги обслуговування до шести літаків на місяць.\n\nНаразі публічно повідомлено про декілька моделей дронів, які використовують для перехоплення реактивних «Шахедів»: P1-SUN JetKiller, SPYS, Sting S та перехоплювач, імовірно, створений на основі ракети-дрона «Барс». При цьому перші три є подальшим розвитком електричних квадрокоптерів, тоді як дрон-перехоплювач «Барс», імовірно, оснащений реактивним двигуном.\n\nМалогабаритна крилата ракета Герань-5 в прицилі дрона-перехоплювача STING S. Стоп-кадр з відео Дикі Шершні\n\nЯк розповів міністр оборони Євген Хмара на зустрічі з журналістами, на якій був присутній кореспондент «Мілітарного», Україна вже має успішні результати застосування дронів-перехоплювачів проти реактивних безпілотників. Один із підрозділів під час бойового застосування знищив п’ять повітряних цілей п’ятьма перехоплювачами «Барс». Тобто результативність у цьому випадку становила 100%.\n\n«Зараз цей досвід вивчають і масштабують, до роботи долучають додаткових фахівців та підрозділи. Завдання — підвищувати загальний відсоток знищення реактивних безпілотників і швидко масштабувати рішення, які підтверджують ефективність у бойових умовах», — наголосив він.",
+    "expect": [
+      {
+        "semantic": "speed.cruise",
+        "value": 161,
+        "unit": "km/h"
+      }
+    ],
+    "expectNames": ["Geran-5"]
+  },
+  {
+    "id": "a47dc699-6ac1-4ce9-bca6-f882bf1446e1",
+    "source": "Kyiv Post · https://www.kyivpost.com/post/87169",
+    "text": "Ukraine Seeks 450 Kph Starlink Limit to Counter Jet Drones. Ukraine is seeking unrestricted operation of military satellite terminals after speed limits disrupted drone missions. Journalist Alex Raufoglu reported that Germany funds the service under a contract running through April 2027, while Ukrainian sources said connectivity at speeds of at least 450 kph is needed against jet-powered Shaheds. Former Defense Minister Mykhailo Fedorov announced partial restoration, but the broader restrictions remain unresolved.",
+    "expect": [
+      {
+        "semantic": "speed.cruise",
+        "value": 450,
+        "unit": "km/h"
+      }
+    ],
+    "expectNames": ["Shahed"]
+  },
+  {
+    "id": "593aceab-cf43-4071-b798-b923e6b31335",
+    "source": "Militarnyi (UA RSS) · https://militarnyi.com/uk/news/frantsiya-shkodu-dlya-operatoriv-zrk-samp-t/?utm_source=rss&#038;utm_medium=rss&#038;utm_campaign=frantsiya-shkodu-dlya-operatoriv-zrk-samp-t",
+    "text": "Франція створила міжнародну школу операторів ЗРК SAMP/T NG\n\nФранція створила міжнародну школу для підготовки операторів ЗРК SAMP/T NG. Така потреба виникла після підписання контракту на продаж систем ППО Данії та зростання інтересу з боку інших країн.\n\nПро це заявив генерал Жером Белланже, начальник штабу Повітряно-космічних сил Франції, під час виступу в парламенті щодо оборонного бюджету на 2027 рік.\n\nУперше про плани відкрити подібну школу стало відомо в березні 2026 року. Тоді генерал Жером Белланже розповів про це в коментарі виданню Mer et Marine.\n\n«Ми просто зараз вивчаємо можливість створення міжнародної школи наземної протиповітряної оборони на території Франції», — заявив тоді генерал Белланже.\n\nЗенітна батарея комплексу SAMP/T збройних сил Італії у Кувейті.\n\nЗа інформацією видання, проєкт уже перебував «на дуже просунутій стадії». Він покликаний задовольнити потреби Данії, а також запити інших майбутніх європейських користувачів. Зокрема, Україна вже замовила чотири новітні франко-італійські ракетні комплекси ППО SAMP/T NG.\n\nФранція тимчасово передасть Україні два комплекси SAMP/T на час виробництва замовлених новітніх комплексів SAMP/T NG. Після надходження нових систем комплекси SAMP/T мають повернути французькій стороні.\n\nФінансування закупівлі SAMP/T NG передбачене в межах траншів Позики на підтримку України на 2026 і 2027 роки.\n\nЄвропейський комплекс набуває значної популярності на тлі обмежених виробничих потужностей США та високого світового попиту, через які черга на отримання американських систем розтягнулася на роки.\n\nЗагалом, можливостями цього комплексу зараз цікавляться близько 15 країн. Швейцарія та Естонія вже публічно заявили про свій інтерес. Aster 30 розглядають для оснащення ВМС Швеції, а також збройних сил Хорватії, Словаччини, Кувейту та Угорщини.\n\nТуреччина також веде переговори з Італією щодо купівлі та спільного виробництва європейських систем протиповітряної оборони SAMP/T.\n\nПуск ракети Aster 30 B1NT (Block 1 New Technology) з ЗРК SAMP/T NG. Літо 2025. Джерело: eurosam\n\nТуреччина та Eurosam уклали попередню угоду про спільну розробку ще у 2018 році, проте заперечення Франції зупинило подальше просування проєкту. Турецька сторона вважає, що зміна безпекової ситуації в регіоні може змусити партнерів переглянути умови експорту технологій для зміцнення південно-східного флангу Альянсу.\n\nУ грудні 2015 року французька армія уклала контракт із компанією Eurosam на розробку ракети Aster 30 Block 1 NT (New Technology) для ЗРК нового покоління SAMP/T NG. У грудні 2016 року до розробки долучилася Італія.\n\nНова ракета має уражати об’єкти на висоті до 25 тисяч метрів у радіусі 150 кілометрів та ефективно працювати проти цілей зі швидкістю понад п’ять Махів. Заявлено, що це дасть новій ракеті можливість перехоплювати навіть балістичні ракети з дальністю польоту до 1500 км.\n\nОкрім можливості використовувати нові ракети, комплекс також отримав нові радари: Kronos Grand Mobile High Power компанії Leonardo для Італії та Ground Fire 300 компанії Thales для Франції. Їхня заявлена дальність виявлення цілей становить до 350 км, а висота — до 30 км.\n\nПостачання перших оновлених комплексів SAMP/T для армій Італії та Франції розпочалося у 2026 році. Виробництво зенітних ракет Aster, які використовує ця система, планують подвоїти до 180 одиниць, а у 2027 році цей показник має перевищити 300 ракет на рік.",
+    "expect": [
+      {
+        "semantic": "range.detection",
+        "value": 350,
+        "unit": "km"
+      }
+    ]
+  },
+  {
+    "id": "f84da712-afc9-4dbb-8cc7-e5279f12b53c",
+    "source": "Naval News · https://www.navalnews.com/naval-news/2026/10/hanwha-highlights-m38-m48-musv-and-containerized-munitions-at-ausa-2026/",
+    "text": "Hanwha Highlights M38/M48 MUSV and Containerized Munitions at AUSA 2026\n\nAt AUSA 2026, Hanwha Defense USA featured a model of the M38 MUSV made in partnership with Magnet Defense, with the parent design vessel recently arriving at National Harbor just outside of Washington D.C. following previous rounds of testing at sea.\n\nHanwha’s Kevin Schoonover provided insight into the ongoing program, including several of Hanwha’s munitions offering destined to outfit the vessel and other platforms, alongside greater detail pertaining to the partnership with Magnet Defense. Schoonover also highlighted how the M38 is the primary testing vehicle for the class standing at 38 meters long, with future production upgrading to the larger 48 meter standard found on the M48. To this end steel has been cut for the first M48, with production coinciding with continued testing of the original M38.\n\nNaval News previously reported on the partnership between Hanwha and Magnet Defense, primarily geared towards breaching the emerging U.S. USV market. Schoonover also detailed how Hanwha handles most of the construction on the vessel along with work regarding autonomous weapons integration, whilst Magnet Defense handles most of the autonomy in regards to navigation and the vessel’s actual operation.\n\nLike similar sized USVs, the M38 also features the capability to carry containerized payloads related to multiple missions, including strike, reconnaissance, and electronic warfare. M38 has already demonstrated its range of 17,000 nautical miles on multiple tests, including a trip across the Pacific to American Samoa in up to conditions of Sea State 9 . This has been part of a bid to introduce the M38 to overseas markets, including those beyond the U.S.’s MUSV program and Korean operation.\n\nJoining the M38 at Hanwha’s booth, the company showcased offerings for both containerized Multiple Launch Rocket Systems (MLRS) and containerized Vertical Launch Systems (VLS). There are a total of 4 different containerized systems on display, with two systems fitting inside of a 20 foot long shipping containers and the others using 40 foot standard shipping containers. When paired with M38, the vessel can carry up to 4 of the 20 foot long containerized munition packages, 2 of the 40 foot long options, or a combination of a pair of 20 foot containers and a singular 40 foot container\n\nA containerized version of the Chunmoo family of MLRS systems constitutes one of the 20 foot options, utilizing the same munitions and launch mechanisms found on the truck based version. This enables carriage of 2 MLRS pods, with each pod containing up to 6 CGR-080 guided rockets, 4 CTM-MR ballistic missiles (with a range of 160km), 4 CTM-160 Anti-Ship Ballistic Missiles, 1 CTM-290 Ballistic Missile (with a range of 290km), or 1 CTM-X Ballistic Missile featuring a range of 500 kilometers.\n\nThe other containers represent Hanwha’s iterations on containerized VLS systems, with the other 20 foot container featuring a shortened K-VLS compact system, with 4 cells primarily meant for smaller surface to air missile systems such as K-SAAM. The two 40 foot options carry 4 cells of K-VLS I or 2 cells of K-VLS II respectively. The container with K-VLS I can employ Red Shark rocket launched torpedoes (K-ASROC), SSM-700K type surface to surface cruise missiles, and K-SAAM. The container with K-VLS II can utilize the larger L-SAM (intended to replace the SM-2 in Korean service), and other larger ballistic and cruise missiles.",
+    "expect": [
+      {
+        "semantic": "range.max",
+        "value": 31484,
+        "unit": "km"
+      },
+      {
+        "semantic": "dimension.length",
+        "value": 38,
+        "unit": "m"
+      }
+    ],
+    "expectNames": ["M38 MUSV"]
+  },
+  {
+    "id": "79d759bf-fd66-4f19-9a4b-c97ece5a2438",
+    "source": "sUAS News · https://www.suasnews.com/2026/10/ideaforge-secures-orders-from-survey-of-india-for-q6-v2-uavs-to-support-mapping-and-geospatial-applications/",
+    "text": "ideaForge Secures Orders from Survey of India for Q6 V2 UAVs to Support Mapping and Geospatial Applications\n\nideaForge Technology Limited has received an order from the Survey of India (SOI) for its Q6 V2 UAVs, further expanding the use of its indigenous UAV technology across specialised government applications. The UAVs will support SOI’s surveying and mapping requirements, enabling the collection of high-quality aerial and geospatial data across diverse terrains and project environments. The growing use of UAVs is transforming how geospatial data is collected, processed, and used for planning and decision-making. By enabling aerial data collection across large and difficult-to-access areas, UAVs can complement conventional survey methods while improving the speed, coverage, and frequency of data collection and processing. This is particularly relevant for applications where current and accurate geospatial information is critical to planning, infrastructure development, land administration and public programmes.\n\nThe Q6 V2 is a survey-grade UAV designed to provide high-area coverage, enabling large-scale mapping projects to be completed faster and more efficiently. A high-endurance, lightweight, and VTOL-capable platform, the Q6 V2 is designed and developed entirely in India. Equipped with advanced Mapping payloads, autonomous navigation, and encrypted communications systems, ithas rapid deployment capability in under 10 minutes. The quadcopter designed UAV has an endurance of 60 minutes, having an operational range of 5 km and a maximum takeoff weight of 6kg. The platform supports daylight, thermal, mapping, and multispectral payloads, offering flexibility across various kinds of survey requirements. Q6 V2 is field-proven across varied terrains, from high-altitude zones to flood-affected areas.\n\nSpeaking on the development, Mr. Somil Gautam, Associate Director – Enterprise Business, ideaForge Technology Ltd., said, “The adoption of UAVs in geospatial applications is creating a more efficient way to collect the aerial data that informs how we plan, develop, and manage our physical environment. Our engagement with the Survey of India reflects the growing relevance ofindigenous UAV technology in specialised applications where reliable and timely data is important. At ideaForge, we are focused on building platforms that can deliver dependable performance across real-world operating environments, and we see significant potential for UAV-enabled mapping and geospatial intelligence across government and enterprise applications.”\n\nThe order adds to the use of ideaForge’s UAV technology in mapping and geospatial applications, in a field where aerial data collection is becoming a regular part of how surveys are planned and carried out. The company’s UAVs have already demonstrated their capabilities across a range of government and enterprise survey requirements, including large-scale deployments under theGovernment of India’s SVAMITVA Yojana and large-scale mapping. ideaForge looks forward to supporting Survey of India as it applies drone technology to its surveying and mapping needs, and to working with its teams as they put the platform to use.\n\nDiscover more: www.ideaforgetech.com\n\nSubscribe to get the latest posts sent to your email.",
+    "expect": [
+      {
+        "semantic": "range.max",
+        "value": 5,
+        "unit": "km"
+      },
+      {
+        "semantic": "endurance.flight",
+        "value": 60,
+        "unit": "min"
+      },
+      {
+        "semantic": "weight.mtow",
+        "value": 6,
+        "unit": "kg"
+      }
+    ],
+    "expectNames": ["Q6 V2"]
+  },
+  {
+    "id": "2bae759b-acf2-4f1d-8bec-772ca3611938",
+    "source": "Defense Express · https://en.defence-ua.com/news/russians_claim_ukraine_is_using_british_k3_scout_usvs_previously_prepared_for_airdrop_deployment_to_strike_russias_black_sea_ports-20125.html",
+    "text": "russians Claim Ukraine Is Using British K3 Scout USVs, Previously Prepared for Airdrop Deployment, to Strike russia's Black Sea Ports\n\nIt became known that the Defense Forces of Ukraine have begun using British K3 Scout unmanned surface vehicles, manufactured by Kraken Technology, to strike russian ports in the Black Sea. In particular, a strike using these USVs was carried out against the russian port city of Sochi.\n\nUntil then, there had been no reports that the Defense Forces of Ukraine had British K3 Scout USVs in their arsenal. Following The Times' report on the appearance of these USVs in Ukraine's arsenal, russian occupiers flooded social media with complaints.\n\nSo, what are these British K3 Scouts capable of? The K3 Scout reportedly has a range of 650 nautical miles (approximately 1,200 km), a maximum speed of up to 55 knots (approximately 100 km/h), a cruising speed of 25 knots (approximately 46 km/h), and a claimed endurance of 30 days.\n\nThe K3 Scout can carry up to 600 kg of payload, which may consist not only of combat equipment but also other weapons. These include guided missiles, FPV reconnaissance drones, and other undisclosed weapons.\n\nAt this point, it remains unclear how widely the K3 Scouts are being used by the Ukrainian Armed Forces. It can be assumed that they are being used for testing purposes, given that Ukraine's defense industry offers a wide range of high-performance, low-cost combat vehicles. However, other deployment scenarios are also possible.\n\nUnder a contract for 20 units for the UK, each vessel was priced at approximately $821,000, making it several times more expensive than Ukrainian USVs. However, this is a rough estimate, as the British cost includes command centers, crew training, technical support, and so on.\n\nCurrently, the announced production rate for the K3 Scout is 200 units per year at the joint venture between Rheinmetall and Kraken Technology. However, the company says it could manufacture up to 1,000 of these drones annually if it receives orders.\n\nAn interesting feature of the K3 Scout is that it is the world's first unmanned boat that can be airdropped on a pallet with a parachute from an Airbus A400M Atlas military transport aircraft.\n\nThere was also a rather unusual incident involving the K3 Scout: Chinese-made components were discovered inside the camera of one of these reconnaissance drones in the UK. Moreover, these components were found to be transmitting operational data directly to servers in China. However, the UK Ministry of Defense assured the public that there was no evidence that any classified information had been compromised.",
+    "expect": [
+      {
+        "semantic": "speed.cruise",
+        "value": 100,
+        "unit": "km/h"
+      },
+      {
+        "semantic": "speed.cruise",
+        "value": 46,
+        "unit": "km/h"
+      }
+    ],
+    "expectNames": ["K3 Scout"]
+  },
+  {
+    "id": "5d4c3d44-b7c6-42c7-84ec-6cb17039efa6",
+    "source": "Militarnyi (UA RSS) · https://militarnyi.com/uk/news/ukrayini-vyprobovuyut-bezpilotnyk-stargate/?utm_source=rss&#038;utm_medium=rss&#038;utm_campaign=ukrayini-vyprobovuyut-bezpilotnyk-stargate",
+    "text": "В Україні випробовують безпілотник StarGate для евакуації поранених\n\nУкраїнська компанія SkyFall розробила та передала на випробування новий безпілотник для медичної евакуації StarGate.\n\nПро це повідомляє інформаційне агентство Associated Press.\n\nБезпілотник розробляли протягом останнього року спеціально для транспортування поранених бійців із важкодоступних ділянок фронту.\n\nІдея створення медевакуаційного БпЛА виникла за запитом командира з позивним «Флінт» із 475-го штурмового полку Code 9.2.\n\nВ Україні випробовують безпілотник StarGate для евакуації поранених.\n\nВідео: Associated Press https://t.co/WeWt81apDd\n\n— Владислав (@Vladislav110528) October 16, 2026\n\nГексакоптер оснащений медичною капсулою із закріпленими ношами та здатний підіймати вантаж вагою до 150 кг, що дозволяє транспортувати бійця у повній екіпіровці.\n\nМаксимальна швидкість безпілотника сягає 105 км/год, а радіус дії в один бік становить 15 км.\n\nЗаявлена вартість одного комплексу StarGate становить близько $50 тисяч залежно від конфігурації.\n\nЕвакуаційний гексакоптер StarGate. Жовтень 2026 року. Фото надане виробником\n\nДля стійкості до засобів радіоелектронної боротьби дрон використовує подвійні канали зв’язку через Starlink і систему L-Link, а також навігацію на базі штучного інтелекту.\n\nУ разі повної втрати управління та сигналу GPS система здатна самостійно прокласти маршрут і повернутися в безпечну зону.\n\nПід час випробувань безпілотник також продемонстрував систему захисту від атакуючих FPV-дронів за допомогою сіткомета.\n\nЕвакуаційний гексакоптер StarGate. Жовтень 2026 року. Фото надане виробником\n\nНаразі комплекс передали одному з бойових підрозділів для оцінки ефективності та надійності в умовах бойових дій.\n\nНагадаємо, у липні повідомляли, що в Україні для потреб війська розглядають розробку повітряних мотоциклів та аеробаггі для швидкого перекидання бійців на позиції.",
+    "expect": [
+      {
+        "semantic": "speed.cruise",
+        "value": 105,
+        "unit": "km/h"
+      }
+    ],
+    "expectNames": ["StarGate"]
+  },
+  {
+    "id": "a9cc3eb5-8f06-45b0-9169-efe61cdd2ac9",
+    "source": "Breaking Defense · https://breakingdefense.com/2026/10/a-leap-in-drone-range-and-payloads-come-from-a-battery-with-different-chemistry/",
+    "text": "A leap in drone range and payloads come from a battery with different chemistry\n\nThe US military is asking more of its unmanned systems, all of which are constrained by the energy capacity of today’s batteries. The demand for increasingly capable and power-hungry drones means the battery’s capability determines range, endurance, payload, and time on station.\n\nBreaking Defense spoke with Sion Power CTO Job Rijssenbeek about advances in high-capacity battery chemistry, where lithium-metal technology may be applicable, and why batteries and unmanned platforms increasingly need to be co-designed as a single system.\n\nBreaking Defense: As unmanned systems take on more demanding missions, is energy becoming a limiting factor in what they can do?\n\nRijssenbeek: Absolutely. Brig. Gen. Troy Denomy, program acquisition executive for maneuver, summed up energy challenges at GVSETS (Ground Vehicle Systems Engineering & Technology Symposium) this past summer when he said, ‘Every formation we have today is underpowered.’ The insatiable demand for energy will only increase.\n\nFor airborne platforms, every pound matters. More weight requires more energy to lift, which requires more batteries, which add more weight. This quickly becomes a vicious circle. If you can put more energy into the same battery weight, you meaningfully change that math. Greater energy density batteries become enablers of greater range, endurance, and mission capability. They put more missions within reach.\n\nWhat has changed in battery technology to make improvements in power, weight, and performance possible?\n\nLithium-ion technology has been extraordinarily successful, and will remain the right choice for many applications, but it is reaching its entitlement performance. There are several advanced battery chemistries coming onto the market, but there isn’t one chemistry that’s best for every mission. The different chemistries and ways of putting those together deliver different combinations of energy, power, cycle life, safety, and cost.\n\nFor applications where weight and endurance are especially important, lithium-metal anode batteries are compelling because replacing the graphite anode with lithium metal reduces weight and volume, and increases energy density. Those gains significantly enhance mission capability.\n\nSion Power has been at the forefront of lithium-metal battery innovation for more than 25 years. Over the last 15 years, we’ve developed robust IP around high-energy density batteries for electric vehicles. In the process, we developed lithium anode production technology, electrolyte formulations, cell designs, and packaging that makes this promising chemistry practical and applicable for aerospace and defense applications.\n\nToday we’re producing large-format lithium-metal cells in Tucson, Arizona that offer double the energy density of conventional lithium-ion batteries, at the cell and pack level, which is transformational for drones and the missions they can fulfill.\n\nWhat does higher energy density mean in practical terms for defense customers?\n\nMore energy at the same or lower weight translates into extended mission duration or additional payload. You can fly longer, reach farther, and do more.\n\nOur maximum energy, one-way attack Licerion Strike cell is designed to deliver up to 500 Wh/kg at the cell level, compared with roughly 250 Wh/kg for today’s standard lithium-ion drone batteries. This means roughly twice the flight time, which translates to greater reach, significantly greater time on station, and enhanced effectiveness. Drones are being asked to carry increasingly greater electronic payloads (like communications, jamming, autonomous guidance, etc.), which consume hundreds of watts of continuous power. Higher-energy batteries allow operators to incorporate more of these capabilities without sacrificing endurance.\n\nDefense systems must operate safely and reliably in harsh environments. How do lithium-metal cells perform under abuse conditions and temperature extremes?\n\nHigher energy density is a benefit only if the cell can operate reliably under the conditions the mission requires. Any time more energy goes into a smaller package, safety always has to be front of mind. I’m proud to say that safety has always been our top priority at Sion Power. We design for safety rigorously, from the materials to the battery pack.\n\nAt our Tucson facility, we have approximately 2,000 test channels and a 5,300-square-foot safety and abuse lab dedicated to rigorous performance and safety testing – from exposure to extreme temperatures and vibration, to nail penetration, and forced discharge.\n\nWe understand that our batteries need to perform reliably in diverse environments and conditions, and we are constantly expanding the capabilities on that front. (defense customers will be using our batteries in non-hostile environments as well)\n\nWhat happens when you take lithium-metal batteries out of the lab and put them onto an actual drone?\n\nWe asked ourselves the same question earlier this year, as we shifted our application focus to drones. To find out, we fitted one of our Licerion Strike demonstration packs onto a commercially available Freefly Astro Max drone, replacing the drone’s two conventional lithium-ion batteries. Our pack increased onboard energy by over 50 percent and reduced the pack weight by nearly 30 percent, all while using the same mechanical footprint.\n\nMore importantly, the drone flew nearly twice as long when equipped with our battery, increasing from 33 minutes to 60 minutes.\n\nTwice the flight time means reaching targets twice as far away and putting the pilot further out of harm’s way. Twice the flight time also means more time to be productive at the target. For example, if the target area is 15 minutes away, a 33-minute aircraft has only about three minutes on station before it must return. That’s not a lot of time to be effective. However, at 60 minutes of endurance, that enables 30 minutes on station. Imagine what more you can do in 30 minutes that you cannot do in 3 minutes. That’s the kind of difference operators care about.\n\nCan lithium-metal technology be manufactured at defense-relevant scale and cost?\n\nAbsolutely. We’re shipping cells today from Tucson and are ramping 10–20 MWh of pilot-line capacity. We have plans for expanding to 100–200 MWh and more as demand increases. While we replace graphite with a lithium metal anode, all the other battery components are commensurate with already commercialized lithium-ion batteries. We already tap those supply chains to minimize our cell costs. As our manufacturing scale increases, our cost position will improve further.\n\nWhich drones would benefit most from lithium-metal, and where else could higher energy density change the performance equation?\n\nOur lithium-metal solutions are ideal for heavier Group 1 and Group 2 drones where the range and payload benefits are significant. Group 3 drones tend to be powered by internal combustion engines today but will benefit from greater electrification and noise reduction that high-energy batteries will enable. Beyond drones, we anticipate our cells will be able to support robotics, automotive, and space applications in the future. If weight and energy are constraints, our batteries will help.\n\nIs lithium-metal technology primarily suited to one-way applications, or can the technology also support rechargeable systems?\n\nLithium-metal batteries are absolutely rechargeable. Our work for automotive was foundational to demonstrating this.\n\nWe developed large-format 400 Wh/kg Licerion pouch cells that achieve 800 charge-discharge cycles, are fast-charge capable, and were validated by leading global OEMs. While our Licerion Strike product is aimed at maximum energy density, we’ve applied those learnings to Licerion Echo, our rechargeable solution, which is designed to deliver high energy density with over 150 cycles. Rechargeability increases flexibility, supports reuse, and reduces ",
+    "expect": [
+      {
+        "semantic": "endurance.flight",
+        "value": 30,
+        "unit": "min"
+      }
+    ],
+    "expectNames": ["Freefly Astro Max"]
+  },
+  {
+    "id": "440e26a8-f6ef-4509-b9de-399dc8d59130",
+    "source": "Euromaidan Press · https://euromaidanpress.com/2026/10/15/two-tankers-burn-off-romanias-sulina-as-bulgaria-says-it-lacks-proof-russia-is-behind-the-black-sea-ship-attacks/",
+    "text": "Two tankers burn off Romania’s Sulina as Bulgaria says it lacks proof Russia is behind the Black Sea ship attacks\n\nTwo tankers burn off Romania’s Sulina as Bulgaria says it lacks proof Russia is behind the Black Sea ship attacks\n\nTwo tankers caught fire within sia launched them.\n\nFor months, Russia has struck civilian ships on the sea route that carries most of Ukraine’s farm exports, while its drones have repeatedly crossed into Moldova and Romania during attacks on Ukraine. As long as Bucharest and Sofia wait for drone wreckage before naming anyone, Russia, the party Bulgaria’s own prime minister says the logic points to, pays no price for extending its war on Ukraine’s trade routes into NATO members’ waters.\n\nThe San Marino-flagged chemical tanker Wine Trader reported a fire in its superstructure around 07:00 on 15 October while anchored in Romanian territorial waters e for the fire, though unnamed sources Read Also “Operation to strike Russian targets deep in swamps continues”: Ukrainian Commander Madiar says his unit hits 7,306 Russian troops in first half of October, up 59% on August Ukraine’s hobbit-named robot fired on targets up to 1.3 km away in a demo for border guards Ukraine and Japan plan prefabricated backup crossings for Kyiv’s bridges: 720 meters of structures already delivered\n\nTo suggest a correction or clarification, write to us here\n\nYou can also highlight the text and press Ctrl + Enter\n\nWe are an independent media outlet that relies solely on advertising revenue to sustain itself. We do not endorse or promote any products or services for financial gain. Therefore, we kindly ask for your support by disabling your ad blocker. Your assistance helps us continue providing quality content. Thank you!",
+    "expect": [
+      {
+        "semantic": "altitude.target_max",
+        "value": 1.3,
+        "unit": "km"
+      }
+    ],
+    "expectNames": ["San"]
+  },
+  {
+    "id": "98f21b6b-e384-404c-9db2-041bb6dac9c7",
+    "source": "Euromaidan Press · https://euromaidanpress.com/2026/10/15/ukraine-prepares-backup-plans-for-bridges-water-utilities-and-boiler-plants-with-japans-support-amid-threat-of-russian-strikes-japan-has-already-delivered-720-meters-of-prefabricated-bridge/",
+    "text": "Ukraine and Japan plan prefabricated backup crossings for Kyiv’s bridges: 720 meters of structures already delivered\n\nUkrainian and Japanese officials discussed establishing backup bridge crossings in the event of Russian strikes, preparing municipal infrastructure for winter, and Japan's continued assistance with Ukraine's recovery, Ukraine's Minister for Restoration, Infrastructure and Transport, Mykola Kalashnyk, reported on 14 October.\n\nRussia is targeting Kyiv's bridges to paralyze the city and break civilian morale, defense analyst Hamish de Bretton-Gordon wrote in The Telegraph. On 1 and 2 October, Russia attacked Kyiv's Southern Bridge, then struck the Northern Bridge on 3 and 4 October. Ukraine is now working with international partners to establish backup bridge crossings that could maintain connectivity even if major routes are damaged.\n\nThe discussions took place during a meeting between Minister Kalashnyk, Japan's Ambassador to Ukraine Yo Osumi, and Osamu Hattori, head of the Japan International Cooperation Agency (JICA) office in Ukraine, according to the statement.\n\nKyiv's Southern Bridge, for example, plays a critical role in logistics because freight traffic uses it, transport planning expert Dmytro Bespalov noted in an article for Ukrainska Pravda. At the same time, installing additional metal structures to reinforce bridges could be dangerous given their technical condition and existing load levels, he said.\n\nOne potential solution is to establish backup bridge crossings.\n\nUkraine and JICA have agreed to continue working together on engineering solutions for setting up these crossings. Japan has already delivered 720 meters of prefabricated bridge structures to Ukraine, which are expected to be used to create alternative routes if Russia's attacks damage major bridges, Kalashnyk said.\n\nThe initiative is intended to help maintain transportation links, ensure the delivery of critical supplies, and preserve evacuation routes for civilians.\n\nDuring the meeting, Ukraine and JICA discussed equipping water utilities with backup power supplies, addressing the need for modular boiler plants, and obtaining equipment to ensure uninterrupted heating and water services. Ukraine has already submitted lists of the necessary equipment to JICA for consideration as part of a new emergency assistance project, Kalashnyk said.\n\nAn intercepted document outlining an alleged Russian plan for strikes against Ukraine this winter reportedly describes attacks on 60 critical infrastructure facilities using up to 1,000 missiles, drones, and aerial bombs. Potential targets include electrical substations, hydroelectric power plants, thermal power plants, boiler facilities, and infrastructure related to water supply and wastewater management.\n\nThe document also describes potential strikes on facilities in Kyiv, Kharkiv, Odesa, and several other cities. Such attacks could disrupt electricity, heating, water supply, and wastewater services.",
+    "expect": [
+      {
+        "semantic": "missiles",
+        "value": 0
+      }
+    ],
+    "expectNames": ["Freyja"]
+  }
+]

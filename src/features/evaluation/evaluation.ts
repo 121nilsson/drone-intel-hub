@@ -17,6 +17,7 @@ export type MatchType =
 export interface EvalMismatch {
   candidateId: string;
   source: string;
+  text: string;
   specKey: string;
   matchType: MatchType;
   heuristicValue: string | number | null;
@@ -24,6 +25,8 @@ export interface EvalMismatch {
   referenceValue: string | number | null;
   referenceUnit: string | null;
   evidence: string;
+  normalizedHeuristic?: { canonicalValue?: number | undefined; canonicalUnit?: string | undefined };
+  normalizedReference?: { canonicalValue?: number | undefined; canonicalUnit?: string | undefined };
 }
 
 export interface Prf {
@@ -59,6 +62,8 @@ export interface EvalFixture {
   text: string;
   /** Semantic key + canonical value the heuristic must keep producing. */
   expect: { semantic: string; value: number | string; unit?: string }[];
+  /** Specs that must NOT be produced (known bad outputs). */
+  forbid?: { semantic: string; value?: number | string; unit?: string }[];
   expectNames?: string[];
 }
 
@@ -68,6 +73,7 @@ export interface EvalOptions {
   includeDiscarded?: boolean;
   minRawLength?: number;
   maxMismatchesPerKey?: number;
+  onProgress?: (done: number, total: number) => void;
 }
 
 const MIN_RAW = 50;
@@ -297,6 +303,7 @@ export async function evaluateHeuristic(
     mismatches.push({
       candidateId: c.id,
       source: c.source,
+      text: c.raw,
       specKey: key,
       matchType: type,
       heuristicValue: h?.value ?? null,
@@ -304,10 +311,21 @@ export async function evaluateHeuristic(
       referenceValue: r?.value ?? null,
       referenceUnit: r?.unit ?? null,
       evidence: (h?.evidence || r?.evidence || "").slice(0, 280),
+      ...(h
+        ? { normalizedHeuristic: { canonicalValue: h.canonical, canonicalUnit: h.canonicalUnit } }
+        : {}),
+      ...(r
+        ? { normalizedReference: { canonicalValue: r.canonical, canonicalUnit: r.canonicalUnit } }
+        : {}),
     });
   };
 
-  for (const c of sample) {
+  const total = sample.length;
+  for (let i = 0; i < sample.length; i++) {
+    const c = sample[i]!;
+    // Yield to the event loop so the UI can paint progress and stay responsive.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    opts.onProgress?.(i + 1, total);
     const inc = (rec: Record<string, number>, k: string) => (rec[k] = (rec[k] ?? 0) + 1);
     inc(strat.platform, platformOf(c.source));
     inc(strat.outcome, outcomeOf(c));
@@ -428,9 +446,46 @@ export async function checkFixture(
         return String(g.value).toLowerCase() === String(e.value).toLowerCase();
       }),
   );
+  const forbidden = (fx.forbid ?? []).filter((f) =>
+    got.some((g) => {
+      if (g.semantic !== f.semantic) return false;
+      if (f.value === undefined) return true;
+      if (typeof f.value === "number")
+        return (
+          g.canonical !== undefined &&
+          numbersClose(g.canonical, f.value) &&
+          (g.canonicalUnit ?? "") === (f.unit ?? "")
+        );
+      return String(g.value).toLowerCase() === String(f.value).toLowerCase();
+    }),
+  );
   const names = namesOf(heur);
   const missingNames = (fx.expectNames ?? []).filter((n) => !names.includes(phoneticKey(n)));
-  return { missing, missingNames };
+  return { missing, missingNames, forbidden };
+}
+
+/** Build regression fixtures from known bad outputs; replayed to ensure they stay fixed. */
+export function mismatchesToFixtures(mismatches: EvalMismatch[], limit = 50): EvalFixture[] {
+  const byKey = new Map<string, EvalMismatch>();
+  for (const m of mismatches) {
+    if (m.matchType === "falsePositive" || m.matchType === "wrongKey") {
+      const k = `${m.candidateId}|${m.specKey}`;
+      if (!byKey.has(k)) byKey.set(k, m);
+    }
+  }
+  return [...byKey.values()].slice(0, limit).map((m) => ({
+    id: `neg-${m.candidateId}-${m.specKey}`,
+    source: m.source,
+    text: m.text,
+    expect: [],
+    forbid: [
+      {
+        semantic: m.specKey,
+        ...(m.heuristicValue !== null ? { value: m.heuristicValue } : {}),
+        ...(m.heuristicUnit ? { unit: m.heuristicUnit } : {}),
+      },
+    ],
+  }));
 }
 
 /** JSON corpus for src/test/fixtures/eval-corpus.json (merged by id with an existing one). */

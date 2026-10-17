@@ -88,7 +88,9 @@ function CatalogCard({ d, drones, cp }: { d: Drone; drones: Drone[]; cp: Drone |
               {[d.cyrillic, ...d.aliases].filter(Boolean).join(" · ")}
             </p>
           </div>
-          <Tag tone="primary" className="shrink-0">{d.domain}</Tag>
+          <Tag tone="primary" className="shrink-0">
+            {d.domain}
+          </Tag>
         </div>
         {top.length > 0 && (
           <p className="mt-2 break-words font-mono text-xs text-foreground/80">{top.join(" · ")}</p>

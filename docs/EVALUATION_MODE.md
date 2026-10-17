@@ -1,8 +1,8 @@
 # Spec: Utvärderingsläge för heuristikmotorn
 
-**Status:** Förslag (ej implementerat)  
+**Status:** Implementerat (v1)  
 **Fil:** `docs/EVALUATION_MODE.md`  
-**Relaterad kod:** `src/features/intake/pipeline.ts`, `src/shared/infra/heuristic-ai.ts`, `src/features/sources/auto-ingest.ts`, `src/features/intake/evaluation.ts` (ny)
+**Relaterad kod:** `src/features/evaluation/evaluation.ts`, `src/features/evaluation/evaluation-page.tsx`, `src/test/eval-corpus.test.ts`, `src/test/fixtures/eval-corpus.json`
 
 ---
 
@@ -71,10 +71,12 @@ Varje kandidat bär hela `Extraction` (heuristik + AI-förfining) plus den råa 
 ### 4.3 Read-only-kontrakt (invariant)
 
 `evaluateHeuristic()` får **endast**:
+
 - Anropa `heuristic.extract(raw, catalog)`
 - Läsa `Candidate.extraction`, `Candidate.raw`, `Drone[]`
 
 Den får **inte**:
+
 - Anropa `drones.upsert()`, `candidates.add()`, `dispatches.update()` eller någon annan skrivning
 - Anropa AI-providern (`tier1`, `tier2`)
 - Ändra kandidatens status, matchId eller något annat fält
@@ -85,18 +87,19 @@ Detta säkerställer att utvärderingen är säker att köra även mot den live-
 
 Två specs anses matcha enligt denna prioriterade ordning:
 
-| Kriterium | Beskrivning |
-|-----------|-------------|
+| Kriterium              | Beskrivning                                                                                                 |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------- |
 | **Normaliserad match** | Samma `semanticKey`, samma `normalized.canonicalValue` (inom 1% tolerans), samma `normalized.canonicalUnit` |
-| **Semantisk match** | Samma `semantic` (via `semanticKeyFor()`), samma värde/enhet |
-| **Rå match** | Samma `key`, samma `value` (som sträng), samma `unit` |
-| **Felaktig nyckel** | Heuristiken hittade ett värde men under fel nyckel (annan `semantic`) |
-| **Miss** | AI hittade ett värde som heuristiken missade helt |
-| **Falskt positivt** | Heuristiken hittade ett värde som AI inte hittade |
+| **Semantisk match**    | Samma `semantic` (via `semanticKeyFor()`), samma värde/enhet                                                |
+| **Rå match**           | Samma `key`, samma `value` (som sträng), samma `unit`                                                       |
+| **Felaktig nyckel**    | Heuristiken hittade ett värde men under fel nyckel (annan `semantic`)                                       |
+| **Miss**               | AI hittade ett värde som heuristiken missade helt                                                           |
+| **Falskt positivt**    | Heuristiken hittade ett värde som AI inte hittade                                                           |
 
 Normalisering använder `Extraction` fältet `normalized` (från `normalizeQuantity`) eller faller tillbaka på `parseMagnitude`/`parseNumber` om det inte finns.
 
 **Parningsregler (one-to-one, greedy):**
+
 1. Matcha först `exact` → `semantic` → `raw`; varje spec får matchas högst en gång (annars kan en heuristik-spec matcha flera AI-specs).
 2. `range`: `canonicalValue` är `undefined` för `up to`/`80–120 km`. Jämför `range.min`/`range.max` individuellt med samma tolerans, eller klassificera skillnad i qualifier som `differentReading` (inte `miss`) — "up to 120 km" är en annan läsning än "120 km".
 3. Legacy-nycklar (t.ex. `payloadCapacity` camelCase, enhet "tonne") normaliseras av `semanticKeyFor()`. Kör `semanticKeyFor()` på **båda** sidor så att jämförelsen sker på kanoniska semantiska nycklar, inte råa nycklar.
@@ -105,15 +108,15 @@ Normalisering använder `Extraction` fältet `normalized` (från `normalizeQuant
 
 Utvärderingen mäter också identitetsförmågan separat:
 
-| Mått | Beskrivning |
-|------|-------------|
-| **Name precision** | Andel heuristik-namn som matchar AI-namn (exakt eller fonetiskt) |
-| **Name recall** | Andel AI-namn som heuristiken hittade |
-| **MatchId precision** | Andel heuristik-`matchId` som stämmer med AI-`matchId` |
+| Mått                  | Beskrivning                                                      |
+| --------------------- | ---------------------------------------------------------------- |
+| **Name precision**    | Andel heuristik-namn som matchar AI-namn (exakt eller fonetiskt) |
+| **Name recall**       | Andel AI-namn som heuristiken hittade                            |
+| **MatchId precision** | Andel heuristik-`matchId` som stämmer med AI-`matchId`           |
 
 > **Obs:** Identitets-recall är strukturellt partisk — AI:n släpper medvetet obekräftade heuristik-system ("National", "Ukrinform"). Låg recall är därför inte automatiskt ett fel.
-| **MatchId recall** | Andel AI-`matchId` som heuristiken hittade |
-| **Systems precision/recall** | Samma men för `extraction.systems[]` |
+> | **MatchId recall** | Andel AI-`matchId` som heuristiken hittade |
+> | **Systems precision/recall** | Samma men för `extraction.systems[]` |
 
 Identitetsjämförelse använder `phoneticKey()`/`nameKey()` från `name-key.ts` för fonetisk matchning, och `±1%` tolerans gäller numeriska `canonicalValue` (strängvärden som `guidance`/`engine` jämförs exakt).
 
@@ -125,6 +128,7 @@ Per spec-nyckel:
 - **Recall** = träffar / (träffar + missar)
 
 > Tolerans för numeriska värden: `max(1%, |a−b|)` (absolut epsilon för små värden), inte rent procentuellt — annars blir 1 % av 0,1 = 0,001.
+
 - **F1** = 2 × precision × recall / (precision + recall)
 - **Antal fall** = hur många kandidater som innehöll nyckeln i AI-resultatet
 
@@ -272,6 +276,20 @@ Domän (`domain`) och ursprungsland (`origin`) bör ingå i rapporten som inform
 2. Lägg till ett CLI-kommando eller en server-funktion för att köra utvärderingen
 3. Kör utvärderingen mot den live-DB:n (3 170 dispatches, 1 632 processade, 4 646 kandidater)
 4. Använd rapporten för att prioritera nästa heuristik-fix (t.ex. altitud-kontamination eller pengar)
+
+---
+
+## 9. Självlärande loop (mål)
+
+Utvärderingen är inte bara ett mätverktyg — den är grunden för att systemet ska **lära sig bli bättre** över tid:
+
+1. **Kör** utvärderingen mot live-data (eller ett urval).
+2. **Exportera** överenskomna fall till `src/test/fixtures/eval-corpus.json` via "Ladda ner corpus" på `/evaluation`.
+3. **Replay:** `eval-corpus.test.ts` kör heuristiken mot varje sparad rapport och kräver att alla förväntade värden fortfarande produceras.
+4. **Fixa:** om en heuristik-ändring bryter ett test, justera koden (eller uppdatera corpus medvetet).
+5. **Upprepa:** nya rapporter läggs till corpus, så regressioner fångas automatiskt.
+
+På sikt kan samma loop driva automatiska förbättringar: analysera mismatch-mönster, föreslå lexikon-tillägg eller notAfter-ändringar, och verifiera via corpus-testerna.
 
 ---
 
