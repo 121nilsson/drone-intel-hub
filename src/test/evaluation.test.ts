@@ -4,7 +4,8 @@ import type { IntelExtractor } from "@/shared/contracts/ai";
 import { evaluateHeuristic, numbersClose, platformOf } from "@/features/evaluation/evaluation";
 
 const ext = (specs: Extraction["specs"], name?: string): Extraction => ({
-  name,
+  ...(name ? { name } : {}),
+
   aliases: [],
   operators: [],
   specs,
@@ -21,7 +22,11 @@ const cand = (id: string, extraction: Extraction, source = "tg:test"): Candidate
   extraction,
   status: "queued",
 });
-const fake = (out: Extraction): IntelExtractor => ({ tier: 1, label: "fake", extract: async () => out });
+const fake = (out: Extraction): IntelExtractor => ({
+  tier: 1,
+  label: "fake",
+  extract: async () => out,
+});
 
 describe("evaluation", () => {
   it("numeric tolerance is 1%", () => {
@@ -35,7 +40,9 @@ describe("evaluation", () => {
   });
 
   it("counts a target altitude read as vehicle altitude as a wrong key", async () => {
-    const ref = ext([{ key: "target_altitude_max", label: "Target altitude", value: 40, unit: "km" }]);
+    const ref = ext([
+      { key: "target_altitude_max", label: "Target altitude", value: 40, unit: "km" },
+    ]);
     const heur = ext([{ key: "altitude", label: "Altitude", value: 40, unit: "km" }]);
     const r = await evaluateHeuristic([cand("a", ref)], [], fake(heur));
     expect(r.mismatches[0].matchType).toBe("wrongKey");

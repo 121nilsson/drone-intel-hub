@@ -11,7 +11,8 @@ import { isFinancialSpecKey } from "@/features/intake/procurement-routing";
  * and never calls an AI tier. The stored (combined) extraction is the reference — not "truth".
  */
 
-export type MatchType = "exact" | "semantic" | "raw" | "differentReading" | "wrongKey" | "falsePositive" | "miss";
+export type MatchType =
+  "exact" | "semantic" | "raw" | "differentReading" | "wrongKey" | "falsePositive" | "miss";
 
 export interface EvalMismatch {
   candidateId: string;
@@ -38,7 +39,11 @@ export interface EvalReport {
   generatedAt: string;
   sampleSize: number;
   totalItems: number;
-  stratification: { platform: Record<string, number>; outcome: Record<string, number>; epoch: Record<string, number> };
+  stratification: {
+    platform: Record<string, number>;
+    outcome: Record<string, number>;
+    epoch: Record<string, number>;
+  };
   summary: Prf;
   identity: { name: Prf; matchId: Prf };
   perKey: Record<string, Prf>;
@@ -70,7 +75,7 @@ const MIN_RAW = 50;
 export function platformOf(source: string): string {
   const m = /^([a-z]+)[:|]/i.exec(source.trim());
   if (m) {
-    const p = m[1].toLowerCase();
+    const p = (m[1] ?? "").toLowerCase();
     if (p === "tg" || p === "telegram") return "telegram";
     return p;
   }
@@ -105,7 +110,9 @@ export function stratifiedSample(cands: Candidate[], n: number, seed = 1): Candi
   for (const b of buckets.values()) {
     for (let i = b.length - 1; i > 0; i--) {
       const j = Math.floor(rand() * (i + 1));
-      [b[i], b[j]] = [b[j], b[i]];
+      const t = b[i]!;
+      b[i] = b[j]!;
+      b[j] = t;
     }
   }
   const lists = [...buckets.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([, b]) => b);
@@ -114,7 +121,7 @@ export function stratifiedSample(cands: Candidate[], n: number, seed = 1): Candi
     let any = false;
     for (const l of lists) {
       if (i < l.length && out.length < n) {
-        out.push(l[i]);
+        out.push(l[i]!);
         any = true;
       }
     }
@@ -131,11 +138,11 @@ interface Norm {
   semantic: string;
   key: string;
   value: number | string;
-  unit?: string;
-  canonical?: number;
-  canonicalUnit?: string;
-  min?: number;
-  max?: number;
+  unit?: string | undefined;
+  canonical?: number | undefined;
+  canonicalUnit?: string | undefined;
+  min?: number | undefined;
+  max?: number | undefined;
   evidence: string;
 }
 
@@ -156,15 +163,27 @@ function norm(s: ExtractedSpec): Norm {
 
 function sameValue(a: Norm, b: Norm): "exact" | "differentReading" | "raw" | null {
   if (a.canonical !== undefined && b.canonical !== undefined) {
-    if (numbersClose(a.canonical, b.canonical) && (a.canonicalUnit ?? "") === (b.canonicalUnit ?? "")) return "exact";
+    if (
+      numbersClose(a.canonical, b.canonical) &&
+      (a.canonicalUnit ?? "") === (b.canonicalUnit ?? "")
+    )
+      return "exact";
   }
   const aBound = a.max ?? a.min;
   const bBound = b.max ?? b.min;
   const aPoint = a.canonical ?? aBound;
   const bPoint = b.canonical ?? bBound;
-  if ((a.max !== undefined || b.max !== undefined || a.min !== undefined || b.min !== undefined) && aPoint !== undefined && bPoint !== undefined && numbersClose(aPoint, bPoint))
+  if (
+    (a.max !== undefined || b.max !== undefined || a.min !== undefined || b.min !== undefined) &&
+    aPoint !== undefined &&
+    bPoint !== undefined &&
+    numbersClose(aPoint, bPoint)
+  )
     return "differentReading";
-  if (String(a.value).trim().toLowerCase() === String(b.value).trim().toLowerCase() && (a.unit ?? "") === (b.unit ?? ""))
+  if (
+    String(a.value).trim().toLowerCase() === String(b.value).trim().toLowerCase() &&
+    (a.unit ?? "") === (b.unit ?? "")
+  )
     return "raw";
   return null;
 }
@@ -188,18 +207,24 @@ export function compareSpecs(heur: Norm[], ref: Norm[]): SpecComparison {
   const pairs: SpecComparison["pairs"] = [];
   const wrongKeys: SpecComparison["wrongKeys"] = [];
   heur.forEach((h, hi) => {
-    const ri = ref.findIndex((r, i) => !usedR.has(i) && r.semantic === h.semantic && sameValue(h, r));
-    if (ri < 0) return;
-    const t = sameValue(h, ref[ri])!;
-    pairs.push({ h, r: ref[ri], type: t === "exact" ? (h.key === ref[ri].key ? "exact" : "semantic") : t });
+    const ri = ref.findIndex(
+      (r, i) => !usedR.has(i) && r.semantic === h.semantic && sameValue(h, r),
+    );
+    const r = ref[ri];
+    if (ri < 0 || !r) return;
+    const t = sameValue(h, r)!;
+    pairs.push({ h, r, type: t === "exact" ? (h.key === r.key ? "exact" : "semantic") : t });
     usedR.add(ri);
     usedH.add(hi);
   });
   heur.forEach((h, hi) => {
     if (usedH.has(hi)) return;
-    const ri = ref.findIndex((r, i) => !usedR.has(i) && r.semantic !== h.semantic && sameValue(h, r) === "exact");
-    if (ri < 0) return;
-    wrongKeys.push({ h, r: ref[ri] });
+    const ri = ref.findIndex(
+      (r, i) => !usedR.has(i) && r.semantic !== h.semantic && sameValue(h, r) === "exact",
+    );
+    const r = ref[ri];
+    if (ri < 0 || !r) return;
+    wrongKeys.push({ h, r });
     usedR.add(ri);
     usedH.add(hi);
   });
@@ -218,10 +243,18 @@ function prf(tp: number, fp: number, fn: number): Prf {
   return { precision, recall, f1, tp, fp, fn };
 }
 
-const namesOf = (e: Extraction) =>
-  [...new Set([e.name, ...(e.systems ?? []).map((s) => s.name)].filter((n): n is string => !!n?.trim()).map(phoneticKey))];
-const matchIdsOf = (e: Extraction) =>
-  [...new Set([e.matchId, ...(e.systems ?? []).map((s) => s.matchId)].filter((x): x is string => !!x))];
+const namesOf = (e: Extraction) => [
+  ...new Set(
+    [e.name, ...(e.systems ?? []).map((s) => s.name)]
+      .filter((n): n is string => !!n?.trim())
+      .map(phoneticKey),
+  ),
+];
+const matchIdsOf = (e: Extraction) => [
+  ...new Set(
+    [e.matchId, ...(e.systems ?? []).map((s) => s.matchId)].filter((x): x is string => !!x),
+  ),
+];
 
 function setCounts(h: string[], r: string[]) {
   const rs = new Set(r);
@@ -239,7 +272,8 @@ export async function evaluateHeuristic(
   const minRaw = opts.minRawLength ?? MIN_RAW;
   const cap = opts.maxMismatchesPerKey ?? 5;
   const eligible = candidates.filter(
-    (c) => (c.raw?.trim().length ?? 0) >= minRaw && (opts.includeDiscarded || c.status !== "discarded"),
+    (c) =>
+      (c.raw?.trim().length ?? 0) >= minRaw && (opts.includeDiscarded || c.status !== "discarded"),
   );
   const sample = stratifiedSample(eligible, sampleSize, opts.seed ?? 1);
 
@@ -317,7 +351,10 @@ export async function evaluateHeuristic(
 
     const agreed = cmp.pairs.filter((p) => p.type === "exact" || p.type === "semantic");
     if (agreed.length) {
-      const refNames = [c.extraction.name, ...(c.extraction.systems ?? []).map((s) => s.name)].filter(
+      const refNames = [
+        c.extraction.name,
+        ...(c.extraction.systems ?? []).map((s) => s.name),
+      ].filter(
         (n): n is string => !!n && rn.includes(phoneticKey(n)) && hn.includes(phoneticKey(n)),
       );
       fixtures.push({
@@ -335,7 +372,9 @@ export async function evaluateHeuristic(
   }
 
   const perKey: Record<string, Prf> = {};
-  let T = 0, F = 0, N = 0;
+  let T = 0,
+    F = 0,
+    N = 0;
   for (const [k, v] of keyCounts) {
     perKey[k] = prf(v.tp, v.fp, v.fn);
     T += v.tp;
@@ -369,7 +408,11 @@ export async function evaluateHeuristic(
 }
 
 /** Checks one fixture against a fresh heuristic run; returns failing expectations. Pure. */
-export async function checkFixture(fx: EvalFixture, heuristic: IntelExtractor, catalog: Drone[] = []) {
+export async function checkFixture(
+  fx: EvalFixture,
+  heuristic: IntelExtractor,
+  catalog: Drone[] = [],
+) {
   const heur = normalizeExtraction(await heuristic.extract(fx.text, catalog)).extraction;
   const got = comparableSpecs(heur);
   const missing = fx.expect.filter(
@@ -377,7 +420,11 @@ export async function checkFixture(fx: EvalFixture, heuristic: IntelExtractor, c
       !got.some((g) => {
         if (g.semantic !== e.semantic) return false;
         if (typeof e.value === "number")
-          return g.canonical !== undefined && numbersClose(g.canonical, e.value) && (g.canonicalUnit ?? "") === (e.unit ?? "");
+          return (
+            g.canonical !== undefined &&
+            numbersClose(g.canonical, e.value) &&
+            (g.canonicalUnit ?? "") === (e.unit ?? "")
+          );
         return String(g.value).toLowerCase() === String(e.value).toLowerCase();
       }),
   );
@@ -387,7 +434,11 @@ export async function checkFixture(fx: EvalFixture, heuristic: IntelExtractor, c
 }
 
 /** JSON corpus for src/test/fixtures/eval-corpus.json (merged by id with an existing one). */
-export function fixturesToCorpus(fixtures: EvalFixture[], existing: EvalFixture[] = [], limit = 50): EvalFixture[] {
+export function fixturesToCorpus(
+  fixtures: EvalFixture[],
+  existing: EvalFixture[] = [],
+  limit = 50,
+): EvalFixture[] {
   const byId = new Map(existing.map((f) => [f.id, f]));
   for (const f of fixtures.slice(0, limit)) byId.set(f.id, f);
   return [...byId.values()];

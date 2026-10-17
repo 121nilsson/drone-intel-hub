@@ -10,7 +10,9 @@ const SIZES = [50, 100, 250, 500];
 function Kpi({ label, v }: { label: string; v: Prf }) {
   return (
     <Card>
-      <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">{label}</div>
+      <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+        {label}
+      </div>
       <div className="mt-1 text-2xl font-semibold">F1 {v.f1.toFixed(2)}</div>
       <div className="font-mono text-xs text-muted-foreground">
         P {pct(v.precision)} · R {pct(v.recall)}
@@ -20,7 +22,9 @@ function Kpi({ label, v }: { label: string; v: Prf }) {
 }
 
 function download(name: string, data: unknown) {
-  const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }));
+  const url = URL.createObjectURL(
+    new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }),
+  );
   const a = document.createElement("a");
   a.href = url;
   a.download = name;
@@ -79,7 +83,11 @@ export function EvaluationPage() {
             </Btn>
           ))}
           <label className="flex items-center gap-2 font-mono text-xs text-muted-foreground">
-            <input type="checkbox" checked={discarded} onChange={(e) => setDiscarded(e.target.checked)} />
+            <input
+              type="checkbox"
+              checked={discarded}
+              onChange={(e) => setDiscarded(e.target.checked)}
+            />
             inkl. kasserade
           </label>
           <Btn onClick={run} disabled={running || candidates.length === 0}>
@@ -87,7 +95,8 @@ export function EvaluationPage() {
           </Btn>
         </div>
         <p className="mt-2 font-mono text-xs text-muted-foreground">
-          {candidates.length} kandidater tillgängliga · endast texter ≥ 50 tecken · kontraktsbelopp räknas inte
+          {candidates.length} kandidater tillgängliga · endast texter ≥ 50 tecken · kontraktsbelopp
+          räknas inte
         </p>
       </Panel>
 
@@ -103,7 +112,11 @@ export function EvaluationPage() {
             <div className="flex flex-wrap gap-1.5">
               {(["platform", "outcome", "epoch"] as const).flatMap((dim) =>
                 Object.entries(report.stratification[dim]).map(([k, n]) => (
-                  <Tag key={`${dim}-${k}`} tone={dim === "platform" ? "info" : dim === "outcome" ? "default" : "muted"} mono>
+                  <Tag
+                    key={`${dim}-${k}`}
+                    tone={dim === "platform" ? "info" : dim === "outcome" ? "default" : "muted"}
+                    mono
+                  >
                     {k}: {n}
                   </Tag>
                 )),
@@ -112,7 +125,9 @@ export function EvaluationPage() {
             {report.topIssues.length > 0 && (
               <ul className="mt-3 space-y-1 font-mono text-xs text-warning">
                 {report.topIssues.map((t) => (
-                  <li key={t} className="break-words">⚠ {t}</li>
+                  <li key={t} className="break-words">
+                    ⚠ {t}
+                  </li>
                 ))}
               </ul>
             )}
@@ -134,10 +149,11 @@ export function EvaluationPage() {
             }
           >
             <p className="text-sm text-muted-foreground">
-              {report.fixtures.length} rapporter där heuristiken och lagrad extraction är överens blir testfall
-              ({report.fixtures.reduce((n, f) => n + f.expect.length, 0)} förväntade värden). Ersätt{" "}
-              <code className="font-mono text-xs">src/test/fixtures/eval-corpus.json</code> med filen så låser
-              testsviten dagens korrekta beteende.
+              {report.fixtures.length} rapporter där heuristiken och lagrad extraction är överens
+              blir testfall ({report.fixtures.reduce((n, f) => n + f.expect.length, 0)} förväntade
+              värden). Ersätt{" "}
+              <code className="font-mono text-xs">src/test/fixtures/eval-corpus.json</code> med
+              filen så låser testsviten dagens korrekta beteende.
             </p>
           </Panel>
 
@@ -147,12 +163,18 @@ export function EvaluationPage() {
                 const mis = report.mismatches.filter((m) => m.specKey === k);
                 return (
                   <li key={k}>
-                    <button className="w-full text-left" onClick={() => setOpenKey(openKey === k ? null : k)}>
+                    <button
+                      className="w-full text-left"
+                      onClick={() => setOpenKey(openKey === k ? null : k)}
+                    >
                       <ListRow
                         title={<span className="font-mono">{k}</span>}
                         subtitle={`tp ${v.tp} · fp ${v.fp} · fn ${v.fn}`}
                         meta={
-                          <Tag tone={v.f1 < 0.5 ? "danger" : v.f1 < 0.8 ? "warning" : "success"} mono>
+                          <Tag
+                            tone={v.f1 < 0.5 ? "danger" : v.f1 < 0.8 ? "warning" : "success"}
+                            mono
+                          >
                             F1 {v.f1.toFixed(2)} · P {pct(v.precision)} · R {pct(v.recall)}
                           </Tag>
                         }
@@ -160,18 +182,28 @@ export function EvaluationPage() {
                     </button>
                     {openKey === k && (
                       <div className="space-y-2 px-3 pb-3">
-                        {mis.length === 0 && <p className="text-xs text-muted-foreground">Inga avvikelser.</p>}
+                        {mis.length === 0 && (
+                          <p className="text-xs text-muted-foreground">Inga avvikelser.</p>
+                        )}
                         {mis.map((m, i) => (
                           <Card key={i} className="text-xs">
                             <div className="flex flex-wrap items-center gap-2">
-                              <Tag tone="warning" mono>{m.matchType}</Tag>
-                              <span className="min-w-0 break-all font-mono text-muted-foreground">{m.source}</span>
+                              <Tag tone="warning" mono>
+                                {m.matchType}
+                              </Tag>
+                              <span className="min-w-0 break-all font-mono text-muted-foreground">
+                                {m.source}
+                              </span>
                             </div>
                             <div className="mt-1 font-mono">
-                              heuristik: {m.heuristicValue ?? "—"} {m.heuristicUnit ?? ""} · lagrad: {m.referenceValue ?? "—"}{" "}
-                              {m.referenceUnit ?? ""}
+                              heuristik: {m.heuristicValue ?? "—"} {m.heuristicUnit ?? ""} · lagrad:{" "}
+                              {m.referenceValue ?? "—"} {m.referenceUnit ?? ""}
                             </div>
-                            {m.evidence && <p className="mt-1 break-words italic text-muted-foreground">“{m.evidence}”</p>}
+                            {m.evidence && (
+                              <p className="mt-1 break-words italic text-muted-foreground">
+                                “{m.evidence}”
+                              </p>
+                            )}
                           </Card>
                         ))}
                       </div>
