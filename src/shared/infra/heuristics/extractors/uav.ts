@@ -1,4 +1,4 @@
-import { cue, unit } from "../lexicons";
+import { cue, unit } from "@/shared/lexicons";
 import { type AddSpec, measureCue } from "./common";
 
 /** Counter-drone envelope cues; a vehicle's own range/altitude must not swallow these. */

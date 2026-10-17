@@ -1,4 +1,4 @@
-import { cue, unit } from "../lexicons";
+import { cue, unit } from "@/shared/lexicons";
 import { type AddSpec, measureCue } from "./common";
 
 /** Ground robots: load/towing capacity and battery operating time. */
