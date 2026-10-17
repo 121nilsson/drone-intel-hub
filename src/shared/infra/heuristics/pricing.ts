@@ -1,4 +1,5 @@
-import { alt } from "@/shared/lexicons";
+import { parseMoney, parseMoneyRange, type Money, type MoneyRange } from "@/entities/normalization/currency";
+import { alt, compoundAlt, currencyAlt, magnitudeAlt } from "@/shared/lexicons";
 
 /**
  * Money extraction, driven by the lexicons. Magnitudes are flattened longest-first across all
@@ -7,8 +8,8 @@ import { alt } from "@/shared/lexicons";
  * dossier for a "$2 billion" arms deal.
  */
 const CUR = "[$€£₽₴]";
-const MAG = alt((l) => l.money.magnitudes);
-const CUR_WORD = alt((l) => l.money.currencyWords);
+const MAG = magnitudeAlt();
+const CUR_WORD = `(?:${compoundAlt()}|${currencyAlt()})`;
 const AMT = `(\\d[\\d,. ]*\\d|\\d)\\s*(${MAG})?`;
 const END = "(?![\\p{L}])";
 
