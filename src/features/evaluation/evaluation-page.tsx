@@ -9,7 +9,7 @@ const SIZES = [50, 100, 250, 500];
 
 function Kpi({ label, v }: { label: string; v: Prf }) {
   return (
-    <Card>
+    <Card className="p-3">
       <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
         {label}
       </div>
