@@ -43,12 +43,33 @@ const domain = z
   }, z.enum(DOMAINS).optional())
   .catch(undefined);
 
+/**
+ * Model keys arrive as free text: "Range", "speedMax", even "target_capability'," with the quote
+ * that birthed it sitting in a live dossier. Canonical form is lowercase snake_case so variant
+ * spellings merge into one spec and punctuation noise cannot fork a key. A key that reduces to
+ * nothing keeps its original text rather than dropping the fact.
+ */
+const normalizeSpecKey = (v: unknown) => {
+  if (typeof v !== "string") return v;
+  const cleaned = v
+    .trim()
+    .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+    .toLowerCase()
+    .replace(/[^a-z0-9_]+/g, "_")
+    .replace(/_{2,}/g, "_")
+    .replace(/^_+|_+$/g, "");
+  return cleaned || v.trim();
+};
+
 export const ExtractedSpecSchema = z.preprocess(
   // `label` is display text; a model that gives only `key` has still reported the fact.
-  (v) =>
-    v && typeof v === "object" && !Array.isArray(v) && !(v as { label?: unknown }).label
-      ? { ...v, label: (v as { key?: unknown }).key }
-      : v,
+  (v) => {
+    if (!v || typeof v !== "object" || Array.isArray(v)) return v;
+    const spec = { ...(v as Record<string, unknown>) };
+    if (!spec["label"]) spec["label"] = spec["key"];
+    spec["key"] = normalizeSpecKey(spec["key"]);
+    return spec;
+  },
   z.object({
     key: z.string().trim().min(1).max(100),
     label: z.string().trim().min(1).max(160),

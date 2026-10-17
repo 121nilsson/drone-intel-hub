@@ -211,6 +211,17 @@ describe("resolveSystems", () => {
   it("returns nothing for text with no systems", () => {
     expect(resolveSystems("nothing of interest here", CATALOG)).toEqual([]);
   });
+
+  it("does not match a catalog alias that is a Cyrillic calendar word (Starlink → Lyutyi)", () => {
+    // Live data: "Февраль" (February) sat as a Lyutyi alias and auto-merged a Starlink-restriction
+    // post that only used the word in its calendar sense.
+    const lyutyi = drone("lyutyi", {
+      name: "FP-1 / Lyutyi",
+      cyrillic: "Лютий",
+      aliases: ["Liutyi", "AN-196", "Лютый", "Февраль"],
+    });
+    expect(resolveSystems("Февраль потерял связь с терминалами Starlink", [lyutyi])).toEqual([]);
+  });
 });
 
 describe("HeuristicExtractor number parsing", () => {

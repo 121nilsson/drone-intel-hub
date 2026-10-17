@@ -263,6 +263,16 @@ describe("runTwoTier auto-triage", () => {
     expect(d._cands[0]!.resolvedBy).toBe("auto");
   });
 
+  it("records no candidate row for a nameless, matchless screen result", async () => {
+    const d = triage([drone("geran-2")], { confidence: 0.1 });
+    const res = await runTwoTier("report", SRC, d);
+
+    // The dispatch still reports the outcome; the candidates store holds nothing. 2,060 of
+    // 3,224 discarded rows measured live were exactly this shape.
+    expect(res.kind).toBe("auto-discarded");
+    expect(d._cands).toHaveLength(0);
+  });
+
   it("leaves everything to review when the thresholds are unset", async () => {
     const d = deps([], { name: "Orlan-30", confidence: 0.95 });
     expect((await runTwoTier("report", SRC, d)).kind).toBe("queued");

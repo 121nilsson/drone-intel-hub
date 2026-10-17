@@ -20,6 +20,10 @@ const STOP = new Set(
   (
     "Telegram Russian Russia Ukrainian Ukraine Iranian Iran Chinese China The A An In On At Of And Or But New Our We They It This That These Those " +
     "Monday Tuesday Wednesday Thursday Friday Saturday Sunday January February March April May June July August September October November December " +
+    // Cyrillic calendar words are not system names: "Февраль" (February) sat as a Lyutyi alias and
+    // auto-merged a Starlink post into its dossier. Ukrainian months are omitted on purpose —
+    // "Лютий" (February) IS the FP-1/Lyutyi name and must stay matchable.
+    "Январь Февраль Март Апрель Май Июнь Июль Август Сентябрь Октябрь Ноябрь Декабрь " +
     "MHz GHz CRPA GNSS GPS FPV UAV UAVs USV UGV EW AI RF HD km kg USD EUR UAH RUB Air Land Sea Defense Defence Forces Army Navy Report Dispatch Update Source Sources " +
     "Also New One Two Three Several Later Then After Before Near Meanwhile Reportedly Estimated Price Cost Unit Russians Ukrainians Kyiv Moscow Kharkiv Odesa Donetsk Crimea Black Front Western Eastern Southern Northern Sea Oblast"
   )
@@ -115,7 +119,9 @@ function dropContained(names: string[], against: string[]) {
 }
 
 const catalogNames = (d: Drone) =>
-  [...d.name.split(/\s*\/\s*/), d.name, d.cyrillic ?? "", ...d.aliases].filter((n) => n.length > 2);
+  [...d.name.split(/\s*\/\s*/), d.name, d.cyrillic ?? "", ...d.aliases].filter(
+    (n) => n.length > 2 && !STOP.has(n.toLowerCase()),
+  );
 const base = (n: string) => {
   const m = n.toLowerCase().match(/^(.*?)-(\p{N}+\w*)$/u);
   return m ? { stem: m[1]!, variant: m[2]! } : null;

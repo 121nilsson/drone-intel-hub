@@ -131,8 +131,14 @@ function round(n: number) {
 }
 
 export function consensus(spec: SpecAttribute): Consensus {
-  const sources = new Set(spec.claims.map((c) => c.source)).size;
-  const measured = spec.claims.flatMap((claim, i) => {
+  // An adjudicated "outlier" stays on the record (the report said what it said) but no longer
+  // feeds the aggregate: one rejected figure must not drag the median into a dispute. Kept
+  // claims carry their original index, so consensus().outliers still points into spec.claims.
+  const kept = spec.claims.flatMap((claim, i) =>
+    claim.adjudication?.verdict === "outlier" ? [] : [{ claim, i }],
+  );
+  const sources = new Set(kept.map(({ claim }) => claim.source)).size;
+  const measured = kept.flatMap(({ claim, i }) => {
     const m = measurement(spec, claim, i);
     return m ? [m] : [];
   });
@@ -141,13 +147,15 @@ export function consensus(spec: SpecAttribute): Consensus {
 
   if (points.length === 0 && bounds.length === 0) {
     const counts = new Map<string, number>();
-    spec.claims.forEach((c) => counts.set(String(c.value), (counts.get(String(c.value)) ?? 0) + 1));
+    kept.forEach(({ claim }) =>
+      counts.set(String(claim.value), (counts.get(String(claim.value)) ?? 0) + 1),
+    );
     const top = [...counts.entries()].sort((a, b) => b[1] - a[1])[0];
-    const agree = top ? top[1] / spec.claims.length : 0;
+    const agree = top ? top[1] / kept.length : 0;
     return {
       display: top?.[0] ?? "—",
       sources,
-      disputed: agree < 0.6 && spec.claims.length > 1,
+      disputed: agree < 0.6 && kept.length > 1,
       confidence: sources >= 3 && agree > 0.6 ? "high" : sources >= 2 ? "medium" : "low",
     };
   }

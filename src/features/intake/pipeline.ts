@@ -654,7 +654,12 @@ export async function runTwoTier(
     candidate.status = "discarded";
     candidate.resolvedBy = "auto";
     if (candidate.quality) candidate.quality.decision = "auto-discarded";
-    d.candidates.add(candidate);
+    // A nameless, system-less, matchless extraction has nothing to attribute, review or merge:
+    // storing it only grew the discard pile (2,060 nameless rows of 3,224 discarded, measured
+    // live). The outcome still lands on the dispatch; no candidate row is recorded. A screen
+    // that matched or named something keeps its audit row.
+    if (extraction.name || extraction.systems?.length || extraction.matchId)
+      d.candidates.add(candidate);
     return applyRelatedSystems(
       { kind: "auto-discarded", candidate, trace },
       fullExtraction,

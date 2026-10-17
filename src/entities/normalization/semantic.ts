@@ -42,13 +42,22 @@ export function semanticKeyFor(key: string, label = ""): string {
     return "range.max";
 
   if (k === "dive_speed" || /\bdive\b/i.test(lab)) return "speed.dive";
-  if (k === "max_speed" || (k === "speed" && /\bmax(?:imum)?\b/i.test(lab))) return "speed.max";
-  if (k === "cruise_speed" || (k === "speed" && /\bcruise\b/i.test(lab))) return "speed.cruise";
+  if (
+    k === "max_speed" ||
+    k === "speed_max" ||
+    k === "top_speed" ||
+    (k === "speed" && /\bmax(?:imum)?\b/i.test(lab))
+  )
+    return "speed.max";
+  if (k === "cruise_speed" || k === "speed_cruise" || (k === "speed" && /\bcruise\b/i.test(lab)))
+    return "speed.cruise";
 
   if (k === "service_ceiling" || /service ceiling/i.test(lab)) return "altitude.service_ceiling";
   if (k === "max_altitude" || (k === "altitude" && /\bmax(?:imum)?\b/i.test(lab)))
     return "altitude.max";
   if (k === "altitude" && /recommended/i.test(lab)) return "altitude.recommended";
+  // A bare "altitude" is the airframe's own ceiling; a stated minimum keeps its own key.
+  if (k === "altitude" && !/min(?:imum)?\b/i.test(lab)) return "altitude.max";
 
   if (k === "warhead" || (k === "payload" && /warhead/i.test(lab))) return "payload.warhead";
   if (

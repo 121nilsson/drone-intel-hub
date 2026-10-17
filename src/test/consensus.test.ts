@@ -61,6 +61,30 @@ describe("consensus", () => {
     expect(c.sources).toBe(3);
   });
 
+  it("does not let an adjudicated outlier feed the aggregate", () => {
+    // Thunder, live: an 800 km reference claim next to 15/10 km claims the adjudicator marked.
+    const claim = (value: number, source: string, verdict: "supported" | "outlier"): SpecClaim => ({
+      value,
+      source,
+      date: "2026-10-01T00:00:00.000Z",
+      adjudication: { verdict, confidence: 0.9, at: "2026-10-02T00:00:00.000Z" },
+    });
+    const c = consensus({
+      key: "range",
+      label: "Range",
+      unit: "km",
+      discoveredBy: "ai",
+      claims: [
+        claim(800, "Wikipedia", "supported"),
+        claim(15, "Blog A", "outlier"),
+        claim(10, "Blog B", "outlier"),
+      ],
+    });
+    expect(c.display).toBe("800 km");
+    expect(c.disputed).toBe(false);
+    expect(c.sources).toBe(1);
+  });
+
   it("renders a single value when all sources agree", () => {
     const c = consensus(
       spec(

@@ -285,3 +285,80 @@ Prettier-dirty in your commits (plus three of mine) and were formatted mechanica
 the only gate noise; zero behaviour change.
 
 Signed: **GLM-5.3-Flash Free** — agent via OpenCode · 2026-10-18
+
+---
+
+## Addendum 3 — DB-discrepancy slice (verified against live data, then fixed)
+
+Your `db_discrepancies` report was reviewed claim-by-claim against the code and the live
+database before anything was written. Four of eight root causes did not hold up; the corrected
+findings drove this slice. Evidence-first, same discipline as always.
+
+### Corrected root causes (what the data actually showed)
+
+1. **Altitude contamination (your #1)** — the polluted `altitude` claims on PAC-2/PAC-3/THAAD are
+   all `"discoveredBy": "ai"`; the heuristic `notAfter` path never wrote them. The leak phrases
+   were "maximum **interception** altitude of 24 to 36 km" and "altitudes of up to 32 km" — the
+   `targetAltitude` cues only had "engagement altitude". Where the AI *did* see "engagement
+   altitude" it wrote `target_altitude_max` correctly — and also duplicated the figure under
+   `altitude` ("altitudes of up to 32 km" appears in both keys for PAC-2).
+2. **Starlink → Lyutyi (your #2)** — not a generic "БПЛА" match. The catalog alias **"Февраль"**
+   (Russian for February) sat on lyutyi; the post used the word in its calendar sense, the alias
+   matched, confidence 0.9 ≥ 0.85 auto-merged. Bonus finding: the 160 km/h figure in that article
+   is the Starlink *terminal's* speed — even a correct name match would have mis-attributed it.
+3. **"Nothing adjudicates" (your #6)** — false for live data: Thunder's range claims carry full
+   verdicts (800 km "supported", 15/10 km "outlier", `contradictionCheckedAt` set). The real gap:
+   `consensus()` still aggregated adjudicated outliers into the median/display.
+4. **Money chaos (your #5)** — stale after our lexicon-fed magnitudes: `$832 мільйони` and friends
+   parse today (`missed-heuristics*.test.ts` passes). What remains is legacy verbatim strings in
+   `drones.data` — the reanalysis queue covers those (below).
+
+### What was implemented
+
+- **Lexicon** (`en/ru/uk`): `targetAltitude` += "interception altitude"/"intercept altitude" /
+  "высота перехвата" / "висота перехоплення". The uav `notAfter` ENVELOPE is built from the same
+  cues, so the heuristic side closes automatically. `sv` untouched (native review required).
+- **AI prompt** (v5 → v6): altitude discipline ("altitude = own service ceiling; engagement/
+  interception altitude → target_altitude_max, never both") + keys must be lowercase snake_case.
+  The version bump feeds `isStale`/`requeueStale`, which is bounded per run — old posts re-screen
+  gradually, which is also the migration path for the legacy money strings.
+- **Calendar-word guard** (`names.ts`): Russian months in `STOP`, and `catalogNames()` now skips
+  stop-worded names so a bad alias cannot match even if it sits in the data. Checked against the
+  live catalog: exactly one alias is affected — "Февраль" on lyutyi, the one that mis-merged.
+  Ukrainian months are deliberately NOT stoplisted: "Лютий" (February) IS the FP-1/Lyutyi name.
+- **Consensus outliers** (`consensus.ts`): claims with `adjudication.verdict === "outlier"` no
+  longer feed the aggregate (median/display/sources). Original claim indexes are preserved so
+  `outliers` still points into `spec.claims`; the provenance sheet keeps showing every claim with
+  its verdict. `ew-matrix.ts` already had this rule — now the other consumers do too.
+- **Spec-key normalization** (`extraction.schema.ts`): keys are folded to lowercase snake_case at
+  the `ExtractedSpecSchema` boundary (punctuation → separators, camelCase split). Live data held a
+  spec keyed `"target_capability',"` next to a clean twin — they now merge. A key that reduces to
+  nothing keeps its original text. `semanticKeyFor` gained only unambiguous variants:
+  `speed_max`/`top_speed` → `speed.max`, `speed_cruise` → `speed.cruise`, bare `altitude` →
+  `altitude.max` (min-guarded). Distinct concepts (`combat_range` vs `ferry_range`, the weight
+  variants) are deliberately NOT merged — that needs domain review, not a regex.
+- **Nameless candidates** (`pipeline.ts`): the auto-discard branch no longer stores a candidate
+  row when the extraction has no name, no systems and no matchId (2,060 of 3,224 discarded rows
+  measured live were exactly that shape). The outcome still lands on the dispatch and the run
+  report's `discarded` counter, so the audit trail survives at dispatch level. Thresholds-unset
+  review mode still queues everything, and a matched-but-low-confidence screen keeps its row
+  (your "keeps the candidate for audit" pin is untouched).
+
+### Deliberately not done
+
+- **Name suffix normalization (your #4)** — real fragmentation (17 Warmate candidates verified),
+  but the report's "Geran-2, Geran-5 → same stem" example is the wrong direction: variant numbers
+  are different systems and must never collapse. Any suffix work needs that boundary designed
+  first (strip non-numeric suffixes only).
+- **Heuristic evaluation mode (your #7)** — agreed it's worth having; separate slice.
+
+### Verification (2026-10-18)
+
+Focused first (6 files, 101 tests), then full gate: **67 files / 739 tests passing** (was 66/732);
+type check 0 findings; green gate GREEN against the saved baseline (14 eslint + 4 prettier
+pre-existing, no new findings). New pins: interception-altitude routing (`missed-heuristics-3`),
+Cyrillic-calendar alias + month detection (`heuristic-ai.test.ts`), consensus outlier filter
+(`consensus.test.ts`), key normalization + semantic variants (new `spec-key-normalization.test.ts`),
+and nameless-no-row (`pipeline-relations.test.ts`).
+
+Signed: **GLM-5.3-Flash Free** — agent via OpenCode · 2026-10-18
