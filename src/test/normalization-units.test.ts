@@ -19,9 +19,16 @@ describe("normalizeQuantity", () => {
     expect(normalizeQuantity("90 knots")?.canonicalValue).toBeCloseTo(166.68, 2);
     expect(normalizeQuantity("30 m/s")?.canonicalValue).toBe(108);
     expect(normalizeQuantity("185 км/ч")?.canonicalUnit).toBe("km/h");
+    // Sea units: "45 вузлів" normalized to nothing before the Ukrainian fragment existed.
+    expect(normalizeQuantity("45 вузлів")?.canonicalUnit).toBe("km/h");
+    expect(normalizeQuantity("45 вузлів")?.canonicalValue).toBe(83.34);
+    expect(normalizeQuantity("700 nautical miles")?.canonicalValue).toBe(1296.4);
 
     expect(normalizeQuantity("2 hours")?.canonicalValue).toBe(120);
     expect(normalizeQuantity("5400 seconds")?.canonicalValue).toBe(90);
+    // Days endurance: USV sources state autonomy in діб/суток, which had no unit at all.
+    expect(normalizeQuantity("3 days")?.canonicalValue).toBe(4320);
+    expect(normalizeQuantity("3 діб")?.canonicalValue).toBe(4320);
     // Ukrainian minutes / liters - live claims that normalized to nothing before.
     expect(normalizeQuantity("45 хвилин")?.canonicalValue).toBe(45);
     expect(normalizeQuantity("45 хвилин")?.canonicalUnit).toBe("min");

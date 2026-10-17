@@ -33,6 +33,9 @@ export const sv: Lexicon = {
     watt: ["W", "watt"],
     kilowatt: ["kW"],
     liters: ["(?<![\\p{L}])l(?:iter)?"],
+    knots: ["knop(?:ar)?"],
+    nmi: ["nautiska\\s+mil"],
+    days: ["dygn", "dag(?:ar)?"],
   },
   cues: {
     speed: ["hastighet", "marschfart"],
@@ -50,6 +53,7 @@ export const sv: Lexicon = {
     detectionRange: ["upptäcktsavstånd", "upptäcktsräckvidd", "upptäcker mål på"],
     targetAltitude: ["bekämpningshöjd"],
     fuelCapacity: [], // väntar modersmålsgranskning
+    usvDraft: [], // väntar modersmålsgranskning
     targetSpeed: ["målhastighet"],
     targetChannels: ["målkanaler", "samtidiga mål"],
     length: ["längd", "lång"],

@@ -57,6 +57,9 @@ export const en: Lexicon = {
     watt: ["W", "watts?"],
     kilowatt: ["kW", "kilowatts?"],
     liters: ["(?<![\\p{L}])l(?:it(?:er|re)s?)?"],
+    knots: ["knots?", "kts"],
+    nmi: ["nautical\\s+miles?"],
+    days: ["days?"],
   },
   cues: {
     speed: ["cruise(?:s|d)?(?: at)?", "speed", "flies at"],
@@ -86,6 +89,7 @@ export const en: Lexicon = {
       "targets up to",
     ],
     fuelCapacity: ["fuel capacity"],
+    usvDraft: ["draft", "draught"],
     targetSpeed: ["target speed", "targets flying at", "targets moving at"],
     targetChannels: ["target channels", "simultaneous targets", "targets simultaneously"],
     length: ["length", "long"],

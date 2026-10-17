@@ -86,7 +86,7 @@ const UNITS: UnitDef[] = [
     token: "kn",
     dimension: "speed",
     toCanonical: NM_KM,
-    pattern: /(?:knots?|kts|уз(?:л(?:ов|а)?)?)(?![\p{L}\p{N}])/iu,
+    pattern: /(?:knots?|kts|вузл[а-яіїєґ]*|вузол|уз(?:л(?:ов|а)?)?)(?![\p{L}\p{N}])/iu,
   },
   { token: "mi", dimension: "distance", toCanonical: MILE_KM, pattern: /miles?(?![\p{L}\p{N}])/iu },
   {
@@ -163,6 +163,13 @@ const UNITS: UnitDef[] = [
     dimension: "duration",
     toCanonical: 1,
     pattern: /(?:minutes?|mins?|минут[а-яё]*|мин|хвилин[а-яіїєґ]*|хв)(?![\p{L}\p{N}])/iu,
+  },
+  {
+    token: "d",
+    dimension: "duration",
+    toCanonical: 1440,
+    pattern:
+      /(?:days?|dygn|діб|доб[а-яіїєґ]*|дн(?:ів|я|ю|і|ей)|сут(?:ок|к[а-яё]*))(?![\p{L}\p{N}])/iu,
   },
   {
     token: "s",

@@ -32,6 +32,12 @@ export interface Lexicon {
     kilowatt: string[];
     /** Volume: fuel tank / capacity. */
     liters: string[];
+    /** Speed in knots ("42 kn", "45 вузлів"). */
+    knots: string[];
+    /** Distance in nautical miles. */
+    nmi: string[];
+    /** Endurance in days ("3 days", "3 діб"). */
+    days: string[];
   };
   /** Spec cue phrases, by spec. Each list is matched shortly before the number. */
   cues: {
@@ -46,6 +52,8 @@ export interface Lexicon {
     ugvLoad: string[];
     /** Ground robots: battery / operating time. */
     ugvOperatingTime: string[];
+    /** Surface vessels: hull draft ("0.8 m draft", "осадка 0,8 м"). */
+    usvDraft: string[];
     /** Jammers: radiated output power. */
     jammingPower: string[];
     /** Jammers / handhelds: suppression or effective defeat radius. */

@@ -13,6 +13,7 @@ export function extractUgv(raw: string, add: AddSpec) {
   measureCue(raw, add, {
     cue: cue("ugvOperatingTime"),
     units: [
+      [unit("days"), "d"],
       [unit("hours"), "h"],
       [unit("minutes"), "min"],
     ],

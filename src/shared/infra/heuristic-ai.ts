@@ -27,7 +27,7 @@ function scan(raw: string, catalog: Drone[], deep: boolean): Extraction {
   const facts = extractFacts(raw);
   const specs = facts.specs;
   const rfBands = extractRfBands(raw);
-  const domain: Domain | undefined = /usv|boat|naval|sea drone|maritime/.test(t)
+  const domain: Domain | undefined = /usv|boat|naval|sea drone|maritime|катер|човен|морськ/.test(t)
     ? "Sea"
     : /ugv|tracked|ground robot/.test(t)
       ? "Land"

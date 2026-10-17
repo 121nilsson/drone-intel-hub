@@ -51,7 +51,7 @@ Sequenced so no step is reordered without explicit agreement:
 | 5 | **Languages: pl, tr (+ fr/de)** | One lexicon file each + one line in `index.ts`; native-speaker review required; derive from sv/en; fixtures grow to ≥14 per PR | Polish/Turkish have clear OSINT relevance; zh/ar need `numeric.ts` work first |
 | 6 | **Money numeric (optional)** | Wire `money.magnitudes` into `parseMagnitude`; add `extractPriceNumeric()`; consensus wiring only after stable | Strings stay the system of record today; `parseMagnitude` suffix table lacks miljard/per-lexicon words | ✅ done *(2026-10-18: magnitudes/currencies/compounds lexicon-fed via `@/shared/lexicons`; `parseMoney`/`parseMoneyRange` in `currency.ts`, `extractPriceNumeric` in `pricing.ts` with corpus; verbatim string stays the stored claim)* |
 | 7 | **Regex caching** | Rider on the DRY pass — compile once per lexicon set | Free and safe; not a standalone project | ✅ done *(2026-10-18: shared `getRe` in `regex-cache.ts`; `measureCue` cue/unit patterns, `extractCountedNouns` and `names.ts` `mentions` all cached. Residual, not agreed work: `pricing.ts` still builds its per-call patterns with `new RegExp`)* |
-| 8 | **USV extractor** | New system class, one at a time with `notAfter` discipline | Clean win; nautical miles, knots, endurance, draft |
+| 8 | **USV extractor** | New system class, one at a time with `notAfter` discipline | Clean win; nautical miles, knots, endurance, draft | ✅ done *(2026-10-18: `extractors/usv.ts` — knots, nautical miles, draft; endurance gained a days unit for `3 діб`/`суток`; uk/ru Sea-domain words; uk knots added to the normalization table; shared envelope guard moved to `common.ts`. Residuals: `beam`, sv usvDraft cues (native review))* |
 | 9 | **Loitering-munitions split** | Project-sized; after USV | Touches taxonomy, existing cards, `notAfter` boundaries |
 | 10 | **HEURISTICS.md (final)** | Add ownership map: which extractor owns range/altitude/frequency for overlapping classes | Prevents EW/radar from doubling SHORAD claims | *(2026-10-18: exists at `src/shared/infra/heuristics/HEURISTICS.md`; ownership map present incl. `rfBands` — EW/radar overlap row: todo)* |
 
@@ -360,6 +360,65 @@ pre-existing, no new findings). New pins: interception-altitude routing (`missed
 Cyrillic-calendar alias + month detection (`heuristic-ai.test.ts`), consensus outlier filter
 (`consensus.test.ts`), key normalization + semantic variants (new `spec-key-normalization.test.ts`),
 and nameless-no-row (`pipeline-relations.test.ts`).
+
+Signed: **GLM-5.3-Flash Free** — agent via OpenCode · 2026-10-18
+
+## Addendum 5 — USV extractor (frozen priority #8)
+
+The row promised "nautical miles, knots, endurance, draft". Code verification before the first
+edit reshaped the slice in three places:
+
+1. **The seed table pre-designed this class.** `semanticKeyFor` already maps `draft` →
+   `dimension.depth` and `beam` → `dimension.width`; `canonicalUnitForSemantic` extends
+   `dimension.*` to metres. The semantics existed with no lexicon or extractor producing them —
+   draft needed zero semantic work.
+2. **Same split-brain as the хвилин gap (Addendum 4), again.** The normalization table already
+   parses `knots`/`nautical miles` (en/ru) — but the pattern lacks the Ukrainian `вузл*` words,
+   so "45 вузлів" captured in text would come back un-normalized, exactly like "45 хвилин" did.
+3. **"Endurance" needed no new cue family — but it needed a unit.** uk/ru autonomy phrasing
+   ("автономність"/"автономность") is already in `ugvOperatingTime` and the extractors run
+   class-agnostically. The real loss: sea autonomy is stated in days ("3 діб", "суток") and no
+   duration unit existed — those figures were dropped entirely, not under-measured.
+
+### What was implemented
+
+- **`extractors/usv.ts`** appended to `SPEC_EXTRACTORS`: speed in knots (target-speed `notAfter`,
+  same guard as uav's km/h matcher), range in nautical miles (guarded by the C-UAS envelope, so
+  "detection range up to 15 nautical miles" is never the boat's range), hull draft in metres.
+  Airframe readings in km/km-h stay with uav — the unit split keeps one claim per reading and
+  uav's unit lists remain untouched.
+- **`ENVELOPE` moved from `uav.ts` to `common.ts`**: usv needs the identical four-cue guard, and
+  duplicating it across extractors is how the notAfter discipline rots. Confirmations of the
+  collision-vocabulary checks are in the pins: "хвиля"/"хвост" survive the uk "хв"-class checks,
+  the military "draft covers 200,000 men" captures nothing (the matcher requires a metre unit
+  after the number).
+- **Lexicon**: `units.knots` (en `knots?|kts`, uk `вузл*`, ru `узл*`, sv `knop(?:ar)?`),
+  `units.nmi` (en `nautical miles`, uk `морських миль`, ru `морских миль`, sv `nautiska mil`),
+  `units.days` (en `days`, uk `діб|доба|днів`, ru `суток|дней`, sv `dygn|dagar`), and
+  `cues.usvDraft` (en `draft|draught`, uk/ru `осадка` — sv left empty pending native review,
+  same policy as sv fuelCapacity).
+- **Normalization**: `kn` pattern gained uk `вузол|вузл*` ("45 вузлів" → 45 kn, canonical
+  83.34 km/h); new `days` unit (token `d`, ×1440 min, one pattern across en/uk/ru/sv).
+- **uav + ugv endurance matchers** gained the days alternative as their first unit — the only
+  endurance change needed.
+- **Domain detection** (`heuristic-ai.ts`): the Sea trigger gained `катер|човен|морськ` — until
+  now only English anglasmer ("boat/naval/sea drone/maritime") marked a USV post Sea.
+
+### Deliberately not done
+
+- **`beam`** — the seed maps it, the frozen row does not list it; it rides the next naval slice
+  (with the loitering-munitions split it deserves its own pass over hull vocabulary).
+- **`sv` usvDraft cues** ("djupgående"/"fribordhöjd") — native-speaker review required, as for sv
+  fuelCapacity.
+
+### Verification (2026-10-18)
+
+Focused first (7 files, 195 tests), then full: **70 files / 752 tests passing** (was 68/739 after
+Addendum 4 — the parallel writer committed during the slice, hence the delta beyond my own 9
+pins); no failures. New pins: knots en/uk + nmi en/uk + draft en/uk + days endurance with the
+once-only dedupe + two adversarial cases (military draft, radar envelope) in
+`missed-heuristics-5.test.ts`; uk knots/days normalizing (`normalization-units.test.ts`);
+uk/ru Sea-domain detection (`heuristic-ai.test.ts`).
 
 Signed: **GLM-5.3-Flash Free** — agent via OpenCode · 2026-10-18
 

@@ -16,6 +16,7 @@ import { extractShorad } from "./extractors/shorad";
 import { extractStructure } from "./extractors/structure";
 import { extractUav } from "./extractors/uav";
 import { extractUgv } from "./extractors/ugv";
+import { extractUsv } from "./extractors/usv";
 import {
   extractContractValue,
   extractPriceNumeric,
@@ -28,11 +29,12 @@ export interface Facts extends ObservationSink {
 
 /**
  * Spec extractors, run in order. Order matters only for display order and first-wins dedupe;
- * add a new system class (e.g. USV) by appending one entry.
+ * add a new system class by appending one entry.
  */
 export const SPEC_EXTRACTORS: Array<(raw: string, add: AddSpec) => void> = [
   extractUav,
   extractUgv,
+  extractUsv,
   extractCuas,
   extractShorad,
   extractStructure,

@@ -1,4 +1,5 @@
 import { parseNumber } from "@/entities/normalization/numeric";
+import { cue } from "@/shared/lexicons";
 import { getRe } from "../regex-cache";
 
 /** Records one spec claim; duplicates are dropped by the caller's sink. */
@@ -13,6 +14,20 @@ export type AddSpec = (
 export const NUMBER = String.raw`\d(?:[\d., ]*\d)?`;
 /** Units must end at a word edge: "м" must not match the start of "метров"-less words. */
 export const END = String.raw`(?![\p{L}])`;
+
+/**
+ * Counter-drone envelope cues; a vehicle's own range/altitude must not swallow these. Shared
+ * by uav and usv: both classes' own figures sit behind the same notAfter guard.
+ */
+export const ENVELOPE = new RegExp(
+  [
+    cue("engagementRange"),
+    cue("detectionRange"),
+    cue("suppressionRadius"),
+    cue("targetAltitude"),
+  ].join("|"),
+  "iu",
+);
 
 export function num(s: string): number {
   return parseNumber(s) ?? Number.NaN;

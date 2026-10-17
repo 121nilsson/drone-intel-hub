@@ -1,16 +1,5 @@
 import { cue, unit } from "@/shared/lexicons";
-import { type AddSpec, measureCue } from "./common";
-
-/** Counter-drone envelope cues; a vehicle's own range/altitude must not swallow these. */
-const ENVELOPE = new RegExp(
-  [
-    cue("engagementRange"),
-    cue("detectionRange"),
-    cue("suppressionRadius"),
-    cue("targetAltitude"),
-  ].join("|"),
-  "iu",
-);
+import { ENVELOPE, type AddSpec, measureCue } from "./common";
 
 /** Airframe performance: speed, range, endurance, ceiling, wingspan - every registered language. */
 export function extractUav(raw: string, add: AddSpec) {
@@ -32,6 +21,7 @@ export function extractUav(raw: string, add: AddSpec) {
   measureCue(raw, add, {
     cue: cue("endurance"),
     units: [
+      [unit("days"), "d"],
       [unit("hours"), "h"],
       [unit("minutes"), "min"],
     ],

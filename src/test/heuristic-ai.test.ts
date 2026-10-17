@@ -337,6 +337,8 @@ describe("HeuristicExtractor extraction", () => {
 
   it("infers domain", async () => {
     expect((await t1.extract("a USV launch", CATALOG)).domain).toBe("Sea");
+    expect((await t1.extract("Безпілотний катер MAGURA V5", CATALOG)).domain).toBe("Sea");
+    expect((await t1.extract("морський безпілотний човен", CATALOG)).domain).toBe("Sea");
     expect((await t1.extract("a UGV on tracks", CATALOG)).domain).toBe("Land");
   });
 

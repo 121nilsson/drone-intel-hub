@@ -10,7 +10,7 @@ heuristics/
   pricing.ts              unit price vs contract value (never mixed)
   extractors/
     common.ts             measureCue, extractCountedNouns (both use the cache)
-    uav|ugv|cuas|shorad   per system class
+    uav|ugv|usv|cuas|shorad  per system class
     structure.ts          weights, payload, warhead, fuel capacity, dimensions
     observations.ts       counted equipment, sensors, guidance, propulsion, RF bands
 heuristic-ai.ts           HeuristicExtractor: orchestration, domain/origin, confidence
@@ -41,6 +41,10 @@ class's envelope (engagement/detection range) could be read as a vehicle's own f
   both keys.
 - `rfBands`: `observations.ts` `extractRfBands(raw)` — one shared rule for the whole text and
   per-system clause contexts.
+- Sea units — `speed` as `kn` and `range` as `nmi` — plus hull `draft`: usv. The same figure in
+  km/km-h stays with uav; the unit split keeps one claim per reading. `draft` maps to the
+  pre-seeded `dimension.depth` semantic. `endurance` stays with uav/ugv (class-agnostic
+  vocabulary, now including days).
 - `unit_cost` only with a per-unit cue and no total cue; otherwise `contract_value`.
 
 ## Money vocabulary
