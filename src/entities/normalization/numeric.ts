@@ -1,3 +1,5 @@
+import { magnitudeAlt, scaleOf } from "@/shared/lexicons";
+
 export type QuantityQualifier =
   "exact" | "approximate" | "up_to" | "at_least" | "less_than" | "greater_than" | "range";
 
@@ -35,24 +37,20 @@ export function parseNumber(s: string): number | undefined {
   return Number.isFinite(n) ? n : undefined;
 }
 
-const MAGNITUDE =
-  /^(.*?)\s*(k|K|thousand|тыс\.?|тис\.?|M|million|млн\.?|млрд\.?|billion|bn|мільйон\w*|мільярд\w*|млн|млрд)$/;
+// Magnitude words come from the shared lexicons, so "miljarder" or "мільйонів" needs no code here.
+let MAGNITUDE: RegExp | undefined;
+const magnitudeRe = () =>
+  (MAGNITUDE ??= new RegExp(`^(.*?)\\s*(${magnitudeAlt()})\\.?$`, "iu"));
 
 /** "25k" → 25000, "2.5M" → 2_500_000, "500 млн" → 500e6. A bare "m" is not million. */
 export function parseMagnitude(s: string): number | undefined {
   const t = s.trim().replace(THIN_SPACE, " ");
-  const m = t.match(MAGNITUDE);
+  const m = t.match(magnitudeRe());
   if (!m?.[1] || !m[2]) return parseNumber(t);
+  const mult = scaleOf(m[2]);
+  if (mult === undefined) return undefined;
   const base = parseNumber(m[1].trim());
-  if (base === undefined) return undefined;
-  const suf = m[2];
-  const mult =
-    suf === "M" || /^million$/i.test(suf) || /^мільйон/i.test(suf) || /^млн$/i.test(suf)
-      ? 1e6
-      : /^мільярд/i.test(suf) || /^млрд$/i.test(suf) || /^billion$/i.test(suf) || /^bn$/i.test(suf)
-        ? 1e9
-        : 1e3;
-  return base * mult;
+  return base === undefined ? undefined : base * mult;
 }
 
 const QUALIFIER_PREFIX: Array<[RegExp, QuantityQualifier]> = [
