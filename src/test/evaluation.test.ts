@@ -45,7 +45,7 @@ describe("evaluation", () => {
     ]);
     const heur = ext([{ key: "altitude", label: "Altitude", value: 40, unit: "km" }]);
     const r = await evaluateHeuristic([cand("a", ref)], [], fake(heur));
-    expect(r.mismatches[0].matchType).toBe("wrongKey");
+    expect(r.mismatches[0]?.matchType).toBe("wrongKey");
     expect(r.summary.tp).toBe(0);
   });
 
@@ -61,6 +61,6 @@ describe("evaluation", () => {
     const r = await evaluateHeuristic([cand("a", ext([spec])), short], [], fake(ext([spec])));
     expect(r.totalItems).toBe(1);
     expect(r.fixtures).toHaveLength(1);
-    expect(r.fixtures[0].expect[0].value).toBe(40);
+    expect(r.fixtures[0]?.expect[0]?.value).toBe(40);
   });
 });
