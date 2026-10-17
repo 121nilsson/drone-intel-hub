@@ -20,7 +20,7 @@ const cand = (id: string, extraction: Extraction, source = "tg:test"): Candidate
   createdAt: "2026-01-01",
   tier: 1,
   extraction,
-  status: "queued",
+  status: "pending",
 });
 const fake = (out: Extraction): IntelExtractor => ({
   tier: 1,
