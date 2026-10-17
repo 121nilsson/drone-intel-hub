@@ -17,6 +17,7 @@ import { duplicateGroups } from "@/entities/drone/duplicates";
 import { applyReference } from "@/features/catalog/reference-import";
 import { useRelatedIntel, RelatedChips } from "@/features/intel-graph";
 import {
+  DEFAULT_SORT,
   emptyFacets,
   fromSearchParams,
   toCatalogSearch,
@@ -157,7 +158,8 @@ export function CatalogPage({
     (next: typeof f) => setUrl(toCatalogSearch({ ...state, facets: next })),
     [setUrl, state],
   );
-  const clearAll = () => setUrl(toCatalogSearch({ q: "", sort: "name", facets: emptyFacets() }));
+  const clearAll = () =>
+    setUrl(toCatalogSearch({ q: "", sort: DEFAULT_SORT, facets: emptyFacets() }));
   const [showFilters, setShowFilters] = useState(false);
   const [view, setView] = useState<"compact" | "cards">("compact");
   const [mergeTargets, setMergeTargets] = useState<Record<string, string>>({});

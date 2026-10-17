@@ -15,21 +15,21 @@ describe("catalog search codec", () => {
   it("round-trips a fully specified view", () => {
     const state = fromSearchParams({
       q: "shahed",
-      sort: "updated",
+      sort: "domain",
       dom: "Air,Land",
       org: "RU,IR",
       band: "900 MHz",
       fiber: "1",
     });
 
-    expect(state.sort).toBe("updated");
+    expect(state.sort).toBe("domain");
     expect(state.facets.domains).toEqual(["Air", "Land"]);
     expect(state.facets.fiberOnly).toBe(true);
 
     const params = toCatalogSearch(state);
     expect(parseCatalogSearchParams(params)).toEqual({
       q: "shahed",
-      sort: "updated",
+      sort: "domain",
       dom: "Air,Land",
       org: "RU,IR",
       band: "900 MHz",
@@ -39,7 +39,16 @@ describe("catalog search codec", () => {
 
   it("encodes nothing for the default view", () => {
     const state = fromSearchParams({});
+    expect(state.sort).toBe("updated");
     expect(toCatalogSearch(state)).toEqual({});
+  });
+
+  it("keeps 'recently updated' as the default and still round-trips an explicit sort", () => {
+    // An analyst opening a bare /catalog must land on the freshest evidence, not a–z.
+    expect(fromSearchParams({}).sort).toBe("updated");
+    expect(fromSearchParams({ sort: "name" }).sort).toBe("name");
+    expect(toCatalogSearch(fromSearchParams({ sort: "name" }))).toEqual({ sort: "name" });
+    expect(parseCatalogSearchParams({ sort: "updated" })).toEqual({ sort: "updated" });
   });
 
   it("drops non-CSV garbage, empty lists and unknown params", () => {
