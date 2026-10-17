@@ -22,6 +22,12 @@ describe("normalizeQuantity", () => {
 
     expect(normalizeQuantity("2 hours")?.canonicalValue).toBe(120);
     expect(normalizeQuantity("5400 seconds")?.canonicalValue).toBe(90);
+    // Ukrainian minutes / liters - live claims that normalized to nothing before.
+    expect(normalizeQuantity("45 хвилин")?.canonicalValue).toBe(45);
+    expect(normalizeQuantity("45 хвилин")?.canonicalUnit).toBe("min");
+    expect(normalizeQuantity("15 л")?.canonicalValue).toBe(15);
+    expect(normalizeQuantity("15 л")?.canonicalUnit).toBe("l");
+    expect(normalizeQuantity("150 gallons")?.canonicalValue).toBeCloseTo(567.81, 2);
     expect(normalizeQuantity("2.5 kg")?.canonicalUnit).toBe("kg");
     expect(normalizeQuantity("500 г")?.canonicalValue).toBeCloseTo(0.5, 4);
   });
@@ -46,5 +52,10 @@ describe("normalizeQuantity", () => {
     expect(normalizeQuantity("")).toBeUndefined();
     expect(normalizeQuantity("80")).toBeUndefined();
     expect(normalizeQuantity("—")).toBeUndefined();
+  });
+
+  it("keeps converted ranges free of float noise", () => {
+    // Live Red Wolf claim: 200 × 1.852 must not carry IEEE754 noise into the dossier.
+    expect(normalizeQuantity("exceeding 200 nautical miles")?.range?.min).toBe(370.4);
   });
 });

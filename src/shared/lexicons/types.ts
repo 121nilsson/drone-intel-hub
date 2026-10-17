@@ -30,6 +30,8 @@ export interface Lexicon {
     kmh: string[];
     watt: string[];
     kilowatt: string[];
+    /** Volume: fuel tank / capacity. */
+    liters: string[];
   };
   /** Spec cue phrases, by spec. Each list is matched shortly before the number. */
   cues: {
@@ -58,6 +60,8 @@ export interface Lexicon {
     targetSpeed: string[];
     /** SHORAD: simultaneous target channels. */
     targetChannels: string[];
+    /** Fuel tank / fuel capacity (liters). */
+    fuelCapacity: string[];
     /** Dimension: length. */
     length: string[];
     /** Dimension: height. */

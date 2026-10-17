@@ -26,6 +26,15 @@ export function extractStructure(raw: string, add: AddSpec) {
   for (const [cueKey, key, label] of WEIGHTS)
     measureCue(raw, add, { cue: cue(cueKey), units: kg, key, label, gap: 20 });
 
+  // "має запас пального 15 л" / "fuel capacity of 15 L" - tank volume, not a mass.
+  const liters: Array<[string, string]> = [[unit("liters"), "l"]];
+  measureCue(raw, add, {
+    cue: cue("fuelCapacity"),
+    units: liters,
+    key: "fuel_capacity",
+    label: "Fuel capacity",
+  });
+
   for (const order of ["before", "after"] as const)
     measureCue(raw, add, {
       cue: cue("warhead"),

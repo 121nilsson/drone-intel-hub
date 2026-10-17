@@ -56,6 +56,7 @@ export const en: Lexicon = {
     kmh: ["km\\/h", "kph"],
     watt: ["W", "watts?"],
     kilowatt: ["kW", "kilowatts?"],
+    liters: ["(?<![\\p{L}])l(?:it(?:er|re)s?)?"],
   },
   cues: {
     speed: ["cruise(?:s|d)?(?: at)?", "speed", "flies at"],
@@ -84,6 +85,7 @@ export const en: Lexicon = {
       "max(?:imum)? target altitude",
       "targets up to",
     ],
+    fuelCapacity: ["fuel capacity"],
     targetSpeed: ["target speed", "targets flying at", "targets moving at"],
     targetChannels: ["target channels", "simultaneous targets", "targets simultaneously"],
     length: ["length", "long"],

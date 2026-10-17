@@ -6,7 +6,12 @@ export const CANONICAL_UNIT = {
   mass: "kg",
   duration: "min",
   power: "W",
+  volume: "l",
 } as const;
+
+/** 200 × 1.852 is 370.40000000000003 in IEEE754; 12 significant digits strip the arithmetic
+ * noise without hiding real precision. */
+const cleanFloat = (n: number) => Number(n.toPrecision(12));
 
 export type Dimension = keyof typeof CANONICAL_UNIT;
 
@@ -43,6 +48,25 @@ interface UnitDef {
 // Longer spellings first so "nautical miles" wins over "m" and "km/h" wins over "km".
 // `(?![\p{L}\p{N}])` is a Unicode-aware word end. ASCII `\b` does not treat Cyrillic as a letter.
 const UNITS: UnitDef[] = [
+  // Volume: fuel capacity ("15 л", "150 gallons"). Imperial gallons excluded - different factor.
+  {
+    token: "gal",
+    dimension: "volume",
+    toCanonical: 3.785411784,
+    pattern: /(?<!imperial\s)(?<![/\p{L}])(?:gallons?|gal)(?![\p{L}\p{N}])/iu,
+  },
+  {
+    token: "l",
+    dimension: "volume",
+    toCanonical: 1,
+    pattern: /(?:lit(?:er|re)s?|літр[а-яіїєґ]*|литр[а-яё]*)(?![\p{L}\p{N}])/iu,
+  },
+  {
+    token: "l",
+    dimension: "volume",
+    toCanonical: 1,
+    pattern: /(?<![/\p{L}])(?:l|л)(?![\p{L}\p{N}])/iu,
+  },
   { token: "nmi", dimension: "distance", toCanonical: NM_KM, pattern: /nautical\s+miles?/iu },
   {
     token: "nmi",
@@ -138,7 +162,7 @@ const UNITS: UnitDef[] = [
     token: "min",
     dimension: "duration",
     toCanonical: 1,
-    pattern: /(?:minutes?|mins?|мин)(?![\p{L}\p{N}])/iu,
+    pattern: /(?:minutes?|mins?|минут[а-яё]*|мин|хвилин[а-яіїєґ]*|хв)(?![\p{L}\p{N}])/iu,
   },
   {
     token: "s",
@@ -175,7 +199,7 @@ export function convert(value: number, from: string, to: string): number | undef
   const src = UNITS.find((u) => u.token === from || u.pattern.test(from));
   const dst = UNITS.find((u) => u.token === to || u.pattern.test(to));
   if (!src || !dst || src.dimension !== dst.dimension) return undefined;
-  return (value * src.toCanonical) / dst.toCanonical;
+  return cleanFloat((value * src.toCanonical) / dst.toCanonical);
 }
 
 export function canonicalUnitFor(rawUnit: string): string | undefined {
@@ -212,7 +236,7 @@ export function rebaseQuantity(q: NormalizedQuantity, toUnit: string): Normalize
 }
 
 function scale(n: number, factor: number): number {
-  return n * factor;
+  return cleanFloat(n * factor);
 }
 
 /**

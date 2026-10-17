@@ -24,6 +24,7 @@ export function semanticKeyFor(key: string, label = ""): string {
   if (k === "jamming_power" || k === "output_power" || /jamming power|output power/i.test(lab))
     return "power.rf";
   if (k === "target_channels" || /target channels/i.test(lab)) return "capacity.target_channels";
+  if (k === "fuel_capacity" || /fuel capacity|internal fuel/i.test(lab)) return "capacity.fuel";
 
   if (k === "fiber_spool" || k === "spool_length" || /spool/i.test(lab)) return "range.fiber_spool";
   if (
@@ -100,5 +101,6 @@ export function canonicalUnitForSemantic(semantic: string): string | undefined {
   if (semantic.startsWith("payload.") || semantic.startsWith("weight.")) return "kg";
   if (semantic.startsWith("endurance.")) return "min";
   if (semantic.startsWith("power.")) return "W";
+  if (semantic === "capacity.fuel") return "l";
   return undefined;
 }

@@ -96,7 +96,9 @@ export function SpecTable({ drone }: { drone: Drone }) {
                 )}
               </p>
               <p className="font-mono text-xs text-muted-foreground">
-                {c.min !== undefined && c.min !== c.max ? `${c.min}–${c.max} · ` : ""}
+                {c.min !== undefined && c.max !== undefined && c.min !== c.max
+                  ? `${c.min}–${c.max} · `
+                  : ""}
                 {c.sources} source{c.sources === 1 ? "" : "s"}
               </p>
               {chips(s)}
@@ -142,7 +144,9 @@ export function SpecTable({ drone }: { drone: Drone }) {
                   )}
                 </td>
                 <td className="py-2 font-mono text-xs text-muted-foreground">
-                  {c.min !== undefined && c.min !== c.max ? `${c.min}–${c.max}` : "—"}
+                  {c.min !== undefined && c.max !== undefined && c.min !== c.max
+                    ? `${c.min}–${c.max}`
+                    : "—"}
                 </td>
                 <td className="py-2 font-mono text-xs">{c.sources}</td>
                 <td className="py-2">

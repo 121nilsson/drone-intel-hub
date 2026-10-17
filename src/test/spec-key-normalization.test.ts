@@ -21,6 +21,7 @@ describe("spec key normalization at the extraction boundary", () => {
     expect(semanticKeyFor("top_speed")).toBe("speed.max");
     expect(semanticKeyFor("speed_cruise")).toBe("speed.cruise");
     expect(semanticKeyFor("altitude", "Altitude")).toBe("altitude.max");
+    expect(semanticKeyFor("fuel_capacity")).toBe("capacity.fuel");
     // A stated minimum is a different reading and keeps its own key.
     expect(semanticKeyFor("altitude", "Minimum altitude")).toBe("altitude");
   });

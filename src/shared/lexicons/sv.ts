@@ -32,6 +32,7 @@ export const sv: Lexicon = {
     kmh: ["km\\/tim"],
     watt: ["W", "watt"],
     kilowatt: ["kW"],
+    liters: ["(?<![\\p{L}])l(?:iter)?"],
   },
   cues: {
     speed: ["hastighet", "marschfart"],
@@ -48,6 +49,7 @@ export const sv: Lexicon = {
     engagementRange: ["bekämpningsräckvidd", "bekämpar mål på"],
     detectionRange: ["upptäcktsavstånd", "upptäcktsräckvidd", "upptäcker mål på"],
     targetAltitude: ["bekämpningshöjd"],
+    fuelCapacity: [], // väntar modersmålsgranskning
     targetSpeed: ["målhastighet"],
     targetChannels: ["målkanaler", "samtidiga mål"],
     length: ["längd", "lång"],

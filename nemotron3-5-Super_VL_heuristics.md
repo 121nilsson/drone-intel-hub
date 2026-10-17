@@ -362,3 +362,48 @@ Cyrillic-calendar alias + month detection (`heuristic-ai.test.ts`), consensus ou
 and nameless-no-row (`pipeline-relations.test.ts`).
 
 Signed: **GLM-5.3-Flash Free** — agent via OpenCode · 2026-10-18
+
+## Addendum 4 — live-app missed captures (uk endurance/fuel parsing + spread display)
+
+New user reports from the running app: `/systems/-3a3f` shows "45 хвилин" and "Fuel capacity: 15 л"
+uncaptured; `/systems/red-wolf-0a83` shows "spred: 370.40000000000003–undefined". Verified against
+the live DB before coding:
+
+1. **Миротворець (-3a3f)** — the claims *exist* (AI-captured, raw "45 хвилин" / "15 л") but carry
+   no `normalized`: normalization can't parse them. `units.ts` (the hardcoded normalization table,
+   separate from the lexicons) had no Ukrainian minute words — though the *extractor* lexicon
+   already had `хв` — and no volume dimension at all.
+2. **Red Wolf** — "exceeding 200 nautical miles" → 200 × 1.852 = 370.40000000000003 stored
+   unrounded in `normalized.range.min`; the dossier Spread cell renders `${c.min}–${c.max}` guarded
+   only by `c.min !== c.max`, so a min-only bound printed "370.40000000000003–undefined".
+3. **Bonus finding** — Red Wolf `missiles: 0` from raw "000 missiles": an AI quote-fragment of
+   "1,000 missiles"; the evidence fold-check passes because the fragment is a substring of the
+   longer phrase. AI-side, unfixed this slice; noted for the next prompt iteration.
+
+### What was implemented
+
+- **units.ts**: Ukrainian/Russian minute words added to the `min` pattern (хвилин, минут — mirrors
+  the lexicons); new `volume` dimension with canonical `l`; liters (en/uk/ru word forms + guarded
+  bare `л`/`l`) and US gallons (`imperial` excluded by lookbehind — different factor, documented).
+  `cleanFloat()` = `Number(n.toPrecision(12))` applied in `scale()` and `convert()` so unit
+  conversion never bakes IEEE754 noise into stored claims.
+- **Lexicons**: new `units.liters` fragment in all four languages (lookbehind-guarded, so
+  "мл"/"ml" cannot match litres). New heuristic fact family **fuel_capacity** via `structure.ts`:
+  en "fuel capacity", uk "запас пального"/"запас палива", ru "запас топлива"/"запас горючего" —
+  `sv` cues deliberately empty pending native review. `semanticKeyFor` → `capacity.fuel`;
+  `canonicalUnitForSemantic("capacity.fuel")` → `"l"`.
+- **dossier-page.tsx**: both min–max renderings now require `c.max !== undefined`; a min-only
+  bound falls back to "—" in the Spread cell while the consensus display still shows
+  "≥370.4 km".
+- **AI prompt v6** (uncommitted, folded into this session's bump): the explicit check list gained
+  "fuel capacity" next to payload/warhead.
+
+### Verification (2026-10-18)
+
+Focused first (10 files, 125 tests), then full: **68 files / 743 tests passing** (was 67/739);
+green gate GREEN against the saved baseline. New pins: "45 хвилин" → 45 min, "15 л" → 15 l,
+150 gal → 567.81 l, the live min-only range clean at 370.4 (`normalization-units.test.ts`);
+Ukrainian endurance + fuel capture end-to-end (`missed-heuristics-4.test.ts`);
+`fuel_capacity` semantic (`spec-key-normalization.test.ts`).
+
+Signed: **GLM-5.3-Flash Free** — agent via OpenCode · 2026-10-18
