@@ -31,7 +31,8 @@ const SCALES = Object.keys(SCALE) as MoneyScale[];
 /** Every magnitude word in every language. */
 export const magnitudeAlt = () => alt((l) => SCALES.flatMap((s) => l.money.magnitudes[s]));
 /** Every currency word or code in every language. */
-export const currencyAlt = () => alt((l) => Object.values(l.money.currencies).flatMap((v) => v ?? []));
+export const currencyAlt = () =>
+  alt((l) => Object.values(l.money.currencies).flatMap((v) => v ?? []));
 /** Every combined magnitude+currency token ("mkr"). */
 export const compoundAlt = () => alt((l) => (l.money.compounds ?? []).map((c) => c.word));
 

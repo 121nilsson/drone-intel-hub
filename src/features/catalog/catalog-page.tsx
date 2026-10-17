@@ -8,9 +8,9 @@ import { CountryBadge } from "@/shared/ui/country-badge";
 import { ieeeLabel } from "@/entities/normalization/bands";
 import { effectiveInstallationId, effectivePropulsionId } from "@/entities/normalization/taxonomy";
 import { effectiveIeeeBands, linkIsFiber } from "@/entities/normalization/rf";
-import { useDrones, useServices } from "@/shared/infra/services";
+import { useDispatches, useDrones, useServices } from "@/shared/infra/services";
 import { fetchWikipediaReference } from "@/shared/infra/wikipedia/functions";
-import { Btn, Loading, Panel, Tag } from "@/shared/ui/primitives";
+import { Btn, Loading, Panel, Sparkline, Tag } from "@/shared/ui/primitives";
 import { cn } from "@/lib/utils";
 import { mergeDrones } from "@/features/intake/pipeline";
 import { duplicateGroups } from "@/entities/drone/duplicates";
@@ -138,6 +138,7 @@ export function CatalogPage({
   setUrl: (next: Record<string, string>) => void;
 }) {
   const drones = useDrones();
+  const dispatches = useDispatches();
   const svc = useServices();
   const { drones: repo } = svc;
   // Search, sort and facets are URL state: the URL is the single truth, changes navigate with a
@@ -302,6 +303,27 @@ export function CatalogPage({
   }
   // Same name in another spelling, a name that is another entry's alias, or one Wikidata item.
   const duplicates = useMemo(() => duplicateGroups(drones), [drones]);
+
+  // 7-day report frequency per system, derived from dispatch provenance.
+  const reportSeries = useMemo(() => {
+    const now = Date.now();
+    const dayMs = 24 * 60 * 60 * 1000;
+    const series = new Map<string, number[]>();
+    for (const d of dispatches) {
+      const ids = d.droneIds ?? [];
+      if (!ids.length) continue;
+      const ts = Date.parse(d.processedAt ?? d.publishedAt ?? d.createdAt);
+      if (!Number.isFinite(ts)) continue;
+      const ageDays = Math.floor((now - ts) / dayMs);
+      if (ageDays < 0 || ageDays >= 7) continue;
+      for (const id of ids) {
+        const arr = series.get(id) ?? Array.from({ length: 7 }, () => 0);
+        arr[6 - ageDays] = (arr[6 - ageDays] ?? 0) + 1;
+        series.set(id, arr);
+      }
+    }
+    return series;
+  }, [dispatches]);
 
   // The repositories fill asynchronously after SSR; until then every list reads empty, which
   // would read as a legitimately empty catalog. Hold a loading state instead.
@@ -647,6 +669,15 @@ export function CatalogPage({
                             {d.cyrillic}
                           </span>
                         )}
+                        {(() => {
+                          const s = reportSeries.get(d.id);
+                          if (!s || !s.some((v) => v > 0)) return null;
+                          return (
+                            <span className="ml-2" title="Reports over the last 7 days">
+                              <Sparkline values={s} />
+                            </span>
+                          );
+                        })()}
                       </td>
                       <td className="px-3 py-2">
                         <CountryBadge code={d.origin} />

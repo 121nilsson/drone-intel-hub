@@ -1,4 +1,9 @@
-import { parseMoney, parseMoneyRange, type Money, type MoneyRange } from "@/entities/normalization/currency";
+import {
+  parseMoney,
+  parseMoneyRange,
+  type Money,
+  type MoneyRange,
+} from "@/entities/normalization/currency";
 import { alt, compoundAlt, currencyAlt, magnitudeAlt } from "@/shared/lexicons";
 
 /**

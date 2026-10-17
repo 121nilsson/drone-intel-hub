@@ -112,6 +112,52 @@ export function Num({ children, className }: { children: ReactNode; className?: 
   return <span className={cn("font-mono tabular-nums", className)}>{children}</span>;
 }
 
+/** Tiny inline line chart for a short series (e.g. 7-day report counts). */
+export function Sparkline({
+  values,
+  width = 48,
+  height = 14,
+  className,
+  stroke = "currentColor",
+}: {
+  values: number[];
+  width?: number;
+  height?: number;
+  className?: string;
+  stroke?: string;
+}) {
+  const series = values.length ? values : [0];
+  const max = Math.max(...series, 1);
+  const min = Math.min(...series, 0);
+  const range = max - min || 1;
+  const step = series.length > 1 ? width / (series.length - 1) : 0;
+  const points = series
+    .map(
+      (v, i) =>
+        `${(i * step).toFixed(1)},${(height - ((v - min) / range) * (height - 2) - 1).toFixed(1)}`,
+    )
+    .join(" ");
+  return (
+    <svg
+      width={width}
+      height={height}
+      viewBox={`0 0 ${width} ${height}`}
+      className={cn("inline-block align-middle text-primary", className)}
+      role="img"
+      aria-label="sparkline"
+    >
+      <polyline
+        fill="none"
+        stroke={stroke}
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        points={points}
+      />
+    </svg>
+  );
+}
+
 /** Shared loading affordance: repositories are async after SSR (see Services.attached). */
 export function Loading({ label = "Loading…" }: { label?: string }) {
   return <p className="animate-pulse font-mono text-sm text-muted-foreground">{label}</p>;

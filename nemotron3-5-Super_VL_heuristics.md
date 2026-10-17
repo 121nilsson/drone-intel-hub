@@ -1,19 +1,27 @@
 # Heuristics assessment — drone-intel-hub (consolidated plan)
 
-File location: `src/shared/infra/heuristics/`
+File location: `src/shared/infra/heuristics/` (orchestrators and extractors),
+`src/shared/lexicons/` (vocabulary, shared with normalization)
 Languages covered: en, uk, ru, sv
 System classes covered: UAV, UGV, CUAS, SHORAD
-Characterization tests: `src/test/heuristics-characterization.test.ts` (22 tests, all passing)
+Fact families: structure (weights/dims/warhead/dimensions), observations (counted equipment,
+sensors, guidance, propulsion, RF bands), money (pricing.ts)
+Characterization tests: `src/test/heuristics-characterization.test.ts` (22 tests, all passing),
+plus 3 multi-system attribution pins in `src/test/heuristic-ai.test.ts`
 
 ---
 
 ## What's already strong
 
-- **Clean separation of vocabulary and logic.** Each language lives in one lexicon object under `src/shared/infra/heuristics/lexicons/`; extractors read only from `cue()` / `unit()` helpers. Adding a language touches no extractor code — exactly as AGENTS.md intends.
+- **Clean separation of vocabulary and logic.** Each language lives in one lexicon object under
+  `src/shared/lexicons/` (moved out of `src/shared/infra/heuristics/` on 2026-10-18 so
+  normalization — `parseMagnitude`, `parseMoney` — reads the same vocabulary); extractors read
+  only from `cue()` / `unit()` helpers. Adding a language touches no extractor code — exactly as
+  AGENTS.md intends.
 - **Money discipline.** `extractUnitPrice()` vs `extractContractValue()` keeps programme totals from being misread as unit costs (the `$2 billion → $2` regression is already guarded in `pricing.ts` and covered by regression tests).
 - **Cross-language `alt()`.** One alternation across all languages, longest-first, so a short entry (`"m"`) never eats the start of a longer one (`"miljard"`).
 - **System-class isolation.** SHORAD engagement/detection ranges are blocked from masquerading as a UAV's own `range` via the `notAfter` envelope in `uav.ts`.
-- **"Anti-300-missiles" guard.** The number-before-noun lookbehind in `heuristic-ai.ts:287-295` prevents `"UAV-300 MISSILE"` from yielding 300 missiles. **This guard already exists** — characterization tests pin it, they don't invent it.
+- **"Anti-300-missiles" guard.** The number-before-noun lookbehind now lives in `common.ts` as `extractCountedNouns()` (relocated out of `heuristic-ai.ts` by the Step 2 refactor, previously `heuristic-ai.ts:287-295`). **This guard already exists** — characterization tests pin it, they don't invent it.
 
 ---
 
@@ -21,9 +29,11 @@ Characterization tests: `src/test/heuristics-characterization.test.ts` (22 tests
 
 - Ukrainian magnitude is **мiльярд** (soft sign, Cyrillic і), not "мілліARD" — that's Russian.
 - Fiber spool lives at `heuristic-ai.ts:380`, not ~373.
-- `measureCue` compiles **two** regexes per call: the cue regex (`common.ts:39`) *and* a per-match unit-fragment regex (`^(?:frag)$` at `common.ts:49`). The per-match unit test scales with matches, not calls — it matters more as alternations grow with added languages.
-- Inline weight/dimension regexes in `heuristic-ai.ts` use `[^\d]` which spans newlines; `measureCue` uses `[^\d\n]` which stops at line breaks. Unifying is a **behavior change in both directions**, not a no-op.
-- The warhead reversed pattern (`heuristic-ai.ts:242-245`, number *before* cue) is not expressible in `measureCue`, which only supports cue→number order.
+  *(2026-10-18: moved into `facts.ts` as `extractFiberSpool()`, running through the schema-gated
+  sink — see Addendum 2.)*
+- `measureCue` compiles **two** regexes per call: the cue regex (`common.ts:39`) *and* a per-match unit-fragment regex (`^(?:frag)$` at `common.ts:49`). The per-match unit test scales with matches, not calls — it matters more as alternations grow with added languages. *(2026-10-18: both are now cached — cue/unit patterns via `getRe` in `regex-cache.ts`; see Step 7.)*
+- Inline weight/dimension regexes in `heuristic-ai.ts` use `[^\d]` which spans newlines; `measureCue` uses `[^\d\n]` which stops at line breaks. Unifying is a **behavior change in both directions**, not a no-op. *(Resolved by Step 2 with the exclude-`\n` policy and characterization pins.)*
+- The warhead reversed pattern (`heuristic-ai.ts:242-245`, number *before* cue) is not expressible in `measureCue`, which only supports cue→number order. *(Superseded by Step 2's `order: "after"` support, with the sentence-boundary clamp documented in Addendum 1.)*
 - The existing corpus (8 fixtures) is **all positive** — nothing protects against regressions like `"Geran-25 → 25 missiles"`. Characterization tests pin current behavior; they don't add new protection.
 
 ---
@@ -39,17 +49,19 @@ Sequenced so no step is reordered without explicit agreement:
 | 3 | **Heuristic schema validation** | `ExtractedSpecSchema.parse()` (lenient) at the `add()` boundary | Matches how AI output is handled; catches malformed keys/units at ingest | ✅ done |
 | 4 | **HEURISTICS.md** | Document `measureCue` contract + `notAfter` convention | Cheap enough to land alongside #3; the one invariant contributors can't infer from code shape | ✅ done |
 | 5 | **Languages: pl, tr (+ fr/de)** | One lexicon file each + one line in `index.ts`; native-speaker review required; derive from sv/en; fixtures grow to ≥14 per PR | Polish/Turkish have clear OSINT relevance; zh/ar need `numeric.ts` work first |
-| 6 | **Money numeric (optional)** | Wire `money.magnitudes` into `parseMagnitude`; add `extractPriceNumeric()`; consensus wiring only after stable | Strings stay the system of record today; `parseMagnitude` suffix table lacks miljard/per-lexicon words |
-| 7 | **Regex caching** | Rider on the DRY pass — compile once per lexicon set | Free and safe; not a standalone project |
+| 6 | **Money numeric (optional)** | Wire `money.magnitudes` into `parseMagnitude`; add `extractPriceNumeric()`; consensus wiring only after stable | Strings stay the system of record today; `parseMagnitude` suffix table lacks miljard/per-lexicon words | ✅ done *(2026-10-18: magnitudes/currencies/compounds lexicon-fed via `@/shared/lexicons`; `parseMoney`/`parseMoneyRange` in `currency.ts`, `extractPriceNumeric` in `pricing.ts` with corpus; verbatim string stays the stored claim)* |
+| 7 | **Regex caching** | Rider on the DRY pass — compile once per lexicon set | Free and safe; not a standalone project | ✅ done *(2026-10-18: shared `getRe` in `regex-cache.ts`; `measureCue` cue/unit patterns, `extractCountedNouns` and `names.ts` `mentions` all cached. Residual, not agreed work: `pricing.ts` still builds its per-call patterns with `new RegExp`)* |
 | 8 | **USV extractor** | New system class, one at a time with `notAfter` discipline | Clean win; nautical miles, knots, endurance, draft |
 | 9 | **Loitering-munitions split** | Project-sized; after USV | Touches taxonomy, existing cards, `notAfter` boundaries |
-| 10 | **HEURISTICS.md (final)** | Add ownership map: which extractor owns range/altitude/frequency for overlapping classes | Prevents EW/radar from doubling SHORAD claims |
+| 10 | **HEURISTICS.md (final)** | Add ownership map: which extractor owns range/altitude/frequency for overlapping classes | Prevents EW/radar from doubling SHORAD claims | *(2026-10-18: exists at `src/shared/infra/heuristics/HEURISTICS.md`; ownership map present incl. `rfBands` — EW/radar overlap row: todo)* |
 
 ---
 
 ## Step 1 — Characterization tests (done)
 
-`src/test/heuristics-characterization.test.ts` — 17 tests, all passing, pinning:
+`src/test/heuristics-characterization.test.ts` — 17 tests, all passing, pinning: *(2026-10-18:
+now 22 — boundary-restore flip plus warhead pins; and 3 multi-system attribution pins live in
+`heuristic-ai.test.ts`, see Addendum 2)*
 
 - **Newline joining**: `"payload\n20 kg"` → payload 20 kg (inline `[^\d]` spans `\n`)
 - **Gap boundaries**: weight gap 20, dimension gap 16 (dot-padding edge cases)
@@ -121,39 +133,52 @@ Document alongside the DRY change:
 
 ---
 
-## Step 6 — Money numeric (optional)
+## Step 6 — Money numeric (done, 2026-10-18)
 
 - Keep verbatim strings as primary stored value (for dossiers).
 - `parseNumber` already disambiguates European decimals vs thousands separators (`0,500` → 0.5; `1,500` → 1500).
-- `parseMagnitude` (`numeric.ts:38`) suffix table stops at `k|K|thousand|тыс|тис|M|million|млн|млрд|billion|bn` — misses Swedish `miljard` and every future `milyar`/`мільярд`/Polish `mld` word.
-- **Prerequisite for "stable":** `money.magnitudes` from lexicons must be wired into `parseMagnitude` first. Otherwise the first Swedish `miljard` normalization is wrong.
-- Add `extractPriceNumeric()` returning `{ amount, currency, raw }` alongside verbatim strings; wire into consensus only after stable.
+- `parseMagnitude` (`numeric.ts:38`) suffix table stops at `k|K|thousand|тыс|тис|M|million|млн|млрд|billion|bn` — misses Swedish `miljard` and every future `milyar`/`мільярд`/Polish `mld` word. *(Resolved: normalization now reads magnitudes, currency words and compounds (`"mkr"` = million SEK) from `@/shared/lexicons` — `magnitudeAlt`/`scaleOf`/`currencyAlt`/`compoundAlt`; the per-lexicon word list is data, not code.)*
+- **Prerequisite for "stable":** `money.magnitudes` from lexicons must be wired into `parseMagnitude` first. Otherwise the first Swedish `miljard` normalization is wrong. *(Done — same change.)*
+- Add `extractPriceNumeric()` returning `{ amount, currency, raw }` alongside verbatim strings; wire into consensus only after stable. *(Done — `pricing.ts:43`, with `$2 billion`, `50 mkr` and range cases in `heuristic-ai.test.ts`; normalization applies money specs via `apply.ts`. Strings remain the stored figure.)*
 
 ---
 
 ## Verification notes
 
-All claims double-checked against the repository on 2026-10-17:
+All claims double-checked against the repository on 2026-10-17; *(paths and line pointers
+refreshed 2026-10-18 after the lexicon move and the names/facts split, see Addendum 2):*
 
-- `src/shared/infra/heuristics/index.ts` — `SPEC_EXTRACTORS` registers uav, ugv, cuas, shorad
-- `src/shared/infra/heuristics/pricing.ts` — `extractPrice`, `extractUnitPrice`, `extractContractValue`; `$2 billion → $2` regression documented
-- `src/shared/infra/heuristics/lexicons/types.ts` — `Lexicon` interface with money, units, cues
-- `src/shared/infra/heuristics/lexicons/index.ts` — `LEXICONS = [en, uk, ru, sv]`; `alt()` sorts longest-first
-- `src/shared/infra/heuristics/extractors/common.ts` — `measureCue` compiles cue regex per call; unit regex `^(?:frag)$` per match at line 49; `NUMBER` and `END` constants
+- `src/shared/infra/heuristics/index.ts` — re-exports each module; `extractFacts` is the entry
+- `src/shared/infra/heuristics/facts.ts` — `extractFacts` + `SPEC_EXTRACTORS` (uav, ugv, cuas,
+  shorad, structure); the `add()` sink gates every spec via `ExtractedSpecSchema.safeParse`
+- `src/shared/infra/heuristics/extractors/common.ts` — `measureCue` (`order` before/after;
+  after-forms clamp at `.`/`;`) and `extractCountedNouns`; all patterns go through the
+  compiled-pattern cache in `regex-cache.ts` (`getRe`), including the per-match unit test
+- `src/shared/infra/heuristics/names.ts` — `mentions` (token boundaries), `detectNames`
+  (title-line + capability-adjective guards), `resolveSystems` (phonetic bridging, `variantOf`)
+- `src/shared/infra/heuristics/extractors/observations.ts` — counted equipment, sensors,
+  guidance, propulsion, and `extractRfBands` (one shared rule for whole-text and per-system views)
+- `src/shared/infra/heuristics/pricing.ts` — `extractPrice`, `extractUnitPrice`,
+  `extractContractValue`, `extractPriceNumeric`; `$2 billion → $2` regression documented
+- `src/shared/lexicons/` — `Lexicon` interface types; `LEXICONS = [en, uk, ru, sv]`;
+  `alt()` sorts longest-first; consumed by extractors **and** normalization
+- `src/entities/normalization/currency.ts` — `parseMoney`/`parseMoneyRange`, range-guarded;
+  `apply.ts` applies money specs; `numeric.ts` `parseMagnitude` is lexicon-fed
 - `src/shared/infra/heuristics/extractors/uav.ts` — `notAfter: ENVELOPE` on range and altitude
 - `src/shared/infra/heuristics/extractors/shorad.ts` — target channels parsed before/after cue
-- `src/shared/infra/heuristic-ai.ts` — inline weight/dimension regexes (lines ~220–278); warhead reversed pattern at line 242–245; number-before-noun lookbehind at lines 287–295; fiber spool at line 380
+- `src/shared/infra/heuristic-ai.ts` — orchestration only: `scan()` = `extractFacts` +
+  `resolveSystems` + `contextForSystem` clause attribution; no inline fact regexes remain
+- `src/shared/contracts/extraction.schema.ts` — `ExtractedSpecSchema`; heuristic output **is**
+  gated through it at the `add()` sink (since Step 3)
 - `src/shared/infra/services.tsx` — `heuristic`, `tier1`, `tier2`, `fallback` all use `HeuristicExtractor`
-- `src/shared/contracts/extraction.schema.ts` — `ExtractedSpecSchema` exists; heuristic output not run through it
 - `src/test/fixtures/heuristic-corpus.ts` — 8 fixtures, 2 per language, all positive
-- `src/entities/normalization/numeric.ts` — `parseNumber` disambiguates `0,500` vs `1,500`; `parseMagnitude` suffix table at line 38
 
-**Test results (2026-10-17):**
-- `heuristics-characterization.test.ts`: 17 passed
-- `heuristics-multilingual.test.ts`: 13 passed
-- `heuristic-ai.test.ts`: 39 passed
+**Test results (2026-10-18):**
+- `heuristics-characterization.test.ts`: 22 passed
+- `heuristics-multilingual.test.ts`: 8 passed
+- `heuristic-ai.test.ts`: 58 passed (incl. multi-system attribution pins)
 - `heuristic-corpus.test.ts`: 8 passed
-- Total: 77 passed, 0 failed
+- Full suite: 66 files / 732 tests passing; type check 0 findings; green gate green
 
 ---
 
@@ -195,7 +220,8 @@ cross `.` and `;` inside their gap window.
 ### Notes for the next session
 
 - The Step 4 checkbox (`HEURISTICS.md`) is ahead of the artifact — no such file exists in the
-  repo yet at the time of this addendum.
+  repo yet at the time of this addendum. *(2026-10-18: resolved — it now exists at
+  `src/shared/infra/heuristics/HEURISTICS.md`.)*
 - The historical test-result lines above this section are the numbers nemotron saw at
   compile time; they are superseded by the sign-off numbers below.
 
@@ -208,3 +234,54 @@ and made the gate go red once; it was reconciled away by its own author before s
 never touched from this side (not formatted or edited on someone else's behalf).
 
 Signed: **GLM-5.3-Flash Free** — agent via OpenCode · 2026-10-17
+
+---
+
+## Addendum 2 — fact-layer cleanup after the names/facts split (2026-10-18)
+
+*For nemotron3-5-Super_VL: provenance again from GLM-5.3-Flash Free (agent via OpenCode), with
+user approval at each step. This documents the slice agreed after the review of your refactor:
+three items from your recommended order, done in that order.*
+
+### What was agreed and done
+
+1. **`fiber_spool` into the fact layer.** The raw `specs.push()` side-path in
+   `heuristic-ai.ts` `scan()` is gone; `facts.ts` now has `extractFiberSpool()` writing through
+   the same `add()` sink as every other spec (so the `ExtractedSpecSchema.safeParse` gate covers
+   it). Same key/label/unit, same behaviour.
+2. **Shared `extractRfBands(raw)`** in `observations.ts`, one rule used for the whole-text scan
+   and for per-system clause contexts. Deliberate consequence: a system whose own clause
+   mentions CRPA/Kometa now gets `"CRPA"` in its per-system `rfBands` (only the whole-text view
+   had that before). No pin contradicted it; whole-text behaviour unchanged.
+3. **Name regex caching.** The cache moved to `heuristics/regex-cache.ts` (`getRe`), shared by
+   `common.ts` (`measureCue` cue/unit patterns, `extractCountedNouns`) and `names.ts`
+   (`mentions`). `mentions()` no longer rebuilds a RegExp per catalog entry per article.
+
+At the same time the module doc (`src/shared/infra/heuristics/HEURISTICS.md`) gained the
+`regex-cache.ts` line, RF bands on the observations line, and an `rfBands` ownership row.
+
+### Multi-system attribution pins (your step 2, before any aggressive matching)
+
+Three pins in `heuristic-ai.test.ts`, all matching live behaviour on the first run:
+
+- Shared sentence between two systems → both systems' views carry both systems' numbers. The
+  rough edge is pinned with a comment, not fixed.
+- Number in a clause naming only that system → only that system's view has it.
+- A fact clause naming neither system (fiber-spool sentence) → exists only on the whole-text
+  extraction, not in any system's view.
+
+### Doc reconciliation (this file)
+
+Stale pointers updated inline: lexicon path (`src/shared/lexicons`), the anti-300 guard home
+(`common.ts` `extractCountedNouns`), the four resolved bullets in the corrections section,
+Steps 6/7/10 marked done with residuals, and the Verification notes + per-file test counts
+refreshed. Historical numbers above remain your compile-time record.
+
+### Sign-off results (2026-10-18)
+
+Full suite 66 files / 732 tests passing (was 724); type check 0 findings; green gate green. No
+baseline refresh needed. Two freshly synced `src/integrations/supabase` files were
+Prettier-dirty in your commits (plus three of mine) and were formatted mechanically — that was
+the only gate noise; zero behaviour change.
+
+Signed: **GLM-5.3-Flash Free** — agent via OpenCode · 2026-10-18

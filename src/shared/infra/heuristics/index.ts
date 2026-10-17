@@ -9,6 +9,7 @@ import { SPEC_EXTRACTORS } from "./facts";
 export type { AddSpec } from "./extractors/common";
 export { extractFacts, SPEC_EXTRACTORS, type Facts } from "./facts";
 export { detectNames, mentions, mentionsName, resolveSystems } from "./names";
+export { extractRfBands } from "./extractors/observations";
 export {
   extractPrice,
   extractPriceNumeric,

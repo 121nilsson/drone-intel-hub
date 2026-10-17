@@ -1,7 +1,6 @@
-import { parseNumber } from "@/entities/normalization/numeric";
 import type { Domain, Drone, Extraction, SystemExtraction } from "@/entities/drone/types";
 import type { BriefingSummarizer, IntelExtractor } from "@/shared/contracts/ai";
-import { extractFacts, mentionsName, resolveSystems } from "./heuristics";
+import { extractFacts, extractRfBands, mentionsName, resolveSystems } from "./heuristics";
 
 /**
  * Local heuristic IntelExtractor. Orchestration only: names live in ./heuristics/names,
@@ -17,9 +16,6 @@ export {
   resolveSystems,
 } from "./heuristics";
 
-const num = (s: string) => parseNumber(s) ?? Number.NaN;
-const NUMBER = String.raw`\d(?:[\d., ]*\d)?`;
-
 function contextForSystem(raw: string, name: string): string {
   const clauses = raw.split(/(?<=[.!?;\n])\s+/);
   const hits = clauses.filter((clause) => mentionsName(clause, name));
@@ -30,21 +26,7 @@ function scan(raw: string, catalog: Drone[], deep: boolean): Extraction {
   const t = raw.toLowerCase();
   const facts = extractFacts(raw);
   const specs = facts.specs;
-  const fiber = raw.match(new RegExp(`(${NUMBER})\\s*km\\s+(?:of\\s+)?(?:fiber|fibre|spool)`, "i"));
-  if (fiber?.[1])
-    specs.push({
-      key: "fiber_spool",
-      label: "Fiber spool length",
-      value: num(fiber[1]),
-      unit: "km",
-      raw: fiber[0],
-      evidence: fiber[0],
-    });
-
-  const rfBands = [...raw.matchAll(/(\d+(?:[.,]\d+)?)\s*(mhz|ghz)/gi)].map(
-    (m) => `${m[1]} ${m[2]!.toUpperCase()}`,
-  );
-  if (/crpa|kometa/i.test(raw)) rfBands.push("CRPA");
+  const rfBands = extractRfBands(raw);
   const domain: Domain | undefined = /usv|boat|naval|sea drone|maritime/.test(t)
     ? "Sea"
     : /ugv|tracked|ground robot/.test(t)
@@ -93,12 +75,7 @@ function scan(raw: string, catalog: Drone[], deep: boolean): Extraction {
     return {
       ...system,
       specs: systems.length === 1 ? specs : local.specs,
-      rfBands:
-        systems.length === 1
-          ? rfBands
-          : [...context.matchAll(/(\d+(?:[.,]\d+)?)\s*(mhz|ghz)/gi)].map(
-              (m) => `${m[1]} ${m[2]!.toUpperCase()}`,
-            ),
+      rfBands: systems.length === 1 ? rfBands : extractRfBands(context),
       payloads: systems.length === 1 ? facts.payloads : local.payloads,
       sensors: systems.length === 1 ? facts.sensors : local.sensors,
       components: systems.length === 1 ? facts.components : local.components,

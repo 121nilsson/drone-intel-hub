@@ -1,4 +1,5 @@
 import { parseNumber } from "@/entities/normalization/numeric";
+import { getRe } from "../regex-cache";
 
 /** Records one spec claim; duplicates are dropped by the caller's sink. */
 export type AddSpec = (
@@ -15,19 +16,6 @@ export const END = String.raw`(?![\p{L}])`;
 
 export function num(s: string): number {
   return parseNumber(s) ?? Number.NaN;
-}
-
-/** Compiled-regex cache keyed on pattern + flags. Lexicons are static, so reuse across calls. */
-const reCache = new Map<string, RegExp>();
-
-function getRe(pattern: string, flags: string): RegExp {
-  const key = `${pattern}::${flags}`;
-  let re = reCache.get(key);
-  if (!re) {
-    re = new RegExp(pattern, flags);
-    reCache.set(key, re);
-  }
-  return re;
 }
 
 /**

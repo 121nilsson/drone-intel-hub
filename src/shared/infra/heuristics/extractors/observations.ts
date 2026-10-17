@@ -24,7 +24,13 @@ export function extractCountedEquipment(raw: string, add: AddSpec, sink: Observa
     ["jammers?", "cameras?", "missiles?", "rotors?", "antennas?", "bombs?"],
     (noun, quantity, evidence) => {
       if (noun === "camera")
-        sink.sensors.push({ name: evidence, category: "camera", quantity, evidence, confidence: 0.8 });
+        sink.sensors.push({
+          name: evidence,
+          category: "camera",
+          quantity,
+          evidence,
+          confidence: 0.8,
+        });
       if (noun === "bomb" || noun === "missile")
         sink.payloads.push({ name: noun, category: noun, quantity, evidence, confidence: 0.8 });
     },
@@ -81,4 +87,17 @@ export function extractPropulsion(raw: string, sink: ObservationSink) {
       confidence: 0.7,
     });
   }
+}
+
+/**
+ * Frequency references ("900 MHz", "5.8 GHz") plus a CRPA antenna mention, as raw band labels;
+ * link-role splitting (control / video / GNSS / radar) stays in normalization. Shared by the
+ * whole-text scan and the per-system clause contexts so the rule lives in exactly one place.
+ */
+export function extractRfBands(raw: string): string[] {
+  const bands = [...raw.matchAll(/(\d+(?:[.,]\d+)?)\s*(mhz|ghz)/gi)].map(
+    (m) => `${m[1]} ${m[2]!.toUpperCase()}`,
+  );
+  if (/crpa|kometa/i.test(raw)) bands.push("CRPA");
+  return bands;
 }

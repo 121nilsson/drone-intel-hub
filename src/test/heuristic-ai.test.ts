@@ -247,6 +247,51 @@ describe("HeuristicExtractor number parsing", () => {
   });
 });
 
+describe("multi-system attribution (characterization)", () => {
+  // Current contract: facts are attributed per system from the clauses that NAME it, splitting
+  // at sentence boundaries only. These pins keep that semantics visible — tighten matching
+  // (per-fact disambiguation) only with new pins alongside, never silently.
+
+  it("gives a shared sentence's numbers to both systems named in it", async () => {
+    const e = await t1.extract(
+      "The Shahed-136 flew with range 1,500 km while the Geran-2 carried a 50 kg warhead.",
+      CATALOG,
+    );
+    const shahed = e.systemExtractions!.find((s) => s.name === "Shahed-136")!;
+    const geran = e.systemExtractions!.find((s) => s.name === "Geran-2")!;
+    expect(shahed.specs.some((s) => s.key === "range" && s.value === 1500)).toBe(true);
+    expect(geran.specs.some((s) => s.key === "warhead" && s.value === 50)).toBe(true);
+    // The rough edge, pinned: each system's view also carries the other one's values.
+    expect(shahed.specs.some((s) => s.key === "warhead")).toBe(true);
+    expect(geran.specs.some((s) => s.key === "range")).toBe(true);
+  });
+
+  it("attributes a number only to the system named in its own clause", async () => {
+    const e = await t1.extract(
+      "Shahed-136 flew with range 1,500 km. The Geran-2 has range 800 km. Both launched overnight.",
+      CATALOG,
+    );
+    const shahed = e.systemExtractions!.find((s) => s.name === "Shahed-136")!;
+    const geran = e.systemExtractions!.find((s) => s.name === "Geran-2")!;
+    expect(shahed.specs.some((s) => s.key === "range" && s.value === 1500)).toBe(true);
+    expect(shahed.specs.some((s) => s.key === "range" && s.value === 800)).toBe(false);
+    expect(geran.specs.some((s) => s.key === "range" && s.value === 800)).toBe(true);
+    expect(geran.specs.some((s) => s.key === "range" && s.value === 1500)).toBe(false);
+  });
+
+  it("keeps facts outside every named system's clauses on the whole-text extraction only", async () => {
+    // The fiber-spool clause names neither system, so the per-system views have nothing there;
+    // the whole-text specs keep it.
+    const e = await t1.extract(
+      "The Shahed-136 was seen over Sumy while the Geran-2 was recovered. The launcher paid out 30 km of fiber spool.",
+      CATALOG,
+    );
+    expect(specOf(e.specs, "fiber_spool")).toBe(30);
+    for (const s of e.systemExtractions!)
+      expect(s.specs.find((x) => x.key === "fiber_spool")).toBeUndefined();
+  });
+});
+
 describe("HeuristicExtractor extraction", () => {
   it("counts repeated nouns", async () => {
     const e = await t1.extract("fitted with 4 jammers and 2 antennas", CATALOG);
@@ -394,7 +439,13 @@ describe("HeuristicExtractor extraction", () => {
 describe("extractPriceNumeric", () => {
   it("returns a numeric amount in the written currency", async () => {
     const { extractPriceNumeric } = await import("@/shared/infra/heuristics");
-    expect(extractPriceNumeric("kostar 50 mkr per styck")).toMatchObject({ amount: 50e6, currency: "SEK" });
-    expect(extractPriceNumeric("signed a $2 billion deal")).toMatchObject({ amount: 2e9, currency: "USD" });
+    expect(extractPriceNumeric("kostar 50 mkr per styck")).toMatchObject({
+      amount: 50e6,
+      currency: "SEK",
+    });
+    expect(extractPriceNumeric("signed a $2 billion deal")).toMatchObject({
+      amount: 2e9,
+      currency: "USD",
+    });
   });
 });

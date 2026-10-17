@@ -1,4 +1,11 @@
-import { compoundAlt, compoundOf, currencyAlt, currencyOf, magnitudeAlt, scaleOf } from "@/shared/lexicons";
+import {
+  compoundAlt,
+  compoundOf,
+  currencyAlt,
+  currencyOf,
+  magnitudeAlt,
+  scaleOf,
+} from "@/shared/lexicons";
 import { parseNumber } from "./numeric";
 
 export interface Money {
@@ -80,7 +87,8 @@ export function parseMoney(raw: string): Money | undefined {
   if (c) {
     const info = compoundOf(c[2]!);
     const base = parseNumber(c[1]!.trim());
-    if (info && base !== undefined) return { amount: base * info.scale, currency: info.currency, raw };
+    if (info && base !== undefined)
+      return { amount: base * info.scale, currency: info.currency, raw };
   }
 
   const w = text.match(word);

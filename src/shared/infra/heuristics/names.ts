@@ -4,13 +4,14 @@
  */
 import { mentionsPhonetic, phoneticKey } from "@/entities/drone/name-key";
 import type { DetectedSystem, Drone } from "@/entities/drone/types";
+import { getRe } from "./regex-cache";
 
 const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /** Exact token-boundary match: "Geran-2" never matches inside "Geran-5" or "Geran-25". */
 export function mentions(text: string, name: string) {
   if (name.trim().length < 2) return false;
-  return new RegExp(`(?<![\\p{L}\\p{N}-])${esc(name.trim())}(?![\\p{L}\\p{N}]|-\\p{N})`, "iu").test(
+  return getRe(`(?<![\\p{L}\\p{N}-])${esc(name.trim())}(?![\\p{L}\\p{N}]|-\\p{N})`, "iu").test(
     text,
   );
 }

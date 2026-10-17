@@ -39,8 +39,7 @@ export function parseNumber(s: string): number | undefined {
 
 // Magnitude words come from the shared lexicons, so "miljarder" or "мільйонів" needs no code here.
 let MAGNITUDE: RegExp | undefined;
-const magnitudeRe = () =>
-  (MAGNITUDE ??= new RegExp(`^(.*?)\\s*(${magnitudeAlt()})\\.?$`, "iu"));
+const magnitudeRe = () => (MAGNITUDE ??= new RegExp(`^(.*?)\\s*(${magnitudeAlt()})\\.?$`, "iu"));
 
 /** "25k" → 25000, "2.5M" → 2_500_000, "500 млн" → 500e6. A bare "m" is not million. */
 export function parseMagnitude(s: string): number | undefined {

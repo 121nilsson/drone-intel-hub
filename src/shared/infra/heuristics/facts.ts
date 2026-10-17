@@ -1,6 +1,7 @@
 import type { ExtractedSpec } from "@/entities/drone/types";
+import { parseNumber } from "@/entities/normalization/numeric";
 import { ExtractedSpecSchema } from "@/shared/contracts/extraction.schema";
-import type { AddSpec } from "./extractors/common";
+import { NUMBER, type AddSpec } from "./extractors/common";
 import { extractCuas } from "./extractors/cuas";
 import {
   extractCountedEquipment,
@@ -34,9 +35,17 @@ export const SPEC_EXTRACTORS: Array<(raw: string, add: AddSpec) => void> = [
 /** Unit price, else contract-scale value under its own key - never mixed. */
 function extractMoney(raw: string, add: AddSpec) {
   const priced = extractUnitPrice(raw);
-  if (priced) return add("unit_cost", "Unit Cost / Price", priced.value, undefined, priced.evidence);
+  if (priced)
+    return add("unit_cost", "Unit Cost / Price", priced.value, undefined, priced.evidence);
   const deal = extractContractValue(raw);
   if (deal) add("contract_value", "Contract value", deal.value, undefined, deal.evidence);
+}
+
+/** Fiber-spool length ("recoiled 30 km of fiber"); a spec claim, so the same schema gate. */
+function extractFiberSpool(raw: string, add: AddSpec) {
+  const fiber = raw.match(new RegExp(`(${NUMBER})\\s*km\\s+(?:of\\s+)?(?:fiber|fibre|spool)`, "i"));
+  if (fiber?.[1])
+    add("fiber_spool", "Fiber spool length", parseNumber(fiber[1]) ?? Number.NaN, "km", fiber[0]);
 }
 
 /** Every heuristic fact in `raw`: spec claims plus payload, sensor, component and guidance observations. */
@@ -59,6 +68,7 @@ export function extractFacts(raw: string): Facts {
   extractGuidance(raw, add, facts);
   extractPropulsion(raw, facts);
   extractMoney(raw, add);
+  extractFiberSpool(raw, add);
   facts.guidance = [...new Set(facts.guidance)];
   return facts;
 }
