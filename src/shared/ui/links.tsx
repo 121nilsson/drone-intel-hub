@@ -20,7 +20,7 @@ export function ExternalSourceLink({
 }: {
   href: string;
   children?: ReactNode;
-  className?: string;
+  className?: string | undefined;
 }) {
   return (
     <a
@@ -47,7 +47,7 @@ export function SystemChip({
 }: {
   id: string;
   name: string;
-  className?: string;
+  className?: string | undefined;
 }) {
   return (
     <Link
@@ -62,4 +62,34 @@ export function SystemChip({
       <span className="truncate">{name}</span>
     </Link>
   );
+}
+
+/** Append a unit unless the value already ends with it ("60 km" + "km" → "60 km"). */
+export function withUnit(value: unknown, unit?: string): string {
+  const v = String(value ?? "").trim();
+  const u = (unit ?? "").trim();
+  if (!u) return v;
+  return v.toLowerCase().endsWith(u.toLowerCase()) ? v : `${v} ${u}`;
+}
+
+/** Source label: URLs become a truncated external link, other text wraps safely. */
+export function SourceRef({
+  source,
+  href,
+  className,
+}: {
+  source?: string | undefined;
+  href?: string | undefined;
+  className?: string | undefined;
+}) {
+  const s = (source ?? "").trim();
+  const url = /^https?:\/\//i.test(s) ? s : href;
+  if (url) {
+    return (
+      <ExternalSourceLink href={url} className={className}>
+        {s && !/^https?:\/\//i.test(s) ? s : shortUrl(url)}
+      </ExternalSourceLink>
+    );
+  }
+  return <span className={cn("break-words [overflow-wrap:anywhere]", className)}>{s || "?"}</span>;
 }
