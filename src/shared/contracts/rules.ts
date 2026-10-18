@@ -3,7 +3,8 @@
  * Pure and browser-safe: the heuristic engine applies a RuleSnapshot synchronously, so extract()
  * never touches the database.
  */
-export type RuleKind = "add_cue" | "context_filter" | "add_alias" | "add_stopword" | "add_unit_scale";
+export type RuleKind =
+  "add_cue" | "context_filter" | "add_alias" | "add_stopword" | "add_unit_scale";
 export type RuleLanguage = "all" | "en" | "sv" | "ru" | "uk";
 
 export interface DynamicRuleRow {

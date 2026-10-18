@@ -15,10 +15,12 @@ type Loader = () => Promise<{ version: number; rows: DynamicRuleRow[] } | null>;
 const pgLoader: Loader = async () => {
   const { db, dbConfigured } = await import("@/shared/infra/postgres/db.server");
   if (!dbConfigured()) return null;
-  const [v] = await db()`select coalesce(max(version), 0)::int as version from dynamic_rules_version`;
+  const [v] =
+    await db()`select coalesce(max(version), 0)::int as version from dynamic_rules_version`;
   const version = Number(v?.["version"] ?? 0);
   if (version <= currentVersion) return { version, rows: [] };
-  const rows = await db()`select id, kind, language, payload from dynamic_rules where status = 'active'`;
+  const rows =
+    await db()`select id, kind, language, payload from dynamic_rules where status = 'active'`;
   return { version, rows: rows as unknown as DynamicRuleRow[] };
 };
 
