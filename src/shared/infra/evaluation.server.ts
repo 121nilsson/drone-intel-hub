@@ -1,6 +1,7 @@
 import { db, dbConfigured } from "@/shared/infra/postgres/db.server";
 import { PostgresStore } from "@/shared/infra/postgres/postgres-store.server";
 import { HeuristicExtractor } from "@/shared/infra/heuristic-ai";
+import { getOrRefreshRuleSnapshot } from "@/shared/infra/heuristics/rule-registry.server";
 import { evaluateHeuristic, compareSpecs, comparableSpecs } from "@/features/evaluation/evaluation";
 import { normalizeExtraction } from "@/entities/normalization/apply";
 import { semanticKeyFor } from "@/entities/normalization/semantic";
@@ -72,7 +73,7 @@ export async function runEvaluation(): Promise<EvaluationRunResult> {
     const store = new PostgresStore();
     const drones = ((await store.load("drones")) ?? []) as unknown as Drone[];
     const candidates = ((await store.load("candidates")) ?? []) as unknown as Candidate[];
-    const heuristic = new HeuristicExtractor(1);
+    const heuristic = new HeuristicExtractor(1, await getOrRefreshRuleSnapshot());
     const report = await evaluateHeuristic(candidates, drones, heuristic, {
       sampleSize: 200,
       seed: 1,
@@ -101,7 +102,7 @@ export async function runEvaluationHealth(): Promise<EvaluationHealthResult> {
     const store = new PostgresStore();
     const drones = ((await store.load("drones")) ?? []) as unknown as Drone[];
     const candidates = ((await store.load("candidates")) ?? []) as unknown as Candidate[];
-    const heuristic = new HeuristicExtractor(1);
+    const heuristic = new HeuristicExtractor(1, await getOrRefreshRuleSnapshot());
     const report = await evaluateHeuristic(candidates, drones, heuristic, {
       sampleSize: 200,
       seed: 1,
@@ -217,7 +218,7 @@ export async function harvestCorpus(): Promise<{
     const store = new PostgresStore();
     const drones = ((await store.load("drones")) ?? []) as unknown as Drone[];
     const candidates = ((await store.load("candidates")) ?? []) as unknown as Candidate[];
-    const heuristic = new HeuristicExtractor(1);
+    const heuristic = new HeuristicExtractor(1, await getOrRefreshRuleSnapshot());
     const report = await evaluateHeuristic(candidates, drones, heuristic, {
       sampleSize: 200,
       seed: 1,
@@ -336,21 +337,40 @@ export async function minePatterns(): Promise<PatternSuggestion[]> {
   return out.sort((a, b) => b.count - a.count).slice(0, 20);
 }
 
+const RULE_KIND: Record<PatternSuggestion["kind"], string> = {
+  cue: "add_cue",
+  notAfter: "context_filter",
+  magnitude: "add_unit_scale",
+  alias: "add_alias",
+  stop: "add_stopword",
+};
+
+/** Bump the rule version so every process reloads its snapshot within one TTL. */
+async function bumpRuleVersion(note: string) {
+  await db()`insert into dynamic_rules_version (version, note)
+    select coalesce(max(version), 0) + 1, ${note} from dynamic_rules_version`;
+  await getOrRefreshRuleSnapshot({ force: true });
+}
+
 export async function approveOverride(suggestion: PatternSuggestion): Promise<{ ok: boolean }> {
   if (!dbConfigured()) return { ok: false };
   await db()`
-    insert into lexicon_overrides (id, kind, payload, status, decided_at, decided_by)
-    values (${suggestion.id}, ${suggestion.kind}, ${db().json(sanitizeJson(suggestion as unknown as JSONValue))}, 'approved', now(), 'analyst')
-    on conflict (id) do update set status = 'approved', decided_at = now(), decided_by = 'analyst'`;
+    insert into dynamic_rules (id, kind, payload, status, origin, target_key, rationale, decided_by, promoted_at)
+    values (${suggestion.id}, ${RULE_KIND[suggestion.kind]}, ${db().json(sanitizeJson(suggestion as unknown as JSONValue))},
+      'active', 'analyst', ${suggestion.specKey}, ${suggestion.description}, 'analyst', now())
+    on conflict (id) do update set status = 'active', version = dynamic_rules.version + 1,
+      payload = excluded.payload, promoted_at = now(), decided_by = 'analyst'`;
+  await bumpRuleVersion(`approve ${suggestion.id}`);
   return { ok: true };
 }
 
 export async function rejectOverride(id: string): Promise<{ ok: boolean }> {
   if (!dbConfigured()) return { ok: false };
   await db()`
-    insert into lexicon_overrides (id, kind, payload, status, decided_at, decided_by)
-    values (${id}, 'cue', ${db().json(sanitizeJson({ id } as unknown as JSONValue))}, 'rejected', now(), 'analyst')
-    on conflict (id) do update set status = 'rejected', decided_at = now(), decided_by = 'analyst'`;
+    insert into dynamic_rules (id, kind, payload, status, origin, decided_by)
+    values (${id}, 'add_cue', ${db().json(sanitizeJson({ id } as unknown as JSONValue))}, 'rejected', 'analyst', 'analyst')
+    on conflict (id) do update set status = 'rejected', decided_by = 'analyst'`;
+  await bumpRuleVersion(`reject ${id}`);
   return { ok: true };
 }
 
@@ -372,7 +392,7 @@ export async function runAdjudication(): Promise<{
     const store = new PostgresStore();
     const drones = ((await store.load("drones")) ?? []) as unknown as Drone[];
     const candidates = ((await store.load("candidates")) ?? []) as unknown as Candidate[];
-    const heuristic = new HeuristicExtractor(1);
+    const heuristic = new HeuristicExtractor(1, await getOrRefreshRuleSnapshot());
     const { chatCompletionOnce } = await import("@/shared/infra/ai-proxy.server");
 
     let adjudicated = 0;

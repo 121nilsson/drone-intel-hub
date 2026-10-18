@@ -95,6 +95,10 @@ export async function fetchAllSources(
 
   // Call the transport directly: the cron tick has no Start request context, so routing
   // through the chatCompletion server function would throw.
+  // Refresh dynamic heuristic rules (never throws; falls back to static lexicons).
+  const { getOrRefreshRuleSnapshot } =
+    await import("@/shared/infra/heuristics/rule-registry.server");
+  await getOrRefreshRuleSnapshot();
   const deps = {
     drones,
     candidates,

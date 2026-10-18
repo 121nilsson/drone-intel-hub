@@ -1,5 +1,6 @@
 import type { Domain, Drone, Extraction, SystemExtraction } from "@/entities/drone/types";
 import type { BriefingSummarizer, IntelExtractor } from "@/shared/contracts/ai";
+import { getActiveRuleSnapshot, type RuleSnapshot } from "@/shared/contracts/rules";
 import { extractFacts, extractRfBands, mentionsName, resolveSystems } from "./heuristics";
 
 /**
@@ -22,7 +23,7 @@ function contextForSystem(raw: string, name: string): string {
   return hits.join(" ");
 }
 
-function scan(raw: string, catalog: Drone[], deep: boolean): Extraction {
+function scan(raw: string, catalog: Drone[], deep: boolean, rules?: RuleSnapshot): Extraction {
   const t = raw.toLowerCase();
   const facts = extractFacts(raw);
   const specs = facts.specs;
@@ -48,7 +49,7 @@ function scan(raw: string, catalog: Drone[], deep: boolean): Extraction {
               ? "IL"
               : undefined;
 
-  const systems = resolveSystems(raw, catalog);
+  const systems = resolveSystems(raw, catalog, rules?.stopwords);
   const matched = systems.filter((s) => s.matchId);
   const novel = systems.filter((s) => !s.matchId);
   // Single unambiguous catalog match only when no new/variant system is the subject
@@ -111,13 +112,32 @@ function scan(raw: string, catalog: Drone[], deep: boolean): Extraction {
   };
 }
 
+/** Catalog copy with dynamic aliases; aliases for deleted/merged ids simply find no drone. */
+function withRuleAliases(catalog: Drone[], rules: RuleSnapshot): Drone[] {
+  if (!rules.aliases.size) return catalog;
+  return catalog.map((d) => {
+    const extra = rules.aliases.get(d.id);
+    return extra?.length ? { ...d, aliases: [...d.aliases, ...extra] } : d;
+  });
+}
+
 export class HeuristicExtractor implements IntelExtractor {
   readonly label: string;
-  constructor(readonly tier: 1 | 2) {
+  constructor(
+    readonly tier: 1 | 2,
+    private readonly rules?: RuleSnapshot,
+  ) {
     this.label = tier === 1 ? "Local screener" : "Local deep matcher";
   }
-  async extract(raw: string, catalog: Drone[]) {
-    return scan(raw, catalog, this.tier === 2);
+  /** Rules: per-call option, else constructor snapshot, else the process-wide active one. */
+  async extract(
+    raw: string,
+    catalog: Drone[],
+    _context?: Extraction,
+    options?: { rules?: RuleSnapshot },
+  ) {
+    const rules = options?.rules ?? this.rules ?? getActiveRuleSnapshot();
+    return scan(raw, withRuleAliases(catalog, rules), this.tier === 2, rules);
   }
 }
 
