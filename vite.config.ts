@@ -33,6 +33,10 @@ export default defineConfig({
       // Auto-ingest every 10 minutes. The task enforces a 9 min floor via sync_state so ticks
       // cannot overlap, and each run stops starting AI work after an 8 min window.
       "*/10 * * * *": "sources:sync",
+      // Heuristic evaluation daily at 03:15 (after the nightly ingest window).
+      "15 3 * * *": "evaluation:run",
+      // Heuristic health check daily at 03:45.
+      "45 3 * * *": "evaluation:health",
     },
   } as never,
 });

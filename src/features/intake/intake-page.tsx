@@ -6,6 +6,7 @@ import { useCandidates, useDispatches, useDrones, useServices } from "@/shared/i
 import { translateText } from "@/shared/infra/ai-proxy.functions";
 import { fetchIntakeArticle, isBareUrl } from "@/shared/infra/sources/intake-fetch.functions";
 import { Btn, Loading, Panel, Tag } from "@/shared/ui/primitives";
+import { triggerRecordAnalyst } from "@/shared/infra/evaluation.functions";
 import { mergeInto, promote, runTwoTier, recordMention } from "./pipeline";
 import type { Candidate } from "@/entities/drone/types";
 
@@ -229,6 +230,7 @@ function CandidateRow({ c }: { c: Candidate }) {
             onClick={() => {
               promote(c, svc, name);
               svc.candidates.update(c.id, { resolvedBy: "analyst" });
+              void triggerRecordAnalyst({ data: { candidate: c } }).catch(() => {});
               toast("Candidate promoted", {
                 description: `New system “${name}” added to the catalog`,
               });
@@ -256,6 +258,7 @@ function CandidateRow({ c }: { c: Candidate }) {
             onClick={() => {
               mergeInto(c, target, svc);
               svc.candidates.update(c.id, { resolvedBy: "analyst" });
+              void triggerRecordAnalyst({ data: { candidate: c } }).catch(() => {});
               const targetName = drones.find((d) => d.id === target)?.name ?? target;
               toast("Merged into existing system", {
                 description: targetName,
@@ -285,6 +288,7 @@ function CandidateRow({ c }: { c: Candidate }) {
                 ...(c.supersededBy !== undefined ? { supersededBy: c.supersededBy } : {}),
               };
               svc.candidates.update(c.id, { status: "discarded", resolvedBy: "analyst" });
+              void triggerRecordAnalyst({ data: { candidate: c } }).catch(() => {});
               toast("Candidate discarded", {
                 description: e.name ?? c.source,
                 action: {

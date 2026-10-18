@@ -1,5 +1,6 @@
 import type { ExtractedSpec } from "@/entities/drone/types";
 import { parseNumber } from "@/entities/normalization/numeric";
+import { parseMoney } from "@/entities/normalization/currency";
 import { semanticKeyFor } from "@/entities/normalization/semantic";
 import { ExtractedSpecSchema } from "@/shared/contracts/extraction.schema";
 import { type Money } from "@/entities/normalization/currency";
@@ -38,17 +39,13 @@ export const SPEC_EXTRACTORS: Array<(raw: string, add: AddSpec) => void> = [
 
 /** Unit price, else contract-scale value under its own key - never mixed. */
 function extractMoney(raw: string, add: AddSpec) {
-  const priced = extractPriceNumeric(raw);
-  if (priced) {
-    const money = priced as Money;
-    add(
-      "unit_cost",
-      "Unit Cost / Price",
-      money.amount,
-      undefined,
-      `${money.amount} ${money.currency}`,
-    );
-    return;
+  const unit = extractUnitPrice(raw);
+  if (unit) {
+    const money = parseMoney(unit.value);
+    if (money) {
+      add("unit_cost", "Unit Cost / Price", money.amount, undefined, unit.evidence);
+      return;
+    }
   }
   const deal = extractContractValue(raw);
   if (deal) add("contract_value", "Contract value", deal.value, undefined, deal.evidence);

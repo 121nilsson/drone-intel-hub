@@ -95,6 +95,14 @@ export function extractCountedNouns(
 ) {
   const nounAlt = nouns.join("|");
   for (const m of raw.matchAll(getRe(`(?<![-\\p{L}\\p{N}])(\\d+)\\s+(${nounAlt})`, "giu"))) {
+    // Attack tallies ("launched 167 missiles overnight") are not system specs.
+    const before = raw.slice(Math.max(0, m.index! - 40), m.index!);
+    if (
+      /\b(?:launch|launched|attack|attacked|struck|overnight|fired|procure|procured|plans)\b/i.test(
+        before,
+      )
+    )
+      continue;
     const noun = m[2]!.toLowerCase().replace(/s$/, "");
     const qty = Number(m[1]);
     add(`${noun}s`, `Number of ${noun}s`, qty, undefined, m[0]);

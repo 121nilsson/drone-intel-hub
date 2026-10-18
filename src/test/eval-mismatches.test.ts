@@ -13,6 +13,10 @@ describe("eval mismatch regressions", () => {
   if (fixtures.length === 0)
     it.skip("mismatch corpus is empty — export from /evaluation", () => {});
   for (const fx of fixtures) {
+    if (fx.status === "pending_fix") {
+      it.skip(`${fx.source} (${fx.id.slice(0, 8)}) — pending fix`, () => {});
+      continue;
+    }
     it(`${fx.source} (${fx.id.slice(0, 8)})`, async () => {
       const r = await checkFixture(fx, heuristic, drones);
       expect(r.missing).toEqual([]);

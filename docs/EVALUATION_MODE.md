@@ -1,8 +1,8 @@
 # Spec: Utvärderingsläge för heuristikmotorn
 
-**Status:** Implementerat (v1)  
+**Status:** Implementerat (v1 + automation)  
 **Fil:** `docs/EVALUATION_MODE.md`  
-**Relaterad kod:** `src/features/evaluation/evaluation.ts`, `src/features/evaluation/evaluation-page.tsx`, `src/test/eval-corpus.test.ts`, `src/test/fixtures/eval-corpus.json`
+**Relaterad kod:** `src/features/evaluation/evaluation.ts`, `src/features/evaluation/evaluation-page.tsx`, `src/shared/infra/evaluation.server.ts`, `src/shared/infra/evaluation.functions.ts`, `src/test/eval-corpus.test.ts`, `src/test/eval-mismatches.test.ts`, `src/test/fixtures/eval-corpus.json`, `src/test/fixtures/eval-mismatches.json`, `src/test/fixtures/eval-catalog.json`
 
 ---
 

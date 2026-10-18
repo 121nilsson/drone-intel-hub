@@ -65,8 +65,18 @@ const GUIDANCE_TERMS = [
 
 /** Guidance / navigation modes; recorded both as an observation and one combined spec. */
 export function extractGuidance(raw: string, add: AddSpec, sink: ObservationSink) {
-  for (const term of GUIDANCE_TERMS)
+  for (const term of GUIDANCE_TERMS) {
+    // "GPS jamming" / "immune to GPS jamming" / "without stable GPS" describe a threat or
+    // absence, not a guidance mode.
+    if (
+      term === "GPS" &&
+      /immune\s+to\s+GPS\s+jamming|GPS\s+jamming|without[^.]{0,20}GPS|no[^.]{0,20}GPS|без[^.]{0,20}GPS/i.test(
+        raw,
+      )
+    )
+      continue;
     if (new RegExp(`\\b${term.replace(" ", "\\s+")}\\b`, "i").test(raw)) sink.guidance.push(term);
+  }
   const unique = [...new Set(sink.guidance)];
   if (unique.length)
     add("guidance", "Guidance / navigation", unique.join(", "), undefined, unique.join(", "));

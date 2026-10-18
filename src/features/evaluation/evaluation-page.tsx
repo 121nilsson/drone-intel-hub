@@ -1,7 +1,16 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useCandidates, useDrones, useServices } from "@/shared/infra/services";
-import { Btn, Card, CardGrid, ListRow, PageTitle, Panel, Tag } from "@/shared/ui/primitives";
+import {
+  Btn,
+  Card,
+  CardGrid,
+  ListRow,
+  PageTitle,
+  Panel,
+  Sparkline,
+  Tag,
+} from "@/shared/ui/primitives";
 import {
   evaluateHeuristic,
   fixturesToCorpus,
@@ -9,6 +18,17 @@ import {
   type EvalReport,
   type Prf,
 } from "./evaluation";
+import {
+  triggerEvaluation,
+  triggerMinePatterns,
+  triggerApproveOverride,
+  triggerRejectOverride,
+  fetchEvalReports,
+  triggerGitImport,
+  triggerHarvest,
+  triggerAdjudication,
+} from "@/shared/infra/evaluation.functions";
+import type { PatternSuggestion } from "@/shared/infra/evaluation.server";
 
 const pct = (n: number) => `${Math.round(n * 100)}%`;
 const SIZES = [50, 100, 250, 500];
@@ -48,6 +68,16 @@ export function EvaluationPage() {
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [report, setReport] = useState<EvalReport | null>(null);
   const [openKey, setOpenKey] = useState<string | null>(null);
+  const [suggestions, setSuggestions] = useState<PatternSuggestion[]>([]);
+  const [trend, setTrend] = useState<{ generatedAt: string; f1: number }[]>([]);
+
+  useEffect(() => {
+    fetchEvalReports()
+      .then((rows) =>
+        setTrend(rows.map((r) => ({ generatedAt: r.generatedAt, f1: r.f1 })).reverse()),
+      )
+      .catch(() => {});
+  }, []);
 
   const run = async () => {
     setRunning(true);
@@ -99,6 +129,17 @@ export function EvaluationPage() {
         </p>
       </Panel>
 
+      {trend.length > 1 && (
+        <Panel title="Trend (F1 över tid)">
+          <div className="flex items-center gap-3">
+            <Sparkline values={trend.map((t) => t.f1)} width={120} height={24} />
+            <span className="font-mono text-xs text-muted-foreground">
+              {trend.length} körningar · senaste F1 {trend[trend.length - 1]?.f1.toFixed(2)}
+            </span>
+          </div>
+        </Panel>
+      )}
+
       <Panel title="Urval">
         <div className="flex flex-wrap items-center gap-2">
           {SIZES.map((n) => (
@@ -120,6 +161,23 @@ export function EvaluationPage() {
               : running
                 ? "Kör…"
                 : "Kör utvärdering"}
+          </Btn>
+          <Btn
+            variant="ghost"
+            disabled={running}
+            onClick={async () => {
+              setRunning(true);
+              try {
+                const r = await triggerEvaluation();
+                toast.success(`Server-utvärdering klar: ${r.totalItems ?? 0} kandidater`);
+              } catch (e) {
+                toast.error(`Server-utvärdering misslyckades: ${(e as Error).message}`);
+              } finally {
+                setRunning(false);
+              }
+            }}
+          >
+            Kör på server (spara rapport)
           </Btn>
         </div>
         <p className="mt-2 font-mono text-xs text-muted-foreground">
@@ -270,6 +328,100 @@ export function EvaluationPage() {
                 );
               })}
             </ul>
+          </Panel>
+
+          <Panel title="Förslag (mönstergrävning)">
+            <div className="mb-3 flex flex-wrap gap-2">
+              <Btn
+                variant="ghost"
+                onClick={async () => {
+                  try {
+                    const s = await triggerMinePatterns();
+                    setSuggestions(s);
+                    toast.success(`${s.length} förslag hittade`);
+                  } catch (e) {
+                    toast.error(`Mönstergrävning misslyckades: ${(e as Error).message}`);
+                  }
+                }}
+              >
+                Analysera mönster
+              </Btn>
+            </div>
+            {suggestions.length === 0 && (
+              <p className="text-sm text-muted-foreground">Inga förslag ännu.</p>
+            )}
+            <ul className="space-y-2">
+              {suggestions.map((s) => (
+                <li key={s.id} className="border border-border p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="font-mono text-xs">{s.description}</span>
+                    <div className="flex gap-2">
+                      <Btn
+                        variant="ghost"
+                        onClick={async () => {
+                          await triggerApproveOverride({ data: { suggestion: s } });
+                          setSuggestions((prev) => prev.filter((x) => x.id !== s.id));
+                          toast.success("Förslag godkänt — skrivs till lexicon_overrides");
+                        }}
+                      >
+                        Godkänn
+                      </Btn>
+                      <Btn
+                        variant="danger"
+                        onClick={async () => {
+                          await triggerRejectOverride({ data: { id: s.id } });
+                          setSuggestions((prev) => prev.filter((x) => x.id !== s.id));
+                          toast.success("Förslag avvisat");
+                        }}
+                      >
+                        Avvisa
+                      </Btn>
+                    </div>
+                  </div>
+                  {s.sample.length > 0 && (
+                    <ul className="mt-2 space-y-1 font-mono text-[11px] text-muted-foreground">
+                      {s.sample.map((e, i) => (
+                        <li key={i} className="break-words">
+                          {e}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </Panel>
+
+          <Panel title="Automation (server)">
+            <div className="flex flex-wrap gap-2">
+              <Btn
+                variant="ghost"
+                onClick={async () => {
+                  const r = await triggerGitImport();
+                  toast.success(`Import: ${r.imported} nya, ${r.skipped} hoppade`);
+                }}
+              >
+                Importera git-corpus
+              </Btn>
+              <Btn
+                variant="ghost"
+                onClick={async () => {
+                  const r = await triggerHarvest();
+                  toast.success(`Harvest: ${r.inserted} nya, ${r.skipped} hoppade`);
+                }}
+              >
+                Harvest corpus
+              </Btn>
+              <Btn
+                variant="ghost"
+                onClick={async () => {
+                  const r = await triggerAdjudication();
+                  toast.success(`Adjudication: ${r.adjudicated} domar, ${r.inserted} nya`);
+                }}
+              >
+                Kör adjudication
+              </Btn>
+            </div>
           </Panel>
         </>
       )}

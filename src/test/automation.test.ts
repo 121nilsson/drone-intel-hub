@@ -121,7 +121,7 @@ describe("source health", () => {
 });
 
 describe("platformDrift", () => {
-  const input = (platform: string, fetched: number, hoursAgo = 1) => ({
+  const input = (platform: string, fetched: number, hoursAgo = 0) => ({
     platform,
     fetched,
     lastPostAt: iso(NOW - hoursAgo * 3_600_000),
@@ -130,12 +130,10 @@ describe("platformDrift", () => {
   it("reports a platform whose proven sources all came back empty", () => {
     // The signal a per-source check cannot see: one silent source reads as a quiet day, four
     // on one platform in the same run is a parser change.
-    const msgs = platformDrift([
-      input("Telegram", 0),
-      input("Telegram", 0),
-      input("Telegram", 0),
-      input("Telegram", 0),
-    ]);
+    const msgs = platformDrift(
+      [input("Telegram", 0), input("Telegram", 0), input("Telegram", 0), input("Telegram", 0)],
+      NOW,
+    );
     expect(msgs).toEqual(["4 of 4 Telegram sources returned no posts"]);
   });
 

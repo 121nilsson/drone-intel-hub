@@ -1,9 +1,9 @@
 # Spec: Autonom utvärderingsloop (självlärande eval)
 
-**Status:** Utkast v2 — reviderat efter granskning. Ej implementerat (utom v1-delarna i §1).
+**Status:** Implementerat — Steg −1, 0, 1, 2, 3 och 4 (grundläggande) är implementerade. Steg 2–4 är grundläggande versioner (AI-adjudication, mönstergrävning UI, analytikerrättelser). Trust-filter och mismatch-forbid har korrigerats efter review.
 **Fil:** `docs/EVALUATION_AUTOMATION.md` (tidigare felstavad `EVALUTATION_AUTOMATION.md`)
 **Relaterad spec:** `docs/EVALUATION_MODE.md` (v1, implementerad) — detta dokument realiserar dess §9 (självlärande loop).
-**Relaterad kod:** `src/features/evaluation/evaluation.ts`, `src/features/evaluation/evaluation-page.tsx`, `src/test/eval-corpus.test.ts`, `src/test/eval-mismatches.test.ts`, `tasks/sources/sync.ts`, `src/shared/infra/sources/source-sync.server.ts`
+**Relaterad kod:** `src/features/evaluation/evaluation.ts`, `src/features/evaluation/evaluation-page.tsx`, `src/shared/infra/evaluation.server.ts`, `src/shared/infra/evaluation.functions.ts`, `tasks/evaluation/run.ts`, `tasks/evaluation/health.ts`, `tasks/evaluation/adjudicate.ts` (ej skapad — adjudication körs via server-funktion), `src/test/eval-corpus.test.ts`, `src/test/eval-mismatches.test.ts`
 
 ---
 
@@ -23,14 +23,22 @@ Implementerat i v1:
 - `src/test/fixtures/eval-corpus.json` innehåller **50 godkända positiva fall**, `eval-mismatches.json` **50 negativa fall**, och `eval-catalog.json` finns.
 - `eval-corpus.test.ts` passerar (50/50). `eval-mismatches.test.ts` fallerar 49/50 — se §2.1, det är ett tankefel i hur negativa fall skapats, inte en heuristikregression.
 
+Implementerat:
+
+1. Schemalagd mätning (cron 03:15) + manuell trigger via `/evaluation`.
+2. Health-check (cron 03:45) med regression-larm.
+3. Corpus-writer (harvest) + git-import + export-script.
+4. AI-adjudication (max 10/körning) via server-funktion.
+5. Mönstergrävning + förslag på `/evaluation` (Godkänn/Avvisa → `lexicon_overrides`).
+6. Analytikerrättelser som träningsdata (origin `analyst`, auto-godkänd).
+
 Kvar att automatisera:
 
-1. Mätningen körs bara manuellt.
-2. Corpus-export slutar i webbläsaren (nedladdning) och måste checkas in för hand.
-3. Ingen trendhistorik mellan körningar.
+1. Steg 2–4 är grundläggande versioner — behöver verifieras mot live-data och förbättras.
+2. Trendhistorik-vy (rapporter över tid) saknas i UI.
 
 > **Felaktigt tänk (v1 av detta dokument):** "Corpuset är tomt (`[]`), regressionssviterna hoppar över."
-> **Så här bör det tänkas:** Corpuset finns redan och är värdefullt. Automationen ska *bygga vidare* på de incheckade filerna, inte ersätta dem.
+> **Så här bör det tänkas:** Corpuset finns redan och är värdefullt. Automationen ska _bygga vidare_ på de incheckade filerna, inte ersätta dem.
 
 ---
 
@@ -38,11 +46,12 @@ Kvar att automatisera:
 
 ### 2.1 Negativa fixtures (`forbid`)
 
-> **Felaktigt tänk:** Varje mismatch mellan heuristik och referens blir en negativ fixture som *förbjuder* heuristikens värde. "Mismatch där heuristiken är mer korroborerad än AI → negativ fixture."
+> **Felaktigt tänk:** Varje mismatch mellan heuristik och referens blir en negativ fixture som _förbjuder_ heuristikens värde. "Mismatch där heuristiken är mer korroborerad än AI → negativ fixture."
 >
 > Resultat: när heuristiken hade rätt förbjöd testet det korrekta svaret. Därför är 49/50 i `eval-mismatches.test.ts` röda.
 
 > **Så här bör det tänkas:**
+>
 > - Heuristiken har rätt i en konflikt → **positiv fixture (`expect`)** med heuristikens värde. Referensens fel loggas separat som AI/referensfel; det testas inte mot heuristiken.
 > - Heuristiken har fel (verifierat) → negativ fixture (`forbid`) med det felaktiga värdet, **men** med `status = 'pending_fix'`.
 > - När koden rättats och fixturen passerar → `pending_fix` → `approved`, och den blir ett aktivt regressionstest.
@@ -58,10 +67,10 @@ Kvar att automatisera:
 
 > **Så här bör det tänkas — två lager:**
 >
-> | Lager | Var | Körs av | Syfte |
-> |---|---|---|---|
-> | **Hermetiskt** | `src/test/fixtures/*.json` i git | `bunx vitest run` i CI, alltid | Stoppar kodregressioner. Deterministiskt. |
-> | **Levande** | `eval_corpus` i Postgres | Schemalagd task + `bun run test:corpus-db` lokalt mot Docker | Växer automatiskt, mäter trend, föder förslag. |
+> | Lager          | Var                              | Körs av                                                      | Syfte                                          |
+> | -------------- | -------------------------------- | ------------------------------------------------------------ | ---------------------------------------------- |
+> | **Hermetiskt** | `src/test/fixtures/*.json` i git | `bunx vitest run` i CI, alltid                               | Stoppar kodregressioner. Deterministiskt.      |
+> | **Levande**    | `eval_corpus` i Postgres         | Schemalagd task + `bun run test:corpus-db` lokalt mot Docker | Växer automatiskt, mäter trend, föder förslag. |
 >
 > Flöde mellan lagren: godkända DB-fixtures **befordras** periodiskt till git via en exportknapp/skript som skriver JSON-filerna — en människa granskar diffen och committar. Ingen bot gör commits.
 
@@ -70,6 +79,8 @@ Kvar att automatisera:
 > **Felaktigt tänk:** Lexikon-overrides "mergeas vid lexikon-inläsning" från DB — vilket i praktiken gör `extract()`/normalisering beroende av en async DB-läsning.
 
 > **Så här bör det tänkas:** Extraktorer och normalisering förblir **rena, synkrona och deterministiska**. Servern laddar `lexicon_overrides` till en **oföränderlig snapshot** i minnet vid uppstart och efter varje godkännande/synk. Extraktorn får snapshoten som indata (eller läser den cachade). Testerna kör med TS-default eller en explicit fixture-snapshot — aldrig mot DB.
+>
+> **Nuläge:** Overrides lagras i `lexicon_overrides` och visas på `/evaluation`, men appliceras **inte** automatiskt i extraktorerna. Godkända overrides back-porteras manuellt till TS-lexikon (princip 1: systemet ändrar aldrig TS-kod eller git). Detta är medvetet — auto-applicering kräver en snapshot-mekanism som ännu inte är implementerad.
 
 ### 2.4 Regressionströsklar
 
@@ -82,6 +93,7 @@ Kvar att automatisera:
 > **Felaktigt tänk:** Otydligt vad som får auto-godkännas; adjudicerade fall "via Steg 3:s approve-knapp".
 
 > **Så här bör det tänkas:**
+>
 > - Auto-godkänn **endast** positiva fall som klarar hela trust-filtret (§5.2).
 > - Allt som innehåller `forbid`, allt från AI-domare (Steg 2) och allt från mönstergrävning (Steg 3) → `pending` / `pending_fix`, granskas på `/evaluation`.
 
@@ -89,7 +101,7 @@ Kvar att automatisera:
 
 > **Felaktigt tänk:** `eval_corpus_version` som `bigserial` + "radera pending-versionen" vid ny observation — strider mot append-only, och versionsnumret säger inget om innehållet.
 
-> **Så här bör det tänkas:** Pending-rader *ersätts* via `status = 'superseded'` (ingen DELETE). Versionen är en monoton räknare som höjs i samma transaktion som godkännanden, och testsviten pinnar `corpus_version` vid start.
+> **Så här bör det tänkas:** Pending-rader _ersätts_ via `status = 'superseded'` (ingen DELETE). Versionen är en monoton räknare som höjs i samma transaktion som godkännanden, och testsviten pinnar `corpus_version` vid start.
 
 ---
 
@@ -169,14 +181,14 @@ Skrivregler: aldrig DELETE. "Radera" = `rejected`; ny pending-observation ersät
 
 ### 5.2 Trust-filter
 
-| Villkor | Positiv | Negativ |
-|---|---|---|
-| Evidens finns bokstavligen i `raw` (normaliserat) | krävs | krävs |
-| `raw` > 50 tecken | krävs | krävs |
-| Kandidat ej `discarded` | krävs | krävs |
-| Korroborerat av ≥2 kandidater, samma kanoniska värde | krävs för auto-godkännande | — |
-| Upphandlingsnycklar (`contract_value`, `*_funding` …) | uteslutna | uteslutna |
-| Felet bekräftat av analytiker eller domare | — | krävs |
+| Villkor                                               | Positiv                    | Negativ   |
+| ----------------------------------------------------- | -------------------------- | --------- |
+| Evidens finns bokstavligen i `raw` (normaliserat)     | krävs                      | krävs     |
+| `raw` > 50 tecken                                     | krävs                      | krävs     |
+| Kandidat ej `discarded`                               | krävs                      | krävs     |
+| Korroborerat av ≥2 kandidater, samma kanoniska värde  | krävs för auto-godkännande | —         |
+| Upphandlingsnycklar (`contract_value`, `*_funding` …) | uteslutna                  | uteslutna |
+| Felet bekräftat av analytiker eller domare            | —                          | krävs     |
 
 ### 5.3 Budgettak per körning
 
@@ -185,11 +197,29 @@ Skrivregler: aldrig DELETE. "Radera" = `rejected`; ny pending-observation ersät
 
 ---
 
+## 5.4 Health-check (regression-larm, implementerat)
+
+Utöver den schemalagda mätningen (§5) körs en **health-check** dagligen (03:45) som:
+
+1. Kör `evaluateHeuristic()` mot ett nytt urval.
+2. Jämför mot senaste `eval_reports`-rad.
+3. **Larmar** (console.warn + detaljer) vid:
+   - Total F1 sjunker > 0.02
+   - Per-nyckel F1 sjunker > 0.05 (för nycklar med ≥10 fall)
+   - Nya mismatch-mönster dyker upp
+4. Sparar alltid rapporten i `eval_reports` för trendanalys.
+
+**Kod:** `src/shared/infra/evaluation.server.ts` (`runEvaluationHealth`), `tasks/evaluation/health.ts`, cron i `vite.config.ts`.
+
+**Syfte:** Kombinerar CI (hermetiskt) med produktionsövervakning — regressioner fångas även mellan deployer utan git-commits.
+
+---
+
 ## 6. Steg 2 — Kapad tvistlösning
 
 Max 10 AI-domar per körning via `chatCompletion`-proxyn. Domaren får råtext + båda läsningarna och svarar `heuristic | ai | neither`.
 
-- `heuristic` → **positiv** fixture med heuristikens värde, `pending`. *(Inte negativ — se §2.1.)*
+- `heuristic` → **positiv** fixture med heuristikens värde, `pending`. _(Inte negativ — se §2.1.)_
 - `ai` → negativ fixture mot heuristikens felvärde, `pending_fix`, samt positiv med AI-värdet om evidensen bär.
 - `neither` → loggas som olöst.
 
@@ -217,11 +247,11 @@ Rättelser på `/catalog` eller borttagna felmatchningar blir fixtures med `orig
 
 ## 9. Testinfrastruktur
 
-| Kommando | Källa | Miljö |
-|---|---|---|
-| `bunx vitest run` | `src/test/fixtures/*.json` | CI + lokalt, alltid hermetiskt |
-| `bun run test:corpus-db` | `eval_corpus` (pinnad version) | Lokalt/server mot Docker-Postgres |
-| `bun run eval:export` | DB → `src/test/fixtures/*.json` | Människa granskar diff och committar |
+| Kommando                 | Källa                           | Miljö                                |
+| ------------------------ | ------------------------------- | ------------------------------------ |
+| `bunx vitest run`        | `src/test/fixtures/*.json`      | CI + lokalt, alltid hermetiskt       |
+| `bun run test:corpus-db` | `eval_corpus` (pinnad version)  | Lokalt/server mot Docker-Postgres    |
+| `bun run eval:export`    | DB → `src/test/fixtures/*.json` | Människa granskar diff och committar |
 
 Regler:
 
@@ -232,37 +262,37 @@ Regler:
 
 ## 10. Drift
 
-| Ämne | Lösning |
-|---|---|
-| Cron vs manuell körning | `eval_lock` CAS |
-| DB nere | Tyst överhoppning + backoff |
-| Volym | ~200 urval/dygn, 10 AI-domar/dygn, ~2 000 corpus-tak |
-| Read-only-invariant | Endast orchestratorn skriver |
-| Radering | Förbjuden — `rejected`/`superseded` |
-| Lovable Cloud | Samma tabeller via service-role server-funktioner; sekundärt |
+| Ämne                    | Lösning                                                      |
+| ----------------------- | ------------------------------------------------------------ |
+| Cron vs manuell körning | `eval_lock` CAS                                              |
+| DB nere                 | Tyst överhoppning + backoff                                  |
+| Volym                   | ~200 urval/dygn, 10 AI-domar/dygn, ~2 000 corpus-tak         |
+| Read-only-invariant     | Endast orchestratorn skriver                                 |
+| Radering                | Förbjuden — `rejected`/`superseded`                          |
+| Lovable Cloud           | Samma tabeller via service-role server-funktioner; sekundärt |
 
 ---
 
 ## 11. Byggordning
 
-| Steg | Innehåll | Förutsättning |
-|---|---|---|
-| **−1** | Klassificera om `eval-mismatches.json` (§2.1) så CI blir grön | — |
-| **0** | Schema, `eval_lock`, cron-task, `eval_reports`, trendvy | −1 |
-| **1** | Corpus-writer, trust-filter, git-import, `eval:export` | 0 |
-| **2** | Kapad tvistlösning | 1 |
-| **3** | `lexicon_overrides` + snapshot + förslag | 1 |
-| **4** | Analytikerrättelser | 1 |
+| Steg   | Innehåll                                                      | Förutsättning |
+| ------ | ------------------------------------------------------------- | ------------- |
+| **−1** | Klassificera om `eval-mismatches.json` (§2.1) så CI blir grön | —             |
+| **0**  | Schema, `eval_lock`, cron-task, `eval_reports`, trendvy       | −1            |
+| **1**  | Corpus-writer, trust-filter, git-import, `eval:export`        | 0             |
+| **2**  | Kapad tvistlösning                                            | 1             |
+| **3**  | `lexicon_overrides` + snapshot + förslag                      | 1             |
+| **4**  | Analytikerrättelser                                           | 1             |
 
 ---
 
 ## 12. Beslut (tidigare öppna frågor)
 
-| Fråga | Beslut |
-|---|---|
+| Fråga                 | Beslut                                                        |
+| --------------------- | ------------------------------------------------------------- |
 | Postgres eller Cloud? | Postgres i Docker är primärt; Cloud stöds via `DocumentStore` |
-| Hermetiskt lager? | Ja, alltid. CI kräver aldrig DB |
-| Auto-godkännande? | Endast trust-filtrerade positiva + analytikerrättelser |
-| Cron-frekvens? | Dygnsvis |
-| Regressionströskel? | −0.05 per nyckel (≥10 fall), −0.02 totalt |
-| Corpus-tak? | ~2 000 totalt, max 50 per spec-nyckel |
+| Hermetiskt lager?     | Ja, alltid. CI kräver aldrig DB                               |
+| Auto-godkännande?     | Endast trust-filtrerade positiva + analytikerrättelser        |
+| Cron-frekvens?        | Dygnsvis                                                      |
+| Regressionströskel?   | −0.05 per nyckel (≥10 fall), −0.02 totalt                     |
+| Corpus-tak?           | ~2 000 totalt, max 50 per spec-nyckel                         |

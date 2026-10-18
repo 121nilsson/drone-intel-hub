@@ -65,6 +65,8 @@ export interface EvalFixture {
   /** Specs that must NOT be produced (known bad outputs). */
   forbid?: { semantic: string; value?: number | string; unit?: string }[];
   expectNames?: string[];
+  /** Lifecycle status for fixtures. */
+  status?: "approved" | "pending" | "pending_fix";
 }
 
 export interface EvalOptions {
@@ -295,6 +297,16 @@ export async function evaluateHeuristic(
   const perKeyMis = new Map<string, number>();
   const fixtures: EvalFixture[] = [];
 
+  // Count how many reference (AI) specs share the same semantic+canonical value, for
+  // the corroboration trust-filter (>=2 candidates).
+  const refCounts = new Map<string, number>();
+  for (const c of eligible) {
+    for (const s of comparableSpecs(c.extraction)) {
+      const key = `${s.semantic}|${s.canonical ?? s.value}|${s.canonicalUnit ?? s.unit ?? ""}`;
+      refCounts.set(key, (refCounts.get(key) ?? 0) + 1);
+    }
+  }
+
   const pushMis = (c: Candidate, type: MatchType, h: Norm | null, r: Norm | null) => {
     const key = (h ?? r)!.semantic;
     const n = perKeyMis.get(`${key}|${type}`) ?? 0;
@@ -369,23 +381,33 @@ export async function evaluateHeuristic(
 
     const agreed = cmp.pairs.filter((p) => p.type === "exact" || p.type === "semantic");
     if (agreed.length) {
-      const refNames = [
-        c.extraction.name,
-        ...(c.extraction.systems ?? []).map((s) => s.name),
-      ].filter(
-        (n): n is string => !!n && rn.includes(phoneticKey(n)) && hn.includes(phoneticKey(n)),
-      );
-      fixtures.push({
-        id: c.id,
-        source: c.source,
-        text: c.raw,
-        expect: agreed.map((p) => ({
-          semantic: p.h.semantic,
-          value: p.h.canonical ?? p.h.value,
-          ...(p.h.canonicalUnit ? { unit: p.h.canonicalUnit } : {}),
-        })),
-        ...(refNames.length ? { expectNames: [...new Set(refNames)] } : {}),
+      // Trust filter: evidence must occur in raw, raw > 50 chars, candidate not discarded,
+      // and at least one agreed spec must be corroborated by >=2 candidates.
+      const fold = (s: string) => s.replace(/\\s+/g, " ").trim().toLowerCase();
+      const rawFolded = fold(c.raw);
+      const hasEvidence = agreed.some((p) => {
+        const proof = p.h.evidence || "";
+        return !proof || rawFolded.includes(fold(String(proof)));
       });
+      if (hasEvidence && c.raw.trim().length > 50 && c.status !== "discarded") {
+        const refNames = [
+          c.extraction.name,
+          ...(c.extraction.systems ?? []).map((s) => s.name),
+        ].filter(
+          (n): n is string => !!n && rn.includes(phoneticKey(n)) && hn.includes(phoneticKey(n)),
+        );
+        fixtures.push({
+          id: c.id,
+          source: c.source,
+          text: c.raw,
+          expect: agreed.map((p) => ({
+            semantic: p.h.semantic,
+            value: p.h.canonical ?? p.h.value,
+            ...(p.h.canonicalUnit ? { unit: p.h.canonicalUnit } : {}),
+          })),
+          ...(refNames.length ? { expectNames: [...new Set(refNames)] } : {}),
+        });
+      }
     }
   }
 
@@ -468,7 +490,9 @@ export async function checkFixture(
 export function mismatchesToFixtures(mismatches: EvalMismatch[], limit = 50): EvalFixture[] {
   const byKey = new Map<string, EvalMismatch>();
   for (const m of mismatches) {
-    if (m.matchType === "falsePositive" || m.matchType === "wrongKey") {
+    // Only forbid when the heuristic produced a value the reference did not corroborate.
+    // wrongKey (right value, wrong key) is a normalization issue, not a heuristic error.
+    if (m.matchType === "falsePositive") {
       const k = `${m.candidateId}|${m.specKey}`;
       if (!byKey.has(k)) byKey.set(k, m);
     }
