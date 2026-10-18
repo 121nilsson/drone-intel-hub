@@ -384,7 +384,7 @@ export function EvaluationPage() {
                         onClick={async () => {
                           await triggerApproveOverride({ data: { suggestion: s } });
                           setSuggestions((prev) => prev.filter((x) => x.id !== s.id));
-                          toast.success("Förslag godkänt — skrivs till lexicon_overrides");
+                          toast.success("Förslag godkänt — aktiv regel i dynamic_rules");
                         }}
                       >
                         Godkänn

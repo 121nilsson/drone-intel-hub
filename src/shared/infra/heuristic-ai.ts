@@ -23,7 +23,7 @@ function contextForSystem(raw: string, name: string): string {
   return hits.join(" ");
 }
 
-function scan(raw: string, catalog: Drone[], deep: boolean): Extraction {
+function scan(raw: string, catalog: Drone[], deep: boolean, rules?: RuleSnapshot): Extraction {
   const t = raw.toLowerCase();
   const facts = extractFacts(raw);
   const specs = facts.specs;
