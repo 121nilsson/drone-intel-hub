@@ -103,6 +103,19 @@
     "expectNames": ["BERTIL-01"]
   },
   {
+    "id": "1660ef39-7e8b-42fc-b95c-ae7ee7aa0867",
+    "text": "У Канаді вироблятимуть НРК TerMIT для України та країн НАТО\n\nУкраїнська компанія TENCORE та канадська Dominion Dynamics запустять виробництво НРК TerMIT у Канаді для потреб України та партнерів НАТО.\n\nПро це у компанії TENCORE розповіли Мілітарному.\n\nУ межах міжнародної оборонної виставки AUSA 2026 українська компанія TENCORE та канадська Dominion Dynamics підписали меморандум про взаєморозуміння.\n\nПартнерство української та канадської компанії, окрім локалізації, передбачає також інтеграцію канадської системи автономного керування та навігації AuraNet.\n\nУ межах партнерства TENCORE забезпечить трансфер технологій та навчання канадських фахівців для виходу на серійне виробництво.\n\nЗі свого боку, Dominion Dynamics інтегрує власний софтверно-апаратний комплекс командного керування та автономії AuraNet, а також розробить спеціалізовану модифікацію TerMIT для роботи в екстремальних арктичних умовах.\n\nПередача НРК TerMIT Фото: Tencore\n\nВипуск перших серійних зразків канадського виробництва заплановано на 2027 рік.\n\n«Партнерство з Канадою дає нам масштабовану виробничу базу, стійкі ланцюги постачання та надійну енергосистему, щоб запускати цей цикл разом із союзниками, яким потрібні перевірені рішення», — зазначає співзасновник TENCORE Роман Ткаченко.\n\nБазова версія НРК НРК TerMIT створена для транспортування вантажів із запасом ходу до 40 км, швидкістю до 15 км/год та балістичним захистом для стабільної роботи під час логістичних місій.\n\nТакож є версії TerMIT з бойовим модулем «Хижак» виробництва UGV Robotics.\n\nУ червні стало відомо, що також у Німеччині вироблятимуть НРК для України на спільному підприємстві Quantum Systems і Tencore.",
+    "expect": [
+      {
+        "unit": "km/h",
+        "value": 15,
+        "semantic": "speed.cruise"
+      }
+    ],
+    "source": "Militarnyi (UA RSS) · https://militarnyi.com/uk/news/u-kanadi-vyroblyatymut-nrk-termit/?utm_source=rss&#038;utm_medium=rss&#038;utm_campaign=u-kanadi-vyroblyatymut-nrk-termit",
+    "expectNames": ["TerMIT"]
+  },
+  {
     "id": "176870d7-915b-49a6-86c8-c431ea7cbbd9",
     "text": "ВМС Греції випробували морські дрони Corsair, які США використовували проти Ірану\n\nВійськово-морські сили Греції випробовують американські морські дрони Corsair і подали запит на закупівлю щонайменше 30 таких комплексів.\n\nПро це повідомляє профільне видання Naval News з посиланням на заяви Міністерства оборони Греції.\n\nВипробування дронів розробки американської компанії Saronic відбулися в межах відкриття Навчального центру об’єднаних безпілотних та автономних морських систем на базі ВМС у Скарамангасі.\n\nМіністр оборони Греції Нікос Дендіас під час заходу заявив про прагнення країни стати європейським лідером у сфері розробки та застосування автономних платформ до 2030 року.\n\nУ ході маневрів щонайменше два катери Corsair успішно пройшли оцінювання та відпрацювали взаємодію з кількома бойовими кораблями грецького флоту.\n\nМБеК Corsair та грецький корабель забезпечення HS Aias. 13 жовтня 2026 року. Фото: МО Греції\n\nЯк носії для катерів під час випробувань залучалися кораблі забезпечення HS Perseas та HS Aias.\n\nПісля завершення тестувань грецький уряд надіслав офіційний запит до США щодо закупівлі цих систем у межах міжурядової програми Foreign Military Sales (FMS).\n\nМорські апарати Corsair уже перебувають на озброєнні Військово-морського флоту США та залучаються до бойових операцій на Близькому Сході.\n\nУ липні три катери Corsair завдали удару по об’єктах на території військово-морської бази в іранському порту Бандар-Аббас.\n\nYesterday, using multiple one-way attack surface drones, CENTCOM forces successfully struck a submarine and ship maintenance facility in Iran. Three Corsair unmanned surface vessels hit the port at Bandar Abbas Naval Base, marking the first time American forces have employed sea drones in combat operations. Last night’s strikes degraded Iran’s ability to continue attacking commercial shipping.\n\n— U.S. Central Command (@CENTCOM) July 13, 2026\n\nЦіллю атаки став іранський надмалий підводний човен класу Ghadir.\n\nCorsair є 7-метровим морським дроном із дальністю ходу понад 1000 морських миль і здатністю переносити корисне навантаження до 454 кг.\n\nМаксимальна швидкість судна становить понад 35 вузлів, а бортові системи штучного інтелекту дозволяють діяти у складі «рою» та виконувати завдання розвідки й ураження цілей.",
     "expect": [
@@ -114,6 +127,19 @@
     ],
     "source": "Militarnyi (UA RSS) · https://militarnyi.com/uk/news/gretsiyi-vyprobuvaly-morski-drony-corsair/?utm_source=rss&#038;utm_medium=rss&#038;utm_campaign=gretsiyi-vyprobuvaly-morski-drony-corsair",
     "expectNames": ["Corsair"]
+  },
+  {
+    "id": "18004ddc-441c-489c-9fa7-16740ee695ae",
+    "text": "russia Tests 15kg Jet Interceptor Drone DF-1 Roscherk at 500km/h While Developing 850km/h DF-3 Gadyuka Based on Italian Fighter Shape\n\nrussian company DOFA-Tek during DronCongress 2026 forum first announced development of its new jet air-defense drone DF-1 Roscherk, designed for intercepting jet unmanned aerial vehicles.\n\nQuite impressive characteristics were announced for new DF-1 Roscherk. Specifically, declared maximum range is up to 250 km, flight duration up to 50 minutes, maximum speed up to 500 km/h, cruising speed up to 400 km/h, or in economy flight mode up to 200 km/h.\n\nDespite such large range of entire 250 km, DF-1 Roscherk has mass of only 15 kg, of which warhead can account for up to 1.5 kg. Additionally, construction of this air-defense drone is all-metal, which according to developers will simplify production.\n\nDF-1 Roscherk is launched from guide rails using solid-fuel rocket booster, which provides acceleration and brings drone to required altitude and speed. Details regarding guidance and communications system have not been announced yet.\n\nAs of now DF-1 Roscherk is at factory testing stage, with next public tests planned for November this year. Meaning DF-1 Roscherk is no longer just project, but working solution that may soon pose obstacle to Ukrainian long-range unmanned aerial vehicles.\n\nBesides DF-1 Roscherk, rashists are developing other jet drones as well. Specifically this concerns more powerful air-defense drone DF-3 Gadyuka and long-range strike unmanned aerial vehicle DF-5 Iskra. Most interesting among them is DF-3 Gadyuka.\n\nFor DF-3 Gadyuka, maximum range of entire 800 km is declared. It has cruising speed of 650 km/h, and also maximum speed up to 850 km/h, which may be sufficient for intercepting some cruise missiles.\n\nAt same time, DF-3 Gadyuka mass compared to DF-1 Roscherk increased significantly, now standing at gigantic for air-defense drone 240 kg. Meaning in size and range this is almost deep strike, but designed for intercepting drones, and here one can recall Ukrainian jet long-range drone Bars, which was converted into interceptor.\n\nInterestingly on sole published image of DF-3 Gadyuka, it has shape suspiciously similar to Italian light fighter-bomber Aeritalia G.91. Meaning rashists could have simply taken successful aerodynamic design of that aircraft as basis for their drone.\n\nRegarding DF-5 Iskra, following characteristics are declared: maximum range up to 1,200 km, speed 850 km/h, and also takeoff mass of 120 kg, of which warhead accounts for 20 kg.\n\nHowever both DF-3 Gadyuka and DF-5 Iskra, unlike DF-1 Roscherk, judging by everything are currently only at early development stages. Therefore they appear to be still far from serial examples and factory testing.",
+    "expect": [
+      {
+        "unit": "km",
+        "value": 250,
+        "semantic": "range.max"
+      }
+    ],
+    "source": "Defense Express · https://en.defence-ua.com/industries/russia_tests_15kg_jet_interceptor_drone_df_1_roscherk_at_500kmh_while_developing_850kmh_df_3_gadyuka_based_on_italian_fighter_shape-20046.html",
+    "expectNames": ["DF-1 Roscherk", "DF-3 Gadyuka", "DF-5 Iskra", "Bars"]
   },
   {
     "id": "1bea2e0f-5348-4a61-999f-31dcc190b33c",
@@ -213,6 +239,19 @@
     "expectNames": ["DRAKON"]
   },
   {
+    "id": "31051597-9b84-4b53-a747-4c7b2946193c",
+    "text": "Ukraine’s Defense Minister Confirms russia Developing 800km/h Jet Kamikaze Drones, 1990s Tu-300 Korshun Shows the Precedent",
+    "expect": [
+      {
+        "unit": "km/h",
+        "value": 800,
+        "semantic": "speed.cruise"
+      }
+    ],
+    "source": "Defense Express · https://en.defence-ua.com/weapon_and_tech/ukraines_defense_minister_confirms_russia_developing_800kmh_jet_kamikaze_drones_1990s_tu_300_korshun_shows_the_precedent-20074.html",
+    "expectNames": ["Ту-300"]
+  },
+  {
     "id": "3588b59f-5691-42e5-84c9-51f5ca0373e3",
     "text": "ideaForge Secures Orders from Survey of India for Q6 V2 UAVs to Support Mapping and Geospatial Applications\n\nideaForge Technology Limited has received an order from the Survey of India (SOI) for its Q6 V2 UAVs, further expanding the use of its indigenous UAV technology across specialised government applications. The UAVs will support SOI’s surveying and mapping requirements, enabling the collection of high-quality aerial and geospatial data across diverse terrains and project environments. The growing use of UAVs is transforming how geospatial data is collected, processed, and used for planning and decision-making. By enabling aerial data collection across large and difficult-to-access areas, UAVs can complement conventional survey methods while improving the speed, coverage, and frequency of data collection and processing. This is particularly relevant for applications where current and accurate geospatial information is critical to planning, infrastructure development, land administration and public programmes.\n\nThe Q6 V2 is a survey-grade UAV designed to provide high-area coverage, enabling large-scale mapping projects to be completed faster and more efficiently. A high-endurance, lightweight, and VTOL-capable platform, the Q6 V2 is designed and developed entirely in India. Equipped with advanced Mapping payloads, autonomous navigation, and encrypted communications systems, ithas rapid deployment capability in under 10 minutes. The quadcopter designed UAV has an endurance of 60 minutes, having an operational range of 5 km and a maximum takeoff weight of 6kg. The platform supports daylight, thermal, mapping, and multispectral payloads, offering flexibility across various kinds of survey requirements. Q6 V2 is field-proven across varied terrains, from high-altitude zones to flood-affected areas.\n\nSpeaking on the development, Mr. Somil Gautam, Associate Director – Enterprise Business, ideaForge Technology Ltd., said, “The adoption of UAVs in geospatial applications is creating a more efficient way to collect the aerial data that informs how we plan, develop, and manage our physical environment. Our engagement with the Survey of India reflects the growing relevance ofindigenous UAV technology in specialised applications where reliable and timely data is important. At ideaForge, we are focused on building platforms that can deliver dependable performance across real-world operating environments, and we see significant potential for UAV-enabled mapping and geospatial intelligence across government and enterprise applications.”\n\nThe order adds to the use of ideaForge’s UAV technology in mapping and geospatial applications, in a field where aerial data collection is becoming a regular part of how surveys are planned and carried out. The company’s UAVs have already demonstrated their capabilities across a range of government and enterprise survey requirements, including large-scale deployments under theGovernment of India’s SVAMITVA Yojana and large-scale mapping. ideaForge looks forward to supporting Survey of India as it applies drone technology to its surveying and mapping needs, and to working with its teams as they put the platform to use.\n\nDiscover more: www.ideaforgetech.com\n\nSubscribe to get the latest posts sent to your email.",
     "expect": [
@@ -234,6 +273,19 @@
     ],
     "source": "sUAS News · https://www.suasnews.com/2026/10/ideaforge-secures-orders-from-survey-of-india-for-q6-v2-uavs-to-support-mapping-and-geospatial-applications/",
     "expectNames": ["Q6 V2"]
+  },
+  {
+    "id": "3e6d7aa6-efcb-40f6-9b82-5d5d93fd5915",
+    "text": "Two tankers burn off Romania’s Sulina as Bulgaria says it lacks proof Russia is behind the Black Sea ship attacks\n\nTwo tankers burn off Romania’s Sulina as Bulgaria says it lacks proof Russia is behind the Black Sea ship attacks\n\nTwo tankers caught fire within sia launched them.\n\nFor months, Russia has struck civilian ships on the sea route that carries most of Ukraine’s farm exports, while its drones have repeatedly crossed into Moldova and Romania during attacks on Ukraine. As long as Bucharest and Sofia wait for drone wreckage before naming anyone, Russia, the party Bulgaria’s own prime minister says the logic points to, pays no price for extending its war on Ukraine’s trade routes into NATO members’ waters.\n\nThe San Marino-flagged chemical tanker Wine Trader reported a fire in its superstructure around 07:00 on 15 October while anchored in Romanian territorial waters e for the fire, though unnamed sources Read Also “Operation to strike Russian targets deep in swamps continues”: Ukrainian Commander Madiar says his unit hits 7,306 Russian troops in first half of October, up 59% on August Ukraine’s hobbit-named robot fired on targets up to 1.3 km away in a demo for border guards Ukraine and Japan plan prefabricated backup crossings for Kyiv’s bridges: 720 meters of structures already delivered\n\nTo suggest a correction or clarification, write to us here\n\nYou can also highlight the text and press Ctrl + Enter\n\nWe are an independent media outlet that relies solely on advertising revenue to sustain itself. We do not endorse or promote any products or services for financial gain. Therefore, we kindly ask for your support by disabling your ad blocker. Your assistance helps us continue providing quality content. Thank you!",
+    "expect": [
+      {
+        "unit": "km",
+        "value": 1.3,
+        "semantic": "altitude.target_max"
+      }
+    ],
+    "source": "Euromaidan Press · https://euromaidanpress.com/2026/10/15/two-tankers-burn-off-romanias-sulina-as-bulgaria-says-it-lacks-proof-russia-is-behind-the-black-sea-ship-attacks/",
+    "expectNames": ["San"]
   },
   {
     "id": "4041feb6-6461-4df3-99f9-2e94801fed65",
@@ -296,6 +348,24 @@
     ],
     "source": "Kyiv Post · https://www.kyivpost.com/post/87379",
     "expectNames": ["Шахед"]
+  },
+  {
+    "id": "4a7bb207-08d2-4fcc-893e-a93c0932b728",
+    "text": "Реактивний перехоплювач 1020-ї бригади збив «Герань-5» на швидкості 430 км/год\n\nНовому реактивному перехоплювачу вдалося наздогнати російський реактивний дрон «Герань-5» на швидкості 430 км/год.\n\nЦі перехоплювачі 1020-й зенітній ракетно-артилерійській бригаді передав благодійний фонд Сергія Притули.\n\n«Герань-5» знищили над Чернігівською областю на висоті 780 метрів і швидкості 430 км/год.\n\n«Це друге таке збиття за допомогою засобу від фонду. Технологія нова, тому екіпажі відпрацьовують її в різних умовах», — розповіли у фонді.\n\nРезультат залежить не лише від техніки: досвід екіпажу та знання особливостей літакових БпЛА мають не менше значення.\n\nПерший такий результат 1020-ї зенітної ракетно-артилерійської бригади зафіксували у вересні.\n\nРеактивні дрони типу «Герань-5» летять швидко й високо, тому звичайним дронам-перехоплювачам часто складно їх перехопити.\n\n«Фонд законтрактував низку виробників, здатних протидіяти такій загрозі. Наше завдання — масштабувати це та посилювати підрозділи», — зазначили у фонді.\n\n«Герань-5» — російський реактивний ударний безпілотник завдовжки приблизно 6,5 метра з розмахом крил близько 3,2 метра.\n\nЙого максимальна злітна маса становить орієнтовно 850 кг, а швидкість польоту, за відкритими даними, — від 425 км/год.\n\nРосійський реактивний ударний дрон «Герань-5». 9 травня 2026 року. Джерело: ОТС LIVE\n\nЗаявлена дальність польоту сягає 950 км, а висота польоту може досягати 6 000 метрів.\n\nДрон оснащений турбореактивним двигуном і, за відкритими даними, може нести бойову частину масою близько 90 кг.",
+    "expect": [
+      {
+        "unit": "km/h",
+        "value": 430,
+        "semantic": "speed.cruise"
+      },
+      {
+        "unit": "km/h",
+        "value": 430,
+        "semantic": "speed.cruise"
+      }
+    ],
+    "source": "Militarnyi (UA RSS) · https://militarnyi.com/uk/news/perehoplyuvach-zbyv-geran-5-na-430-km-god/?utm_source=rss&#038;utm_medium=rss&#038;utm_campaign=perehoplyuvach-zbyv-geran-5-na-430-km-god",
+    "expectNames": ["Geran"]
   },
   {
     "id": "4d3a9286-50eb-4c26-8bdf-2483cfc1d64a",
@@ -747,6 +817,19 @@
       }
     ],
     "source": "EDR Magazine · https://www.edrmagazine.eu/edge-strengthens-moroccos-air-power-with-precision-weapons-for-its-unmanned-combat-fleet"
+  },
+  {
+    "id": "c078aea9-ba3e-4228-854b-7723ba50aa9c",
+    "text": "Bradley’s Old TOW Launchers Get New Teeth With Spike Missile Adapter\n\nRafael USA and Leonardo DRS have presented a capability that would allow fighting vehicles equipped with legacy Tube-launched, Optically tracked, Wire-guided (TOW) missile launchers to fire Rafael’s Spike LR2 anti-armor missiles. The effort builds on a demonstration dating back to 2021, with the companies now presenting a more mature adapter solution designed to integrate the Israeli-made missile into existing platforms.\n\nRoman Palaria, Rafael’s vice president for marketing and business development in its land and naval division, discussed the system in an interview with TWZ at the Association of the U.S. Army’s (AUSA) main annual convention. He explained that the earlier demonstration, part of Project Convergence 2021, used a version of the adapter that had not yet reached its final configuration. Leonardo DRS, Rafael’s U.S. partner, subsequently developed the mechanical and electrical components needed to connect the Spike LR2 to the TOW launcher and the vehicle’s existing systems.\n\nThe approach is intended to avoid replacing the launcher or radically overhauling the vehicle’s gunner station. Instead, the adapter provides the mechanical interface for loading the Spike LR2 missile and the electrical connections needed to communicate with the vehicle. Additional electronic components are installed within the vehicle to support the missile’s functions.\n\n“We’re doing minimum changes to the vehicle,” Palaria said, describing the goal of making the integration as seamless as possible for the operator.\n\nThe Bradley infantry fighting vehicle is a prominent potential application, although the companies say the capability could extend to other platforms that use TOW launchers. The Army has operated TOW-equipped vehicles for decades, creating a substantial installed base of launch systems that could potentially benefit from the approach. As for the Bradley, the Army effort to replace its TOW missiles has been a long one, but is yet to produce any real results.\n\nSpike LR2 was successfully test-fired from M2A4 Bradley equipped with Multi-Purpose Missile Launcher (MPML), developed by Rafael and DRS. Adapters allow the system to remain compatible with existing TML/UTML launchers. Spike LR2 has also been proposed for the CCMS-H and XM30. pic.twitter.com/KB9EYwi6BI\n\nAfter a missile is fired, its launch tube remains in the launcher and can be removed to accommodate another missile.\n\nThe central attraction of the system is the ability to combine existing launcher infrastructure with the Spike LR2’s unique engagement capabilities.\n\nDuring Project Convergence 2021, two Spike missiles were fired from a TOW launcher, and both reportedly hit their intended targets. The adapter now being presented reflects subsequent development work by Leonardo DRS, including refinement of the mechanical interface and vehicle electrical integration.\n\nThe system is designed to preserve the vehicle’s existing TOW capability while adding the option to use Spike LR2. That would give commanders another missile option without necessarily requiring wholesale replacement of installed launcher equipment. The extent to which individual vehicles could use both missile types would depend on the completed integration and applicable qualification requirements.\n\nThe Spike LR2 offers capabilities differ substantially from those of the legacy TOW missile. Palaria cited a maximum range of approximately 5.5 kilometers (3.4 miles) and highlighted the missile’s day/night imaging seeker, which provides video to the operator during flight. The longest-range TOW missile versions max out at around 4.5 kilometers (2.8 miles).\n\nRAFAEL's Spike LR2 Missile\n\nIn contrast, Spike LR2’s imaging capability supports engagement of targets beyond the operator’s direct line of sight, as well as observation of the target area during the missile’s approach. Depending on the engagement, the operator can acquire a target through the missile’s seeker, adjust the engagement, or select a different target while the missile is in flight.\n\nThese features contrast with the traditional TOW’s semi-automatic command to line-of-sight (SACLOS) guidance, in which the gunner tracks the target through the launcher’s observation system and guides the missile throughout its flight. Spike LR2’s onboard imaging provides a different set of options for engagements in which direct observation is limited or target conditions change after launch. This can also include striking targets behind cover.\n\nPalaria also described the LR2’s two warhead options. The first of these is a tandem-charge anti-tank warhead, which Rafael claims is able to penetrate any modern main battle tank. It consists of a precursor warhead and the main warhead, which are designed to penetrate the reactive armor, and the main armor, respectively.\n\nRafael's SPIKE LR2 HEAT IMPACT\n\nThe second option is a multi-purpose configuration. It has a programmable fuze, which allows the missile to be employed against different target types. Depending on the selected mode, the warhead can be configured for direct-impact or timed-detonation effects, for example, detonating above the ground for anti-personnel missions, or penetrating a building, in which case the first charge will make a hole in in a wall, and then the second charge will go inside and explode after a short delay.\n\nThe adapter offers a potential route to adding new missile capabilities to existing Army vehicles while limiting changes to their launcher hardware and crew interface.\n\nOperator training would obviously be necessary. Although the gunner would continue using the vehicle’s existing console and displays, Palaria acknowledged that Spike LR2 introduces additional functions, controls, and engagement procedures.\n\nFor the Army, the proposition is straightforward: retain a familiar launcher architecture while potentially adding a missile with greater reach, onboard imaging, and more flexible engagement options that exceed line-of-sight tracking. The adapter’s significance lies in making that combination possible without starting from a clean sheet.\n\nWhether that capability becomes a fielded upgrade will depend on the Army’s requirements, testing, integration decisions, and procurement plans. But the widespread uptake of the Spike series of missiles around the globe, combined with the very large existing TOW missile operator base, means the adapter solution could well be of interest to customers outside the U.S. Army, too.\n\nContact the author: thomas@thewarzone.com",
+    "expect": [
+      {
+        "unit": "km",
+        "value": 5.5,
+        "semantic": "range.max"
+      }
+    ],
+    "source": "The War Zone · https://www.twz.com/land/bradleys-old-tow-launchers-get-new-teeth-with-spike-missile-adapter",
+    "expectNames": ["Spike LR2"]
   },
   {
     "id": "c9024838-d157-426e-8d14-af718e909268",

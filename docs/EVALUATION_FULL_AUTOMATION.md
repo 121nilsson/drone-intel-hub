@@ -1,6 +1,6 @@
 # Spec & Guide: Helt autonom självförbättrande loop utan extern CI
 
-**Status:** Teknisk specifikation och implementationsguide (v3)  
+**Status:** Teknisk specifikation och implementationsguide (v3 — reviderad efter arkitekturgranskning)  
 **Fil:** `docs/EVALUATION_FULL_AUTOMATION.md`  
 **Relaterade specifikationer:** `docs/EVALUATION_MODE.md` (v1, manuell utvärdering), `docs/EVALUATION_AUTOMATION.md` (v2, halvautonom loop med mänskligt godkännande)  
 **Relaterad kod:** `src/features/evaluation/**`, `src/shared/infra/evaluation.*`, `src/shared/infra/heuristics/**`, `src/shared/lexicons/**`, `tasks/evaluation/**`
@@ -9,18 +9,19 @@
 
 ## 1. Vision och sammanfattning
 
-Denna specifikation beskriver hur **Drone Intel Hub** kan uppnå **äkta runtime-autonomi**: en sluten, självförbättrande loop där systemet upptäcker sina egna heuristikfel, formulerar regelhypoteser, validerar dem i en intern sandlåda och driftsätter förbättringarna direkt i minnet — **helt utan att pusha git-commits, förlita sig på externa CI-pipelines (GitHub Actions) eller starta om applikationsservern**.
+Denna specifikation beskriver hur **Drone Intel Hub** uppnår **äkta runtime-autonomi**: en sluten, självförbättrande loop där systemet upptäcker sina egna heuristikfel, formulerar regelhypoteser, validerar dem i en intern sandlåda och driftsätter förbättringarna direkt i minnet — **helt utan att pusha git-commits, förlita sig på externa CI-pipelines (GitHub Actions) eller starta om applikationsservern**.
 
 ### 1.1 Evolutionen av utvärderingssystemet
 
 | Egenskap | v1 (EVALUATION_MODE) | v2 (EVALUATION_AUTOMATION) | v3 (EVALUATION_FULL_AUTOMATION) |
 | :--- | :--- | :--- | :--- |
 | **Utvärdering** | Manuell via `/evaluation` | Nattlig cron (03:15 / 03:45) | Händelsedriven och schemalagd |
-| **Regressionstest** | Manuellt körd Vitest | Hermetisk Vitest i git | **In-Process Sandbox** mot Postgres |
-| **Förbättringsförslag**| Manuellt kodarbete | Mönstergrävning i UI (Godkänn/Avvisa) | **Autonom hypotesgenerering via AI** |
-| **Driftsättning** | Git commit + PR + CI | `lexicon_overrides` sparad i DB | **Atomär In-Memory Hot Reload** |
+| **Regressionsprovning** | Manuellt körd Vitest | Hermetisk Vitest i git | **In-Process Sandbox** mot Postgres `eval_corpus` |
+| **Förbättringsförslag**| Manuellt kodarbete | Mönstergrävning i UI (Godkänn/Avvisa) | **Autonom hypotesgenerering** via skyddad AI-loop |
+| **Regelpersistens** | Hårdkodad i `.ts`-filer | Delad tabell (`lexicon_overrides`) | **Enhetlig tabell (`dynamic_rules`) för manuellt & autonomt** |
+| **Driftsättning** | Git commit + PR + CI | Manuell omstart / ej kopplad | **Atomär In-Memory Hot Reload med versionssynk** |
 | **Externt beroende** | Node/Vitest lokalt | Git + GitHub Actions CI | **Noll externa beroenden** (100 % inuti Docker/Postgres) |
-| **Mänsklig roll** | Utvecklare kodar fix | Analytiker klickar godkänn | **Övervakare / Auditör** (undantagshantering) |
+| **Mänsklig roll** | Utvecklare kodar fix | Analytiker klickar godkänn | **Övervakare / Auditör** (undantagshantering & rollbacks) |
 
 ---
 
@@ -29,7 +30,7 @@ Denna specifikation beskriver hur **Drone Intel Hub** kan uppnå **äkta runtime
 I traditionell mjukvaruutveckling och i v1/v2 av detta system gäller principen:
 > *"Autonomi i datalagret, granskning i kodlagret. Inga ändringar i `.ts`-filer utan en människa och en git-commit."*
 
-Detta skapar tre allvarliga begränsningar i en domän som OSINT/drönarunderrättelser:
+Detta skapar tre allvarliga begränsningar i en domän som OSINT och drönarunderrättelser:
 1. **Långsam anpassning till språklig drift:** När ett nytt system introduceras vid fronten (t.ex. en ny FPV-variant eller ukrainsk/rysk jargong) tar ledtiden från upptäckt via PR, review, CI, image-bygge och deployment timmar till dagar.
 2. **Hög tröskel för mikrojusteringar:** Att lägga till en enda synonym (t.ex. ukrainska `"дальність"` som `range.max`) kräver samma tunga procedur som en hel refaktorisering.
 3. **CI saknar databasaccess:** GitHub Actions kör hermetiskt utan produktionsdatabas. CI kan därmed bara testa gamla statiska fixtures som checkats in i git, inte den ständigt växande poolen av nya källor och avvikelser.
@@ -46,18 +47,18 @@ Detta skapar tre allvarliga begränsningar i en domän som OSINT/drönarunderrä
 │                                                                                        │
 │   ┌────────────────────────┐                   ┌───────────────────────────────────┐   │
 │   │  1. Ingestion & Eval   │                   │    2. Hypothesis Generator        │   │
-│   │  Kör heuristik isolerat│                   │    Identifierar mönster i         │   │
-│   │  och loggar avvikelser │──[ Mismatches ]──▶│    mismatches; skapar kandidat-   │   │
-│   │  i `eval_reports`.     │                   │    regler i strikt DSL.           │   │
+│   │  Kör heuristik isolerat│                   │    Kräver: korroborering,         │   │
+│   │  och loggar avvikelser │──[ Verified Mis ]▶│    analytikerfacit eller struktur.│   │
+│   │  i `eval_reports`.     │                   │    Skapar regler i strikt DSL.    │   │
 │   └────────────────────────┘                   └───────────────────────────────────┘   │
 │                ▲                                                 │                     │
 │                │                                                 │ [ Candidate Rule ]  │
 │                │                                                 ▼                     │
 │   ┌────────────────────────┐                   ┌───────────────────────────────────┐   │
-│   │  4. Hot Reload         │                   │    3. In-Process Test Sandbox     │   │
-│   │  Aktiverar regeln i    │◀──[ Promoted ]────│    Kör regeln mot hela            │   │
-│   │  minnescachen (Trie).  │   (ΔF1 > 0 &      │    `eval_corpus` i Postgres.      │   │
-│   │  Noll omstart.         │    0 regressioner)│    Spärrar regressioner.          │   │
+│   │  4. Hot Reload & Sync  │                   │    3. In-Process Test Sandbox     │   │
+│   │  Multi-process synk    │◀──[ Promoted ]────│    Kör regeln mot hela            │   │
+│   │  via rules_version.    │   (ΔF1 > 0 &      │    `eval_corpus` i Postgres.      │   │
+│   │  Noll omstart i RAM.   │    0 regressioner)│    Spärrar regressioner.          │   │
 │   └────────────────────────┘                   └───────────────────────────────────┘   │
 │                │                                                 │                     │
 │                ▼                                                 ▼ [ Failed ]          │
@@ -67,41 +68,62 @@ Detta skapar tre allvarliga begränsningar i en domän som OSINT/drönarunderrä
 
 ---
 
-### Pelare 1: Data-driven regelmotor med minnes-snapshot (Hot Reload)
+### Pelare 1: Data-driven regelmotor & Multi-process synkronisering (Hot Reload)
 
 Heuristikmotorn (`HeuristicExtractor`) måste förbli **synkron, ren och deterministisk**. Den får **aldrig** göra asynkrona databasanrop inuti `extract()`.
 
-#### Hur minnescachen fungerar:
-1. **Regel-snapshot vid start:** Servern läser alla aktiva regler (`status = 'active'`) från tabellen `dynamic_rules` i PostgreSQL till ett oföränderligt objekt i RAM (`RuleSnapshot`).
-2. **Kompilerad regelrepresentation:** Reglerna kompileras till en intern lookup-struktur (Aho-Corasick / Trie för sökord och normaliserade regex-arrayer för kontext).
-3. **Atomär uppdatering:** När en ny regel godkänns av sandlådan sparas den i databasen och en uppdaterad `RuleSnapshot` ersätter den aktiva referensen atomärt i minnet:
+#### Enhetlig regelmodell (Inga dubbla tabeller):
+Tidigare fanns ett utkast till `lexicon_overrides` och ett separat förslag om `dynamic_rules`. Vi **förenar dessa till en enda tabell: `dynamic_rules`**.
+Både manuella analytikerrättelser från `/evaluation` och helautomatiska regler lagras i samma tabell och exekveras av samma regelmotor.
+
+#### Minnes-snapshot och flermiljö-synkronisering:
+1. **Regel-snapshot vid start:** Servern läser alla aktiva regler (`status = 'active'`) från tabellen `dynamic_rules` till ett oföränderligt objekt i RAM (`RuleSnapshot`).
+2. **Kompilerad regelrepresentation:** Reglerna förkompileras till en intern lookup-struktur (Aho-Corasick / Trie för sökord och normaliserade token-mönster för kontext).
+3. **Multi-process synk (Web vs Worker vs Tasks):**
+   När en bakgrundstask eller en Nitro-task aktiverar en ny regel i databasen kan andra processer (t.ex. webbservern) inte veta om detta via ett lokalt funktionsanrop.
+   - **Lösning:** Tabellen `rules_version` håller ett monotont versionsnummer.
+   - `getActiveRuleSnapshot()` kontrollerar versionsnumret med en kort, billig in-memory TTL (t.ex. 30–60 sekunder) eller lyssnar på Postgres `LISTEN/NOTIFY dynamic_rules_changed`.
+   - Har versionsnumret ändrats laddas ett nytt `RuleSnapshot` atomärt in i minnet:
    ```ts
    // src/shared/infra/heuristics/rule-registry.server.ts
    let currentSnapshot: RuleSnapshot = emptySnapshot();
+   let currentVersion = 0;
+   let lastChecked = 0;
+   const TTL_MS = 30_000;
 
-   export function getActiveRuleSnapshot(): RuleSnapshot {
+   export async function getOrRefreshRuleSnapshot(): Promise<RuleSnapshot> {
+     const now = Date.now();
+     if (now - lastChecked > TTL_MS) {
+       lastChecked = now;
+       const [{ version }] = await db()`select coalesce(max(version), 0) as version from dynamic_rules_version`;
+       if (version > currentVersion) {
+         const rules = await db()`select * from dynamic_rules where status = 'active'`;
+         currentSnapshot = compileRuleSnapshot(rules);
+         currentVersion = version;
+       }
+     }
      return currentSnapshot;
    }
-
-   export async function reloadRuleSnapshot(): Promise<void> {
-     const rules = await db()`select * from dynamic_rules where status = 'active'`;
-     currentSnapshot = compileRuleSnapshot(rules);
-   }
    ```
-4. **Extraktorn tar snapshot som argument:** `extract(raw, catalog, snapshot = getActiveRuleSnapshot())`.
+4. **Extraktorn förblir ren och synkron:** Extraktionspipelinen tar en snapshot som indata:
+   ```ts
+   extract(raw: string, catalog: Drone[], rules: RuleSnapshot): Extraction
+   ```
 
 ---
 
-### Pelare 2: Domänspecifik regel-DSL (Skydd mot hallucinationer & ReDoS)
+### Pelare 2: Domänspecifik regel-DSL med språk och avståndsfönster
 
 Automatiken får **aldrig** generera fri JavaScript-kod eller godtyckliga regexar. En fri LLM-genererad regex kan orsaka Catastrophic Backtracking (ReDoS) eller förstöra extraktionen med oavsiktliga sidoeffekter.
 
-Alla förbättringar måste uttryckas i en **strikt typad DSL**:
+#### DSL-justeringar för flerspråkighet och fri ordföljd:
+1. **Obligatorisk språktagg:** Både cues, filter och stoppord måste ange språk (`"sv" | "en" | "ru" | "uk" | "all"`). Ett stoppord på engelska får aldrig dämpa ett likalydande ord på ukrainska/ryska.
+2. **Token-avstånd i stället för strikt föregående ord:** I slaviska språk (ryska/ukrainska) är ordföljden betydligt friare än i engelska. Att kräva `preceding_word` missar ofta uttryck som *"высота поражения цели до 40 км"*. Därför definieras kontextfilter med ett **avståndsfönster inom samma mening** (`maxTokenDistance: number`).
 
 ```ts
 export type DynamicRule = 
   | AddCueRule
-  | AddContextFilterRule
+  | ContextFilterRule
   | AddAliasRule
   | AddStopwordRule
   | AddUnitScaleRule;
@@ -110,19 +132,22 @@ export interface AddCueRule {
   kind: "add_cue";
   id: string;
   semanticKey: string;           // t.ex. "range.max"
-  language: "sv" | "en" | "ru" | "uk";
+  language: "sv" | "en" | "ru" | "uk" | "all";
   term: string;                  // t.ex. "дальність польоту"
   confidence: number;            // 0.1 - 1.0
 }
 
-export interface AddContextFilterRule {
+export interface ContextFilterRule {
   kind: "context_filter";
   id: string;
   semanticKey: string;           // t.ex. "altitude.max"
+  language: "sv" | "en" | "ru" | "uk" | "all";
   action: "suppress" | "reroute";
   targetKey?: string;            // t.ex. "altitude.target_max" vid korsklasskontamination
-  matchPattern: "preceding_word" | "following_word";
-  triggerWords: string[];        // t.ex. ["engagement", "target", "ціль", "перехоплення"]
+  scope: "same_sentence" | "same_clause";
+  position: "before" | "after" | "anywhere_in_scope";
+  maxTokenDistance: number;      // t.ex. 1-4 tokens avstånd
+  triggerWords: string[];        // t.ex. ["engagement", "target", "поражения", "ціль"]
 }
 
 export interface AddAliasRule {
@@ -130,22 +155,24 @@ export interface AddAliasRule {
   id: string;
   targetDroneId: string;         // t.ex. "shahed-136"
   alias: string;                 // t.ex. "герань-2"
-  sourceEpoch?: string;
+  language?: "sv" | "en" | "ru" | "uk" | "all";
 }
 
 export interface AddStopwordRule {
   kind: "add_stopword";
   id: string;
   term: string;                  // t.ex. "бпла", "kamikaze", "interceptor"
-  scope: "system_name" | "manufacturer";
+  language: "sv" | "en" | "ru" | "uk" | "all";
+  scope: "system_name" | "manufacturer" | "spec_value";
 }
 
 export interface AddUnitScaleRule {
   kind: "add_unit_scale";
   id: string;
-  unit: string;                  // t.ex. "млрд"
+  unit: string;                  // t.ex. "млрд", "миллиард"
   multiplier: number;            // 1_000_000_000
   dimension: "currency" | "distance" | "weight" | "speed";
+  language: "sv" | "en" | "ru" | "uk" | "all";
 }
 ```
 
@@ -153,67 +180,58 @@ export interface AddUnitScaleRule {
 
 ### Pelare 3: In-Process Test Sandbox ("Inbyggd CI")
 
-Detta är systemets säkerhetsventil. Ingen regel tillåts någonsin nå `status = 'active'` utan att först genomgå ett automatiserat prov mot det historiska corpus-lagret.
+Detta är systemets absoluta säkerhetsventil. Ingen regel tillåts någonsin nå `status = 'active'` utan att först genomgå ett automatiserat prov mot det historiska korpuslagret (`eval_corpus`).
 
 #### Testkörningsprocessen:
-1. En hypotetisk `RuleSnapshot_Test` skapas: `currentSnapshot + candidateRule`.
-2. Sandlådan kör `evaluateHeuristic()` mot samtliga godkända fixtures i tabellen `eval_corpus` i Postgres:
+1. En hypotetisk `RuleSnapshot_Test` sammanställs: `currentSnapshot + candidateRule`.
+2. Sandlådan kör `checkFixture()` mot samtliga `approved` fixtures i tabellen `eval_corpus` i Postgres:
    ```ts
-   // Körs som ren TypeScript i serverprocessen (eller via Nitro task worker)
-   const baselineScore = await getCorpusBaseline();
-   const testResult = await evaluateSnapshotAgainstCorpus(RuleSnapshot_Test);
+   // src/shared/infra/evaluation/sandbox-evaluator.server.ts
+   export async function evaluateCandidateInSandbox(candidate: DynamicRule): Promise<SandboxResult> {
+     const fixtures = await loadApprovedCorpusFixtures();
+     const testSnapshot = compileSnapshotWithRule(currentSnapshot, candidate);
+     
+     let regressions = 0;
+     const brokenIds: string[] = [];
+     
+     for (const fx of fixtures) {
+       const res = await checkFixtureWithSnapshot(fx, testSnapshot);
+       if (res.missing.length > 0 || res.forbidden.length > 0) {
+         regressions++;
+         brokenIds.push(fx.id);
+       }
+     }
+     
+     // Hård spärr: noll regressioner tolereras
+     const passed = regressions === 0;
+     return { passed, regressions, brokenIds };
+   }
    ```
 3. **Hårda godkännandevillkor (Invarianter):**
-   - **Noll regressioner ($\text{regressions} == 0$):** Inte ett enda godkänt fall i `eval_corpus` som tidigare gav rätt svar får ge fel svar eller missas.
-   - **Positiv effekt ($\Delta \text{F1} > 0$):** Regeln måste faktiskt lösa den specifika avvikelse den skapades för eller höja metriken för berörd `semanticKey`.
-   - **Ingen global degradering:** Total F1 över hela testkorpuset får inte minska med ens $0.001$.
-4. **Utfall:**
-   - **Godkänd:** `status = 'active'`, `decided_by = 'autonomous_sandbox'`, monotonic version höjs, in-memory cache uppdateras omedelbart.
-   - **Underkänd:** `status = 'rejected'`, testrapport sparas i `rule_evaluations` med exakt information om vilken fixture som bröts.
+   - **Noll regressioner ($\text{regressions} == 0$):** Inte en enda godkänd fixture i `eval_corpus` som tidigare fungerade får ge fel svar eller missas.
+   - **Positiv effekt ($\Delta \text{F1} > 0$):** Regeln måste faktiskt öka precision/recall eller eliminera den observerade avvikelsen.
+   - **Ingen global degradering:** Total F1 över testkorpuset får inte minska med ens $0.001$.
+4. **Resultat:**
+   - **Godkänd:** Sätts till `status = 'active'`, `decided_by = 'autonomous_sandbox'`, monotonic version höjs i `dynamic_rules_version`, snapshot uppdateras.
+   - **Underkänd:** Sätts till `status = 'rejected'`, testresultat sparas i `rule_evaluations` med fellogg för framtida analys.
 
 ---
 
-### Pelare 4: AI-hypotesgenerator & Mönsteranalysator
+### Pelare 4: AI-hypotesgenerator & Anti-förgiftningsskydd ("AI är inte facit")
 
-Hypotesmotorn aktiveras automatiskt efter varje utvärderingskörning där avvikelser (`mismatches`) hittats.
+#### Risken:
+Om hypotesgeneratorn automatiskt läser en mismatch mellan heuristik och AI från en oadjudikerad artikel, och AI:n i själva verket hallucinerade eller läste fel siffra i artikeln, kommer generatorn att formulera en regel som **tvingar heuristiken att producera samma fel som AI:n**. Detta leder till snabb dataförgiftning (*model poisoning*).
 
-#### Process:
-1. **Klusteranalys:** Gruppera avvikelser per `specKey` och mismatch-typ (`falsePositive`, `miss`, `wrongKey`).
-2. **Kandidaturval:** Välj de 5 mest frekventa felmönstren.
-3. **AI-adjudicering och formulerande av hypotes:**
-   En LLM anropas med en specialiserad prompt som kräver strikt JSON enligt regel-DSL:en.
+#### Skyddet: Filtrerat urval för hypotesgenerering
+En avvikelse (`EvalMismatch`) får **endast** användas som underlag för en hypotes om den uppfyller minst ett av följande tre kriterier:
+1. **Analytikerverifierad (`origin = 'analyst'`):** En människa har markerat vad som är sant och falskt via gränssnittet.
+2. **Källkorroborerad konsensus:** Värdet bekräftas av $\ge 2$ oberoende källor i databasen med samma kanoniska värde.
+3. **Strukturell eller semantisk kollision:** Avvikelsen beror på ett entydigt och strukturellt mönster:
+   - Ett generiskt stoppord som felaktigt tolkats som systemnamn (t.ex. `"БПЛА"`, `"FPV"`).
+   - En känd felklassning med stark språklig signal (t.ex. `"engagement altitude"` eller `"ceiling of target"` som tolkas som drönarens egen altitud).
+   - Valutasymboler som saknats i lexikonet (t.ex. ukrainska förkortningar för miljoner/miljarder).
 
-```
-SYSTEM PROMPT:
-Du är en deterministisk OSINT-regeloptimerare för en drönardatabas. 
-Ditt uppdrag är att formulera EXAKT EN regel i vår DSL för att åtgärda en observerad avvikelse, 
-utan att skapa oönskade sidoeffekter.
-
-GIVEN DATA:
-Mismatch: {
-  "specKey": "altitude",
-  "heuristicValue": 40,
-  "unit": "km",
-  "evidence": "target engagement altitude of up to 40 km",
-  "issue": "Korsklasskontamination: målets maxhöjd tolkades som drönarens egen flyghöjd"
-}
-
-TILLGÄNGLIGA REGLER:
-- add_cue
-- context_filter
-- add_alias
-- add_stopword
-
-SVARA ENDAST MED GILTIG JSON ENLIGT REGEL-DSL:
-{
-  "kind": "context_filter",
-  "semanticKey": "altitude.max",
-  "action": "reroute",
-  "targetKey": "altitude.target_max",
-  "matchPattern": "preceding_word",
-  "triggerWords": ["target engagement", "engagement", "target", "ціль"]
-}
-```
+Oadjudikerade, enskilda avvikelser där heuristiken och AI:n bara är oense om ett tal utan korroboration ignoreras av automatiken och läggs i en kö för mänsklig granskning.
 
 ---
 
@@ -222,15 +240,15 @@ SVARA ENDAST MED GILTIG JSON ENLIGT REGEL-DSL:
 ```
              ┌─────────────────────────┐
              │       Hypothesis        │
-             │  (genererad av AI/mön)  │
+             │ (filtrerat underlag)    │
              └────────────┬────────────┘
                           │
                           ▼
              ┌─────────────────────────┐
              │    evaluating_sandbox   │
-             │  (körs mot eval_corpus) │
+             │ (provkörs mot korpus)   │
              └──────┬────────────┬─────┘
-    Passerar test   │            │  Misslyckas / Regresserar
+    Passerar prov   │            │  Misslyckas / Regresserar
     (ΔF1 > 0, 0 fel)│            │
                     ▼            ▼
        ┌────────────────┐   ┌────────────────┐
@@ -238,8 +256,8 @@ SVARA ENDAST MED GILTIG JSON ENLIGT REGEL-DSL:
        │ (i RAM-cache)  │   │  (arkiverad)   │
        └───────┬────────┘   └────────────────┘
                │
-   Hälsolarm i produktion
-   (drift / kvalitetstapp)
+   Hälsolarm mot rullande produktionsdata
+   (dygnsmätning i tasks/evaluation/health.ts)
                │
                ▼
        ┌────────────────┐
@@ -248,121 +266,113 @@ SVARA ENDAST MED GILTIG JSON ENLIGT REGEL-DSL:
        └────────────────┘
 ```
 
-### Automatisk Rollback (Circuit Breaker)
-Om den dagliga hälsokontrollen (`tasks/evaluation/health.ts` kl 03:45) upptäcker att produktionens totala F1 sjunker med mer än **0.02** sedan föregående dygn:
-1. Hälsokontrollen identifierar vilka regler som aktiverades under de senaste 24 timmarna.
-2. Reglerna sätts omedelbart till `status = 'quarantined'`.
-3. In-memory snapshot laddas om till föregående säkra version.
-4. Ett larm loggas i `eval_reports` med orsak och berörda regel-ID:n.
+### Tydliggörande av Circuit Breaker (Rollback-metrik)
+I specifikationen anges:
+> *"Om total F1 sjunker med mer än 0.02 sedan föregående dygn... sätts senaste regeln i `quarantined`."*
+
+**Viktigt förtydligande gällande dataset:**
+- Minskningen kan **inte** uppstå mot `eval_corpus`, eftersom sandlådan garanterar noll regressioner mot korpuset innan regeln aktiveras.
+- Minskningen mäts mot den **rullande produktionsevalueringen** ([tasks/evaluation/health.ts](file:///C:/dev/drone-intel-hub/tasks/evaluation/health.ts)), som varje natt (03:45) drar ett stratifierat stickprov på 200 **nya inkommande artiklar/kandidater** i produktion.
+- Om F1 mot de nya produktionskandidaterna plötsligt viker kraftigt indikerar det att en nyligen införd regel har överanpassats (*overfitting*) mot testkorpuset på bekostnad av verkliga artiklar.
+- Åtgärd: De regler som aktiverats under de senaste 24 timmarna sätts i `status = 'quarantined'`, `dynamic_rules_version` räknas upp och systemet rullar tillbaka till den tidigare stabila minnescachen.
 
 ---
 
 ## 5. Datamodell i PostgreSQL
 
-Följande tabeller skapas i en ny migration (`010_full_automation.sql`):
+Vi ersätter `lexicon_overrides` med en sammanhållen, framtidssäker tabellstruktur i en ny migration (`010_dynamic_rules.sql`):
 
 ```sql
--- Alla dynamiska regler som motorn kan köra
+-- Enhetlig tabell för ALLA dynamiska regler (både manuella och autonoma)
 CREATE TABLE dynamic_rules (
   id           text PRIMARY KEY,
-  version      int NOT NULL,
+  version      int NOT NULL DEFAULT 1,
   kind         text NOT NULL CHECK (kind IN ('add_cue', 'context_filter', 'add_alias', 'add_stopword', 'add_unit_scale')),
+  language     text NOT NULL DEFAULT 'all',
   payload      jsonb NOT NULL,
   status       text NOT NULL DEFAULT 'candidate' 
                CHECK (status IN ('candidate', 'evaluating', 'active', 'rejected', 'quarantined', 'superseded')),
+  origin       text NOT NULL CHECK (origin IN ('analyst', 'autonomous_sandbox', 'bootstrap')),
+  target_key   text,          -- t.ex. 'range.max' eller drönar-ID för snabb indexering
+  rationale    text,
   created_at   timestamptz NOT NULL DEFAULT now(),
   promoted_at  timestamptz,
-  decided_by   text NOT NULL, -- 'autonomous_sandbox' eller 'analyst'
-  rationale    text,
-  target_key   text           -- t.ex. 'range.max' för snabb indexering
+  decided_by   text NOT NULL  -- 'analyst' eller 'autonomous_sandbox'
 );
 
--- Resultat från intern sandlådetestning
+-- Monoton versionsräknare för multi-process-synk (web/worker)
+CREATE TABLE dynamic_rules_version (
+  version      int PRIMARY KEY,
+  updated_at   timestamptz NOT NULL DEFAULT now(),
+  note         text
+);
+
+INSERT INTO dynamic_rules_version (version, updated_at, note)
+VALUES (1, now(), 'initial')
+ON CONFLICT (version) DO NOTHING;
+
+-- Logg över interna sandlådekörningar
 CREATE TABLE rule_evaluations (
-  id             uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  rule_id        text REFERENCES dynamic_rules(id),
-  evaluated_at   timestamptz NOT NULL DEFAULT now(),
-  passed         boolean NOT NULL,
-  corpus_size    int NOT NULL,
-  regressions    int NOT NULL,
-  f1_before      float NOT NULL,
-  f1_after       float NOT NULL,
-  f1_delta       float NOT NULL,
-  broken_fixtures jsonb -- Lista med fixture-id:n om testet fallerade
+  id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  rule_id         text REFERENCES dynamic_rules(id),
+  evaluated_at    timestamptz NOT NULL DEFAULT now(),
+  passed          boolean NOT NULL,
+  corpus_size     int NOT NULL,
+  regressions     int NOT NULL,
+  broken_fixtures jsonb,      -- Lista med fixture-id:n om provet fallerade
+  f1_delta        float
 );
 
--- Index för snabb snapshot-inladdning vid start
+-- Indexering för millisekundsnabb uppstart
 CREATE INDEX idx_dynamic_rules_active ON dynamic_rules(status) WHERE status = 'active';
 ```
 
 ---
 
-## 6. Implementationssteg för autonoma agenter
+## 6. Rekommenderad byggordning (Fas 1 – Fas 3)
 
-Om en utvecklare eller AI-kodningsagent ska bygga denna fulla automation, genomförs arbetet i följande 6 precisa steg:
+För att undvika regressioner och hålla systemet i ett fungerande skick i varje steg delas implementationen in i tre faser:
 
-### Steg 1: Skapa `rule-registry.server.ts`
-Implementera hanteringen av in-memory regelsnapshot:
-- Ladda aktiva regler från `dynamic_rules`.
-- Kompilera söktermer till ett Trie- eller Map-baserat register.
-- Exponera `getActiveRuleSnapshot()` för serverfunktioner och extraktorn.
-
-### Steg 2: Injicera snapshot i `HeuristicExtractor`
-I `src/shared/infra/heuristic-ai.ts` och dess underliggande extraktorer (`facts.ts`, `names.ts`, `observations.ts`):
-- Uppdatera extraktorernas funktionssignaturer: ta emot en valfri `RuleSnapshot`.
-- Om snapshot skickas med: applicera dynamiska cues, alias och filter *utöver* grundlexikonen.
-- Om ingen snapshot anges: använd de inbyggda TS-standardlexikonen (garanterar 100 % bakåtkompatibilitet med befintliga enhetstester).
-
-### Steg 3: Bygg Sandlåde-testaren (`sandbox-evaluator.server.ts`)
-Implementera funktionen:
-```ts
-export async function evaluateCandidateRuleInSandbox(
-  rule: DynamicRule
-): Promise<{ passed: boolean; delta: number; regressions: number; brokenIds: string[] }>
 ```
-- Läs in samtliga `approved` fixtures från `eval_corpus`.
-- Skapa en test-snapshot med den nya regeln injicerad.
-- Kör alla fixtures genom `checkFixture()`.
-- Kontrollera att `regressions === 0` och att F1 för den berörda spec-nyckeln har ökat.
+┌────────────────────────┐      ┌────────────────────────┐      ┌────────────────────────┐
+│         FAS 1          │      │         FAS 2          │      │         FAS 3          │
+│  Enhetlig regeltabell  │ ───▶ │   In-Process Sandlåda  │ ───▶ │  Hypoteser & Autonomi  │
+│  & In-Memory Snapshot  │      │   mot eval_corpus      │      │  (Sluten loop utan CI) │
+└────────────────────────┘      └────────────────────────┘      └────────────────────────┘
+```
 
-### Steg 4: Implementera Hypotesgeneratorn (`hypothesis.server.ts`)
-Bygg bryggan mellan felrapporter och DSL:
-- Läs senaste avvikelser från `eval_reports`.
-- Skapa prompts för `chatCompletionOnce()` som genererar strikt typad DSL.
-- Skriv kandidatregeln till `dynamic_rules` med `status = 'candidate'`.
+### Fas 1: Grunden — Enhetlig regeltabell & In-Memory Snapshot
+*Mål: Göra motorn kapabel att ta emot dynamiska regler utan omstart.*
+1. Skapa migrationen `010_dynamic_rules.sql` och migrera eventuella rader från `lexicon_overrides`.
+2. Bygg `rule-registry.server.ts` med funktionerna `getOrRefreshRuleSnapshot()` och kompilering av Trie/Map.
+3. Uppdatera [`HeuristicExtractor`](file:///C:/dev/drone-intel-hub/src/shared/infra/heuristic-ai.ts) och dess extraktorer så att de tar emot och applicerar snapshoten synkront.
+4. Uppdatera gränssnittet på `/evaluation` så att godkännande av manuella mönster sparar i `dynamic_rules` och omedelbart slår igenom i extraktionen.
 
-### Steg 5: Skapa Nitro-tasken `tasks/evaluation/auto-improve.ts`
-Schemalägg en återkommande task (t.ex. kl 04:15, efter eval och health check):
-1. Kontrollera att `eval_lock` är ledigt.
-2. Hämta olösta avvikelser.
-3. Generera max 3 kandidatregler.
-4. Kör varje kandidat genom sandlådan.
-5. Om godkänd: sätt `status = 'active'`, logga framgång och anropa `reloadRuleSnapshot()`.
+### Fas 2: Säkerhetsspärren — In-Process Sandlåda
+*Mål: Bygga den inbyggda testaren som garanterar noll regressioner.*
+1. Implementera `sandbox-evaluator.server.ts` med funktionen `evaluateCandidateInSandbox(rule)`.
+2. Låt funktionen köra regeln mot alla aktiva fixtures i `eval_corpus`.
+3. Skriv enhetstester för sandlådan som verifierar att en avsiktligt trasig regel spärras med `passed = false`.
+4. Lägg till en knapp i gränssnittet: *"Testa regel i sandlåda"* så att även manuella regler testas innan aktivering.
 
-### Steg 6: Skapa Dashboard-vy för auditering
-På `/evaluation`:
-- Visa en lista över alla **Autonomt aktiverade regler** (`status = 'active'`).
-- Visa historik över F1-ökning för varje regel.
-- Ge analytikern en "Pausa / Återkalla"-knapp (som sätter regeln i `quarantined`) ifall en människa bedömer att en regel är olämplig.
-
----
-
-## 7. Säkerhetsgarantier och skydd mot dataförgiftning
-
-Att låta ett system ändra sitt eget beteende i drift medför risker för modellkollaps och överanpassning (*overfitting*). Följande 4 skyddsvärn är **obligatoriska inbyggda spärrar**:
-
-1. **Den gyllene grundstammen i Git (`eval-corpus.json`):**
-   - De 50–100 initiala positiva och negativa fixtures som finns incheckade i git är systemets "grundlag".
-   - Sandlådan testar **alltid** mot dessa. En autonom regel kan aldrig tillåtas modifiera eller radera en incheckad git-fixture.
-2. **Volymtak per tidsenhet:**
-   - Max **2 autonoma regler per dygn** får befordras till aktiv drift. Detta förhindrar att en serie snabba beslut förvränger extraktionen.
-3. **Deterministisk isolering:**
-   - Inga LLM-vikter modifieras och ingen fri kod kompileras. Endast parametrar och filter i ett låst koordinatsystem (DSL) förändras.
-4. **Full revisionshistorik (Audit Trail):**
-   - Varje rad i `dynamic_rules` sparar `rationale`, källartikelns text, och id på den `rule_evaluation` som bevisade dess matematiska fördel.
+### Fas 3: Full autonomi — Hypotesgenerator & Schemalagd drift
+*Mål: Sluta loopen helt.*
+1. Bygg `hypothesis.server.ts` med skyddat urval (endast korroborerat, analytikerbedömt eller strukturella fel).
+2. Skapa Nitro-tasken [tasks/evaluation/auto-improve.ts](file:///C:/dev/drone-intel-hub/tasks/evaluation/auto-improve.ts) (körs kl 04:15):
+   - Hämtar verifierade avvikelser.
+   - Genererar max 2 kandidatregler via LLM.
+   - Kör dem genom sandlådan.
+   - Aktiverar godkända regler och höjer `rules_version`.
+3. Koppla hälsokontrollens ([tasks/evaluation/health.ts](file:///C:/dev/drone-intel-hub/tasks/evaluation/health.ts)) larm till automatisk karantän (`quarantined`) av det senaste dygnet regler.
+4. Lägg till en audit-flik i gränssnittet på `/evaluation` som visar alla autonomt aktiverade regler med fullständig historik.
 
 ---
 
-## 8. Slutsats
+## 7. Sammanfattning av säkerhetsgarantier
 
-Genom att kombinera en **strikt regel-DSL**, **atomär in-memory caching** och en **inbyggd sandlådetestare** uppnår Drone Intel Hub fördelarna med kontinuerlig förbättring utan riskerna för driftstörning och utan behov av externa CI/CD-pipelines. Systemet blir i praktiken självläkande och självlärande.
+1. **Den incheckade Git-korpusen (`eval-corpus.json`):** Systemets grundlag. Automatiken får aldrig skriva över eller ta bort dessa fixtures.
+2. **Noll regressioner ($\text{regressions} == 0$):** Inga undantag i sandlådan.
+3. **Anti-förgiftning:** Inga hypoteser baserade på ensamma, oadjudikerade AI-avvikelser.
+4. **Volymtak:** Max 2 regler per dygn för att förhindra hastig drift.
+5. **Circuit Breaker:** Automatisk rollback vid F1-tapp i produktion.
+6. **Multi-Process synk:** Konsekvent regeluppsättning i alla noder via monotona versioner och cache-TTL.

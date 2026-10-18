@@ -10,7 +10,7 @@
       }
     ],
     "source": "https://www.rafael.co.il/system/spike-lr2/",
-    "status": "approved"
+    "status": "pending_fix"
   },
   {
     "id": "neg-236412aa-f852-4875-a6e9-646dd258f25d-range.max",
@@ -37,7 +37,7 @@
       }
     ],
     "source": "Militarnyi (UA RSS) · https://militarnyi.com/uk/news/izrayil-zamovyv-12-gelikopteriv-apache/?utm_source=rss&#038;utm_medium=rss&#038;utm_campaign=izrayil-zamovyv-12-gelikopteriv-apache",
-    "status": "approved"
+    "status": "pending_fix"
   },
   {
     "id": "neg-247099ab-cbd4-41a5-93c3-fc27e6c2db30-speed.cruise",
@@ -78,7 +78,7 @@
       }
     ],
     "source": "sUAS News · https://www.suasnews.com/2026/10/the-interceptor-bubble/",
-    "status": "approved"
+    "status": "pending_fix"
   },
   {
     "id": "neg-2b566b69-1d6e-4253-9341-b8f180468fcf-endurance.flight",
@@ -134,7 +134,7 @@
       }
     ],
     "source": "Breaking Defense · https://breakingdefense.com/2026/10/zone-5-found-a-spot-in-drone-interceptor-market-with-new-eclipse-ceo/",
-    "status": "approved"
+    "status": "pending_fix"
   },
   {
     "id": "neg-4041feb6-6461-4df3-99f9-2e94801fed65-endurance.flight",
@@ -175,7 +175,7 @@
       }
     ],
     "source": "Militarnyi (UA RSS) · https://militarnyi.com/uk/news/sha-prodazh-2000-raket-javelin-dlya-yegyptu/?utm_source=rss&#038;utm_medium=rss&#038;utm_campaign=sha-prodazh-2000-raket-javelin-dlya-yegyptu",
-    "status": "approved"
+    "status": "pending_fix"
   },
   {
     "id": "neg-548f78af-9a4e-4c04-a6f8-621530bddf45-dimension.length",
@@ -202,7 +202,7 @@
       }
     ],
     "source": "Defence Industry Europe · https://defence-industry.eu/uk-secretary-of-defence-says-f-35-and-aukus-partnerships-show-how-britain-and-u-s-can-expand-joint-weapons-production-at-scale/",
-    "status": "approved"
+    "status": "pending_fix"
   },
   {
     "id": "neg-5c8bf501-3fba-48b7-a042-c7e679b28eb6-weight.launch",
@@ -243,7 +243,7 @@
       }
     ],
     "source": "Defense News · https://www.defensenews.com/global/2026/10/14/ukraine-races-to-field-faster-interceptors-as-russia-hammers-its-energy-grid/",
-    "status": "approved"
+    "status": "pending_fix"
   },
   {
     "id": "neg-6c46fa20-fc75-49a4-a45c-d2eb6d682d63-speed.cruise",
@@ -326,7 +326,7 @@
       }
     ],
     "source": "Defense Express · https://en.defence-ua.com/industries/ukrainian_bars_and_american_anthem_to_pair_with_tomahawk_in_bundeswehrs_1500km_deep_strike_deliveries_eyed_for_2027-20106.html",
-    "status": "approved"
+    "status": "pending_fix"
   },
   {
     "id": "neg-9aa5a71b-29e2-471d-8a7e-c0ce2d72b733-payload.warhead",
@@ -409,7 +409,7 @@
       }
     ],
     "source": "Defence Blog (RSS) · https://defence-blog.com/u-s-navy-gives-boeing-up-to-80m-to-improve-mq-25-drone/",
-    "status": "approved"
+    "status": "pending_fix"
   },
   {
     "id": "neg-bb9d1e0f-519b-4aa4-b584-1e2c4a74868b-altitude.target_max",
@@ -492,7 +492,7 @@
       }
     ],
     "source": "Defense News · https://www.defensenews.com/global/2026/10/14/ukraine-races-to-field-faster-interceptors-as-russia-hammers-its-energy-grid/",
-    "status": "approved"
+    "status": "pending_fix"
   },
   {
     "id": "neg-ccd9779c-3d54-4750-b0e5-a14538c8769b-payload.capacity",
@@ -560,7 +560,7 @@
       }
     ],
     "source": "https://www.rafael.co.il/system/spike-lr2/",
-    "status": "approved"
+    "status": "pending_fix"
   },
   {
     "id": "neg-ec31fe74-315e-4f2d-b1d3-58d777bc3575-range.max",
@@ -587,7 +587,7 @@
       }
     ],
     "source": "Defence Industry Europe · https://defence-industry.eu/chaos-industries-unveils-vespid-counter-drone-interceptors-with-10-kilometer-range-and-annual-production-target-of-12000-units/",
-    "status": "approved"
+    "status": "pending_fix"
   },
   {
     "id": "neg-ee23c26b-545b-4f94-a88f-a3fa0ec3f3ee-guidance.system",
@@ -600,7 +600,7 @@
       }
     ],
     "source": "Defence Industry Europe · https://defence-industry.eu/chaos-industries-unveils-vespid-counter-drone-interceptors-with-10-kilometer-range-and-annual-production-target-of-12000-units/",
-    "status": "approved"
+    "status": "pending_fix"
   },
   {
     "id": "neg-f01c101c-11ed-436f-9209-e7bf65f6336e-payload.capacity",
@@ -627,7 +627,7 @@
       }
     ],
     "source": "Militarnyi (UA RSS) · https://militarnyi.com/uk/news/tencore-ekosystema-nazemnyh-kompleksiv/?utm_source=rss&#038;utm_medium=rss&#038;utm_campaign=tencore-ekosystema-nazemnyh-kompleksiv",
-    "status": "approved"
+    "status": "pending_fix"
   },
   {
     "id": "neg-f3bd923f-c160-44d1-9ee2-a3971a400d18-altitude.max",
