@@ -40,17 +40,18 @@ export function mentionsName(text: string, name: string) {
 }
 
 /** Find proper nouns, acronyms and model designations without requiring quotes. */
-export function detectNames(raw: string): string[] {
+export function detectNames(raw: string, extraStop?: ReadonlySet<string>): string[] {
   const out: string[] = [];
+  const isStop = (w: string) => STOP.has(w) || !!extraStop?.has(w);
   const add = (s: string) => {
     const words = s
       .trim()
       .replace(/[.,;:!?)]+$/, "")
       .split(/\s+/);
-    while (words.length > 1 && STOP.has(words[0]!.toLowerCase())) words.shift();
+    while (words.length > 1 && isStop(words[0]!.toLowerCase())) words.shift();
     const n = words.join(" ");
-    if (n.length < 2 || STOP.has(n.toLowerCase())) return;
-    if (n.split(/\s+/).every((w) => STOP.has(w.toLowerCase()))) return;
+    if (n.length < 2 || isStop(n.toLowerCase())) return;
+    if (n.split(/\s+/).every((w) => isStop(w.toLowerCase()))) return;
     if (!out.some((o) => o.toLowerCase() === n.toLowerCase())) out.push(n);
   };
   for (const m of raw.matchAll(/["«“']([^"»”']{2,40})["»”']/g)) add(m[1]!);
@@ -127,7 +128,11 @@ const base = (n: string) => {
   return m ? { stem: m[1]!, variant: m[2]! } : null;
 };
 
-export function resolveSystems(raw: string, catalog: Drone[]): DetectedSystem[] {
+export function resolveSystems(
+  raw: string,
+  catalog: Drone[],
+  extraStop?: ReadonlySet<string>,
+): DetectedSystem[] {
   const systems: DetectedSystem[] = [];
   const seen = new Set<string>();
   // 1. Catalog mentions, in any script or romanisation ("Ланцет" finds Lancet)
@@ -140,7 +145,7 @@ export function resolveSystems(raw: string, catalog: Drone[]): DetectedSystem[] 
   }
   // 2. Detected names not already covered — check for variant-of relations
   for (const n of dropContained(
-    detectNames(raw),
+    detectNames(raw, extraStop),
     systems.map((s) => s.name),
   )) {
     // Compared by phonetic key, so a Cyrillic spelling of a matched system is not a new one.
