@@ -11,6 +11,7 @@ import {
   rejectOverride,
   recordAnalystFixture,
   getEvalReports,
+  getEvalKeyTrends,
   type PatternSuggestion,
 } from "./evaluation.server";
 
@@ -58,4 +59,8 @@ export const triggerRecordAnalyst = createServerFn({ method: "POST" })
 
 export const fetchEvalReports = createServerFn({ method: "GET" }).handler(async () => {
   return await getEvalReports(20);
+});
+
+export const fetchEvalKeyTrends = createServerFn({ method: "GET" }).handler(async () => {
+  return await getEvalKeyTrends(20);
 });

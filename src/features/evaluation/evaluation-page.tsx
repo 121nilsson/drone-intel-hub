@@ -24,11 +24,12 @@ import {
   triggerApproveOverride,
   triggerRejectOverride,
   fetchEvalReports,
+  fetchEvalKeyTrends,
   triggerGitImport,
   triggerHarvest,
   triggerAdjudication,
 } from "@/shared/infra/evaluation.functions";
-import type { PatternSuggestion } from "@/shared/infra/evaluation.server";
+import type { PatternSuggestion, EvalKeyTrend } from "@/shared/infra/evaluation.server";
 
 const pct = (n: number) => `${Math.round(n * 100)}%`;
 const SIZES = [50, 100, 250, 500];
@@ -70,12 +71,16 @@ export function EvaluationPage() {
   const [openKey, setOpenKey] = useState<string | null>(null);
   const [suggestions, setSuggestions] = useState<PatternSuggestion[]>([]);
   const [trend, setTrend] = useState<{ generatedAt: string; f1: number }[]>([]);
+  const [keyTrends, setKeyTrends] = useState<EvalKeyTrend[]>([]);
 
   useEffect(() => {
     fetchEvalReports()
       .then((rows) =>
         setTrend(rows.map((r) => ({ generatedAt: r.generatedAt, f1: r.f1 })).reverse()),
       )
+      .catch(() => {});
+    fetchEvalKeyTrends()
+      .then((rows) => setKeyTrends(rows))
       .catch(() => {});
   }, []);
 
@@ -137,6 +142,24 @@ export function EvaluationPage() {
               {trend.length} körningar · senaste F1 {trend[trend.length - 1]?.f1.toFixed(2)}
             </span>
           </div>
+        </Panel>
+      )}
+
+      {keyTrends.length > 0 && (
+        <Panel title="Trend per spec-nyckel">
+          <ul className="space-y-2">
+            {keyTrends.map((k) => (
+              <li key={k.key} className="flex items-center justify-between gap-3">
+                <span className="font-mono text-xs">{k.key}</span>
+                <div className="flex items-center gap-2">
+                  <Sparkline values={k.values} width={80} height={16} />
+                  <span className="font-mono text-[11px] text-muted-foreground">
+                    {k.values.length} körningar · F1 {k.values[k.values.length - 1]?.toFixed(2)}
+                  </span>
+                </div>
+              </li>
+            ))}
+          </ul>
         </Panel>
       )}
 

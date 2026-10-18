@@ -484,6 +484,34 @@ export interface EvalReportRow {
   recall: number;
 }
 
+export interface EvalKeyTrend {
+  key: string;
+  values: number[];
+  dates: string[];
+}
+
+export async function getEvalKeyTrends(limit = 20): Promise<EvalKeyTrend[]> {
+  if (!dbConfigured()) return [];
+  const rows =
+    await db()`select generated_at, report from eval_reports order by generated_at asc limit ${limit}`;
+  const byKey = new Map<string, { values: number[]; dates: string[] }>();
+  for (const r of rows) {
+    const rep = r["report"] as Record<string, unknown>;
+    const perKey = (rep["perKey"] ?? {}) as Record<string, { f1: number }>;
+    const date = (r["generated_at"] as Date).toISOString();
+    for (const [k, v] of Object.entries(perKey)) {
+      const e = byKey.get(k) ?? { values: [], dates: [] };
+      e.values.push(typeof v.f1 === "number" ? v.f1 : 0);
+      e.dates.push(date);
+      byKey.set(k, e);
+    }
+  }
+  return [...byKey.entries()]
+    .map(([key, v]) => ({ key, values: v.values, dates: v.dates }))
+    .sort((a, b) => b.values.length - a.values.length)
+    .slice(0, 12);
+}
+
 export async function getEvalReports(limit = 20): Promise<EvalReportRow[]> {
   if (!dbConfigured()) return [];
   const rows =
