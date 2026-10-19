@@ -75,7 +75,8 @@ const CHECKS = [
     collect({ code, out }) {
       let results = [];
       try {
-        results = JSON.parse(out.slice(out.indexOf("[")));
+        // npm prints its own warnings on stderr, after the JSON: parse only the array itself.
+        results = JSON.parse(out.slice(out.indexOf("["), out.lastIndexOf("]") + 1));
       } catch {
         return { findings: [key("eslint produced no parseable JSON")], blocking: true };
       }
