@@ -20,16 +20,14 @@ import {
 } from "./evaluation";
 import {
   triggerEvaluation,
-  triggerMinePatterns,
-  triggerApproveOverride,
-  triggerRejectOverride,
   fetchEvalReports,
   fetchEvalKeyTrends,
   triggerGitImport,
   triggerHarvest,
   triggerAdjudication,
 } from "@/shared/infra/evaluation.functions";
-import type { PatternSuggestion, EvalKeyTrend } from "@/shared/infra/evaluation.server";
+import type { EvalKeyTrend } from "@/shared/infra/evaluation.server";
+import { RulesPanel } from "./rules-panel";
 
 const pct = (n: number) => `${Math.round(n * 100)}%`;
 const SIZES = [50, 100, 250, 500];
@@ -69,7 +67,6 @@ export function EvaluationPage() {
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [report, setReport] = useState<EvalReport | null>(null);
   const [openKey, setOpenKey] = useState<string | null>(null);
-  const [suggestions, setSuggestions] = useState<PatternSuggestion[]>([]);
   const [trend, setTrend] = useState<{ generatedAt: string; f1: number }[]>([]);
   const [keyTrends, setKeyTrends] = useState<EvalKeyTrend[]>([]);
 
@@ -353,68 +350,6 @@ export function EvaluationPage() {
             </ul>
           </Panel>
 
-          <Panel title="Förslag (mönstergrävning)">
-            <div className="mb-3 flex flex-wrap gap-2">
-              <Btn
-                variant="ghost"
-                onClick={async () => {
-                  try {
-                    const s = await triggerMinePatterns();
-                    setSuggestions(s);
-                    toast.success(`${s.length} förslag hittade`);
-                  } catch (e) {
-                    toast.error(`Mönstergrävning misslyckades: ${(e as Error).message}`);
-                  }
-                }}
-              >
-                Analysera mönster
-              </Btn>
-            </div>
-            {suggestions.length === 0 && (
-              <p className="text-sm text-muted-foreground">Inga förslag ännu.</p>
-            )}
-            <ul className="space-y-2">
-              {suggestions.map((s) => (
-                <li key={s.id} className="border border-border p-3">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <span className="font-mono text-xs">{s.description}</span>
-                    <div className="flex gap-2">
-                      <Btn
-                        variant="ghost"
-                        onClick={async () => {
-                          await triggerApproveOverride({ data: { suggestion: s } });
-                          setSuggestions((prev) => prev.filter((x) => x.id !== s.id));
-                          toast.success("Förslag godkänt — aktiv regel i dynamic_rules");
-                        }}
-                      >
-                        Godkänn
-                      </Btn>
-                      <Btn
-                        variant="danger"
-                        onClick={async () => {
-                          await triggerRejectOverride({ data: { id: s.id } });
-                          setSuggestions((prev) => prev.filter((x) => x.id !== s.id));
-                          toast.success("Förslag avvisat");
-                        }}
-                      >
-                        Avvisa
-                      </Btn>
-                    </div>
-                  </div>
-                  {s.sample.length > 0 && (
-                    <ul className="mt-2 space-y-1 font-mono text-[11px] text-muted-foreground">
-                      {s.sample.map((e, i) => (
-                        <li key={i} className="break-words">
-                          {e}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </li>
-              ))}
-            </ul>
-          </Panel>
-
           <Panel title="Automation (server)">
             <div className="flex flex-wrap gap-2">
               <Btn
@@ -448,6 +383,8 @@ export function EvaluationPage() {
           </Panel>
         </>
       )}
+
+      <RulesPanel />
     </div>
   );
 }

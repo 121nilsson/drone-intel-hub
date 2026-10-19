@@ -142,7 +142,7 @@ export function numbersClose(a: number, b: number): boolean {
   return Math.abs(a - b) <= Math.max(0.01 * Math.max(Math.abs(a), Math.abs(b)), 1e-6);
 }
 
-interface Norm {
+export interface Norm {
   semantic: string;
   key: string;
   value: number | string;
@@ -251,7 +251,7 @@ function prf(tp: number, fp: number, fn: number): Prf {
   return { precision, recall, f1, tp, fp, fn };
 }
 
-const namesOf = (e: Extraction) => [
+export const namesOf = (e: Extraction) => [
   ...new Set(
     [e.name, ...(e.systems ?? []).map((s) => s.name)]
       .filter((n): n is string => !!n?.trim())

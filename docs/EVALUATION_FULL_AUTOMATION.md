@@ -1,6 +1,6 @@
 # Spec & Guide: Helt autonom självförbättrande loop utan extern CI
 
-**Status:** Teknisk specifikation och implementationsguide (v3 — reviderad efter arkitekturgranskning och djupanalys)  
+**Status:** Fas 1 och Fas 2 implementerade (regelmotor med cue/kontextfilter, sandlåda, deterministisk hypotesgenerator, nattlig `evaluation:rules`). Fas 3 (shadow, trust score, auto-aktivering, circuit breaker) återstår. `add_unit_scale` tillämpas ännu inte.  
 **Fil:** `docs/EVALUATION_FULL_AUTOMATION.md`  
 **Relaterade specifikationer:** `docs/EVALUATION_MODE.md` (v1, manuell utvärdering), `docs/EVALUATION_AUTOMATION.md` (v2, halvautonom loop med mänskligt godkännande)  
 **Relaterad kod:** `src/features/evaluation/**`, `src/shared/infra/evaluation.*`, `src/shared/infra/heuristics/**`, `src/shared/lexicons/**`, `tasks/evaluation/**`

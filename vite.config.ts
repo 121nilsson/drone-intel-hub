@@ -37,6 +37,8 @@ export default defineConfig({
       "15 3 * * *": "evaluation:run",
       // Heuristic health check daily at 03:45.
       "45 3 * * *": "evaluation:health",
+      // Rule hypotheses daily at 04:15: mine, propose and sandbox; activation stays manual.
+      "15 4 * * *": "evaluation:rules",
     },
   } as never,
 });

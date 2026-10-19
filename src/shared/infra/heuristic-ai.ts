@@ -25,7 +25,7 @@ function contextForSystem(raw: string, name: string): string {
 
 function scan(raw: string, catalog: Drone[], deep: boolean, rules?: RuleSnapshot): Extraction {
   const t = raw.toLowerCase();
-  const facts = extractFacts(raw);
+  const facts = extractFacts(raw, rules);
   const specs = facts.specs;
   const rfBands = extractRfBands(raw);
   const domain: Domain | undefined = /usv|boat|naval|sea drone|maritime|катер|човен|морськ/.test(t)
@@ -71,7 +71,7 @@ function scan(raw: string, catalog: Drone[], deep: boolean, rules?: RuleSnapshot
   const systemExtractions: SystemExtraction[] = systems.map((system) => {
     const context = contextForSystem(raw, system.name);
     const local = context
-      ? extractFacts(context)
+      ? extractFacts(context, rules)
       : { specs: [], payloads: [], sensors: [], components: [], guidance: [] };
     return {
       ...system,

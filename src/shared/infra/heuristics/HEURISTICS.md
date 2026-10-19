@@ -13,6 +13,7 @@ heuristics/
     uav|ugv|usv|cuas|shorad  per system class
     structure.ts          weights, payload, warhead, fuel capacity, dimensions
     observations.ts       counted equipment, sensors, guidance, propulsion, RF bands
+    dynamic.ts            RuleSnapshot cues (fixed units/guards per target) + context filters
 heuristic-ai.ts           HeuristicExtractor: orchestration, domain/origin, confidence
 ```
 

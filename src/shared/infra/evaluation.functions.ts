@@ -6,14 +6,19 @@ import {
   importGitCorpus,
   harvestCorpus,
   runAdjudication,
-  minePatterns,
-  approveOverride,
-  rejectOverride,
   recordAnalystFixture,
   getEvalReports,
   getEvalKeyTrends,
-  type PatternSuggestion,
 } from "./evaluation.server";
+import {
+  activateRule,
+  listRules,
+  mineAndSandbox,
+  proposeRule,
+  rejectRule,
+  sandboxRule,
+  type ProposeInput,
+} from "./rule-sandbox.server";
 
 export const triggerEvaluation = createServerFn({ method: "POST" }).handler(async () => {
   return await runEvaluation();
@@ -35,20 +40,36 @@ export const triggerAdjudication = createServerFn({ method: "POST" }).handler(as
   return await runAdjudication();
 });
 
-export const triggerMinePatterns = createServerFn({ method: "POST" }).handler(async () => {
-  return await minePatterns();
+export const triggerMineRules = createServerFn({ method: "POST" }).handler(async () => {
+  return await mineAndSandbox();
 });
 
-export const triggerApproveOverride = createServerFn({ method: "POST" })
-  .validator((d: { suggestion: PatternSuggestion }) => d)
+export const fetchRules = createServerFn({ method: "GET" }).handler(async () => {
+  return await listRules();
+});
+
+export const triggerProposeRule = createServerFn({ method: "POST" })
+  .validator((d: ProposeInput) => d)
   .handler(async ({ data }) => {
-    return await approveOverride(data.suggestion);
+    return await proposeRule({ ...data, origin: "analyst" });
   });
 
-export const triggerRejectOverride = createServerFn({ method: "POST" })
+export const triggerSandboxRule = createServerFn({ method: "POST" })
+  .validator((d: { id: string; mode?: "fast" | "full" }) => d)
+  .handler(async ({ data }) => {
+    return await sandboxRule(data.id, data.mode === "full" ? "full" : "fast");
+  });
+
+export const triggerActivateRule = createServerFn({ method: "POST" })
   .validator((d: { id: string }) => d)
   .handler(async ({ data }) => {
-    return await rejectOverride(data.id);
+    return await activateRule(data.id);
+  });
+
+export const triggerRejectRule = createServerFn({ method: "POST" })
+  .validator((d: { id: string }) => d)
+  .handler(async ({ data }) => {
+    return await rejectRule(data.id);
   });
 
 export const triggerRecordAnalyst = createServerFn({ method: "POST" })
