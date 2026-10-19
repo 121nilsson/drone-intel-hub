@@ -3,6 +3,7 @@ import { toast } from "sonner";
 import { DEFAULT_SETTINGS, useServices } from "@/shared/infra/services";
 import { Btn, PageTitle, Panel, Tag } from "@/shared/ui/primitives";
 import { DensityToggle } from "@/shared/ui/density";
+import { ThemeToggle } from "@/shared/ui/theme";
 import type { ProviderEnvConfig, ProviderStatus } from "@/shared/contracts/ai";
 
 /** A model id like `nvidia/nemotron-3-super-120b-a12b` or `meta/muse-glimmer-30b` is namespaced to
@@ -188,6 +189,12 @@ export function SettingsPage() {
           <span className="text-xs text-muted-foreground">
             Compact for triage, analyst for comparison.
           </span>
+        </div>
+      </Panel>
+      <Panel title="Theme">
+        <div className="flex items-center gap-3">
+          <ThemeToggle className="border border-border px-3 py-1.5 font-mono text-xs uppercase tracking-wider" />
+          <span className="text-xs text-muted-foreground">Switch between dark and light mode.</span>
         </div>
       </Panel>
       {providerEnv && <ProviderRouting env={providerEnv} />}

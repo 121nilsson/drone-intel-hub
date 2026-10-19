@@ -7,6 +7,7 @@ import type {
   SupplyComponent,
   SystemExtraction,
 } from "@/entities/drone/types";
+import type { RuleSnapshot } from "@/shared/contracts/rules";
 import {
   BRIEFING_SUMMARY_SYSTEM,
   ProviderOutageError,
@@ -48,7 +49,12 @@ export class OpenAICompatibleExtractor implements IntelExtractor {
   ) {
     this.label = tier === 1 ? cfg.tier1Model : cfg.tier2Model;
   }
-  async extract(raw: string, catalog: Drone[], context?: Extraction): Promise<Extraction> {
+  async extract(
+    raw: string,
+    catalog: Drone[],
+    context?: Extraction,
+    _options?: { rules?: RuleSnapshot },
+  ): Promise<Extraction> {
     const named = catalog.filter((d) =>
       [d.name, d.cyrillic ?? "", ...d.aliases].some((name) => mentionsName(raw, name)),
     );

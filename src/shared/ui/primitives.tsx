@@ -177,7 +177,7 @@ export function Btn({
     <button
       {...p}
       className={cn(
-        "inline-flex items-center gap-1.5 px-3 py-1.5 font-mono text-xs uppercase tracking-wider transition-colors disabled:opacity-50",
+        "inline-flex cursor-pointer items-center gap-1.5 px-3 py-1.5 font-mono text-xs uppercase tracking-wider transition-colors disabled:cursor-not-allowed disabled:opacity-50",
         v[variant],
         className,
       )}

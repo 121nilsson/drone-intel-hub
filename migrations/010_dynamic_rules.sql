@@ -42,6 +42,17 @@ CREATE TABLE IF NOT EXISTS rule_evaluations (
 );
 
 CREATE INDEX IF NOT EXISTS idx_dynamic_rules_active ON dynamic_rules(status) WHERE status = 'active';
+
+CREATE TABLE IF NOT EXISTS rule_evaluations (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  rule_id text REFERENCES dynamic_rules(id),
+  evaluated_at timestamptz NOT NULL DEFAULT now(),
+  passed boolean NOT NULL,
+  corpus_size int NOT NULL,
+  regressions int NOT NULL,
+  broken_fixtures jsonb,
+  f1_delta float
+);
 CREATE INDEX IF NOT EXISTS idx_dynamic_rules_shadow ON dynamic_rules(status) WHERE status = 'shadow';
 
 DO $$

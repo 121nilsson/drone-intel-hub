@@ -52,7 +52,7 @@ const KINDS: readonly RuleKind[] = [
   "add_unit_scale",
 ];
 /** Mined hypotheses sandboxed per run (budget, EVALUATION_AUTOMATION §3 princip 4). */
-const MAX_SANDBOX_PER_RUN = 8;
+const MAX_SANDBOX_PER_RUN = 3;
 
 /** Serializable JSON, so a RuleView can cross the server-function boundary. */
 export type Json = string | number | boolean | null | Json[] | { [k: string]: Json };
@@ -97,7 +97,7 @@ async function loadCatalog() {
 /** Same eligibility as the sandbox's own filter, applied in SQL. Lazy fragment, nested below. */
 const eligible = () => db()`status <> 'discarded' and length(coalesce(data->>'raw', '')) >= 50`;
 /** Unrelated candidates the sandbox stratifies its control set from. */
-const CONTROL_POOL = 1000;
+const CONTROL_POOL = 200;
 const asCandidates = (rows: readonly { data: unknown }[]) => rows.map((r) => r.data as Candidate);
 const likeEscape = (t: string) => `%${t.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
 

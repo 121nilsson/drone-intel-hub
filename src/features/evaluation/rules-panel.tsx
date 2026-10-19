@@ -131,9 +131,18 @@ export function RulesPanel() {
   const [rules, setRules] = useState<RuleView[]>([]);
   const [autonomy, setAutonomy] = useState<AutonomyStatus | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [busyStartedAt, setBusyStartedAt] = useState<number | null>(null);
+  const [now, setNow] = useState(Date.now());
   const [kind, setKind] = useState<RuleKind>("add_stopword");
+
+  useEffect(() => {
+    if (!busy || !busyStartedAt) return;
+    const id = setInterval(() => setNow(Date.now()), 500);
+    return () => clearInterval(id);
+  }, [busy, busyStartedAt]);
   const [language, setLanguage] = useState<RuleLanguage>("all");
   const [payload, setPayload] = useState(EXAMPLES.add_stopword);
+  const [lastVerdict, setLastVerdict] = useState<string | null>(null);
 
   const reload = useCallback(() => {
     fetchRules()
@@ -147,12 +156,14 @@ export function RulesPanel() {
 
   const act = async (label: string, fn: () => Promise<string>) => {
     setBusy(label);
+    setBusyStartedAt(Date.now());
     try {
       toast.success(await fn());
     } catch (e) {
       toast.error(`${label}: ${(e as Error).message}`);
     } finally {
       setBusy(null);
+      setBusyStartedAt(null);
       reload();
     }
   };
@@ -162,14 +173,30 @@ export function RulesPanel() {
       const parsed = JSON.parse(payload) as Record<string, unknown>;
       const p = await triggerProposeRule({ data: { kind, language, payload: parsed } });
       if (!p.ok || !p.id) throw new Error(p.reason ?? "kunde inte spara");
-      const s = await triggerSandboxRule({ data: { id: p.id } });
-      return s.result?.passed
-        ? "Regeln klarade sandlådan — kan aktiveras eller skuggas"
-        : `Sandlåda: ${s.result?.reasons.join("; ") ?? s.reason}`;
+      const s = await triggerSandboxRule({ data: { id: p.id, mode: "fast" } });
+      const verdict = s.result?.passed
+        ? "Sandbox passed - rule can be activated or shadowed"
+        : `Sandbox failed: ${s.result?.reasons.join("; ") ?? s.reason}`;
+      setLastVerdict(verdict);
+      return verdict;
     });
 
   return (
     <Panel title="Dynamiska regler (sandlåda)">
+      <p className="mb-3 text-xs text-muted-foreground">
+        Propose a rule as JSON, then sandbox it against the corpus. A rule only becomes activatable
+        when the sandbox reports zero regressions and a measurable F1 gain. Rules are never applied
+        automatically - an analyst must activate them.
+      </p>
+      {lastVerdict && (
+        <div className="mb-3 border border-border bg-secondary/40 px-3 py-2 font-mono text-xs">
+          Last sandbox: {lastVerdict}
+        </div>
+      )}
+      <p className="mb-2 text-xs text-muted-foreground">
+        Mining hypotheses can take 30–60 s on a large corpus. The button shows elapsed time while
+        running.
+      </p>
       <div className="mb-3 flex flex-wrap gap-2">
         <Btn
           variant="ghost"
@@ -182,7 +209,11 @@ export function RulesPanel() {
             })
           }
         >
-          {busy === "Hypoteser" ? "Gräver…" : "Generera regelhypoteser"}
+          {busy === "Hypoteser" && busyStartedAt
+            ? `Mining… ${Math.max(1, Math.round((now - busyStartedAt) / 1000))}s`
+            : busy === "Hypoteser"
+              ? "Mining…"
+              : "Generate rule hypotheses"}
         </Btn>
         <Btn
           variant="ghost"

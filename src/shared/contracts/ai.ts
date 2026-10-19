@@ -1,10 +1,16 @@
 import type { Candidate, Drone, Extraction } from "@/entities/drone/types";
+import type { RuleSnapshot } from "@/shared/contracts/rules";
 
 /** Inference contract — any engine (heuristic, NIM, OpenAI-compatible) can implement it. */
 export interface IntelExtractor {
   readonly tier: 1 | 2;
   readonly label: string;
-  extract(raw: string, catalog: Drone[], context?: Extraction): Promise<Extraction>;
+  extract(
+    raw: string,
+    catalog: Drone[],
+    context?: Extraction,
+    options?: { rules?: RuleSnapshot },
+  ): Promise<Extraction>;
 }
 
 /**
