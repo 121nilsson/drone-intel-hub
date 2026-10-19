@@ -96,8 +96,11 @@ export function semanticKeyFor(key: string, label = ""): string {
   if (k === "warhead" || (k === "payload" && /warhead/i.test(lab))) return "payload.warhead";
   if (k === "payload_mass" || /payload mass/i.test(lab)) return "payload.mass";
   if (
-    (k === "payload" || k === "payload_capacity") &&
-    (/^payload$/i.test(lab) || /capacity/i.test(lab))
+    k === "max_payload" ||
+    k === "payload_weight" ||
+    k === "payload_weight_kg" ||
+    ((k === "payload" || k === "payload_capacity") &&
+      (/^payload$/i.test(lab) || /capacity/i.test(lab) || /max payload|payload weight/i.test(lab)))
   )
     return "payload.capacity";
   if (k === "weight_mtow" || k === "mtow" || /maximum takeoff|mtow/i.test(lab))

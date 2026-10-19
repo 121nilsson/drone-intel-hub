@@ -18,8 +18,41 @@ const THIN_SPACE = /[\u00a0\u202f\u2009]/g;
  * Grouping applies only when every group after the first is exactly three digits and the first
  * group has no leading zero, so "0,500" stays 0.5 and "1,500" becomes 1500.
  */
+const NUMBER_WORDS: Record<string, number> = {
+  one: 1,
+  two: 2,
+  three: 3,
+  four: 4,
+  five: 5,
+  six: 6,
+  seven: 7,
+  eight: 8,
+  nine: 9,
+  ten: 10,
+  один: 1,
+  одна: 1,
+  два: 2,
+  дві: 2,
+  три: 3,
+  чотири: 4,
+  "п'\u044Fть": 5,
+  шість: 6,
+  сім: 7,
+  вісім: 8,
+  "дев'\u044Fть": 9,
+  десять: 10,
+  четыре: 4,
+  пять: 5,
+  шесть: 6,
+  семь: 7,
+  восемь: 8,
+  девять: 9,
+};
+
 export function parseNumber(s: string): number | undefined {
   const t = s.trim().replace(THIN_SPACE, " ");
+  const key = t.toLowerCase().replace(/[’ʼ]/g, "'");
+  if (NUMBER_WORDS[key] !== undefined) return NUMBER_WORDS[key];
   if (!t || !/\d/.test(t)) return undefined;
 
   const spaced = t.match(/^([1-9]\d{0,2}(?: \d{3})+)(?:([,.])(\d+))?$/);
@@ -56,8 +89,11 @@ const QUALIFIER_PREFIX: Array<[RegExp, QuantityQualifier]> = [
   [/^(?:up\s*to|не\s+более)\s+/i, "up_to"],
   [/^(?:at\s+least|не\s+менее)\s+/i, "at_least"],
   [/^(?:less\s+than|under|меньше)\s+/i, "less_than"],
-  [/^(?:more\s+than|greater\s+than|over|exceeding|свыше|более)\s+/i, "greater_than"],
-  [/^(?:~|≈|approx(?:imately)?|about|roughly|около|примерно)\s*/i, "approximate"],
+  [
+    /^(?:more\s+than|greater\s+than|over|exceeding|понад|більше|exceeding|свыше|более)\s+/i,
+    "greater_than",
+  ],
+  [/^(?:~|≈|approx(?:imately)?|about|roughly|roughly|около|примерно)\s*/i, "approximate"],
 ];
 
 /**

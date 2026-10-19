@@ -88,6 +88,12 @@ const UNITS: UnitDef[] = [
     toCanonical: NM_KM,
     pattern: /(?:knots?|kts|вузл[а-яіїєґ]*|вузол|уз(?:л(?:ов|а)?)?)(?![\p{L}\p{N}])/iu,
   },
+  {
+    token: "Mach",
+    dimension: "speed",
+    toCanonical: 1225,
+    pattern: /(?:mach|мах(?:ів|а)?)(?![\p{L}\p{N}])/iu,
+  },
   { token: "mi", dimension: "distance", toCanonical: MILE_KM, pattern: /miles?(?![\p{L}\p{N}])/iu },
   {
     token: "mi",
@@ -100,7 +106,7 @@ const UNITS: UnitDef[] = [
     token: "m",
     dimension: "distance",
     toCanonical: 0.001,
-    pattern: /(?:meters?|metres?|метр(?:ы|ов|а)?)(?![\p{L}\p{N}])/iu,
+    pattern: /(?:meters?|metres?|метрів|метри?|метр|метр(?:ы|ов|а)?)(?![\p{L}\p{N}])/iu,
   },
   {
     token: "m",
