@@ -1,6 +1,6 @@
 # Spec & Guide: Helt autonom självförbättrande loop utan extern CI
 
-**Status:** Fas 1 och Fas 2 implementerade (regelmotor med cue/kontextfilter, sandlåda, deterministisk hypotesgenerator, nattlig `evaluation:rules`). Fas 3 (shadow, trust score, auto-aktivering, circuit breaker) återstår. `add_unit_scale` tillämpas ännu inte.  
+**Status:** Fas 1–3 implementerade (se §6.1 för avvikelser). `add_unit_scale` tillämpas ännu inte.  
 **Fil:** `docs/EVALUATION_FULL_AUTOMATION.md`  
 **Relaterade specifikationer:** `docs/EVALUATION_MODE.md` (v1, manuell utvärdering), `docs/EVALUATION_AUTOMATION.md` (v2, halvautonom loop med mänskligt godkännande)  
 **Relaterad kod:** `src/features/evaluation/**`, `src/shared/infra/evaluation.*`, `src/shared/infra/heuristics/**`, `src/shared/lexicons/**`, `tasks/evaluation/**`
@@ -448,6 +448,30 @@ För att minimera leveransrisk och snabbt uppnå produktionsvärde delas arbetet
 5. Skapa underhållsskriptet `scripts/rules-backport.mjs` för att exportera långlivade regler tillbaka till källkoden.
 
 ---
+
+## 6.1 Implementerat — och var det avviker från planen
+
+**Fas 1–3 är byggda.** Kod: `shared/contracts/rules.ts` (DSL + kompilator), `heuristics/extractors/dynamic.ts` (cue + kontextfilter), `features/evaluation/{sandbox,hypotheses,autonomy}.ts` (rena, read-only), `shared/infra/rule-sandbox.server.ts` (livscykel), `tasks/evaluation/{rules,shadow}.ts`, migrationer 010–012, `scripts/rules-backport.mjs`.
+
+Livscykel i drift:
+
+```text
+evaluation:rules 04:15   övervaka aktiva (kretsbrytare + audit) → gräv hypoteser → sandlåda
+                         → klarad genererad regel: shadow   · klarad analytikerregel: candidate_passed
+evaluation:shadow  :35   poängsätt shadow-regler mot NYA rapporter → auto-aktivera om policyn uppfylls
+/evaluation              Skuggläge · Aktivera (kör om sandlådan) · Avvisa/Karantän · Full sandlåda
+```
+
+Avvikelser, med skäl:
+
+1. **Spec-provenance (ny förutsättning, inte i planen).** `combineExtractions()` behåller alla heuristik-specs, så den lagrade referensen innehöll heuristikens egen utdata. Ett filter som tog bort ett felvärde såg därför ut som en försämring och kunde aldrig klara sandlådan. AI:n får heuristikens observationer med instruktionen "keep only those the report text supports; drop the rest". Den domen sparas nu per spec som `provenance: "both" | "heuristic" | "ai"`. Utvärderingen räknar ett värde som AI:n strök som `rejected` (falskt positivt), och inte som träff eller miss. Kandidater sparade före ändringen beter sig som tidigare. **Följd:** total F1 i `eval_reports` flyttar sig gradvis när nya kandidater kommer in i urvalet. Hälsolarmet (03:45) kan därför varna en gång utan att något regresserat. Det loggar bara och sätter inget i karantän.
+2. **Kretsbrytaren jämför inte dygn mot dygn.** Den kör samma färska urval och hela korpuset med *alla* aktiva regler mot *aktiva minus de senaste 24 h*. Datadrift kan då inte lösa ut den, och en dålig regel kan inte gömma sig bakom en lättare dag. Tröskel −0.02 F1 eller en enda trasig fixture.
+3. **Villkoret "AI-konfidens ≥ 0.95" är ersatt.** Hypotesgeneratorn är deterministisk och har ingen modellkonfidens. Villkoret är ersatt av skuggprecision ≥ 95 % och minst 5 träffar på rapporter som kom *efter* att regeln gick i skugga.
+4. **Trust räknas bara på mänskliga beslut.** Underlaget är analytikerns aktiveringar och avvisningar av genererade regler per kategori (`kind:targetKey`). Varje karantän räknas emot, oavsett vem som utlöste den. Auto-aktiveringar räknas inte, annars kunde systemet bygga förtroende utan att någon tittat. Därför kan auto-aktivering inte ske förrän en analytiker fattat minst 20 beslut i kategorin.
+5. **Skuggläget körs i batch varje timme**, inte inne i ingestion. Det följer principen om tvåstegsingestion: insamlingen väntar aldrig på skuggor.
+6. **`add_unit_scale` tillämpas inte ännu.** Penningmagnituder läses i normaliseringen (`entities/normalization`), som saknar snapshot-parameter.
+
+Avstängning: `RULES_AUTOPROMOTE=off` stoppar auto-aktivering. Skuggmätningen fortsätter, och panelen visar vad som blockerar varje regel.
 
 ## 7. Sammanfattning av säkerhetsgarantier
 

@@ -2,20 +2,25 @@ import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Btn, Card, Panel, Tag } from "@/shared/ui/primitives";
 import {
+  fetchAutonomy,
   fetchRules,
   triggerActivateRule,
   triggerMineRules,
   triggerProposeRule,
   triggerRejectRule,
+  triggerRunShadow,
   triggerSandboxRule,
+  triggerShadowRule,
+  triggerSupervise,
 } from "@/shared/infra/evaluation.functions";
-import type { RuleView } from "@/shared/infra/rule-sandbox.server";
+import type { AutonomyStatus, RuleView } from "@/shared/infra/rule-sandbox.server";
 import type { RuleKind, RuleLanguage } from "@/shared/contracts/rules";
 import type { SandboxResult } from "./sandbox";
 
 const TONE: Record<string, "success" | "warning" | "danger" | "info" | "muted" | "primary"> = {
   active: "success",
   candidate_passed: "primary",
+  shadow: "warning",
   candidate: "info",
   evaluating: "info",
   rejected: "muted",
@@ -71,12 +76,60 @@ function Verdict({ r }: { r: SandboxResult & { evaluatedAt: string } }) {
   );
 }
 
+function Shadow({ m }: { m: NonNullable<RuleView["shadow"]> }) {
+  const decided = m.concordant + m.conflicts;
+  return (
+    <div className="mt-2 space-y-1 font-mono text-[11px]">
+      <div className="text-muted-foreground">
+        skugga sedan {m.startedAt.slice(0, 16).replace("T", " ")} · {m.evaluated} nya rapporter ·{" "}
+        {m.hits} träffar · {m.concordant} bättre · {m.conflicts} sämre
+        {decided > 0 && ` · precision ${Math.round((m.concordant / decided) * 100)}%`}
+      </div>
+      {m.blockers && m.blockers.length > 0 && (
+        <div className="text-muted-foreground">Väntar på: {m.blockers.join(" · ")}</div>
+      )}
+    </div>
+  );
+}
+
+function Autonomy({ a }: { a: AutonomyStatus }) {
+  const trust = Object.entries(a.trust).sort(([, x], [, y]) => y.decisions - x.decisions);
+  return (
+    <div className="mb-3 space-y-1 border border-border p-3 font-mono text-[11px]">
+      <div className="flex flex-wrap items-center gap-2">
+        <Tag tone={a.autopromote ? "success" : "muted"}>
+          {a.autopromote ? "auto-aktivering på" : "auto-aktivering av"}
+        </Tag>
+        <span className="text-muted-foreground">
+          kräver ≥{a.policy.minShadowHours} h skugga, ≥{a.policy.minHits} träffar, 0 konflikter,
+          precision ≥{a.policy.minPrecision * 100}%, trust ≥{a.policy.minTrust * 100}% över ≥
+          {a.policy.minDecisions} analytikerbeslut · {a.autoActivatedLast24h}/
+          {a.policy.maxAutoPerDay} auto senaste dygnet
+        </span>
+      </div>
+      {trust.length > 0 && (
+        <div className="break-words text-muted-foreground">
+          Trust:{" "}
+          {trust.map(([k, t]) => `${k} ${Math.round(t.score * 100)}% (${t.decisions})`).join(" · ")}
+        </div>
+      )}
+      {a.recent.slice(0, 5).map((d) => (
+        <div key={d.ruleId + d.at} className="break-words text-muted-foreground">
+          {d.at.slice(0, 16).replace("T", " ")} {d.actor} {d.decision} {d.ruleId}
+          {d.note ? ` — ${d.note}` : ""}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /**
  * Dynamic-rule lifecycle on /evaluation: mine → sandbox → activate. Activation re-runs the
  * sandbox server-side, so the button can never push a rule the corpus has not just accepted.
  */
 export function RulesPanel() {
   const [rules, setRules] = useState<RuleView[]>([]);
+  const [autonomy, setAutonomy] = useState<AutonomyStatus | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [kind, setKind] = useState<RuleKind>("add_stopword");
   const [language, setLanguage] = useState<RuleLanguage>("all");
@@ -85,6 +138,9 @@ export function RulesPanel() {
   const reload = useCallback(() => {
     fetchRules()
       .then(setRules)
+      .catch(() => {});
+    fetchAutonomy()
+      .then(setAutonomy)
       .catch(() => {});
   }, []);
   useEffect(reload, [reload]);
@@ -108,7 +164,7 @@ export function RulesPanel() {
       if (!p.ok || !p.id) throw new Error(p.reason ?? "kunde inte spara");
       const s = await triggerSandboxRule({ data: { id: p.id } });
       return s.result?.passed
-        ? "Regeln klarade sandlådan — kan aktiveras"
+        ? "Regeln klarade sandlådan — kan aktiveras eller skuggas"
         : `Sandlåda: ${s.result?.reasons.join("; ") ?? s.reason}`;
     });
 
@@ -128,10 +184,39 @@ export function RulesPanel() {
         >
           {busy === "Hypoteser" ? "Gräver…" : "Generera regelhypoteser"}
         </Btn>
+        <Btn
+          variant="ghost"
+          disabled={!!busy}
+          onClick={() =>
+            act("Skuggläge", async () => {
+              const r = await triggerRunShadow();
+              if (!r.ran) throw new Error(r.reason);
+              return `${r.rules} skuggregler, ${r.evaluated} nya rapporter, aktiverade: ${r.promoted.length}`;
+            })
+          }
+        >
+          Kör skuggläge nu
+        </Btn>
+        <Btn
+          variant="ghost"
+          disabled={!!busy}
+          onClick={() =>
+            act("Övervakning", async () => {
+              const r = await triggerSupervise();
+              if (!r.ran) throw new Error(r.reason);
+              return r.breaker.tripped
+                ? `Kretsbrytaren löste ut: ${r.breaker.reasons.join("; ")}`
+                : `OK · ${r.audited} granskade · ${r.quarantined.length} i karantän`;
+            })
+          }
+        >
+          Övervaka aktiva regler
+        </Btn>
         <Btn variant="ghost" disabled={!!busy} onClick={reload}>
           Uppdatera
         </Btn>
       </div>
+      {autonomy && <Autonomy a={autonomy} />}
 
       <details className="mb-3 border border-border p-3">
         <summary className="cursor-pointer text-sm">Ny regel (analytiker)</summary>
@@ -195,9 +280,25 @@ export function RulesPanel() {
                 >
                   Full sandlåda
                 </Btn>
+                {r.status === "candidate_passed" && (
+                  <Btn
+                    variant="ghost"
+                    disabled={!!busy}
+                    title="Kör dolt mot nya rapporter utan att påverka produktionen"
+                    onClick={() =>
+                      act("Skugga", async () => {
+                        const s = await triggerShadowRule({ data: { id: r.id } });
+                        if (!s.ok) throw new Error("kunde inte flyttas till skuggläge");
+                        return "I skuggläge — mäts mot nya rapporter varje timme";
+                      })
+                    }
+                  >
+                    Skuggläge
+                  </Btn>
+                )}
                 {r.status !== "active" && (
                   <Btn
-                    disabled={!!busy || r.status !== "candidate_passed"}
+                    disabled={!!busy || (r.status !== "candidate_passed" && r.status !== "shadow")}
                     title="Kör sandlådan igen mot aktiva regler och aktiverar bara vid godkänt"
                     onClick={() =>
                       act("Aktivera", async () => {
@@ -227,6 +328,7 @@ export function RulesPanel() {
               </div>
             </div>
             {r.rationale && <p className="mt-1 text-xs text-muted-foreground">{r.rationale}</p>}
+            {r.status === "shadow" && r.shadow && <Shadow m={r.shadow} />}
             {r.lastEvaluation && <Verdict r={r.lastEvaluation} />}
           </Card>
         ))}

@@ -37,8 +37,10 @@ export default defineConfig({
       "15 3 * * *": "evaluation:run",
       // Heuristic health check daily at 03:45.
       "45 3 * * *": "evaluation:health",
-      // Rule hypotheses daily at 04:15: mine, propose and sandbox; activation stays manual.
+      // Rule supervision (circuit breaker + audit), then hypotheses: mine, propose, sandbox.
       "15 4 * * *": "evaluation:rules",
+      // Shadow rules scored hourly on new reports; earned ones auto-promote (RULES_AUTOPROMOTE).
+      "35 * * * *": "evaluation:shadow",
     },
   } as never,
 });

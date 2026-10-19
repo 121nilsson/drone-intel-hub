@@ -178,7 +178,14 @@ export async function runSandbox(input: SandboxInput): Promise<SandboxResult> {
   (["spec", "name", "matchId"] as const).forEach((k, i) => {
     if (deltas[i]! < -EPS) reasons.push(`${k} F1 drops ${deltas[i]!.toFixed(4)}`);
   });
-  const improves = deltas.some((d) => d > EPS) || fixed.length > 0;
+  // Strict dominance also counts: removing false positives where nothing was confirmed leaves
+  // F1 at 0 on both sides, yet is exactly what a context filter is for.
+  const dominates = (["spec", "name", "matchId"] as const).some((k) => {
+    const b = before[k];
+    const a = after[k];
+    return a.tp >= b.tp && a.fp <= b.fp && a.fn <= b.fn && a.tp + b.fp + b.fn > b.tp + a.fp + a.fn;
+  });
+  const improves = deltas.some((d) => d > EPS) || dominates || fixed.length > 0;
   if (!improves) reasons.push(changed ? "no measurable improvement" : "rule changes no output");
 
   return {

@@ -12,6 +12,20 @@ import {
   type RuleLanguage,
 } from "@/shared/contracts/rules";
 import { runSandbox, type SandboxResult } from "@/features/evaluation/sandbox";
+import {
+  breakerTrips,
+  newShadowMetrics,
+  promotionVerdict,
+  ruleCategory,
+  shadowStep,
+  trustScores,
+  PROMOTION_POLICY,
+  type DecisionActor,
+  type DecisionKind,
+  type RuleDecision,
+  type ShadowMetrics,
+  type Trust,
+} from "@/features/evaluation/autonomy";
 import { hypothesisId, mineHypotheses } from "@/features/evaluation/hypotheses";
 import type { EvalFixture } from "@/features/evaluation/evaluation";
 import type { Candidate, Drone } from "@/entities/drone/types";
@@ -20,9 +34,14 @@ import fs from "node:fs";
 import path from "node:path";
 
 /**
- * Rule lifecycle on the server: propose → sandbox → (analyst) activate. Activation always
- * re-runs the sandbox against the rules active at that moment, so a verdict computed before
- * another rule went live can never let a regression through.
+ * Rule lifecycle on the server (EVALUATION_FULL_AUTOMATION §4):
+ *
+ *   candidate → sandbox → candidate_passed (analyst rule) | shadow (generated rule) | rejected
+ *   shadow → active (analyst click, or auto-promotion once trust is earned) → quarantined
+ *
+ * Activation always re-runs the sandbox against the rules active at that moment, so a verdict
+ * computed before another rule went live can never let a regression through. Every transition
+ * is logged in rule_decisions, which is what trust is calibrated from.
  */
 
 const KINDS: readonly RuleKind[] = [
@@ -50,6 +69,8 @@ export interface RuleView {
   evidence: Json;
   createdAt: string;
   promotedAt: string | null;
+  /** Shadow metrics plus what still blocks auto-promotion. */
+  shadow: (ShadowMetrics & { blockers?: string[] }) | null;
   lastEvaluation: (SandboxResult & { evaluatedAt: string; rulesVersion: number | null }) | null;
 }
 
@@ -99,8 +120,8 @@ async function loadFixtures(): Promise<EvalFixture[]> {
 
 async function loadRule(id: string) {
   const [r] =
-    await db()`select id, kind, language, payload, status from dynamic_rules where id = ${id}`;
-  return r ? (r as unknown as DynamicRuleRow & { status: string }) : null;
+    await db()`select id, kind, language, payload, status, origin from dynamic_rules where id = ${id}`;
+  return r ? (r as unknown as DynamicRuleRow & { status: string; origin: string }) : null;
 }
 
 async function activeRows(exceptId?: string) {
@@ -112,6 +133,18 @@ async function activeRows(exceptId?: string) {
 async function rulesVersion() {
   const [v] = await db()`select coalesce(max(version), 0)::int as v from dynamic_rules_version`;
   return Number(v?.["v"] ?? 0);
+}
+
+async function recordDecision(
+  id: string,
+  decision: DecisionKind,
+  actor: DecisionActor,
+  note: string | null = null,
+) {
+  await db()`
+    insert into rule_decisions (rule_id, category, origin, decision, actor, note)
+    select id, kind || ':' || coalesce(target_key, '*'), origin, ${decision}, ${actor}, ${note}
+    from dynamic_rules where id = ${id}`;
 }
 
 async function bumpRuleVersion(note: string) {
@@ -173,25 +206,59 @@ export async function sandboxRule(
     insert into rule_evaluations (rule_id, passed, corpus_size, regressions, broken_fixtures, f1_delta, mode, rules_version, report)
     values (${id}, ${result.passed}, ${result.corpusSize}, ${result.regressions.length},
       ${json(result.regressions.map((r) => r.id))}, ${result.f1Delta}, ${mode}, ${version}, ${json(result)})`;
-  // Only a rule still awaiting a decision changes state; active rules keep theirs.
-  await db()`
-    update dynamic_rules set status = ${result.passed ? "candidate_passed" : "rejected"}
-    where id = ${id} and status in ('candidate', 'evaluating', 'candidate_passed')`;
+  // Only a rule still awaiting a decision changes state; shadow and active rules keep theirs.
+  // A generated rule that passes goes straight to shadow: it cannot affect production there,
+  // and shadow is where it has to prove itself on reports it has never seen.
+  const next = !result.passed
+    ? "rejected"
+    : rule.origin === "autonomous_sandbox"
+      ? "shadow"
+      : "candidate_passed";
+  const [moved] = await db()`
+    update dynamic_rules set status = ${next},
+      shadow_metrics = ${next === "shadow" ? json(newShadowMetrics(new Date().toISOString())) : null}
+    where id = ${id} and status in ('candidate', 'evaluating', 'candidate_passed')
+    returning status`;
+  if (moved && next === "rejected")
+    await recordDecision(id, "rejected", "sandbox", result.reasons.join("; "));
+  if (moved && next === "shadow") await recordDecision(id, "shadowed", "autonomous");
   return { ok: true, result };
 }
 
-/** Analyst activation: re-sandbox now, activate only on a pass, then hot-reload everywhere. */
-export async function activateRule(id: string) {
+/**
+ * Activation by an analyst or by auto-promotion: re-sandbox now, activate only on a pass, then
+ * hot-reload everywhere. A shadow rule that now breaks a fixture is rejected outright.
+ */
+export async function activateRule(id: string, actor: "analyst" | "autonomous" = "analyst") {
   const res = await sandboxRule(id, "fast");
   if (!res.ok || !res.result) return { ok: false, reason: res.reason ?? "sandbox failed" };
-  if (!res.result.passed)
+  if (!res.result.passed) {
+    if (res.result.regressions.length) {
+      const [r] = await db()`
+        update dynamic_rules set status = 'rejected' where id = ${id} and status = 'shadow'
+        returning id`;
+      if (r) await recordDecision(id, "rejected", "sandbox", res.result.reasons.join("; "));
+    }
     return { ok: false, reason: res.result.reasons.join("; "), result: res.result };
+  }
   await db()`
-    update dynamic_rules set status = 'active', promoted_at = now(), decided_by = 'analyst',
-      version = version + 1
+    update dynamic_rules set status = 'active', promoted_at = now(),
+      decided_by = ${actor === "analyst" ? "analyst" : "autonomous_sandbox"}, version = version + 1
     where id = ${id}`;
-  await bumpRuleVersion(`activate ${id}`);
+  await recordDecision(id, actor === "analyst" ? "activated" : "auto_activated", actor);
+  await bumpRuleVersion(`${actor === "analyst" ? "activate" : "auto-activate"} ${id}`);
   return { ok: true, result: res.result };
+}
+
+/** Analyst: send a passed rule to shadow so it earns metrics before going live. */
+export async function shadowRule(id: string) {
+  if (!dbConfigured()) return { ok: false };
+  const rows = await db()`
+    update dynamic_rules set status = 'shadow',
+      shadow_metrics = ${json(newShadowMetrics(new Date().toISOString()))}
+    where id = ${id} and status = 'candidate_passed' returning id`;
+  if (rows.length) await recordDecision(id, "shadowed", "analyst");
+  return { ok: rows.length > 0 };
 }
 
 /** Reject a candidate, or quarantine an active rule (which reloads the snapshot). */
@@ -201,9 +268,22 @@ export async function rejectRule(id: string) {
     update dynamic_rules
     set status = case when status = 'active' then 'quarantined' else 'rejected' end,
       decided_by = 'analyst'
-    where id = ${id} returning status`;
-  if (rows[0]?.["status"] === "quarantined") await bumpRuleVersion(`quarantine ${id}`);
+    where id = ${id} and status not in ('rejected', 'quarantined', 'superseded')
+    returning status`;
+  const status = rows[0]?.["status"] as "rejected" | "quarantined" | undefined;
+  if (status) await recordDecision(id, status, "analyst");
+  if (status === "quarantined") await bumpRuleVersion(`quarantine ${id}`);
   return { ok: rows.length > 0 };
+}
+
+async function quarantine(ids: string[], note: string) {
+  for (const id of ids) {
+    const [r] = await db()`
+      update dynamic_rules set status = 'quarantined', decided_by = 'circuit_breaker'
+      where id = ${id} and status = 'active' returning id`;
+    if (r) await recordDecision(id, "quarantined", "circuit_breaker", note);
+  }
+  if (ids.length) await bumpRuleVersion(`circuit breaker: ${ids.join(", ")}`);
 }
 
 export async function listRules(limit = 100): Promise<RuleView[]> {
@@ -215,8 +295,8 @@ export async function listRules(limit = 100): Promise<RuleView[]> {
       select report, evaluated_at, rules_version from rule_evaluations
       where rule_id = r.id order by evaluated_at desc limit 1
     ) e on true
-    order by case r.status when 'candidate_passed' then 0 when 'active' then 1
-      when 'candidate' then 2 else 3 end, r.created_at desc
+    order by case r.status when 'candidate_passed' then 0 when 'shadow' then 1
+      when 'active' then 2 when 'candidate' then 3 else 4 end, r.created_at desc
     limit ${limit}`;
   return rows.map((r) => ({
     id: r["id"] as string,
@@ -230,6 +310,7 @@ export async function listRules(limit = 100): Promise<RuleView[]> {
     evidence: (r["evidence"] ?? null) as Json,
     createdAt: iso(r["created_at"])!,
     promotedAt: iso(r["promoted_at"]),
+    shadow: (r["shadow_metrics"] as RuleView["shadow"]) ?? null,
     lastEvaluation: r["eval_report"]
       ? {
           ...(r["eval_report"] as SandboxResult),
@@ -252,7 +333,7 @@ export interface MineRunResult {
 
 /**
  * Mine hypotheses from live candidates, propose them and sandbox the new ones. Never
- * activates: candidate_passed waits for an analyst (EVALUATION_FULL_AUTOMATION fas 2).
+ * activates: the ones that pass go to shadow and must earn promotion there.
  */
 export async function mineAndSandbox(): Promise<MineRunResult> {
   const none = { mined: 0, proposed: 0, sandboxed: 0, passed: 0, parserDefects: 0 };
@@ -296,4 +377,196 @@ export async function mineAndSandbox(): Promise<MineRunResult> {
   } catch (e) {
     return { ran: false, reason: e instanceof Error ? e.message : String(e), ...none };
   }
+}
+
+const autopromoteEnabled = () => process.env["RULES_AUTOPROMOTE"]?.toLowerCase() !== "off";
+
+async function decisionsAndTrust() {
+  const rows = await db()`select category, origin, decision, actor from rule_decisions`;
+  const trust = trustScores(rows as unknown as RuleDecision[]);
+  const [c] = await db()`
+    select count(*)::int as n from rule_decisions
+    where decision = 'auto_activated' and decided_at > now() - interval '24 hours'`;
+  return { trust, autoLast24h: Number(c?.["n"] ?? 0) };
+}
+
+export interface ShadowRunResult {
+  ran: boolean;
+  reason: string;
+  rules: number;
+  evaluated: number;
+  promoted: string[];
+}
+
+/**
+ * Score every shadow rule on reports that arrived since it entered shadow, then auto-promote
+ * the ones that meet PROMOTION_POLICY. Runs hourly; ingestion itself never waits for shadows.
+ */
+export async function runShadow(): Promise<ShadowRunResult> {
+  const none = { rules: 0, evaluated: 0, promoted: [] as string[] };
+  if (!dbConfigured()) return { ran: false, reason: "no database configured", ...none };
+  try {
+    const rows = await db()`
+      select id, kind, language, payload, origin, target_key, shadow_metrics
+      from dynamic_rules where status = 'shadow' order by created_at`;
+    if (!rows.length) return { ran: true, reason: "no shadow rules", ...none };
+    const { drones, candidates } = await loadWorld();
+    let { trust, autoLast24h } = await decisionsAndTrust();
+    let active = await activeRows();
+    const promoted: string[] = [];
+    let evaluated = 0;
+    for (const r of rows) {
+      const rule = r as unknown as DynamicRuleRow;
+      const before =
+        (r["shadow_metrics"] as ShadowMetrics | null) ?? newShadowMetrics(new Date().toISOString());
+      const metrics = await shadowStep(
+        before,
+        candidates,
+        drones,
+        new HeuristicExtractor(1, compileRuleSnapshot(active)),
+        new HeuristicExtractor(1, compileRuleSnapshot([...active, rule])),
+      );
+      evaluated += metrics.evaluated - before.evaluated;
+      const category = ruleCategory(r["kind"] as string, r["target_key"] as string | null);
+      const verdict = promotionVerdict({
+        origin: r["origin"] as string,
+        metrics,
+        trust: trust[category],
+        autoActivatedLast24h: autoLast24h,
+        now: new Date(),
+      });
+      const blockers = autopromoteEnabled()
+        ? verdict.reasons
+        : [...verdict.reasons, "auto-promotion disabled (RULES_AUTOPROMOTE=off)"];
+      await db()`update dynamic_rules set shadow_metrics = ${json({ ...metrics, blockers })}
+        where id = ${rule.id}`;
+      if (!verdict.promote || !autopromoteEnabled()) continue;
+      const res = await activateRule(rule.id, "autonomous");
+      if (!res.ok) continue;
+      promoted.push(rule.id);
+      // Later shadows compare against the rule set that is now live, and count the cap anew.
+      active = await activeRows();
+      ({ trust, autoLast24h } = await decisionsAndTrust());
+    }
+    return { ran: true, reason: "ok", rules: rows.length, evaluated, promoted };
+  } catch (e) {
+    return { ran: false, reason: e instanceof Error ? e.message : String(e), ...none };
+  }
+}
+
+export interface SuperviseResult {
+  ran: boolean;
+  reason: string;
+  breaker: { checked: number; tripped: boolean; reasons: string[] };
+  audited: number;
+  quarantined: string[];
+}
+
+/** Active rules audited per night by leave-one-out full sandbox (budget). */
+const MAX_AUDIT_PER_RUN = 10;
+
+/**
+ * Nightly supervision of live rules. 1) Circuit breaker: the full corpus and a fresh sample with
+ * all active rules vs without those activated in the last 24 h - a drop beyond BREAKER_F1_DROP
+ * or any broken fixture quarantines all of them. 2) Audit: each older rule is re-checked against
+ * the full corpus without it; one that now breaks a fixture (the corpus grew) is quarantined.
+ */
+export async function superviseActiveRules(): Promise<SuperviseResult> {
+  const empty = {
+    breaker: { checked: 0, tripped: false, reasons: [] as string[] },
+    audited: 0,
+    quarantined: [] as string[],
+  };
+  if (!dbConfigured()) return { ran: false, reason: "no database configured", ...empty };
+  try {
+    const rows = await db()`
+      select id, kind, language, payload,
+        coalesce(promoted_at > now() - interval '24 hours', false) as recent
+      from dynamic_rules where status = 'active' order by promoted_at desc nulls last`;
+    const all = rows as unknown as (DynamicRuleRow & { recent: boolean })[];
+    if (!all.length) return { ran: true, reason: "no active rules", ...empty };
+    const { drones, candidates } = await loadWorld();
+    const fixtures = await loadFixtures();
+    const version = await rulesVersion();
+    // "proposed" = everything live now; "baseline" = live minus the rules under suspicion.
+    const run = async (suspects: DynamicRuleRow[], mode: "breaker" | "audit") => {
+      const result = await runSandbox({
+        fixtures,
+        candidates,
+        catalog: drones,
+        baseline: new HeuristicExtractor(
+          1,
+          compileRuleSnapshot(all.filter((r) => !suspects.includes(r))),
+        ),
+        proposed: new HeuristicExtractor(1, compileRuleSnapshot(all)),
+        terms: [...new Set(suspects.flatMap(ruleTerms))],
+        mode: "full",
+      });
+      for (const r of suspects)
+        await db()`
+          insert into rule_evaluations (rule_id, passed, corpus_size, regressions, broken_fixtures, f1_delta, mode, rules_version, report)
+          values (${r.id}, ${result.regressions.length === 0}, ${result.corpusSize}, ${result.regressions.length},
+            ${json(result.regressions.map((x) => x.id))}, ${result.f1Delta}, ${mode}, ${version}, ${json(result)})`;
+      return result;
+    };
+
+    const quarantined: string[] = [];
+    const recent = all.filter((r) => r.recent);
+    const breaker = { checked: recent.length, tripped: false, reasons: [] as string[] };
+    if (recent.length) {
+      const verdict = breakerTrips(await run(recent, "breaker"));
+      breaker.tripped = verdict.trips;
+      breaker.reasons = verdict.reasons;
+      if (verdict.trips) {
+        await quarantine(
+          recent.map((r) => r.id),
+          verdict.reasons.join("; "),
+        );
+        quarantined.push(...recent.map((r) => r.id));
+        console.warn("[evaluation:rules] circuit breaker tripped:", verdict.reasons.join("; "));
+      }
+    }
+    let audited = 0;
+    for (const r of all) {
+      if (r.recent || quarantined.includes(r.id) || audited >= MAX_AUDIT_PER_RUN) continue;
+      audited++;
+      const result = await run([r], "audit");
+      if (result.regressions.length) {
+        await quarantine([r.id], `audit: ${result.regressions.length} fixture(s) regress`);
+        quarantined.push(r.id);
+      }
+    }
+    return { ran: true, reason: "ok", breaker, audited, quarantined };
+  } catch (e) {
+    return { ran: false, reason: e instanceof Error ? e.message : String(e), ...empty };
+  }
+}
+
+export interface AutonomyStatus {
+  autopromote: boolean;
+  policy: typeof PROMOTION_POLICY;
+  trust: Record<string, Trust>;
+  autoActivatedLast24h: number;
+  recent: { ruleId: string; decision: string; actor: string; note: string | null; at: string }[];
+}
+
+export async function getAutonomyStatus(): Promise<AutonomyStatus | null> {
+  if (!dbConfigured()) return null;
+  const { trust, autoLast24h } = await decisionsAndTrust();
+  const rows = await db()`
+    select rule_id, decision, actor, note, decided_at from rule_decisions
+    order by decided_at desc limit 20`;
+  return {
+    autopromote: autopromoteEnabled(),
+    policy: PROMOTION_POLICY,
+    trust,
+    autoActivatedLast24h: autoLast24h,
+    recent: rows.map((r) => ({
+      ruleId: r["rule_id"] as string,
+      decision: r["decision"] as string,
+      actor: r["actor"] as string,
+      note: (r["note"] as string | null) ?? null,
+      at: iso(r["decided_at"])!,
+    })),
+  };
 }

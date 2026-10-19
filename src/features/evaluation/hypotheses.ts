@@ -172,7 +172,8 @@ export async function mineHypotheses(
       ]))
         tpTokens.set(`${p.h.key}|${t}`, (tpTokens.get(`${p.h.key}|${t}`) ?? 0) + 1);
     }
-    for (const h of cmp.falsePositives)
+    // A claim the AI was shown and dropped is the strongest false-positive evidence there is.
+    for (const h of [...cmp.falsePositives, ...cmp.rejected.map((x) => x.h)])
       for (const t of new Set(contextTokens(c.raw, h.evidence)))
         note(fpTokens, `${h.key}|${t}`, c, h.evidence);
     for (const w of cmp.wrongKeys) {

@@ -127,7 +127,8 @@ export function EvaluationPage() {
           = missar. Mismatch-typer: <em>exact/semantic</em> = match, <em>differentReading</em> =
           samma värde men annan läsning (t.ex. "up to 120 km"), <em>wrongKey</em> = rätt värde men
           fel nyckel, <em>falsePositive</em> = heuristiken hittade något AI inte hade,
-          <em>miss</em> = AI hittade något heuristiken missade.
+          <em>rejected</em> = AI:n fick se heuristikens värde och strök det, <em>miss</em> = AI
+          hittade något heuristiken missade.
         </p>
       </Panel>
 

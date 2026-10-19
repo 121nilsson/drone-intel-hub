@@ -239,7 +239,15 @@ export interface ExtractedSpec {
   moneyRange?: MoneyRange;
   /** Verbatim clause supporting this observation. */
   evidence?: string;
+  /**
+   * Who stands behind the claim after an AI pass judged the heuristic's observations: "both"
+   * (the AI restated it), "heuristic" (the AI was shown it and dropped it), "ai" (AI only).
+   * Absent on heuristic-only extractions and on candidates stored before provenance existed.
+   */
+  provenance?: SpecProvenance;
 }
+
+export type SpecProvenance = "heuristic" | "ai" | "both";
 
 export interface DetectedSystem {
   name: string;

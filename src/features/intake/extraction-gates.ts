@@ -1,4 +1,6 @@
 import type { ExtractedSpec, Extraction, SystemExtraction } from "@/entities/drone/types";
+import { canonicalUnitForSemantic, semanticKeyFor } from "@/entities/normalization/semantic";
+import { normalizeQuantity, rebaseQuantity } from "@/entities/normalization/units";
 
 export interface ExtractionGate {
   needed: boolean;
@@ -35,21 +37,54 @@ export function needsDeepAI(e: Extraction, threshold: number): ExtractionGate {
 
 const specKey = (s: ExtractedSpec) =>
   `${s.semantic ?? s.key}|${String(s.value).toLowerCase()}|${s.unit ?? ""}`;
+/**
+ * Looser identity for "did the AI restate this?": models rename keys ("max_range" for range) and
+ * rewrite units ("120 km" as 120000 m), so compare semantic key + canonical quantity.
+ */
+function restateKey(s: ExtractedSpec): string {
+  const semantic = semanticKeyFor(s.key, s.label);
+  const text = typeof s.value === "string" ? s.value : `${s.value} ${s.unit ?? ""}`;
+  let q = normalizeQuantity(text);
+  const target = canonicalUnitForSemantic(semantic);
+  if (q && target) q = rebaseQuantity(q, target);
+  const v = q?.canonicalValue;
+  return v !== undefined
+    ? `${semantic}|${Number(v.toPrecision(6))}|${q?.canonicalUnit ?? ""}`
+    : `${semantic}|${String(s.value).trim().toLowerCase()}|${(s.unit ?? "").toLowerCase()}`;
+}
 
-function mergeSpecs(a: ExtractedSpec[], b: ExtractedSpec[]): ExtractedSpec[] {
-  const out = [...a];
+/**
+ * Union of both sides' specs. When `judged` (the refinement is an AI that was shown `a` as
+ * deterministic observations and told to drop what the text does not support), each claim also
+ * records the verdict in `provenance` - the only place that verdict survives, since the union
+ * itself never removes a deterministic fact.
+ */
+function mergeSpecs(a: ExtractedSpec[], b: ExtractedSpec[], judged = false): ExtractedSpec[] {
+  const restated = new Set(judged ? b.map(restateKey) : []);
+  const out = judged
+    ? a.map((s): ExtractedSpec => {
+        const heuristicSaw = s.provenance !== "ai";
+        const aiSaw =
+          s.provenance === "ai" || s.provenance === "both" || restated.has(restateKey(s));
+        return { ...s, provenance: heuristicSaw ? (aiSaw ? "both" : "heuristic") : "ai" };
+      })
+    : [...a];
   const seen = new Set(a.map(specKey));
   for (const spec of b) {
     const key = specKey(spec);
     if (!seen.has(key)) {
       seen.add(key);
-      out.push(spec);
+      out.push(judged ? { ...spec, provenance: "ai" } : spec);
     }
   }
   return out;
 }
 
-function mergeSystems(a: SystemExtraction[], b: SystemExtraction[]): SystemExtraction[] {
+function mergeSystems(
+  a: SystemExtraction[],
+  b: SystemExtraction[],
+  judged = false,
+): SystemExtraction[] {
   const out = a.map((s) => ({ ...s, specs: [...s.specs] }));
   for (const incoming of b) {
     const hit = out.find(
@@ -63,7 +98,7 @@ function mergeSystems(a: SystemExtraction[], b: SystemExtraction[]): SystemExtra
     }
     Object.assign(hit, {
       ...incoming,
-      specs: mergeSpecs(hit.specs, incoming.specs),
+      specs: mergeSpecs(hit.specs, incoming.specs, judged),
       rfBands: [...new Set([...hit.rfBands, ...incoming.rfBands])],
       aliases: [...new Set([...(hit.aliases ?? []), ...(incoming.aliases ?? [])])],
       operators: [...new Set([...(hit.operators ?? []), ...(incoming.operators ?? [])])],
@@ -96,6 +131,7 @@ export function combineExtractions(base: Extraction, refinement: Extraction): Ex
   const systemExtractions = mergeSystems(
     (base.systemExtractions ?? []).filter(kept),
     refinement.systemExtractions ?? [],
+    aiJudged,
   );
   const systems = [
     ...baseSystems,
@@ -122,7 +158,7 @@ export function combineExtractions(base: Extraction, refinement: Extraction): Ex
     ...(name ? { name } : {}),
     aliases: [...new Set([...base.aliases, ...refinement.aliases])],
     operators: [...new Set([...base.operators, ...refinement.operators])],
-    specs: mergeSpecs(base.specs, refinement.specs),
+    specs: mergeSpecs(base.specs, refinement.specs, aiJudged),
     rfBands: [...new Set([...base.rfBands, ...refinement.rfBands])],
     systems,
     systemExtractions,

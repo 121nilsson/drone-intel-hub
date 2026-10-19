@@ -1,4 +1,10 @@
-import type { Candidate, Drone, ExtractedSpec, Extraction } from "@/entities/drone/types";
+import type {
+  Candidate,
+  Drone,
+  ExtractedSpec,
+  Extraction,
+  SpecProvenance,
+} from "@/entities/drone/types";
 import type { IntelExtractor } from "@/shared/contracts/ai";
 import { normalizeExtraction } from "@/entities/normalization/apply";
 import { semanticKeyFor } from "@/entities/normalization/semantic";
@@ -12,7 +18,15 @@ import { isFinancialSpecKey } from "@/features/intake/procurement-routing";
  */
 
 export type MatchType =
-  "exact" | "semantic" | "raw" | "differentReading" | "wrongKey" | "falsePositive" | "miss";
+  | "exact"
+  | "semantic"
+  | "raw"
+  | "differentReading"
+  | "wrongKey"
+  | "falsePositive"
+  | "miss"
+  /** The heuristic still makes a claim the AI was shown and dropped (provenance "heuristic"). */
+  | "rejected";
 
 export interface EvalMismatch {
   candidateId: string;
@@ -152,6 +166,7 @@ export interface Norm {
   min?: number | undefined;
   max?: number | undefined;
   evidence: string;
+  provenance?: SpecProvenance | undefined;
 }
 
 function norm(s: ExtractedSpec): Norm {
@@ -166,6 +181,7 @@ function norm(s: ExtractedSpec): Norm {
     min: n?.range?.min,
     max: n?.range?.max,
     evidence: s.evidence ?? s.raw ?? "",
+    provenance: s.provenance,
   };
 }
 
@@ -206,10 +222,21 @@ export interface SpecComparison {
   falsePositives: Norm[];
   misses: Norm[];
   wrongKeys: { h: Norm; r: Norm }[];
+  /** Heuristic claims matching a reference claim the AI dropped: false positives with proof. */
+  rejected: { h: Norm; r: Norm }[];
 }
 
-/** Greedy one-to-one pairing: same semantic first, then same value under another key. */
-export function compareSpecs(heur: Norm[], ref: Norm[]): SpecComparison {
+/**
+ * Greedy one-to-one pairing: same semantic first, then same value under another key.
+ *
+ * The stored extraction keeps every heuristic claim, so pairing against it as-is would score the
+ * heuristic against its own ingest-time output. Claims the AI dropped (provenance "heuristic")
+ * are therefore never a match: a heuristic claim equal to one is `rejected`, and one the
+ * heuristic no longer makes is not a miss. Candidates stored before provenance behave as before.
+ */
+export function compareSpecs(heur: Norm[], allRef: Norm[]): SpecComparison {
+  const ref = allRef.filter((r) => r.provenance !== "heuristic");
+  const dropped = allRef.filter((r) => r.provenance === "heuristic");
   const usedR = new Set<number>();
   const usedH = new Set<number>();
   const pairs: SpecComparison["pairs"] = [];
@@ -236,11 +263,20 @@ export function compareSpecs(heur: Norm[], ref: Norm[]): SpecComparison {
     usedR.add(ri);
     usedH.add(hi);
   });
+  const rejected: SpecComparison["rejected"] = [];
+  const falsePositives: Norm[] = [];
+  heur.forEach((h, hi) => {
+    if (usedH.has(hi)) return;
+    const r = dropped.find((d) => d.semantic === h.semantic && sameValue(h, d));
+    if (r) rejected.push({ h, r });
+    else falsePositives.push(h);
+  });
   return {
     pairs,
     wrongKeys,
-    falsePositives: heur.filter((_, i) => !usedH.has(i)),
+    falsePositives,
     misses: ref.filter((_, i) => !usedR.has(i)),
+    rejected,
   };
 }
 
@@ -362,6 +398,10 @@ export async function evaluateHeuristic(
     for (const h of cmp.falsePositives) {
       bump(h.semantic, "fp");
       pushMis(c, "falsePositive", h, null);
+    }
+    for (const x of cmp.rejected) {
+      bump(x.h.semantic, "fp");
+      pushMis(c, "rejected", x.h, x.r);
     }
     for (const r of cmp.misses) {
       bump(r.semantic, "fn");

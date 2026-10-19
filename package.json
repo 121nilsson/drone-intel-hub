@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit",
     "green": "node scripts/green-check.mjs",
     "green:save": "node scripts/green-check.mjs --save",
+    "rules:backport": "node scripts/rules-backport.mjs",
     "format": "prettier --write .",
     "test": "vitest run",
     "test:watch": "vitest"

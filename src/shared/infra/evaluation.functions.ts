@@ -12,11 +12,15 @@ import {
 } from "./evaluation.server";
 import {
   activateRule,
+  getAutonomyStatus,
   listRules,
   mineAndSandbox,
   proposeRule,
   rejectRule,
+  runShadow,
   sandboxRule,
+  shadowRule,
+  superviseActiveRules,
   type ProposeInput,
 } from "./rule-sandbox.server";
 
@@ -65,6 +69,24 @@ export const triggerActivateRule = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     return await activateRule(data.id);
   });
+
+export const triggerShadowRule = createServerFn({ method: "POST" })
+  .validator((d: { id: string }) => d)
+  .handler(async ({ data }) => {
+    return await shadowRule(data.id);
+  });
+
+export const triggerRunShadow = createServerFn({ method: "POST" }).handler(async () => {
+  return await runShadow();
+});
+
+export const triggerSupervise = createServerFn({ method: "POST" }).handler(async () => {
+  return await superviseActiveRules();
+});
+
+export const fetchAutonomy = createServerFn({ method: "GET" }).handler(async () => {
+  return await getAutonomyStatus();
+});
 
 export const triggerRejectRule = createServerFn({ method: "POST" })
   .validator((d: { id: string }) => d)
