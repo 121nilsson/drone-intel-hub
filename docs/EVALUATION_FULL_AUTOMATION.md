@@ -1,6 +1,6 @@
 # Spec & Guide: Helt autonom självförbättrande loop utan extern CI
 
-**Status:** Fas 1–3 implementerade (se §6.1 för avvikelser). `add_unit_scale` tillämpas ännu inte.  
+**Status:** Fas 1–3 implementerade, alla fem regeltyper tillämpas (se §6.1 för avvikelser).  
 **Fil:** `docs/EVALUATION_FULL_AUTOMATION.md`  
 **Relaterade specifikationer:** `docs/EVALUATION_MODE.md` (v1, manuell utvärdering), `docs/EVALUATION_AUTOMATION.md` (v2, halvautonom loop med mänskligt godkännande)  
 **Relaterad kod:** `src/features/evaluation/**`, `src/shared/infra/evaluation.*`, `src/shared/infra/heuristics/**`, `src/shared/lexicons/**`, `tasks/evaluation/**`
@@ -469,7 +469,8 @@ Avvikelser, med skäl:
 3. **Villkoret "AI-konfidens ≥ 0.95" är ersatt.** Hypotesgeneratorn är deterministisk och har ingen modellkonfidens. Villkoret är ersatt av skuggprecision ≥ 95 % och minst 5 träffar på rapporter som kom *efter* att regeln gick i skugga.
 4. **Trust räknas bara på mänskliga beslut.** Underlaget är analytikerns aktiveringar och avvisningar av genererade regler per kategori (`kind:targetKey`). Varje karantän räknas emot, oavsett vem som utlöste den. Auto-aktiveringar räknas inte, annars kunde systemet bygga förtroende utan att någon tittat. Därför kan auto-aktivering inte ske förrän en analytiker fattat minst 20 beslut i kategorin.
 5. **Skuggläget körs i batch varje timme**, inte inne i ingestion. Det följer principen om tvåstegsingestion: insamlingen väntar aldrig på skuggor.
-6. **`add_unit_scale` tillämpas inte ännu.** Penningmagnituder läses i normaliseringen (`entities/normalization`), som saknar snapshot-parameter.
+6. **`add_unit_scale` gäller bara valutamagnituder** (multiplikator 1e3, 1e6 eller 1e9, samma skalor som lexikonens `MoneyScale`). Regeln används i heuristikens prisextraktion och `parseMoney`. Ett ord som redan finns i lexikonet vinner alltid, så en regel kan lägga till men aldrig omdefiniera. Regler för avstånd, vikt och fart avvisas som ogiltiga, eftersom enheterna är fasta per mål i motorn. AI-angivna prissträngar normaliseras fortfarande bara mot de statiska lexikonen. För att utvärderingen ska kunna mäta regeln jämförs `cost.unit` på belopp (`money.amount`).
+7. **Drift:** `/migrations` körs vid serverstart (`plugins/migrate.ts`, `schema_migrations`, en transaktion), och aktiveringar serialiseras med ett advisory-lås i Postgres. Regel-loopen laddar kandidater riktat i SQL (de som innehåller regelns termer, nyare än skuggans watermark, eller ett deterministiskt stickprov) i stället för hela samlingen.
 
 Avstängning: `RULES_AUTOPROMOTE=off` stoppar auto-aktivering. Skuggmätningen fortsätter, och panelen visar vad som blockerar varje regel.
 

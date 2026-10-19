@@ -15,8 +15,12 @@ const byLengthDesc = (a: string, b: string) => b.length - a.length;
  * One alternation across all languages, longest first so a short entry ("m") never eats the
  * start of a longer one ("miljard"). Non-capturing so callers keep their own group numbers.
  */
-export function alt(pick: (l: Lexicon) => string[], lexicons: Lexicon[] = LEXICONS): string {
-  const all = [...new Set(lexicons.flatMap(pick))].sort(byLengthDesc);
+export function alt(
+  pick: (l: Lexicon) => string[],
+  lexicons: Lexicon[] = LEXICONS,
+  extra: readonly string[] = [],
+): string {
+  const all = [...new Set([...lexicons.flatMap(pick), ...extra])].sort(byLengthDesc);
   return `(?:${all.join("|")})`;
 }
 
@@ -28,8 +32,12 @@ export const unit = (k: keyof Lexicon["units"]) => alt((l) => l.units[k]);
 export const SCALE: Record<MoneyScale, number> = { thousand: 1e3, million: 1e6, billion: 1e9 };
 const SCALES = Object.keys(SCALE) as MoneyScale[];
 
-/** Every magnitude word in every language. */
-export const magnitudeAlt = () => alt((l) => SCALES.flatMap((s) => l.money.magnitudes[s]));
+/**
+ * Every magnitude word in every language, plus `extra` fragments (dynamic unit-scale rules),
+ * sorted into the same longest-first alternation so a rule's word cannot be eaten by a shorter one.
+ */
+export const magnitudeAlt = (extra: readonly string[] = []) =>
+  alt((l) => SCALES.flatMap((s) => l.money.magnitudes[s]), LEXICONS, extra);
 /** Every currency word or code in every language. */
 export const currencyAlt = () =>
   alt((l) => Object.values(l.money.currencies).flatMap((v) => v ?? []));

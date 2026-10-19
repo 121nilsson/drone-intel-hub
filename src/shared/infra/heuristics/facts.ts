@@ -40,16 +40,16 @@ export const SPEC_EXTRACTORS: Array<(raw: string, add: AddSpec) => void> = [
 ];
 
 /** Unit price, else contract-scale value under its own key - never mixed. */
-function extractMoney(raw: string, add: AddSpec) {
-  const unit = extractUnitPrice(raw);
+function extractMoney(raw: string, add: AddSpec, scales: RuleSnapshot["scales"] = []) {
+  const unit = extractUnitPrice(raw, scales);
   if (unit) {
-    const money = parseMoney(unit.value);
+    const money = parseMoney(unit.value, scales);
     if (money) {
       add("unit_cost", "Unit Cost / Price", money.amount, undefined, unit.evidence);
       return;
     }
   }
-  const deal = extractContractValue(raw);
+  const deal = extractContractValue(raw, scales);
   if (deal) add("contract_value", "Contract value", deal.value, undefined, deal.evidence);
 }
 
@@ -118,7 +118,7 @@ export function extractFacts(raw: string, rules?: RuleSnapshot): Facts {
   extractSensors(raw, facts);
   extractGuidance(raw, add, facts);
   extractPropulsion(raw, facts);
-  extractMoney(raw, add);
+  extractMoney(raw, add, rules?.scales);
   extractFiberSpool(raw, add);
   if (rules?.filters.length)
     facts.specs = applyContextFilters(raw, facts.specs, rules.filters, relabel);

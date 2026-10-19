@@ -13,6 +13,10 @@ RUN npm run build
 FROM node:22-alpine
 WORKDIR /app
 COPY --from=build /app/.output ./.output
+# Read from disk at runtime, relative to the working directory: the migration runner applies
+# /migrations at start, and the rule sandbox replays the checked-in git corpus.
+COPY --from=build /app/migrations ./migrations
+COPY --from=build /app/src/test/fixtures ./src/test/fixtures
 ENV NODE_ENV=production PORT=3010
 EXPOSE 3010
 CMD ["node", ".output/server/index.mjs"]

@@ -170,9 +170,27 @@ export interface Norm {
 }
 
 function norm(s: ExtractedSpec): Norm {
+  const semantic = semanticKeyFor(s.key, s.label);
+  // Prices compare on amount: the heuristic stores a number, an AI often the written string
+  // ("$2 billion", parsed into money.amount). Currency is left out because the heuristic does
+  // not keep it, and the same text rarely states one amount in two currencies.
+  if (semantic === "cost.unit") {
+    const amount = s.money?.amount ?? (typeof s.value === "number" ? s.value : undefined);
+    if (amount !== undefined)
+      return {
+        semantic,
+        key: s.key,
+        value: s.value,
+        unit: s.unit,
+        canonical: amount,
+        canonicalUnit: undefined,
+        evidence: s.evidence ?? s.raw ?? "",
+        provenance: s.provenance,
+      };
+  }
   const n = s.normalized;
   return {
-    semantic: semanticKeyFor(s.key, s.label),
+    semantic,
     key: s.key,
     value: s.value,
     unit: s.unit,

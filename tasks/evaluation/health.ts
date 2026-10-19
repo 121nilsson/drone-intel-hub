@@ -1,4 +1,5 @@
 import { defineTask } from "nitro/task";
+import { ensureMigrated } from "../../src/shared/infra/postgres/migrate.server";
 import { runEvaluationHealth } from "../../src/shared/infra/evaluation.server";
 
 export default defineTask({
@@ -7,6 +8,7 @@ export default defineTask({
     description: "Run heuristic evaluation and alert on regressions",
   },
   async run() {
+    await ensureMigrated();
     const res = await runEvaluationHealth();
     if (res.regression) {
       console.warn(`[evaluation:health] REGRESSION: ${res.details.join("; ")}`);

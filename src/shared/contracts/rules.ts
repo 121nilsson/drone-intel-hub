@@ -61,6 +61,19 @@ export interface CompiledFilter {
   position: "before" | "anywhere_in_scope";
 }
 
+/** A money magnitude word from an add_unit_scale rule ("лям" = 1e6). */
+export interface CompiledScale {
+  id: string;
+  /** Lower-cased literal as matched, whitespace collapsed. */
+  word: string;
+  /** Escaped regex fragment for the word. */
+  pattern: string;
+  multiplier: number;
+}
+
+/** The magnitudes the money parser knows (lexicon MoneyScale); a rule may not invent others. */
+export const SCALE_MULTIPLIERS: readonly number[] = [1e3, 1e6, 1e9];
+
 export interface RuleSnapshot {
   version: number;
   /** Extra stopwords, lower-cased: never reported as a system name. */
@@ -71,7 +84,9 @@ export interface RuleSnapshot {
   cues: readonly CompiledCue[];
   /** Post-extraction guards against cross-class contamination. */
   filters: readonly CompiledFilter[];
-  /** Active rules of a kind this engine version does not apply yet (unit scales). */
+  /** Extra money magnitude words. A static lexicon word always wins over a rule's. */
+  scales: readonly CompiledScale[];
+  /** Active rules of a kind this engine version does not know. */
   unsupported: number;
   /** Rows dropped as malformed, by id, so the UI can say why a rule had no effect. */
   invalid: readonly string[];
@@ -83,6 +98,7 @@ export const emptySnapshot = (): RuleSnapshot => ({
   aliases: new Map(),
   cues: [],
   filters: [],
+  scales: [],
   unsupported: 0,
   invalid: [],
 });
@@ -141,12 +157,29 @@ function compileFilter(id: string, p: Record<string, unknown>): CompiledFilter |
   };
 }
 
+/**
+ * Only currency magnitudes are applied: distance/weight/speed units are fixed per spec target in
+ * the engine, so a rule for them could only ever be a no-op - it is rejected instead.
+ */
+function compileScales(id: string, p: Record<string, unknown>): CompiledScale[] | null {
+  const dimension = str(p["dimension"]) || "currency";
+  const multiplier = Number(p["multiplier"]);
+  if (dimension !== "currency" || !SCALE_MULTIPLIERS.includes(multiplier)) return null;
+  const words = p["unit"] !== undefined ? terms(p, "unit") : terms(p, "terms");
+  if (!words) return null;
+  return words.map((w) => {
+    const word = w.replace(/\s+/g, " ");
+    return { id, word, pattern: esc(word).replace(/ /g, "\\s+"), multiplier };
+  });
+}
+
 /** Build a snapshot from active rows. Malformed rows are skipped, never thrown on. */
 export function compileRuleSnapshot(rows: DynamicRuleRow[], version = 0): RuleSnapshot {
   const stopwords = new Set<string>();
   const aliases = new Map<string, string[]>();
   const cues: CompiledCue[] = [];
   const filters: CompiledFilter[] = [];
+  const scales: CompiledScale[] = [];
   const invalid: string[] = [];
   let unsupported = 0;
   for (const r of rows) {
@@ -179,9 +212,13 @@ export function compileRuleSnapshot(rows: DynamicRuleRow[], version = 0): RuleSn
       const f = compileFilter(r.id, p);
       if (f) filters.push(f);
       else invalid.push(r.id);
+    } else if (r.kind === "add_unit_scale") {
+      const s = compileScales(r.id, p);
+      if (s) scales.push(...s.filter((x) => !scales.some((y) => y.word === x.word)));
+      else invalid.push(r.id);
     } else unsupported++;
   }
-  return { version, stopwords, aliases, cues, filters, unsupported, invalid };
+  return { version, stopwords, aliases, cues, filters, scales, unsupported, invalid };
 }
 
 /** Lower-cased literal words a rule matches on; the sandbox uses them to find affected texts. */
@@ -190,6 +227,7 @@ export function ruleTerms(row: DynamicRuleRow): string[] {
   const out = [
     ...(row.kind === "add_alias" ? [str(p["alias"])] : []),
     ...(row.kind === "add_stopword" ? [str(p["word"])] : []),
+    ...(row.kind === "add_unit_scale" ? [str(p["unit"])] : []),
     ...(Array.isArray(p["terms"]) ? p["terms"].map(str) : []),
     ...(Array.isArray(p["triggerWords"]) ? p["triggerWords"].map(str) : []),
     ...(row.kind === "add_cue" ? [str(p["stem"])] : []),

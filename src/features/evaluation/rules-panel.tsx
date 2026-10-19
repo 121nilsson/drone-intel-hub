@@ -33,7 +33,7 @@ const EXAMPLES: Record<RuleKind, string> = {
   add_alias: `{ "droneId": "lancet-3", "alias": "Izdeliye 52" }`,
   add_cue: `{ "target": "range", "terms": ["дальність польоту"] }`,
   context_filter: `{ "key": "altitude", "triggerWords": ["interception"], "action": "reroute", "targetKey": "target_altitude_max", "maxTokenDistance": 4 }`,
-  add_unit_scale: `{ "unit": "млрд", "multiplier": 1000000000, "dimension": "currency" }`,
+  add_unit_scale: `{ "unit": "лям", "multiplier": 1000000, "dimension": "currency" }`,
 };
 
 const f1 = (n: number) => (n >= 0 ? "+" : "") + n.toFixed(3);

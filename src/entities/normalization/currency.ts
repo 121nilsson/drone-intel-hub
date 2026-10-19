@@ -17,6 +17,12 @@ export interface Money {
   usd?: { value: number; rate: number; rateAsOf: string; rateSource: string };
 }
 
+/**
+ * Extra magnitude words (dynamic add_unit_scale rules), structurally typed so entities need not
+ * know the rule contract. A static lexicon word always wins: a rule can add, never redefine.
+ */
+export type ExtraScales = ReadonlyArray<{ word: string; pattern: string; multiplier: number }>;
+
 export interface MoneyRange {
   min: number;
   max: number;
@@ -44,23 +50,37 @@ const END = String.raw`(?![\p{L}])`;
  * vocabulary the heuristic extractor uses - so "50 miljoner kronor", "45,6 млн грн" and
  * "50 mkr" parse without code changes here. Compiled once, on first use.
  */
-let patterns: { symbol: RegExp; compound: RegExp; word: RegExp } | undefined;
-function re() {
-  if (patterns) return patterns;
-  const mag = magnitudeAlt();
-  return (patterns = {
+type Patterns = { symbol: RegExp; compound: RegExp; word: RegExp };
+/** Keyed by the extra words, so each distinct rule set compiles once. */
+const patterns = new Map<string, Patterns>();
+function re(extra: ExtraScales = []): Patterns {
+  const key = extra.map((x) => x.pattern).join("|");
+  const hit = patterns.get(key);
+  if (hit) return hit;
+  const mag = magnitudeAlt(extra.map((x) => x.pattern));
+  const built: Patterns = {
     symbol: new RegExp(`(C\\$|A\\$|[$€£₽₴₺¥])\\s*(${NUM})(?:\\s*(${mag})\\.?${END})?`, "iu"),
     compound: new RegExp(`(${NUM})\\s*(${compoundAlt()})${END}`, "iu"),
     word: new RegExp(`(${NUM})\\s*(?:(${mag})\\.?\\s*)?(${currencyAlt()})${END}`, "iu"),
-  });
+  };
+  patterns.set(key, built);
+  return built;
 }
 
-function amountOf(num: string, magnitude: string | undefined): number | undefined {
+function amountOf(
+  num: string,
+  magnitude: string | undefined,
+  extra: ExtraScales = [],
+): number | undefined {
   const base = parseNumber(num.trim());
   if (base === undefined) return undefined;
   if (!magnitude) return base;
   // Next to a currency a lowercase "m" is million ("$2.5m"); on its own it would be metres.
-  const mult = magnitude === "m" ? 1e6 : scaleOf(magnitude);
+  const word = magnitude.trim().replace(/\.$/, "").replace(/\s+/g, " ").toLowerCase();
+  const mult =
+    magnitude === "m"
+      ? 1e6
+      : (scaleOf(magnitude) ?? extra.find((x) => x.word === word)?.multiplier);
   return mult === undefined ? undefined : base * mult;
 }
 
@@ -68,18 +88,18 @@ function amountOf(num: string, magnitude: string | undefined): number | undefine
  * Parse a single amount. A range such as "$15,000 - $20,000" returns undefined so it is
  * not collapsed into one number. `$` is USD unless the same text says CAD or AUD.
  */
-export function parseMoney(raw: string): Money | undefined {
+export function parseMoney(raw: string, extra: ExtraScales = []): Money | undefined {
   const text = raw.trim().replace(/[\u00a0\u202f\u2009]/g, " ");
   if (!text) return undefined;
   if (/\d\s*(?:-|–|—|\bto\b)\s*(?:[$€£₽₴₺¥]|[A-Z]{3})?\s*\d/i.test(text)) return undefined;
-  const { symbol, compound, word } = re();
+  const { symbol, compound, word } = re(extra);
 
   const s = text.match(symbol);
   if (s) {
     let currency = SYMBOL[s[1]!.toUpperCase()] ?? SYMBOL[s[1]!];
     if (s[1] === "$" && /\bCAD\b|C\$/.test(text)) currency = "CAD";
     if (s[1] === "$" && /\bAUD\b|A\$/.test(text)) currency = "AUD";
-    const amount = amountOf(s[2]!, s[3]);
+    const amount = amountOf(s[2]!, s[3], extra);
     return currency && amount !== undefined ? { amount, currency, raw } : undefined;
   }
 
@@ -94,18 +114,19 @@ export function parseMoney(raw: string): Money | undefined {
   const w = text.match(word);
   if (!w) return undefined;
   const currency = currencyOf(w[3]!);
-  const amount = amountOf(w[1]!, w[2]);
+  const amount = amountOf(w[1]!, w[2], extra);
   return currency && amount !== undefined ? { amount, currency, raw } : undefined;
 }
 
 /** Parse a closed price range without collapsing it to a misleading point estimate. */
-export function parseMoneyRange(raw: string): MoneyRange | undefined {
+export function parseMoneyRange(raw: string, extra: ExtraScales = []): MoneyRange | undefined {
   const parts = raw.split(/\s*(?:-|–|—|\bto\b)\s*/i);
   if (parts.length !== 2) return undefined;
-  const left = parseMoney(parts[0]!);
+  const left = parseMoney(parts[0]!, extra);
   const rightRaw = parts[1]!;
   const right =
-    parseMoney(rightRaw) ?? parseMoney(left ? `${rightRaw} ${left.currency}` : rightRaw);
+    parseMoney(rightRaw, extra) ??
+    parseMoney(left ? `${rightRaw} ${left.currency}` : rightRaw, extra);
   if (!left || !right || left.currency !== right.currency) return undefined;
   return {
     min: Math.min(left.amount, right.amount),

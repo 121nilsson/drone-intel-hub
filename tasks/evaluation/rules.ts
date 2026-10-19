@@ -1,4 +1,5 @@
 import { defineTask } from "nitro/task";
+import { ensureMigrated } from "../../src/shared/infra/postgres/migrate.server";
 import { mineAndSandbox, superviseActiveRules } from "../../src/shared/infra/rule-sandbox.server";
 
 export default defineTask({
@@ -8,6 +9,7 @@ export default defineTask({
       "Supervise live rules (circuit breaker + audit), then mine and sandbox new hypotheses",
   },
   async run() {
+    await ensureMigrated();
     // Supervision first: a rule quarantined tonight must not be the baseline new hypotheses
     // are sandboxed against.
     const sup = await superviseActiveRules();

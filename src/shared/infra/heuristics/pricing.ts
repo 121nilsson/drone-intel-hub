@@ -1,6 +1,7 @@
 import {
   parseMoney,
   parseMoneyRange,
+  type ExtraScales,
   type Money,
   type MoneyRange,
 } from "@/entities/normalization/currency";
@@ -13,13 +14,18 @@ import { alt, compoundAlt, currencyAlt, magnitudeAlt } from "@/shared/lexicons";
  * dossier for a "$2 billion" arms deal.
  */
 const CUR = "[$€£₽₴]";
-const MAG = magnitudeAlt();
+const STATIC_MAG = magnitudeAlt();
 const CUR_WORD = currencyAlt();
 const COMPOUND = compoundAlt();
-const AMT = `(\\d[\\d,. ]*\\d|\\d)\\s*(${MAG})?`;
 const END = "(?![\\p{L}])";
 
-export function extractPrice(raw: string): string | undefined {
+/**
+ * `extra` = dynamic unit-scale words (RuleSnapshot.scales). They join the same longest-first
+ * magnitude alternation, so "$2 лярда" is read whole once a rule names "лярда".
+ */
+export function extractPrice(raw: string, extra: ExtraScales = []): string | undefined {
+  const MAG = extra.length ? magnitudeAlt(extra.map((x) => x.pattern)) : STATIC_MAG;
+  const AMT = `(\\d[\\d,. ]*\\d|\\d)\\s*(${MAG})?`;
   const re = new RegExp(
     `(${CUR})\\s?${AMT}${END}(?:\\s*(?:-|–|—|to)\\s*${CUR}?\\s?${AMT}${END})?`,
     "u",
@@ -40,10 +46,13 @@ export function extractPrice(raw: string): string | undefined {
 }
 
 /** The figure extractPrice found, as a number in its written currency (range kept as a range). */
-export function extractPriceNumeric(raw: string): Money | MoneyRange | undefined {
-  const text = extractPrice(raw);
+export function extractPriceNumeric(
+  raw: string,
+  extra: ExtraScales = [],
+): Money | MoneyRange | undefined {
+  const text = extractPrice(raw, extra);
   if (!text) return undefined;
-  return parseMoney(text) ?? parseMoneyRange(text);
+  return parseMoney(text, extra) ?? parseMoneyRange(text, extra);
 }
 
 /**
@@ -61,9 +70,12 @@ const TOTAL_CUE = new RegExp(
   "iu",
 );
 
-export function extractUnitPrice(raw: string): { value: string; evidence: string } | undefined {
+export function extractUnitPrice(
+  raw: string,
+  extra: ExtraScales = [],
+): { value: string; evidence: string } | undefined {
   for (const clause of raw.split(/(?<=[.!?;\n])\s+/)) {
-    const value = extractPrice(clause);
+    const value = extractPrice(clause, extra);
     if (!value) continue;
     if (!PRICE_CUE.test(clause) || TOTAL_CUE.test(clause)) continue;
     return { value, evidence: clause.trim().slice(0, 300) };
@@ -72,9 +84,12 @@ export function extractUnitPrice(raw: string): { value: string; evidence: string
 }
 
 /** A contract-scale figure (deal, contract, budget). Kept apart from unit cost on purpose. */
-export function extractContractValue(raw: string): { value: string; evidence: string } | undefined {
+export function extractContractValue(
+  raw: string,
+  extra: ExtraScales = [],
+): { value: string; evidence: string } | undefined {
   for (const clause of raw.split(/(?<=[.!?;\n])\s+/)) {
-    const value = extractPrice(clause);
+    const value = extractPrice(clause, extra);
     if (value && TOTAL_CUE.test(clause)) return { value, evidence: clause.trim().slice(0, 300) };
   }
   return undefined;

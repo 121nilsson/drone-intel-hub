@@ -87,11 +87,78 @@ export interface ProposeInput {
 const iso = (v: unknown) => (v instanceof Date ? v.toISOString() : v ? String(v) : null);
 const json = (v: unknown) => db().json(sanitizeJson(v as JSONValue));
 
-async function loadWorld() {
-  const store = new PostgresStore();
-  const drones = ((await store.load("drones")) ?? []) as unknown as Drone[];
-  const candidates = ((await store.load("candidates")) ?? []) as unknown as Candidate[];
-  return { drones, candidates };
+async function loadCatalog() {
+  return ((await new PostgresStore().load("drones")) ?? []) as unknown as Drone[];
+}
+
+// Targeted candidate loads. The rule loop runs hourly and per click, so it never pulls the whole
+// candidates collection: a rule can only change the output of a text containing one of its
+// terms, and everything else it needs is a bounded, deterministic control sample.
+/** Same eligibility as the sandbox's own filter, applied in SQL. Lazy fragment, nested below. */
+const eligible = () => db()`status <> 'discarded' and length(coalesce(data->>'raw', '')) >= 50`;
+/** Unrelated candidates the sandbox stratifies its control set from. */
+const CONTROL_POOL = 1000;
+const asCandidates = (rows: readonly { data: unknown }[]) => rows.map((r) => r.data as Candidate);
+const likeEscape = (t: string) => `%${t.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+
+/** Newest eligible candidates whose text contains any of the terms (case-insensitive). */
+async function candidatesMentioning(terms: readonly string[], limit = 300) {
+  if (!terms.length) return [];
+  const rows = await db()`
+    select data from candidates where ${eligible()}
+      and data->>'raw' ilike any(${terms.map(likeEscape)})
+    order by created_at desc limit ${limit}`;
+  return asCandidates(rows as unknown as { data: unknown }[]);
+}
+
+/** Deterministic pseudo-random sample: same rows on every call while the table is unchanged. */
+async function candidateSample(n: number) {
+  const rows = await db()`
+    select data from candidates where ${eligible()} order by md5(id) limit ${n}`;
+  return asCandidates(rows as unknown as { data: unknown }[]);
+}
+
+/** Eligible candidates created after a watermark, oldest first. */
+async function candidatesSince(since: string, limit: number) {
+  const rows = await db()`
+    select data from candidates where ${eligible()} and created_at > ${since}
+    order by created_at asc limit ${limit}`;
+  return asCandidates(rows as unknown as { data: unknown }[]);
+}
+
+const mergeById = (...lists: Candidate[][]) => [
+  ...new Map(lists.flat().map((c) => [c.id, c])).values(),
+];
+
+/** Serializes activations across processes (web, tasks): see withActivationLock. */
+const ACTIVATION_LOCK = 7_301_002;
+
+/**
+ * Two activations sandboxed at once would each be checked against a rule set without the
+ * other, so a pair that only breaks in combination would go live and wait for the nightly
+ * breaker. Holding a session advisory lock on a reserved connection makes each activation see
+ * every one before it; the lock dies with the connection if the process does.
+ */
+async function withActivationLock<T>(
+  fn: () => Promise<T>,
+): Promise<T | { ok: false; reason: string }> {
+  const conn = await db().reserve();
+  try {
+    await conn`set lock_timeout = '120s'`;
+    try {
+      await conn`select pg_advisory_lock(${ACTIVATION_LOCK})`;
+    } catch {
+      return { ok: false, reason: "another activation is still running - try again" };
+    }
+    try {
+      return await fn();
+    } finally {
+      await conn`select pg_advisory_unlock(${ACTIVATION_LOCK})`;
+    }
+  } finally {
+    await conn`reset lock_timeout`.catch(() => {});
+    conn.release();
+  }
 }
 
 /** Approved + pending_fix fixtures: latest DB version per id, then git files not in the DB. */
@@ -153,6 +220,19 @@ async function bumpRuleVersion(note: string) {
   await getOrRefreshRuleSnapshot({ force: true });
 }
 
+/**
+ * The key a rule aims at, from its payload, so analyst-written and generated rules of the same
+ * aim share one trust category ("add_stopword:system_name", "add_cue:range").
+ */
+function defaultTargetKey(kind: RuleKind, p: Record<string, unknown>): string | null {
+  const s = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
+  if (kind === "add_stopword" || kind === "add_alias") return "system_name";
+  if (kind === "add_cue") return s(p["target"] ?? p["semanticKey"]);
+  if (kind === "context_filter") return s(p["key"] ?? p["semanticKey"]);
+  if (kind === "add_unit_scale") return "cost.unit";
+  return null;
+}
+
 export async function proposeRule(
   input: ProposeInput,
 ): Promise<{ ok: boolean; id?: string; reason?: string }> {
@@ -166,11 +246,12 @@ export async function proposeRule(
   const compiled = compileRuleSnapshot([row]);
   if (compiled.invalid.includes(id)) return { ok: false, reason: "payload does not compile" };
   const origin = input.origin ?? "analyst";
+  const targetKey = input.targetKey ?? defaultTargetKey(input.kind, input.payload);
   // Re-proposing a rejected or quarantined pattern does not resurrect it; a human must.
   await db()`
     insert into dynamic_rules (id, kind, language, payload, status, origin, target_key, rationale, evidence, decided_by)
     values (${id}, ${input.kind}, ${language}, ${json(input.payload)}, 'candidate', ${origin},
-      ${input.targetKey ?? null}, ${input.rationale ?? null}, ${json(input.evidence ?? null)}, ${origin})
+      ${targetKey}, ${input.rationale ?? null}, ${json(input.evidence ?? null)}, ${origin})
     on conflict (id) do nothing`;
   return { ok: true, id };
 }
@@ -179,7 +260,7 @@ export async function proposeRule(
 export async function sandboxRule(
   id: string,
   mode: "fast" | "full" = "fast",
-  world?: { drones: Drone[]; candidates: Candidate[]; fixtures: EvalFixture[] },
+  world?: { drones: Drone[]; control: Candidate[]; fixtures: EvalFixture[] },
 ): Promise<{ ok: boolean; reason?: string; result?: SandboxResult }> {
   if (!dbConfigured()) return { ok: false, reason: "no database configured" };
   const rule = await loadRule(id);
@@ -190,15 +271,20 @@ export async function sandboxRule(
   const proposedRules = compileRuleSnapshot([...active, rule], version);
   if (proposedRules.invalid.includes(id)) return { ok: false, reason: "payload does not compile" };
 
-  const { drones, candidates } = world ?? (await loadWorld());
+  const drones = world?.drones ?? (await loadCatalog());
   const fixtures = world?.fixtures ?? (await loadFixtures());
+  const terms = ruleTerms(rule);
+  const candidates = mergeById(
+    await candidatesMentioning(terms),
+    world?.control ?? (await candidateSample(CONTROL_POOL)),
+  );
   const result = await runSandbox({
     fixtures,
     candidates,
     catalog: drones,
     baseline: new HeuristicExtractor(1, baselineRules),
     proposed: new HeuristicExtractor(1, proposedRules),
-    terms: ruleTerms(rule),
+    terms,
     mode,
   });
 
@@ -230,6 +316,11 @@ export async function sandboxRule(
  * hot-reload everywhere. A shadow rule that now breaks a fixture is rejected outright.
  */
 export async function activateRule(id: string, actor: "analyst" | "autonomous" = "analyst") {
+  if (!dbConfigured()) return { ok: false, reason: "no database configured" };
+  return withActivationLock(() => activateLocked(id, actor));
+}
+
+async function activateLocked(id: string, actor: "analyst" | "autonomous") {
   const res = await sandboxRule(id, "fast");
   if (!res.ok || !res.result) return { ok: false, reason: res.reason ?? "sandbox failed" };
   if (!res.result.passed) {
@@ -339,10 +430,12 @@ export async function mineAndSandbox(): Promise<MineRunResult> {
   const none = { mined: 0, proposed: 0, sandboxed: 0, passed: 0, parserDefects: 0 };
   if (!dbConfigured()) return { ran: false, reason: "no database configured", ...none };
   try {
-    const { drones, candidates } = await loadWorld();
+    const drones = await loadCatalog();
     const fixtures = await loadFixtures();
+    // The miner stratifies 400 out of this pool; the pool doubles as the sandbox control set.
+    const control = await candidateSample(2 * CONTROL_POOL);
     const heuristic = new HeuristicExtractor(1, await getOrRefreshRuleSnapshot({ force: true }));
-    const mined = await mineHypotheses(candidates, drones, heuristic, { sampleSize: 400, seed: 1 });
+    const mined = await mineHypotheses(control, drones, heuristic, { sampleSize: 400, seed: 1 });
     const known = new Set((await db()`select id from dynamic_rules`).map((r) => r["id"] as string));
     let proposed = 0;
     let sandboxed = 0;
@@ -361,7 +454,7 @@ export async function mineAndSandbox(): Promise<MineRunResult> {
       if (!p.ok || !p.id) continue;
       proposed++;
       if (sandboxed >= MAX_SANDBOX_PER_RUN) continue;
-      const s = await sandboxRule(p.id, "fast", { drones, candidates, fixtures });
+      const s = await sandboxRule(p.id, "fast", { drones, control, fixtures });
       sandboxed++;
       if (s.result?.passed) passed++;
     }
@@ -410,7 +503,14 @@ export async function runShadow(): Promise<ShadowRunResult> {
       select id, kind, language, payload, origin, target_key, shadow_metrics
       from dynamic_rules where status = 'shadow' order by created_at`;
     if (!rows.length) return { ran: true, reason: "no shadow rules", ...none };
-    const { drones, candidates } = await loadWorld();
+    const drones = await loadCatalog();
+    const since = rows
+      .map(
+        (r) => (r["shadow_metrics"] as ShadowMetrics | null)?.watermark ?? new Date().toISOString(),
+      )
+      .sort()[0]!;
+    // shadowStep takes at most 200 per rule; a deeper backlog drains over later runs.
+    const candidates = await candidatesSince(since, 1000);
     let { trust, autoLast24h } = await decisionsAndTrust();
     let active = await activeRows();
     const promoted: string[] = [];
@@ -485,21 +585,23 @@ export async function superviseActiveRules(): Promise<SuperviseResult> {
       from dynamic_rules where status = 'active' order by promoted_at desc nulls last`;
     const all = rows as unknown as (DynamicRuleRow & { recent: boolean })[];
     if (!all.length) return { ran: true, reason: "no active rules", ...empty };
-    const { drones, candidates } = await loadWorld();
+    const drones = await loadCatalog();
     const fixtures = await loadFixtures();
+    const control = await candidateSample(CONTROL_POOL);
     const version = await rulesVersion();
     // "proposed" = everything live now; "baseline" = live minus the rules under suspicion.
     const run = async (suspects: DynamicRuleRow[], mode: "breaker" | "audit") => {
+      const terms = [...new Set(suspects.flatMap(ruleTerms))];
       const result = await runSandbox({
         fixtures,
-        candidates,
+        candidates: mergeById(await candidatesMentioning(terms), control),
         catalog: drones,
         baseline: new HeuristicExtractor(
           1,
           compileRuleSnapshot(all.filter((r) => !suspects.includes(r))),
         ),
         proposed: new HeuristicExtractor(1, compileRuleSnapshot(all)),
-        terms: [...new Set(suspects.flatMap(ruleTerms))],
+        terms,
         mode: "full",
       });
       for (const r of suspects)

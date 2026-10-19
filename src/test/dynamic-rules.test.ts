@@ -73,7 +73,7 @@ describe("dynamic rules phase 1", () => {
     const s = compileRuleSnapshot([
       { id: "a", kind: "add_alias", payload: null },
       { id: "b", kind: "add_cue", payload: { word: "x" } },
-      { id: "c", kind: "add_unit_scale", payload: { unit: "млрд", multiplier: 1e9 } },
+      { id: "c", kind: "add_magic", payload: {} },
     ]);
     expect(s.aliases.size).toBe(0);
     expect(s.invalid).toEqual(["a", "b"]);
