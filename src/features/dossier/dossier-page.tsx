@@ -17,9 +17,8 @@ import { ClaimChip, ProvenanceSheet, type ClaimSelection } from "./provenance-sh
 import { useDrones, useServices } from "@/shared/infra/services";
 import { translateText, generateSystemSummary } from "@/shared/infra/ai-proxy.functions";
 import { buildSystemEvidenceDigest } from "@/shared/infra/system-evidence-digest";
-import { removalImpact, removeDrone } from "@/features/intake/pipeline";
 import { Btn, ConfidenceTag, Loading, Panel, Tag } from "@/shared/ui/primitives";
-import { useRelatedIntel, RelatedRail } from "@/features/intel-graph";
+import { useRelatedIntel, RelatedRail } from "@/shared/ui/intel-graph";
 
 const DOSSIER_SECTIONS = [
   { id: "specs", label: "Specifications" },
@@ -165,7 +164,7 @@ export function SpecTable({ drone }: { drone: Drone }) {
 
 /**
  * Delete a wrongly catalogued entry. Two steps: the first click shows what else the removal
- * touches, the second does it. See removeDrone for what is cleaned up.
+ * touches, the second does it. See CatalogMutations.remove for what is cleaned up.
  */
 function DeleteSystem({ drone }: { drone: Drone }) {
   const svc = useServices();
@@ -177,7 +176,7 @@ function DeleteSystem({ drone }: { drone: Drone }) {
         Delete
       </Btn>
     );
-  const impact = removalImpact(drone.id, svc);
+  const impact = svc.catalog.removalImpact(drone.id);
   const effects = [
     impact.discarded &&
       `${impact.discarded} candidate${impact.discarded === 1 ? "" : "s"} marked discarded`,
@@ -196,7 +195,7 @@ function DeleteSystem({ drone }: { drone: Drone }) {
       <Btn
         variant="danger"
         onClick={() => {
-          removeDrone(drone.id, svc);
+          svc.catalog.remove(drone.id);
           void navigate({ to: "/catalog" });
         }}
       >

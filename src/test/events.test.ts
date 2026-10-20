@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { clusterEvents } from "@/entities/dispatch/events";
-import { stampEvents } from "@/features/sources/auto-ingest";
+import { stampEvents } from "@/shared/infra/ingest/auto-ingest";
 import type { RawDispatch } from "@/entities/dispatch/types";
 import type { DispatchRepository } from "@/shared/contracts/repository";
 

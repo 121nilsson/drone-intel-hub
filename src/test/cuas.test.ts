@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DRONE_HINT } from "@/features/sources/auto-ingest";
+import { DRONE_HINT } from "@/shared/infra/ingest/auto-ingest";
 import { semanticKeyFor } from "@/entities/normalization/semantic";
 import { normalizeQuantity } from "@/entities/normalization/units";
 import { resolveTerm, SEEDED_TERMS } from "@/entities/normalization/taxonomy";

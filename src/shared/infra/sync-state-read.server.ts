@@ -1,4 +1,4 @@
-import type { WorkProgress } from "@/features/sources/auto-ingest";
+import type { WorkProgress } from "@/shared/infra/ingest/auto-ingest";
 import { db, dbConfigured } from "./postgres/db.server";
 
 /** Single global throttle slot for the auto-ingest job. */

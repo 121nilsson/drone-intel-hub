@@ -5,8 +5,8 @@ import {
   processPending,
   requeueFailed,
   requeueStale,
-} from "@/features/sources/auto-ingest";
-import type { PipelineDeps } from "@/features/intake/pipeline";
+} from "@/shared/infra/ingest/auto-ingest";
+import type { PipelineDeps } from "@/shared/infra/ingest/pipeline";
 import type { DispatchRepository } from "@/shared/contracts/repository";
 import type { RawDispatch } from "@/entities/dispatch/types";
 import type { IntelExtractor } from "@/shared/contracts/ai";

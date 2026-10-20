@@ -6,11 +6,11 @@ import {
   nextCooldown,
   processPending,
   type WorkItemEvent,
-} from "@/features/sources/auto-ingest";
+} from "@/shared/infra/ingest/auto-ingest";
 import { MAX_ATTEMPTS, type RawDispatch } from "@/entities/dispatch/types";
 import type { MonitoredSource } from "@/entities/source/types";
 import type { DispatchRepository } from "@/shared/contracts/repository";
-import type { PipelineDeps } from "@/features/intake/pipeline";
+import type { PipelineDeps } from "@/shared/infra/ingest/pipeline";
 import type { FetchedPost } from "@/shared/infra/sources/fetch-posts";
 import type { Candidate, Drone, Extraction } from "@/entities/drone/types";
 import type { IntelExtractor } from "@/shared/contracts/ai";

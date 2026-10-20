@@ -17,7 +17,7 @@ import {
   storeBriefingExecutiveSummary,
 } from "@/shared/infra/briefing.functions";
 import { Btn, Loading, Num, Panel, Tag, Card } from "@/shared/ui/primitives";
-import { useRelatedIntel, RelatedChips } from "@/features/intel-graph";
+import { useRelatedIntel, RelatedChips } from "@/shared/ui/intel-graph";
 
 export function BriefingPage() {
   const [mounted, setMounted] = useState(false);

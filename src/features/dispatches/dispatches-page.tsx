@@ -5,10 +5,10 @@ import { useEffect, useMemo, useState } from "react";
 import { useDispatches, useServices, useSources } from "@/shared/infra/services";
 import type { DispatchStatus } from "@/entities/dispatch/types";
 import { getSyncState, type SyncState } from "@/shared/infra/sources/source-sync.functions";
-import { translateText } from "@/shared/infra/ai-proxy.functions";
 import { Btn, Loading, Panel, Tag, Card } from "@/shared/ui/primitives";
-import { formatProviderError, requeueFailed } from "@/features/sources/auto-ingest";
-import { useRelatedIntel, RelatedInlineToast } from "@/features/intel-graph";
+import { formatProviderError, requeueFailed } from "@/shared/infra/ingest/auto-ingest";
+import { useRelatedIntel, RelatedInlineToast } from "@/shared/ui/intel-graph";
+import { TranslateButton } from "@/shared/ui/translate-button";
 import {
   DISPATCH_FILTERS,
   fromFeedParams,
@@ -83,45 +83,6 @@ function AnalysisDetail({ d }: { d: RawDispatch }) {
         </div>
       )}
     </div>
-  );
-}
-
-export function TranslateButton({ text, model }: { text: string; model: string }) {
-  const fn = useServerFn(translateText);
-  const [busy, setBusy] = useState(false);
-  const [out, setOut] = useState<string | null>(null);
-  const [err, setErr] = useState<string | null>(null);
-  if (out)
-    return (
-      <div className="mt-2 min-w-0 border-l-2 border-primary/30 pl-3">
-        <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-          English translation
-        </p>
-        <p className="mt-0.5 break-words text-sm">{out}</p>
-      </div>
-    );
-  return (
-    <span className="inline-flex flex-wrap items-center gap-2">
-      <Btn
-        variant="ghost"
-        disabled={busy}
-        onClick={async () => {
-          setBusy(true);
-          setErr(null);
-          try {
-            const r = await fn({ data: { text, model } });
-            if (r.ok) setOut(r.translated);
-            else setErr(r.error);
-          } catch (e) {
-            setErr(e instanceof Error ? e.message : "Translation failed");
-          }
-          setBusy(false);
-        }}
-      >
-        {busy ? "Translating…" : "Translate"}
-      </Btn>
-      {err && <span className="font-mono text-[11px] text-destructive">{err}</span>}
-    </span>
   );
 }
 

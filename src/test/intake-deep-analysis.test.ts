@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import { runTwoTier } from "@/features/intake/pipeline";
+import { runTwoTier } from "@/shared/infra/ingest/pipeline";
 import type { Drone, Extraction, Candidate } from "@/entities/drone/types";
 import type { IntelExtractor } from "@/shared/contracts/ai";
-import type { PipelineDeps } from "@/features/intake/pipeline";
+import type { PipelineDeps } from "@/shared/infra/ingest/pipeline";
 
 /**
  * The quick-paste control.

@@ -2,7 +2,7 @@ import {
   BRIEFING_SUMMARY_TTL_MS,
   type BriefingSummaryCache,
   isBriefingSummaryFresh,
-} from "@/features/briefing/briefing-summary-shared";
+} from "@/shared/contracts/briefing-summary";
 
 export { BRIEFING_SUMMARY_TTL_MS, type BriefingSummaryCache };
 

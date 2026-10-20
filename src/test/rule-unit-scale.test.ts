@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { compileRuleSnapshot, type DynamicRuleRow } from "@/shared/contracts/rules";
 import { HeuristicExtractor } from "@/shared/infra/heuristic-ai";
 import { parseMoney } from "@/entities/normalization/currency";
-import { runSandbox } from "@/features/evaluation/sandbox";
+import { runSandbox } from "@/shared/infra/evaluation/sandbox";
 import type { Candidate, Extraction } from "@/entities/drone/types";
 
 const grand: DynamicRuleRow = {

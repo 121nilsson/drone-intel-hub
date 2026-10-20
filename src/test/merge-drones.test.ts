@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mergeDrones } from "@/features/intake/pipeline";
+import { mergeDrones } from "@/shared/infra/catalog-operations";
 import type { Candidate, Drone, SpecAttribute } from "@/entities/drone/types";
 
 const makeDrone = (id: string, over: Partial<Drone> = {}): Drone => ({

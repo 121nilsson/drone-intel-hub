@@ -19,7 +19,7 @@ import {
   isPaused,
   reenable,
   silenceNotice,
-} from "./source-health";
+} from "@/entities/source/health";
 import {
   getSyncState,
   triggerAutoSync,
@@ -40,7 +40,7 @@ import {
   requeueFailed,
   WORK_STALE_MS,
   type WorkProgress,
-} from "./auto-ingest";
+} from "@/shared/infra/ingest/auto-ingest";
 
 const field =
   "w-full min-w-0 max-w-full border border-border bg-background px-2 py-1.5 font-mono text-xs focus:border-primary";

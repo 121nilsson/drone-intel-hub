@@ -4,7 +4,7 @@ import {
   isBriefingSummaryFresh,
   parseBriefingSummaryStored,
   type BriefingSummaryStored,
-} from "@/features/briefing/briefing-summary-shared";
+} from "@/shared/contracts/briefing-summary";
 import { DEFAULT_SETTINGS } from "@/shared/infra/settings-defaults";
 import { BRIEFING_SUMMARY_SYSTEM } from "@/shared/contracts/ai";
 import { chatCompletionOnce } from "@/shared/infra/ai-proxy.server";

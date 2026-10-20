@@ -1,6 +1,7 @@
 import type { Candidate, Drone } from "@/entities/drone/types";
 import type { IntelExtractor } from "@/shared/contracts/ai";
 import { CUE_TARGETS, type RuleKind, type RuleLanguage } from "@/shared/contracts/rules";
+import { FILLER_WORDS } from "@/shared/lexicons/fillers";
 import { normalizeExtraction } from "@/entities/normalization/apply";
 import { semanticKeyFor } from "@/entities/normalization/semantic";
 import { phoneticKey } from "@/entities/drone/name-key";
@@ -50,15 +51,7 @@ const tokens = (s: string) => (s.toLowerCase().match(TOKEN) ?? []) as string[];
 const fold = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase();
 
 /** Function words that are never a useful cue or trigger on their own. */
-const FILLER = new Set(
-  (
-    "the of with and for from that this has have its was were are can will about over than " +
-    "max maximum min minimum approximately around nearly some more less into like also which " +
-    "upto till until reach reaches reaching distance distances " +
-    "до від на по при для около порядка більше более менее менше понад свыше " +
-    "och med för upp till från cirka"
-  ).split(" "),
-);
+const FILLER = FILLER_WORDS;
 const useful = (t: string) => t.length >= 4 && !FILLER.has(t);
 
 export function languageOf(s: string): RuleLanguage {

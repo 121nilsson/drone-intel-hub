@@ -1,6 +1,6 @@
 import { defineTask } from "nitro/task";
 import { ensureMigrated } from "../../src/shared/infra/postgres/migrate.server";
-import { runShadow } from "../../src/shared/infra/rule-sandbox.server";
+import { runShadow } from "../../src/shared/infra/evaluation/rule-sandbox.server";
 
 export default defineTask({
   meta: {

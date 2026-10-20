@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import corpus from "./fixtures/eval-corpus.json";
 import catalog from "./fixtures/eval-catalog.json";
 import { HeuristicExtractor } from "@/shared/infra/heuristic-ai";
-import { checkFixture, type EvalFixture } from "@/features/evaluation/evaluation";
+import { checkFixture, type EvalFixture } from "@/shared/infra/evaluation/evaluation";
 import type { Drone } from "@/entities/drone/types";
 
 const fixtures = corpus as EvalFixture[];

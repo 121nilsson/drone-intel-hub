@@ -11,7 +11,7 @@ import {
   type RuleKind,
   type RuleLanguage,
 } from "@/shared/contracts/rules";
-import { runSandbox, type SandboxResult } from "@/features/evaluation/sandbox";
+import { runSandbox, type SandboxResult } from "@/shared/infra/evaluation/sandbox";
 import {
   breakerTrips,
   newShadowMetrics,
@@ -25,9 +25,9 @@ import {
   type RuleDecision,
   type ShadowMetrics,
   type Trust,
-} from "@/features/evaluation/autonomy";
-import { hypothesisId, mineHypotheses } from "@/features/evaluation/hypotheses";
-import type { EvalFixture } from "@/features/evaluation/evaluation";
+} from "@/shared/infra/evaluation/autonomy";
+import { hypothesisId, mineHypotheses } from "@/shared/infra/evaluation/hypotheses";
+import type { EvalFixture } from "@/shared/infra/evaluation/evaluation";
 import type { Candidate, Drone } from "@/entities/drone/types";
 import type { JSONValue } from "postgres";
 import fs from "node:fs";

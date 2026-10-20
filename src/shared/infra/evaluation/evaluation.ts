@@ -9,7 +9,7 @@ import type { IntelExtractor } from "@/shared/contracts/ai";
 import { normalizeExtraction } from "@/entities/normalization/apply";
 import { semanticKeyFor } from "@/entities/normalization/semantic";
 import { phoneticKey } from "@/entities/drone/name-key";
-import { isFinancialSpecKey } from "@/features/intake/procurement-routing";
+import { isFinancialSpecKey } from "@/entities/procurement/routing";
 
 /**
  * Heuristic evaluation mode. READ-ONLY INVARIANT: this module only calls

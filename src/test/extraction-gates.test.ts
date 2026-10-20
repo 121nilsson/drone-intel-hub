@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { combineExtractions, needsDeepAI, needsFastAI } from "@/features/intake/extraction-gates";
+import { combineExtractions, needsDeepAI, needsFastAI } from "@/entities/drone/extraction-gates";
 import type { Extraction } from "@/entities/drone/types";
 
 const extraction = (over: Partial<Extraction> = {}): Extraction => ({

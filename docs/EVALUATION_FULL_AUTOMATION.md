@@ -3,7 +3,7 @@
 **Status:** Fas 1–3 implementerade, alla fem regeltyper tillämpas (se §6.1 för avvikelser).  
 **Fil:** `docs/EVALUATION_FULL_AUTOMATION.md`  
 **Relaterade specifikationer:** `docs/EVALUATION_MODE.md` (v1, manuell utvärdering), `docs/EVALUATION_AUTOMATION.md` (v2, halvautonom loop med mänskligt godkännande)  
-**Relaterad kod:** `src/features/evaluation/**`, `src/shared/infra/evaluation.*`, `src/shared/infra/heuristics/**`, `src/shared/lexicons/**`, `tasks/evaluation/**`
+**Relaterad kod:** `src/features/evaluation/**`, `src/shared/infra/evaluation/*`, `src/shared/infra/heuristics/**`, `src/shared/lexicons/**`, `tasks/evaluation/**`
 
 ---
 
@@ -478,7 +478,7 @@ _Mål: Göra motorn kapabel att ta emot dynamiska regler synkront utan omstart o
 
 ## 6.1 Implementerat — och var det avviker från planen
 
-**Fas 1–3 är byggda.** Kod: `shared/contracts/rules.ts` (DSL + kompilator), `heuristics/extractors/dynamic.ts` (cue + kontextfilter), `features/evaluation/{sandbox,hypotheses,autonomy}.ts` (rena, read-only), `shared/infra/rule-sandbox.server.ts` (livscykel), `tasks/evaluation/{rules,shadow}.ts`, migrationer 010–012, `scripts/rules-backport.mjs`.
+**Fas 1–3 är byggda.** Kod: `shared/contracts/rules.ts` (DSL + kompilator), `heuristics/extractors/dynamic.ts` (cue + kontextfilter), `shared/infra/evaluation/{sandbox,hypotheses,autonomy}.ts` (rena, read-only), `shared/infra/evaluation/rule-sandbox.server.ts` (livscykel), `tasks/evaluation/{rules,shadow}.ts`, migrationer 010–012, `scripts/rules-backport.mjs`.
 
 Livscykel i drift:
 

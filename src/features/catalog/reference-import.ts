@@ -1,6 +1,6 @@
 import type { Drone, DroneReference, Extraction, ReferenceCard } from "@/entities/drone/types";
 import { normalizeExtraction } from "@/entities/normalization/apply";
-import { attributeSemantic, mergeSpecs } from "@/features/dynamic-specs/spec-engine";
+import { attributeSemantic, mergeSpecs } from "@/entities/drone/spec-engine";
 import { isQid, referenceKey } from "@/shared/infra/wikipedia";
 
 export interface ApplyReferenceReport {

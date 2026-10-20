@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { COLLECTIONS, type Collection } from "@/shared/contracts/store";
-import { MAX_LEASE_MS } from "@/features/sources/auto-ingest";
+import { MAX_LEASE_MS } from "@/shared/infra/ingest/auto-ingest";
 
 const checkCollection = (c: unknown): Collection => {
   if (!COLLECTIONS.includes(c as Collection)) throw new Error("Invalid collection");

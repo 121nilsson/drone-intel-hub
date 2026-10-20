@@ -1,6 +1,9 @@
 import { defineTask } from "nitro/task";
 import { ensureMigrated } from "../../src/shared/infra/postgres/migrate.server";
-import { mineAndSandbox, superviseActiveRules } from "../../src/shared/infra/rule-sandbox.server";
+import {
+  mineAndSandbox,
+  superviseActiveRules,
+} from "../../src/shared/infra/evaluation/rule-sandbox.server";
 
 export default defineTask({
   meta: {

@@ -2,13 +2,17 @@ import { db, dbConfigured } from "@/shared/infra/postgres/db.server";
 import { PostgresStore } from "@/shared/infra/postgres/postgres-store.server";
 import { HeuristicExtractor } from "@/shared/infra/heuristic-ai";
 import { getOrRefreshRuleSnapshot } from "@/shared/infra/heuristics/rule-registry.server";
-import { evaluateHeuristic, compareSpecs, comparableSpecs } from "@/features/evaluation/evaluation";
+import {
+  evaluateHeuristic,
+  compareSpecs,
+  comparableSpecs,
+} from "@/shared/infra/evaluation/evaluation";
 import { normalizeExtraction } from "@/entities/normalization/apply";
 import { semanticKeyFor } from "@/entities/normalization/semantic";
 import { sanitizeJson } from "@/shared/infra/json-sanitize";
 import type { JSONValue } from "postgres";
 import type { Candidate, Drone } from "@/entities/drone/types";
-import type { EvalFixture } from "@/features/evaluation/evaluation";
+import type { EvalFixture } from "@/shared/infra/evaluation/evaluation";
 import { readProviderEnvConfig } from "@/shared/infra/provider-env.server";
 import { chatCompletionOnce } from "@/shared/infra/ai-proxy.server";
 import fs from "node:fs";

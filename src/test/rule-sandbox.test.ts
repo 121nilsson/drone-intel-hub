@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { compileRuleSnapshot, ruleTerms, type DynamicRuleRow } from "@/shared/contracts/rules";
 import { HeuristicExtractor } from "@/shared/infra/heuristic-ai";
-import { runSandbox } from "@/features/evaluation/sandbox";
-import { hypothesisId, mineHypotheses } from "@/features/evaluation/hypotheses";
-import type { EvalFixture } from "@/features/evaluation/evaluation";
+import { runSandbox } from "@/shared/infra/evaluation/sandbox";
+import { hypothesisId, mineHypotheses } from "@/shared/infra/evaluation/hypotheses";
+import type { EvalFixture } from "@/shared/infra/evaluation/evaluation";
 import type { Candidate, Extraction } from "@/entities/drone/types";
 
 const specsOf = async (text: string, rows: DynamicRuleRow[] = []) =>

@@ -33,19 +33,20 @@ Shell navigation and ⌘K search live in `src/shared/ui/app-shell.tsx`.
 - **Selection** (`src/shared/infra/store.functions.ts`): `DATABASE_URL` → PostgreSQL
   (`postgres-store.server.ts`); else Lovable Cloud service role when configured; browser uses
   `LocalStorageStore` or `RemoteStore` (server functions) when Postgres is available.
-- **Repositories:** write-through caches in `src/shared/infra/local-repository.ts` — synchronous
+- **Repositories:** write-through caches in `src/shared/infra/storage/local-repository.ts` — synchronous
   reads for the UI, async `put`/`remove` to the backing store. Failed remote writes are logged to
   the console only (no user-visible sync error yet).
 
-`procurements` is persisted and `extractProcurement()` exists in `pipeline.ts`, but nothing in the
-ingest path calls it yet — no UI surface.
+`procurements` is persisted and a procurement extractor exists
+(`src/shared/infra/procurement-extractor.ts`, behind the `ProcurementExtractor` contract), but
+nothing in the ingest path calls it yet — no UI surface.
 
 ---
 
 ## Ingest — stage 1 (collection)
 
 Implemented in `src/shared/infra/fetch-posts.server.ts`, `fetch-posts.ts`, and
-`src/features/sources/auto-ingest.ts` (`collectSource`).
+`src/shared/infra/ingest/auto-ingest.ts` (`collectSource`).
 
 - Bounded parallel fetches with per-host pooling and `FETCH_TIMEOUT_MS`.
 - **Web / RSS bodies:** Mozilla Readability via `src/shared/infra/article.server.ts` (server-only;
@@ -63,7 +64,7 @@ Implemented in `src/shared/infra/fetch-posts.server.ts`, `fetch-posts.ts`, and
 
 ## Ingest — stage 2 (processing)
 
-Same pipeline as manual Queue paste: `runTwoTier` in `src/features/intake/pipeline.ts`.
+Same pipeline as manual Queue paste: `runTwoTier` in `src/shared/infra/ingest/pipeline.ts`.
 
 1. Heuristic extractor (`src/shared/infra/heuristic-ai.ts`) when `heuristicFirst` is on.
 2. Tier 1 / tier 2 OpenAI-compatible models when configured (`openai-compatible-ai.ts`), with
@@ -87,7 +88,7 @@ Postgres leases are available (`004_dispatch_lease.sql`).
 ## Normalization
 
 Runs on the extraction write path (`normalizeExtraction` in `src/entities/normalization/apply.ts`,
-spec semantics in `src/features/dynamic-specs/spec-engine.ts`).
+spec semantics in `src/entities/drone/spec-engine.ts`).
 
 - Numeric units, currency strings, RF frequencies → IEEE/NATO bands (recomputed from MHz where
   possible).

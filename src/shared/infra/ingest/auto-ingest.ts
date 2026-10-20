@@ -4,7 +4,7 @@ import { MIN_CHARS_FOR_DEDUPE, simHash64 } from "@/entities/dispatch/simhash";
 import { clusterEvents } from "@/entities/dispatch/events";
 import type { FetchedPost } from "@/shared/infra/sources/source-fetch.functions";
 import type { DispatchRepository } from "@/shared/contracts/repository";
-import { runTwoTier, type PipelineDeps, type PipelineResult } from "@/features/intake/pipeline";
+import { runTwoTier, type PipelineDeps, type PipelineResult } from "@/shared/infra/ingest/pipeline";
 import type { Drone } from "@/entities/drone/types";
 import { ProviderOutageError } from "@/shared/contracts/ai";
 import { EXTRACTION_PROMPT_VERSION } from "@/shared/contracts/extraction.schema";

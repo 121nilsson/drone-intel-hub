@@ -4,10 +4,10 @@ import {
   leaseFor,
   processPending,
   MAX_LEASE_MS,
-} from "@/features/sources/auto-ingest";
+} from "@/shared/infra/ingest/auto-ingest";
 import { MAX_ATTEMPTS, type RawDispatch } from "@/entities/dispatch/types";
 import type { DispatchRepository } from "@/shared/contracts/repository";
-import type { PipelineDeps } from "@/features/intake/pipeline";
+import type { PipelineDeps } from "@/shared/infra/ingest/pipeline";
 import type { Candidate, Drone, Extraction } from "@/entities/drone/types";
 import type { IntelExtractor } from "@/shared/contracts/ai";
 

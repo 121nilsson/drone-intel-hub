@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { processPending } from "@/features/sources/auto-ingest";
-import type { PipelineDeps } from "@/features/intake/pipeline";
+import { processPending } from "@/shared/infra/ingest/auto-ingest";
+import type { PipelineDeps } from "@/shared/infra/ingest/pipeline";
 import type { DispatchRepository } from "@/shared/contracts/repository";
 import type { RawDispatch } from "@/entities/dispatch/types";
 import { ProviderOutageError, type IntelExtractor } from "@/shared/contracts/ai";
-import { PROVIDER_OUTAGE_KINDS, providerErrorKind } from "@/features/sources/auto-ingest";
+import { PROVIDER_OUTAGE_KINDS, providerErrorKind } from "@/shared/infra/ingest/auto-ingest";
 import type { Candidate, Drone, Extraction } from "@/entities/drone/types";
 
 const row = (id: string, text: string): RawDispatch => ({

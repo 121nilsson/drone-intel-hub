@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { runTwoTier, type PipelineDeps } from "@/features/intake/pipeline";
+import { runTwoTier, type PipelineDeps } from "@/shared/infra/ingest/pipeline";
 import type { IntelExtractor } from "@/shared/contracts/ai";
 import type { Candidate, Drone, Extraction } from "@/entities/drone/types";
 

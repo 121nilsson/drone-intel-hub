@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Candidate, Extraction } from "@/entities/drone/types";
 import type { IntelExtractor } from "@/shared/contracts/ai";
-import { evaluateHeuristic, numbersClose, platformOf } from "@/features/evaluation/evaluation";
+import { evaluateHeuristic, numbersClose, platformOf } from "@/shared/infra/evaluation/evaluation";
 
 const ext = (specs: Extraction["specs"], name?: string): Extraction => ({
   ...(name ? { name } : {}),

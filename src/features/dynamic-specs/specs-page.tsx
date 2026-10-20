@@ -2,7 +2,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { useDrones, useServices } from "@/shared/infra/services";
 import { Btn, ListRow, Loading, Panel, PageTitle, Tag } from "@/shared/ui/primitives";
-import { allSpecKeys } from "./spec-engine";
+import { allSpecKeys } from "@/entities/drone/spec-engine";
 
 export function SpecsPage() {
   const drones = useDrones();

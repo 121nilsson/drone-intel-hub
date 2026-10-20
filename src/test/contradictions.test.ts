@@ -3,7 +3,7 @@ import {
   CONTRADICTION_CONFIDENCE,
   adjudicateContradictions,
   needsCheck,
-} from "@/features/intake/contradictions";
+} from "@/shared/infra/ingest/contradictions";
 import { consensus } from "@/entities/drone/consensus";
 import { openAIContradictionAdjudicator } from "@/shared/infra/openai-compatible-ai";
 import { ProviderOutageError, type ContradictionAdjudicator } from "@/shared/contracts/ai";

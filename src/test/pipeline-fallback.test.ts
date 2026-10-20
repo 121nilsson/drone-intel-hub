@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { notASystemName, runTwoTier, type PipelineDeps } from "@/features/intake/pipeline";
+import { notASystemName, runTwoTier, type PipelineDeps } from "@/shared/infra/ingest/pipeline";
 import { HeuristicExtractor } from "@/shared/infra/heuristic-ai";
 import { ProviderOutageError, type IntelExtractor } from "@/shared/contracts/ai";
 import type { Candidate, Drone, Extraction } from "@/entities/drone/types";

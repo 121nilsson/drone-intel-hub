@@ -10,7 +10,7 @@ import {
 } from "@/entities/normalization/spectrum-bands";
 import { useDrones, useServices } from "@/shared/infra/services";
 import { Loading, Panel, Card } from "@/shared/ui/primitives";
-import { useRelatedIntel, RelatedRail } from "@/features/intel-graph";
+import { useRelatedIntel, RelatedRail } from "@/shared/ui/intel-graph";
 
 const EXPOSURE: Record<Exposure, { label: string; cls: string }> = {
   jammed: { label: "Jammed", cls: "border-destructive/60 bg-destructive/10 text-destructive" },

@@ -7,7 +7,7 @@ import {
   type Cooldown,
   type SyncReport,
   type WorkProgress,
-} from "@/features/sources/auto-ingest";
+} from "@/shared/infra/ingest/auto-ingest";
 import { db, dbConfigured } from "../postgres/db.server";
 import { sanitizeJson } from "@/shared/infra/json-sanitize";
 import {

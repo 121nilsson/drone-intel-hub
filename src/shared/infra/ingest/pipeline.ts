@@ -4,27 +4,22 @@ import type {
   Drone,
   Extraction,
   ExtractedSpec,
-  SpecAttribute,
   SystemExtraction,
 } from "@/entities/drone/types";
 import { ProviderOutageError, type IntelExtractor } from "@/shared/contracts/ai";
 import type {
   CandidateRepository,
-  DispatchRepository,
   DroneRepository,
   ProcurementRepository,
 } from "@/shared/contracts/repository";
-import { procurementsFrom, splitFinancialSpecs } from "./procurement-routing";
+import { procurementsFrom, splitFinancialSpecs } from "@/entities/procurement/routing";
 import type { TaxonomyCandidateRepository } from "@/shared/contracts/taxonomy";
-import type { Procurement } from "@/entities/procurement/types";
 import { mergeLinks, normalizeExtraction, toRFLink } from "@/entities/normalization/apply";
-import { attributeSemantic, mergeSpecs } from "@/features/dynamic-specs/spec-engine";
+import { mergeSpecs } from "@/entities/drone/spec-engine";
 import { counterpartIdsFor, linkCounterparts } from "@/entities/drone/relations";
-import { chatCompletionOnce } from "@/shared/infra/ai-proxy.server";
-import { combineExtractions, needsDeepAI, needsFastAI } from "./extraction-gates";
+import { combineExtractions, needsDeepAI, needsFastAI } from "@/entities/drone/extraction-gates";
 import { outletKey } from "@/entities/source/outlet-record";
 import { linkVariant, mergeDroneIntelligence } from "@/entities/drone/merge-intelligence";
-import { ProcurementExtractionSchema } from "@/shared/contracts/extraction.schema";
 import { phoneticKey, phoneticText } from "@/entities/drone/name-key";
 import { organizationKey } from "@/entities/drone/types";
 
@@ -770,282 +765,6 @@ export function promote(
   return changed.find((x) => x.id === drone.id) ?? drone;
 }
 
-export function mergeDrones(
-  keepId: string,
-  mergeId: string,
-  d: Pick<PipelineDeps, "drones" | "candidates">,
-  reason?: string,
-): Drone | undefined {
-  if (keepId === mergeId) return undefined;
-  const keep = d.drones.get(keepId);
-  const merge = d.drones.get(mergeId);
-  if (!keep || !merge) return undefined;
-
-  // 1. Merge metadata & descriptive fields
-  const name =
-    keep.name.startsWith("Uncataloged") && !merge.name.startsWith("Uncataloged")
-      ? merge.name
-      : keep.name;
-  const cyrillic = keep.cyrillic || merge.cyrillic;
-  const aliases = [
-    ...new Set([...keep.aliases, ...merge.aliases, ...(merge.name !== name ? [merge.name] : [])]),
-  ].filter((a) => a.toLowerCase() !== name.toLowerCase());
-  const domain = keep.domain && keep.domain !== "Multi" ? keep.domain : merge.domain || "Multi";
-  const origin = keep.origin && keep.origin !== "??" ? keep.origin : merge.origin || "??";
-  const manufacturer = keep.manufacturer || merge.manufacturer;
-  const operators = [...new Set([...keep.operators, ...merge.operators])];
-  const propulsion =
-    keep.propulsion && keep.propulsion !== "Unknown"
-      ? keep.propulsion
-      : merge.propulsion || "Unknown";
-  const summary =
-    (keep.summary?.length ?? 0) >= (merge.summary?.length ?? 0) ? keep.summary : merge.summary;
-
-  // 2. Merge specs preserving all claims and provenance
-  const specsMap = new Map<string, SpecAttribute>();
-  for (const s of keep.specs) {
-    specsMap.set(attributeSemantic(s), { ...s, claims: [...s.claims] });
-  }
-  for (const s of merge.specs) {
-    const existing = specsMap.get(attributeSemantic(s));
-    if (existing) {
-      for (const claim of s.claims) {
-        const isDuplicate = existing.claims.some(
-          (c) => String(c.value) === String(claim.value) && c.source === claim.source,
-        );
-        if (!isDuplicate) {
-          existing.claims.push(claim);
-        }
-      }
-    } else {
-      specsMap.set(attributeSemantic(s), {
-        ...s,
-        semantic: attributeSemantic(s),
-        claims: [...s.claims],
-      });
-    }
-  }
-
-  // 3. Merge RF links
-  const rf = mergeLinks(keep.rf, merge.rf);
-
-  // 4. Merge supply components
-  const components = [...keep.components];
-  for (const comp of merge.components) {
-    const exists = components.some(
-      (c) =>
-        c.part.toLowerCase() === comp.part.toLowerCase() &&
-        c.manufacturer.toLowerCase() === comp.manufacturer.toLowerCase(),
-    );
-    if (!exists) components.push(comp);
-  }
-
-  // 5. Merge evolution history (sorted by date)
-  const mergeEvolution = merge.evolution.map((e) => ({
-    ...e,
-    description: e.description.includes(merge.name)
-      ? e.description
-      : `[${merge.name}] ${e.description}`,
-  }));
-  const evolution = [
-    ...keep.evolution,
-    {
-      date: new Date().toISOString(),
-      kind: "other" as const,
-      description:
-        reason || `Merged duplicate system '${merge.name}' (${mergeId}) into '${name}' (${keepId})`,
-      source: "catalog-merge",
-    },
-    ...mergeEvolution,
-  ].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-
-  // 6. Merge counterpart IDs (cleaning up references to self and merged id)
-  const counterpartIds = [...new Set([...keep.counterpartIds, ...merge.counterpartIds])].filter(
-    (id) => id !== keepId && id !== mergeId,
-  );
-
-  const createdAt =
-    keep.createdAt && merge.createdAt
-      ? new Date(keep.createdAt) < new Date(merge.createdAt)
-        ? keep.createdAt
-        : merge.createdAt
-      : keep.createdAt || merge.createdAt || new Date().toISOString();
-
-  const result: Drone = {
-    id: keepId,
-    name,
-    ...(cyrillic ? { cyrillic } : {}),
-    aliases,
-    domain,
-    origin,
-    ...(manufacturer ? { manufacturer } : {}),
-    operators,
-    propulsion,
-    ...(keep.propulsionId || merge.propulsionId
-      ? { propulsionId: keep.propulsionId ?? merge.propulsionId }
-      : {}),
-    ...(keep.installation || merge.installation
-      ? { installation: keep.installation ?? merge.installation }
-      : {}),
-    ...(keep.installationId || merge.installationId
-      ? { installationId: keep.installationId ?? merge.installationId }
-      : {}),
-    summary,
-    specs: Array.from(specsMap.values()),
-    rf,
-    components,
-    payloads: [
-      ...(keep.payloads ?? []),
-      ...(merge.payloads ?? []).filter(
-        (p) => !(keep.payloads ?? []).some((x) => x.name === p.name && x.weightKg === p.weightKg),
-      ),
-    ],
-    sensors: [
-      ...(keep.sensors ?? []),
-      ...(merge.sensors ?? []).filter(
-        (s) => !(keep.sensors ?? []).some((x) => x.name === s.name && x.model === s.model),
-      ),
-    ],
-    evolution,
-    counterpartIds,
-    ...(keep.variantOfId || merge.variantOfId
-      ? { variantOfId: keep.variantOfId ?? merge.variantOfId }
-      : {}),
-    variantIds: [...new Set([...(keep.variantIds ?? []), ...(merge.variantIds ?? [])])].filter(
-      (id) => id !== keepId && id !== mergeId,
-    ),
-    ...(keep.reference || merge.reference ? { reference: keep.reference ?? merge.reference } : {}),
-    createdAt,
-    updatedAt: new Date().toISOString(),
-  };
-
-  // Upsert merged target
-  d.drones.upsert(result);
-
-  // 7. Update counterpart links on other drones pointing to mergeId
-  for (const other of d.drones.list()) {
-    if (other.id === keepId || other.id === mergeId) continue;
-    if (
-      other.counterpartIds.includes(mergeId) ||
-      other.variantOfId === mergeId ||
-      other.variantIds?.includes(mergeId)
-    ) {
-      const updated = [
-        ...new Set(
-          other.counterpartIds
-            .map((cId) => (cId === mergeId ? keepId : cId))
-            .filter((cId) => cId !== other.id),
-        ),
-      ];
-      d.drones.upsert({
-        ...other,
-        counterpartIds: updated,
-        ...(other.variantOfId === mergeId ? { variantOfId: keepId } : {}),
-        ...(other.variantIds
-          ? {
-              variantIds: [
-                ...new Set(other.variantIds.map((id) => (id === mergeId ? keepId : id))),
-              ],
-            }
-          : {}),
-        updatedAt: new Date().toISOString(),
-      });
-    }
-  }
-
-  // 8. Update candidates resolved into mergeId
-  if (d.candidates) {
-    for (const c of d.candidates.list()) {
-      if (c.resolvedInto === mergeId) {
-        d.candidates.update(c.id, { resolvedInto: keepId });
-      }
-    }
-  }
-
-  // 9. Remove merged drone
-  d.drones.remove?.(mergeId);
-
-  return result;
-}
-
-export interface RemoveDroneReport {
-  /** Other catalog entries whose counterpart or variant links pointed at the removed one. */
-  unlinked: number;
-  /** Candidates that had been promoted or merged into it, now discarded by the analyst. */
-  discarded: number;
-  /** Feed posts whose provenance listed it. */
-  dispatches: number;
-}
-
-/**
- * What removing an entry would touch, without changing anything. The dossier shows this before
- * the analyst confirms.
- */
-export function removalImpact(
-  id: string,
-  d: Pick<PipelineDeps, "drones" | "candidates"> & { dispatches?: DispatchRepository },
-): RemoveDroneReport {
-  return {
-    unlinked: d.drones.list().filter((x) => x.id !== id && linksTo(x, id)).length,
-    discarded: d.candidates.list().filter((c) => c.resolvedInto === id).length,
-    dispatches: (d.dispatches?.list() ?? []).filter((x) => x.droneIds?.includes(id)).length,
-  };
-}
-
-function linksTo(drone: Drone, id: string): boolean {
-  return (
-    drone.counterpartIds.includes(id) ||
-    drone.variantOfId === id ||
-    (drone.variantIds?.includes(id) ?? false)
-  );
-}
-
-/**
- * Remove a catalog entry an analyst has judged wrong (a unit or an outlet promoted as a system).
- *
- * Nothing is left pointing at it: other entries lose their links to it, feed posts drop it from
- * their provenance, and the candidates that created or fed it become "discarded by the analyst".
- * That last part is also what keeps it out: auto-promotion refuses a name an analyst has rejected
- * (see rejectedByAnalyst), so the next post naming it goes to the Queue instead of straight back
- * into the catalog. The candidates keep `resolvedInto` as history; the Queue shows it as deleted.
- */
-export function removeDrone(
-  id: string,
-  d: Pick<PipelineDeps, "drones" | "candidates"> & { dispatches?: DispatchRepository },
-): RemoveDroneReport | undefined {
-  if (!d.drones.get(id)) return undefined;
-  const report: RemoveDroneReport = { unlinked: 0, discarded: 0, dispatches: 0 };
-  const now = new Date().toISOString();
-
-  for (const other of d.drones.list()) {
-    if (other.id === id || !linksTo(other, id)) continue;
-    const { variantOfId, ...rest } = other;
-    d.drones.upsert({
-      ...rest,
-      ...(variantOfId && variantOfId !== id ? { variantOfId } : {}),
-      counterpartIds: other.counterpartIds.filter((x) => x !== id),
-      ...(other.variantIds ? { variantIds: other.variantIds.filter((x) => x !== id) } : {}),
-      updatedAt: now,
-    });
-    report.unlinked++;
-  }
-
-  for (const c of d.candidates.list()) {
-    if (c.resolvedInto !== id) continue;
-    d.candidates.update(c.id, { status: "discarded", resolvedBy: "analyst" });
-    report.discarded++;
-  }
-
-  for (const post of d.dispatches?.list() ?? []) {
-    if (!post.droneIds?.includes(id)) continue;
-    d.dispatches!.update(post.id, { droneIds: post.droneIds.filter((x) => x !== id) });
-    report.dispatches++;
-  }
-
-  d.drones.remove?.(id);
-  return report;
-}
-
 /**
  * True when an analyst has already rejected this name: deleted the entry it created, or
  * discarded a candidate carrying it. Auto-promotion defers to that judgement.
@@ -1110,11 +829,6 @@ export function mergeInto(
   d.drones.upsert(merged);
   d.candidates.update(c.id, { status: "merged", resolvedInto: droneId });
 }
-
-const PROCURE_SYS = `You are a defense procurement analyst. Extract contract and grant information from the report.
-Reply in json with keys: company (string), country (ISO2), amount (string|null), currency (string|null),
-program (string|null), product (string|null), customer (string|null), announcedAt (string|null), notes (string|null).
-Only report information that appears in the text. If no procurement info is found, return null for all fields.`;
 export function recordMention(
   c: Candidate,
   droneId: string,
@@ -1139,44 +853,4 @@ export function recordMention(
   d.drones.upsert(recorded);
   d.candidates.update(c.id, { status: "merged", resolvedInto: droneId, resolvedBy: "analyst" });
   return recorded;
-}
-
-export async function extractProcurement(
-  raw: string,
-  source: string,
-  cfg: { baseUrl: string; apiKey: string; model: string },
-): Promise<Procurement | null> {
-  const r = await chatCompletionOnce({
-    baseUrl: cfg.baseUrl,
-    apiKey: cfg.apiKey,
-    model: cfg.model,
-    system: PROCURE_SYS,
-    prompt: raw,
-    json: true,
-    tier: "tier2",
-  });
-  if (!r.ok) return null;
-  try {
-    const parsed = ProcurementExtractionSchema.safeParse(
-      JSON.parse(r.content.replace(/^```json|```$/g, "").trim()),
-    );
-    if (!parsed.success) return null;
-    const j = parsed.data;
-    return {
-      id: crypto.randomUUID(),
-      company: j.company,
-      country: j.country,
-      ...(j.amount ? { amount: j.amount } : {}),
-      ...(j.currency ? { currency: j.currency } : {}),
-      ...(j.program ? { program: j.program } : {}),
-      ...(j.product ? { product: j.product } : {}),
-      ...(j.customer ? { customer: j.customer } : {}),
-      ...(j.announcedAt ? { announcedAt: j.announcedAt } : {}),
-      source,
-      ...(j.notes ? { notes: j.notes } : {}),
-      createdAt: new Date().toISOString(),
-    };
-  } catch {
-    return null;
-  }
 }

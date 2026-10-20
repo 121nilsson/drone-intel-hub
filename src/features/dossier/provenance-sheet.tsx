@@ -10,7 +10,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Tag } from "@/shared/ui/primitives";
-import { TranslateButton } from "@/features/dispatches/dispatches-page";
+import { TranslateButton } from "@/shared/ui/translate-button";
 
 export interface ClaimSelection {
   spec: SpecAttribute;
@@ -94,7 +94,7 @@ export function ProvenanceSheet({
                   }}
                   className="shrink-0 font-mono text-xs text-primary hover:underline"
                 >
-                  {dispatch ? "Visa posten →" : "Sök i flödet →"}
+                  {dispatch ? "View post →" : "Search in feed →"}
                 </Link>
               </SheetDescription>
             </SheetHeader>

@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { traceFailure, traceItem, traceLevel, traceStage } from "@/shared/infra/pipeline-trace";
-import { processPending } from "@/features/sources/auto-ingest";
+import { processPending } from "@/shared/infra/ingest/auto-ingest";
 import type { DispatchRepository } from "@/shared/contracts/repository";
-import type { PipelineDeps } from "@/features/intake/pipeline";
+import type { PipelineDeps } from "@/shared/infra/ingest/pipeline";
 import type { IntelExtractor } from "@/shared/contracts/ai";
 
 /**

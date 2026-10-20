@@ -17,7 +17,7 @@ import {
   mismatchesToFixtures,
   type EvalReport,
   type Prf,
-} from "./evaluation";
+} from "@/shared/infra/evaluation/evaluation";
 import {
   triggerEvaluation,
   fetchEvalReports,
@@ -25,8 +25,8 @@ import {
   triggerGitImport,
   triggerHarvest,
   triggerAdjudication,
-} from "@/shared/infra/evaluation.functions";
-import type { EvalKeyTrend } from "@/shared/infra/evaluation.server";
+} from "@/shared/infra/evaluation/evaluation.functions";
+import type { EvalKeyTrend } from "@/shared/infra/evaluation/evaluation.server";
 import { RulesPanel } from "./rules-panel";
 
 const pct = (n: number) => `${Math.round(n * 100)}%`;

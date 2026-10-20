@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { removalImpact, removeDrone, runTwoTier } from "@/features/intake/pipeline";
+import { removalImpact, removeDrone } from "@/shared/infra/catalog-operations";
+import { runTwoTier } from "@/shared/infra/ingest/pipeline";
 import type { IntelExtractor } from "@/shared/contracts/ai";
 import type { DispatchRepository } from "@/shared/contracts/repository";
 import type { RawDispatch } from "@/entities/dispatch/types";

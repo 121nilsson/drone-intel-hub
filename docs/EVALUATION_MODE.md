@@ -2,7 +2,7 @@
 
 **Status:** Implementerat (v1 + automation)  
 **Fil:** `docs/EVALUATION_MODE.md`  
-**Relaterad kod:** `src/features/evaluation/evaluation.ts`, `src/features/evaluation/evaluation-page.tsx`, `src/shared/infra/evaluation.server.ts`, `src/shared/infra/evaluation.functions.ts`, `src/test/eval-corpus.test.ts`, `src/test/eval-mismatches.test.ts`, `src/test/fixtures/eval-corpus.json`, `src/test/fixtures/eval-mismatches.json`, `src/test/fixtures/eval-catalog.json`
+**Relaterad kod:** `src/shared/infra/evaluation/evaluation.ts`, `src/features/evaluation/evaluation-page.tsx`, `src/shared/infra/evaluation/evaluation.server.ts`, `src/shared/infra/evaluation/evaluation.functions.ts`, `src/test/eval-corpus.test.ts`, `src/test/eval-mismatches.test.ts`, `src/test/fixtures/eval-corpus.json`, `src/test/fixtures/eval-mismatches.json`, `src/test/fixtures/eval-catalog.json`
 
 ---
 
@@ -191,7 +191,7 @@ Per identitetsdimension (name, matchId, systems):
 ### 4.8 API (förslag)
 
 ```ts
-// src/features/intake/evaluation.ts
+// src/shared/infra/evaluation/evaluation.ts
 
 export interface EvalMismatch {
   candidateId: string;
@@ -272,7 +272,7 @@ Domän (`domain`) och ursprungsland (`origin`) bör ingå i rapporten som inform
 
 ## 7. Förslag till nästa steg
 
-1. Implementera `src/features/intake/evaluation.ts` enligt specen ovan
+1. Implementera `src/shared/infra/evaluation/evaluation.ts` enligt specen ovan
 2. Lägg till ett CLI-kommando eller en server-funktion för att köra utvärderingen
 3. Kör utvärderingen mot den live-DB:n (3 170 dispatches, 1 632 processade, 4 646 kandidater)
 4. Använd rapporten för att prioritera nästa heuristik-fix (t.ex. altitud-kontamination eller pengar)

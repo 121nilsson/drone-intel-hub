@@ -6,7 +6,7 @@ import {
   isDue,
   pollIntervalMs,
   yieldBySource,
-} from "@/features/sources/cadence";
+} from "@/entities/source/cadence";
 import type { MonitoredSource } from "@/entities/source/types";
 import type { RawDispatch } from "@/entities/dispatch/types";
 

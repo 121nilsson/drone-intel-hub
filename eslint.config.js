@@ -4,6 +4,7 @@ import globals from "globals";
 import reactHooks from "eslint-plugin-react-hooks";
 import reactRefresh from "eslint-plugin-react-refresh";
 import tseslint from "typescript-eslint";
+import repoRules from "./eslint-rules/index.js";
 
 export default tseslint.config(
   {
@@ -28,9 +29,14 @@ export default tseslint.config(
     plugins: {
       "react-hooks": reactHooks,
       "react-refresh": reactRefresh,
+      "@repo": repoRules,
     },
     rules: {
       ...reactHooks.configs.recommended.rules,
+      "@repo/no-cross-feature-import": "error",
+      "@repo/no-lower-layer-feature-import": "error",
+      "@repo/no-server-import-from-client": "error",
+      "@repo/no-nordic-ui-copy": "error",
       "no-restricted-imports": [
         "error",
         {

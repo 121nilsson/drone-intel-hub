@@ -3,7 +3,7 @@ import {
   BRIEFING_SUMMARY_TTL_MS,
   isBriefingSummaryFresh,
   parseBriefingSummaryStored,
-} from "@/features/briefing/briefing-summary-shared";
+} from "@/shared/contracts/briefing-summary";
 
 describe("briefing summary shared", () => {
   it("parses stored rows", () => {

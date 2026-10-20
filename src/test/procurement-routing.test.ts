@@ -4,7 +4,7 @@ import {
   isFinancialSpecKey,
   procurementsFrom,
   splitFinancialSpecs,
-} from "@/features/intake/procurement-routing";
+} from "@/entities/procurement/routing";
 
 const base: Extraction = {
   name: "Akash",

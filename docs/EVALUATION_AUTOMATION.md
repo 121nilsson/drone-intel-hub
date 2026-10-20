@@ -3,7 +3,7 @@
 **Status:** Implementerat — Steg −1, 0, 1, 2, 3 och 4 (grundläggande) är implementerade. Steg 2–4 är grundläggande versioner (AI-adjudication, mönstergrävning UI, analytikerrättelser). Trust-filter och mismatch-forbid har korrigerats efter review.
 **Fil:** `docs/EVALUATION_AUTOMATION.md` (tidigare felstavad `EVALUTATION_AUTOMATION.md`)
 **Relaterad spec:** `docs/EVALUATION_MODE.md` (v1, implementerad) — detta dokument realiserar dess §9 (självlärande loop).
-**Relaterad kod:** `src/features/evaluation/evaluation.ts`, `src/features/evaluation/evaluation-page.tsx`, `src/shared/infra/evaluation.server.ts`, `src/shared/infra/evaluation.functions.ts`, `tasks/evaluation/run.ts`, `tasks/evaluation/health.ts`, `tasks/evaluation/adjudicate.ts` (ej skapad — adjudication körs via server-funktion), `src/test/eval-corpus.test.ts`, `src/test/eval-mismatches.test.ts`
+**Relaterad kod:** `src/shared/infra/evaluation/evaluation.ts`, `src/features/evaluation/evaluation-page.tsx`, `src/shared/infra/evaluation/evaluation.server.ts`, `src/shared/infra/evaluation/evaluation.functions.ts`, `tasks/evaluation/run.ts`, `tasks/evaluation/health.ts`, `tasks/evaluation/adjudicate.ts` (ej skapad — adjudication körs via server-funktion), `src/test/eval-corpus.test.ts`, `src/test/eval-mismatches.test.ts`
 
 ---
 
@@ -209,7 +209,7 @@ Utöver den schemalagda mätningen (§5) körs en **health-check** dagligen (03:
    - Nya mismatch-mönster dyker upp
 4. Sparar alltid rapporten i `eval_reports` för trendanalys.
 
-**Kod:** `src/shared/infra/evaluation.server.ts` (`runEvaluationHealth`), `tasks/evaluation/health.ts`, cron i `vite.config.ts`.
+**Kod:** `src/shared/infra/evaluation/evaluation.server.ts` (`runEvaluationHealth`), `tasks/evaluation/health.ts`, cron i `vite.config.ts`.
 
 **Syfte:** Kombinerar CI (hermetiskt) med produktionsövervakning — regressioner fångas även mellan deployer utan git-commits.
 

@@ -13,9 +13,9 @@ import {
   openAICompatibleAdjudicator,
   openAIContradictionAdjudicator,
 } from "../openai-compatible-ai";
-import { autoTriage } from "@/features/intake/auto-triage";
+import { autoTriage } from "@/shared/infra/ingest/auto-triage";
 import { outletWeights } from "@/entities/source/outlet-record";
-import { adjudicateContradictions } from "@/features/intake/contradictions";
+import { adjudicateContradictions } from "@/shared/infra/ingest/contradictions";
 import { dbConfigured } from "../postgres/db.server";
 import { PostgresStore } from "../postgres/postgres-store.server";
 import { DEFAULT_SETTINGS } from "../settings-defaults";
@@ -30,11 +30,11 @@ import {
   progressFromItem,
   type SyncReport,
   type WorkProgress,
-} from "@/features/sources/auto-ingest";
+} from "@/shared/infra/ingest/auto-ingest";
 import { fetchOne, FETCH_CONCURRENCY, sourceHost } from "./fetch-posts";
 import { mapWithConcurrency } from "./pool";
-import { healthAfterFetch, isCollectable, platformDrift } from "@/features/sources/source-health";
-import { isDue, yieldBySource } from "@/features/sources/cadence";
+import { healthAfterFetch, isCollectable, platformDrift } from "@/entities/source/health";
+import { isDue, yieldBySource } from "@/entities/source/cadence";
 
 /** AI time per run. Under the 10-minute cron period so a run never overlaps the next tick. */
 const AI_WINDOW_MS = 8 * 60_000;

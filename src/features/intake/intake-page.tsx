@@ -6,8 +6,8 @@ import { useCandidates, useDispatches, useDrones, useServices } from "@/shared/i
 import { translateText } from "@/shared/infra/ai-proxy.functions";
 import { fetchIntakeArticle, isBareUrl } from "@/shared/infra/sources/intake-fetch.functions";
 import { Btn, Loading, Panel, Tag } from "@/shared/ui/primitives";
-import { triggerRecordAnalyst } from "@/shared/infra/evaluation.functions";
-import { mergeInto, promote, runTwoTier, recordMention } from "./pipeline";
+import { triggerRecordAnalyst } from "@/shared/infra/evaluation/evaluation.functions";
+import { mergeInto, promote, runTwoTier, recordMention } from "@/shared/infra/ingest/pipeline";
 import type { Candidate } from "@/entities/drone/types";
 
 function ExpandableText({ text, className = "" }: { text: string; className?: string }) {

@@ -12,10 +12,9 @@ import { useDispatches, useDrones, useServices } from "@/shared/infra/services";
 import { fetchWikipediaReference } from "@/shared/infra/wikipedia/functions";
 import { Btn, Card, CardGrid, Loading, Panel, Sparkline, Tag } from "@/shared/ui/primitives";
 import { cn } from "@/lib/utils";
-import { mergeDrones } from "@/features/intake/pipeline";
 import { duplicateGroups } from "@/entities/drone/duplicates";
 import { applyReference } from "@/features/catalog/reference-import";
-import { useRelatedIntel, RelatedChips } from "@/features/intel-graph";
+import { useRelatedIntel, RelatedChips } from "@/shared/ui/intel-graph";
 import {
   DEFAULT_SORT,
   emptyFacets,
@@ -467,10 +466,7 @@ export function CatalogPage({
                             onClick={() => {
                               const toMerge = dup.ids.filter((x) => x !== target);
                               for (const m of toMerge) {
-                                mergeDrones(target, m, {
-                                  drones: repo,
-                                  candidates: svc.candidates,
-                                });
+                                svc.catalog.merge(target, m);
                               }
                               setConfirmingMerge(null);
                               setMergeTargets((prev) => {

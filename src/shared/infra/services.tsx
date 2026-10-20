@@ -13,6 +13,7 @@ import type {
   IntelExtractor,
   ProviderEnvConfig,
 } from "@/shared/contracts/ai";
+import type { CatalogMutations } from "@/shared/contracts/catalog";
 import {
   LocalCandidateRepository,
   LocalDispatchRepository,
@@ -28,6 +29,7 @@ import { RemoteStore } from "./storage/remote-store";
 import { getStoreStatus } from "./storage/store.functions";
 import { HeuristicExtractor, HeuristicSummarizer } from "./heuristic-ai";
 import { OpenAICompatibleExtractor, OpenAICompatibleSummarizer } from "./openai-compatible-ai";
+import { createCatalogMutations } from "./catalog-operations";
 
 export { DEFAULT_SETTINGS } from "./settings-defaults";
 import { DEFAULT_SETTINGS } from "./settings-defaults";
@@ -61,6 +63,13 @@ interface Services {
   /** Built-in heuristic engine the pipeline degrades to when an AI tier throws. */
   fallback: IntelExtractor;
   summarizer: BriefingSummarizer;
+  /**
+   * Catalog edits that span more than one collection: merging two entries, and removing one.
+   *
+   * Exposed as a contract so a page asks for the operation instead of assembling the
+   * repositories it happens to work on.
+   */
+  catalog: CatalogMutations;
   /**
    * False until the repositories have attached their store. Until then every list reads empty,
    * which is indistinguishable from "no data" and would render false empty states (dossier
@@ -133,6 +142,14 @@ export function ServicesProvider({ children }: { children: ReactNode }) {
     })();
   }, [drones, candidates, sources, dispatches, procurements, taxonomies, taxonomyCandidates]);
 
+  // The catalog operations are bound to the repository instances, not to a snapshot of their
+  // contents: the instances are stable for the provider's life, and they read through to
+  // whatever store they are attached to.
+  const catalog = useMemo<CatalogMutations>(
+    () => createCatalogMutations({ drones, candidates, dispatches }),
+    [drones, candidates, dispatches],
+  );
+
   const value = useMemo<Services>(() => {
     // Env wins per-field; anything it doesn't define falls back to saved/built-in settings.
     // apiKey is blanked when the env supplies one so the key never enters the browser.
@@ -180,6 +197,7 @@ export function ServicesProvider({ children }: { children: ReactNode }) {
       heuristic: new HeuristicExtractor(1),
       fallback: new HeuristicExtractor(1),
       summarizer: remote ? new OpenAICompatibleSummarizer(resolved) : new HeuristicSummarizer(),
+      catalog,
       attached,
     };
   }, [
@@ -193,6 +211,7 @@ export function ServicesProvider({ children }: { children: ReactNode }) {
     settings,
     envCfg,
     attached,
+    catalog,
   ]);
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

@@ -1,6 +1,6 @@
 import { defineTask } from "nitro/task";
 import { ensureMigrated } from "../../src/shared/infra/postgres/migrate.server";
-import { runEvaluationHealth } from "../../src/shared/infra/evaluation.server";
+import { runEvaluationHealth } from "../../src/shared/infra/evaluation/evaluation.server";
 
 export default defineTask({
   meta: {

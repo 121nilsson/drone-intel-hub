@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { combineExtractions } from "@/features/intake/extraction-gates";
-import { compareSpecs, comparableSpecs } from "@/features/evaluation/evaluation";
+import { combineExtractions } from "@/entities/drone/extraction-gates";
+import { compareSpecs, comparableSpecs } from "@/shared/infra/evaluation/evaluation";
 import {
   breakerTrips,
   newShadowMetrics,
@@ -9,8 +9,8 @@ import {
   trustScores,
   type RuleDecision,
   type ShadowMetrics,
-} from "@/features/evaluation/autonomy";
-import type { SandboxResult } from "@/features/evaluation/sandbox";
+} from "@/shared/infra/evaluation/autonomy";
+import type { SandboxResult } from "@/shared/infra/evaluation/sandbox";
 import { compileRuleSnapshot } from "@/shared/contracts/rules";
 import { HeuristicExtractor } from "@/shared/infra/heuristic-ai";
 import type { Candidate, ExtractedSpec, Extraction } from "@/entities/drone/types";
@@ -201,7 +201,7 @@ describe("circuit breaker", () => {
 
 describe("sandbox with AI-judged references", () => {
   it("passes a suppress filter once the reference shows the AI dropped the claim", async () => {
-    const { runSandbox } = await import("@/features/evaluation/sandbox");
+    const { runSandbox } = await import("@/shared/infra/evaluation/sandbox");
     const raw = "Its hunting altitude reaches 3 km." + " Reported by the regional desk this week.";
     const stored = (n: number) =>
       ({

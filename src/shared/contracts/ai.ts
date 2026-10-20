@@ -1,4 +1,5 @@
 import type { Candidate, Drone, Extraction } from "@/entities/drone/types";
+import type { Procurement } from "@/entities/procurement/types";
 import type { RuleSnapshot } from "@/shared/contracts/rules";
 
 /** Inference contract — any engine (heuristic, NIM, OpenAI-compatible) can implement it. */
@@ -55,6 +56,15 @@ export const BRIEFING_SUMMARY_SYSTEM =
 export interface BriefingSummarizer {
   summarize(context: string): Promise<string>;
 }
+
+/**
+ * Pulls contract, grant and production-deal figures out of a raw report.
+ *
+ * Separate from IntelExtractor because a procurement record is not a drone spec: it names a
+ * deal, not a system, and it lands in its own collection. A function rather than an interface
+ * because there is no state to hold - the transport is injected at construction.
+ */
+export type ProcurementExtractor = (raw: string, source: string) => Promise<Procurement | null>;
 
 /**
  * Every provider that could serve the call is rate-limited, out of credits, rejecting its key,
