@@ -12,6 +12,7 @@ import {
   Tag,
 } from "@/shared/ui/primitives";
 import {
+  analystCorpus,
   evaluateHeuristic,
   fixturesToCorpus,
   mismatchesToFixtures,
@@ -28,6 +29,7 @@ import {
 } from "@/shared/infra/evaluation/evaluation.functions";
 import type { EvalKeyTrend } from "@/shared/infra/evaluation/evaluation.server";
 import { RulesPanel } from "./rules-panel";
+import { AnalystReviewPanel } from "./analyst-review-panel";
 
 const pct = (n: number) => `${Math.round(n * 100)}%`;
 const SIZES = [50, 100, 250, 500];
@@ -266,8 +268,12 @@ export function EvaluationPage() {
                 <Btn
                   variant="ghost"
                   disabled={report.fixtures.length === 0}
-                  onClick={() => {
-                    download("eval-corpus.json", fixturesToCorpus(report.fixtures));
+                  onClick={async () => {
+                    const analyst = await analystCorpus(candidates, drones, heuristic);
+                    download(
+                      "eval-corpus.json",
+                      fixturesToCorpus([...analyst.positive, ...report.fixtures]),
+                    );
                     toast.success("Save the file in src/test/fixtures/ — tests run automatically");
                   }}
                 >
@@ -276,8 +282,12 @@ export function EvaluationPage() {
                 <Btn
                   variant="ghost"
                   disabled={report.mismatches.length === 0}
-                  onClick={() => {
-                    download("eval-mismatches.json", mismatchesToFixtures(report.mismatches));
+                  onClick={async () => {
+                    const analyst = await analystCorpus(candidates, drones, heuristic);
+                    download("eval-mismatches.json", [
+                      ...analyst.negative,
+                      ...mismatchesToFixtures(report.mismatches),
+                    ]);
                     toast.success(
                       "Save the file in src/test/fixtures/ — negative tests run automatically",
                     );
@@ -442,6 +452,8 @@ export function EvaluationPage() {
           </Btn>
         </div>
       </Panel>
+
+      <AnalystReviewPanel drones={drones} />
 
       <RulesPanel />
     </div>

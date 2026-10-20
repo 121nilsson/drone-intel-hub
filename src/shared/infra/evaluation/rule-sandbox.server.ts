@@ -27,7 +27,11 @@ import {
   type Trust,
 } from "@/shared/infra/evaluation/autonomy";
 import { hypothesisId, mineHypotheses } from "@/shared/infra/evaluation/hypotheses";
-import type { EvalFixture } from "@/shared/infra/evaluation/evaluation";
+import {
+  analystFixtures,
+  analystVerdicts,
+  type EvalFixture,
+} from "@/shared/infra/evaluation/evaluation";
 import type { Candidate, Drone } from "@/entities/drone/types";
 import type { JSONValue } from "postgres";
 import fs from "node:fs";
@@ -126,6 +130,19 @@ async function candidatesSince(since: string, limit: number) {
   return asCandidates(rows as unknown as { data: unknown }[]);
 }
 
+/**
+ * The candidates behind the claims an analyst has ruled on, found by the claim's source line.
+ * Bounded by the number of verdicts, not by the size of the collection.
+ */
+async function reviewedCandidates(drones: readonly Drone[]) {
+  const sources = [...analystVerdicts(drones).keys()];
+  if (!sources.length) return [];
+  const rows = await db()`
+    select data from candidates where data->>'source' = any(${sources})
+    order by created_at desc`;
+  return asCandidates(rows as unknown as { data: unknown }[]);
+}
+
 const mergeById = (...lists: Candidate[][]) => [
   ...new Map(lists.flat().map((c) => [c.id, c])).values(),
 ];
@@ -161,8 +178,11 @@ async function withActivationLock<T>(
   }
 }
 
-/** Approved + pending_fix fixtures: latest DB version per id, then git files not in the DB. */
-async function loadFixtures(): Promise<EvalFixture[]> {
+/**
+ * Approved + pending_fix fixtures: latest DB version per id, then git files not in the DB, then
+ * the analyst verdicts in the catalog (analystFixtures), which are never stored.
+ */
+async function loadFixtures(drones: readonly Drone[]): Promise<EvalFixture[]> {
   const rows = await db()`
     select distinct on (id) id, status, fixture from eval_corpus
     order by id, version desc`;
@@ -182,6 +202,8 @@ async function loadFixtures(): Promise<EvalFixture[]> {
     for (const fx of JSON.parse(fs.readFileSync(full, "utf8")) as EvalFixture[])
       if (!byId.has(fx.id)) byId.set(fx.id, fx);
   }
+  for (const fx of analystFixtures(await reviewedCandidates(drones), analystVerdicts(drones)))
+    byId.set(fx.id, fx);
   return [...byId.values()].filter((f) => typeof f.text === "string" && f.text.length > 0);
 }
 
@@ -272,7 +294,7 @@ export async function sandboxRule(
   if (proposedRules.invalid.includes(id)) return { ok: false, reason: "payload does not compile" };
 
   const drones = world?.drones ?? (await loadCatalog());
-  const fixtures = world?.fixtures ?? (await loadFixtures());
+  const fixtures = world?.fixtures ?? (await loadFixtures(drones));
   const terms = ruleTerms(rule);
   const candidates = mergeById(
     await candidatesMentioning(terms),
@@ -431,11 +453,13 @@ export async function mineAndSandbox(): Promise<MineRunResult> {
   if (!dbConfigured()) return { ran: false, reason: "no database configured", ...none };
   try {
     const drones = await loadCatalog();
-    const fixtures = await loadFixtures();
+    const fixtures = await loadFixtures(drones);
     // The miner stratifies 400 out of this pool; the pool doubles as the sandbox control set.
     const control = await candidateSample(2 * CONTROL_POOL);
     const heuristic = new HeuristicExtractor(1, await getOrRefreshRuleSnapshot({ force: true }));
-    const mined = await mineHypotheses(control, drones, heuristic, { sampleSize: 400, seed: 1 });
+    // Reviewed reports join the miner's pool, which always samples them (mineHypotheses).
+    const pool = mergeById(await reviewedCandidates(drones), control);
+    const mined = await mineHypotheses(pool, drones, heuristic, { sampleSize: 400, seed: 1 });
     const known = new Set((await db()`select id from dynamic_rules`).map((r) => r["id"] as string));
     let proposed = 0;
     let sandboxed = 0;
@@ -586,7 +610,7 @@ export async function superviseActiveRules(): Promise<SuperviseResult> {
     const all = rows as unknown as (DynamicRuleRow & { recent: boolean })[];
     if (!all.length) return { ran: true, reason: "no active rules", ...empty };
     const drones = await loadCatalog();
-    const fixtures = await loadFixtures();
+    const fixtures = await loadFixtures(drones);
     const control = await candidateSample(CONTROL_POOL);
     const version = await rulesVersion();
     // "proposed" = everything live now; "baseline" = live minus the rules under suspicion.

@@ -1,7 +1,14 @@
 import type { Candidate, Drone, Extraction } from "@/entities/drone/types";
 import type { IntelExtractor } from "@/shared/contracts/ai";
 import { normalizeExtraction } from "@/entities/normalization/apply";
-import { compareSpecs, comparableSpecs, namesOf } from "./evaluation";
+import {
+  analystVerdicts,
+  compareSpecs,
+  comparableSpecs,
+  namesOf,
+  referenceSpecs,
+  type Norm,
+} from "./evaluation";
 import type { SandboxResult } from "./sandbox";
 
 /**
@@ -36,9 +43,14 @@ export const newShadowMetrics = (now: string): ShadowMetrics => ({
 /**
  * How well one extraction agrees with the stored, AI-judged one: confirmed claims and names
  * minus unconfirmed ones. Only the difference between two runs on the same text is meaningful.
+ * `refSpecs` is the reference with analyst verdicts applied, when the caller has them.
  */
-export function agreementScore(heur: Extraction, ref: Extraction): number {
-  const cmp = compareSpecs(comparableSpecs(heur), comparableSpecs(ref));
+export function agreementScore(
+  heur: Extraction,
+  ref: Extraction,
+  refSpecs: Norm[] = comparableSpecs(ref),
+): number {
+  const cmp = compareSpecs(comparableSpecs(heur), refSpecs);
   const specs =
     cmp.pairs.length - cmp.falsePositives.length - cmp.rejected.length - cmp.wrongKeys.length;
   const refNames = new Set(namesOf(ref));
@@ -69,13 +81,15 @@ export async function shadowStep(
     .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
     .slice(0, max);
   const next = { ...metrics };
+  const verdicts = analystVerdicts(catalog);
   for (const c of fresh) {
     const a = normalizeExtraction(await active.extract(c.raw, catalog)).extraction;
     const s = normalizeExtraction(await shadow.extract(c.raw, catalog)).extraction;
     next.evaluated++;
     next.watermark = c.createdAt;
-    const before = agreementScore(a, c.extraction);
-    const after = agreementScore(s, c.extraction);
+    const ref = referenceSpecs(c, verdicts);
+    const before = agreementScore(a, c.extraction, ref);
+    const after = agreementScore(s, c.extraction, ref);
     const changed =
       before !== after ||
       JSON.stringify(comparableSpecs(a).map((x) => [x.key, x.value])) !==

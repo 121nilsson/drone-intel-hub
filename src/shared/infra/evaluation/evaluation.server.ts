@@ -3,9 +3,11 @@ import { PostgresStore } from "@/shared/infra/postgres/postgres-store.server";
 import { HeuristicExtractor } from "@/shared/infra/heuristic-ai";
 import { getOrRefreshRuleSnapshot } from "@/shared/infra/heuristics/rule-registry.server";
 import {
+  analystVerdicts,
   evaluateHeuristic,
   compareSpecs,
   comparableSpecs,
+  referenceSpecs,
 } from "@/shared/infra/evaluation/evaluation";
 import { normalizeExtraction } from "@/entities/normalization/apply";
 import { semanticKeyFor } from "@/entities/normalization/semantic";
@@ -323,12 +325,15 @@ export async function runAdjudication(): Promise<{
     let adjudicated = 0;
     let inserted = 0;
     const MAX = 10;
+    // A claim an analyst ruled on is settled: it compares as dropped or confirmed, never as a
+    // conflict to put to the model.
+    const verdicts = analystVerdicts(drones);
 
     for (const c of candidates) {
       if (adjudicated >= MAX) break;
       if (!c.raw || c.raw.trim().length < 50) continue;
       const heur = normalizeExtraction(await heuristic.extract(c.raw, drones)).extraction;
-      const cmp = compareSpecs(comparableSpecs(heur), comparableSpecs(c.extraction));
+      const cmp = compareSpecs(comparableSpecs(heur), referenceSpecs(c, verdicts));
       const conflicts = [...cmp.wrongKeys, ...cmp.falsePositives.map((h) => ({ h, r: null }))];
       if (conflicts.length === 0) continue;
 

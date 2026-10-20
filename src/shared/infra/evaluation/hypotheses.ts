@@ -5,7 +5,16 @@ import { FILLER_WORDS } from "@/shared/lexicons/fillers";
 import { normalizeExtraction } from "@/entities/normalization/apply";
 import { semanticKeyFor } from "@/entities/normalization/semantic";
 import { phoneticKey } from "@/entities/drone/name-key";
-import { compareSpecs, comparableSpecs, namesOf, stratifiedSample, type Norm } from "./evaluation";
+import {
+  analystVerdicts,
+  compareSpecs,
+  comparableSpecs,
+  namesOf,
+  referenceSpecs,
+  stratifiedSample,
+  verdictsFor,
+  type Norm,
+} from "./evaluation";
 
 /**
  * Deterministic rule-hypothesis miner. READ-ONLY, like evaluateHeuristic: it only calls
@@ -128,7 +137,12 @@ export async function mineHypotheses(
   const eligible = candidates.filter(
     (c) => (c.raw?.trim().length ?? 0) > 50 && c.status !== "discarded",
   );
-  const sample = stratifiedSample(eligible, opts.sampleSize ?? 400, opts.seed ?? 1);
+  const verdicts = analystVerdicts(catalog);
+  // Reports an analyst has ruled on always join the sample: they are the only reference that is
+  // not a model's opinion, so they should not depend on the draw.
+  const reviewed = eligible.filter((c) => verdictsFor(c, verdicts).length);
+  const drawn = stratifiedSample(eligible, opts.sampleSize ?? 400, opts.seed ?? 1);
+  const sample = [...new Map([...reviewed, ...drawn].map((c) => [c.id, c])).values()];
 
   const falseNames: Bucket = new Map(); // name -> candidates where only the heuristic saw it
   const refNames = new Set<string>(); // every name the reference ever reported
@@ -155,7 +169,7 @@ export async function mineHypotheses(
       if (!ref.has(phoneticKey(s.name))) note(falseNames, s.name.toLowerCase(), c, s.name);
     }
 
-    const cmp = compareSpecs(comparableSpecs(heur), comparableSpecs(c.extraction));
+    const cmp = compareSpecs(comparableSpecs(heur), referenceSpecs(c, verdicts));
     for (const p of cmp.pairs) {
       if (p.type === "differentReading") parserDefects++;
       // Every word near an agreed figure, cue words included: none of them may ever trigger.

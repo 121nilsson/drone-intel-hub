@@ -1,10 +1,12 @@
 import type {
   Candidate,
+  ClaimIssue,
   Drone,
   ExtractedSpec,
   Extraction,
   SpecProvenance,
 } from "@/entities/drone/types";
+import { attributeSemantic } from "@/entities/drone/spec-engine";
 import type { IntelExtractor } from "@/shared/contracts/ai";
 import { normalizeExtraction } from "@/entities/normalization/apply";
 import { semanticKeyFor } from "@/entities/normalization/semantic";
@@ -167,6 +169,8 @@ export interface Norm {
   max?: number | undefined;
   evidence: string;
   provenance?: SpecProvenance | undefined;
+  /** An analyst's verdict on the catalog claim this spec became (referenceSpecs). */
+  verdict?: "confirmed" | "rejected" | undefined;
 }
 
 function norm(s: ExtractedSpec): Norm {
@@ -230,6 +234,153 @@ function sameValue(a: Norm, b: Norm): "exact" | "differentReading" | "raw" | nul
   return null;
 }
 
+/**
+ * Whether a reference claim is known to be wrong. An analyst's verdict outranks the AI's in both
+ * directions, the same order claimCounts() applies to the catalog.
+ */
+const isDropped = (r: Norm) =>
+  r.verdict ? r.verdict === "rejected" : r.provenance === "heuristic";
+
+/** An analyst's verdict on a catalog claim, located by what the claim was extracted from. */
+export interface AnalystVerdict {
+  droneId: string;
+  semantic: string;
+  value: string;
+  canonical?: number | undefined;
+  canonicalUnit?: string | undefined;
+  verdict: "confirmed" | "rejected";
+  issue?: ClaimIssue | undefined;
+}
+
+/** Verdicts keyed by the claim's source line, which is the `source` of the candidate it came from. */
+export type AnalystVerdicts = ReadonlyMap<string, readonly AnalystVerdict[]>;
+
+/** Every analyst verdict on a claim that came from a report. Hand-entered values have no report. */
+export function analystVerdicts(catalog: readonly Drone[]): AnalystVerdicts {
+  const out = new Map<string, AnalystVerdict[]>();
+  for (const d of catalog)
+    for (const s of d.specs)
+      for (const c of s.claims) {
+        if (!c.review || c.extractionEngine === "analyst") continue;
+        const list = out.get(c.source) ?? [];
+        list.push({
+          droneId: d.id,
+          semantic: attributeSemantic(s),
+          value: String(c.value),
+          canonical: c.normalized?.canonicalValue,
+          canonicalUnit: c.normalized?.canonicalUnit,
+          verdict: c.review.verdict,
+          issue: c.review.issue,
+        });
+        out.set(c.source, list);
+      }
+  return out;
+}
+
+/**
+ * A verdict belongs to the candidate that fed that entry. A report naming two systems has one
+ * candidate per system, and a figure rejected as "about another system" on one of them may still
+ * be right for the other.
+ */
+function feeds(c: Candidate, droneId: string): boolean {
+  return (
+    c.resolvedInto === droneId ||
+    c.extraction.matchId === droneId ||
+    (c.extraction.systems ?? []).some((s) => s.matchId === droneId)
+  );
+}
+
+function verdictMatches(v: AnalystVerdict, n: Norm): boolean {
+  if (v.semantic !== n.semantic) return false;
+  if (String(n.value) === v.value) return true;
+  return (
+    v.canonical !== undefined &&
+    n.canonical !== undefined &&
+    numbersClose(v.canonical, n.canonical) &&
+    (v.canonicalUnit ?? "") === (n.canonicalUnit ?? "")
+  );
+}
+
+/** The analyst verdicts on claims this candidate fed into the catalog. */
+export function verdictsFor(c: Candidate, verdicts: AnalystVerdicts): AnalystVerdict[] {
+  return (verdicts.get(c.source) ?? []).filter((v) => feeds(c, v.droneId));
+}
+
+/**
+ * What a heuristic run on this candidate is scored against: the stored extraction, with the
+ * analyst's verdict on each claim it became. A rejected figure counts as one the AI dropped - a
+ * heuristic that still produces it is `rejected`, the strongest false positive there is - and a
+ * confirmed one counts even when the AI dropped it.
+ */
+export function referenceSpecs(c: Candidate, verdicts: AnalystVerdicts): Norm[] {
+  const ref = comparableSpecs(c.extraction);
+  const mine = verdictsFor(c, verdicts);
+  if (!mine.length) return ref;
+  return ref.map((n) => {
+    const v = mine.find((x) => verdictMatches(x, n));
+    return v ? { ...n, verdict: v.verdict } : n;
+  });
+}
+
+/**
+ * Regression fixtures from analyst verdicts: per candidate, a positive one (confirmed figures must
+ * keep being found) and a negative one (rejected figures must not come back), the same split as
+ * the two git corpora. Derived from the catalog on every load rather than stored, so an undone
+ * verdict takes its expectation with it.
+ *
+ * "About another system" is left out: a fixture checks the whole text's output, and the figure
+ * may well be right for another system the same report names.
+ */
+export function analystFixtures(
+  candidates: readonly Candidate[],
+  verdicts: AnalystVerdicts,
+): EvalFixture[] {
+  const out: EvalFixture[] = [];
+  for (const c of candidates) {
+    if (!c.raw?.trim()) continue;
+    const ref = comparableSpecs(c.extraction);
+    const expect: EvalFixture["expect"] = [];
+    const forbid: NonNullable<EvalFixture["forbid"]> = [];
+    for (const v of verdictsFor(c, verdicts)) {
+      if (v.issue === "system") continue;
+      // In the same canonical terms checkFixture compares a fresh run in.
+      const n = ref.find((x) => verdictMatches(v, x));
+      const value = n?.canonical ?? v.canonical ?? n?.value ?? v.value;
+      const unit = n?.canonical !== undefined ? n.canonicalUnit : v.canonicalUnit;
+      (v.verdict === "confirmed" ? expect : forbid).push({
+        semantic: v.semantic,
+        value,
+        ...(unit ? { unit } : {}),
+      });
+    }
+    const base = { source: c.source, text: c.raw, status: "approved" as const };
+    if (expect.length) out.push({ ...base, id: `analyst-${c.id}`, expect });
+    if (forbid.length) out.push({ ...base, id: `analyst-neg-${c.id}`, expect: [], forbid });
+  }
+  return out;
+}
+
+/**
+ * Analyst fixtures for the git corpora, which replay without a baseline: a positive one joins
+ * only while today's heuristic passes it, and a negative one the heuristic still fails is marked
+ * pending_fix, which the mismatch suite skips until a rule fixes it.
+ */
+export async function analystCorpus(
+  candidates: readonly Candidate[],
+  catalog: Drone[],
+  heuristic: IntelExtractor,
+): Promise<{ positive: EvalFixture[]; negative: EvalFixture[] }> {
+  const positive: EvalFixture[] = [];
+  const negative: EvalFixture[] = [];
+  for (const fx of analystFixtures(candidates, analystVerdicts(catalog))) {
+    const r = await checkFixture(fx, heuristic, catalog);
+    if (fx.forbid?.length)
+      negative.push(r.forbidden.length ? { ...fx, status: "pending_fix" } : fx);
+    else if (!r.missing.length) positive.push(fx);
+  }
+  return { positive, negative };
+}
+
 /** Usable specs only: financial/procurement keys are routed out of drone specs, so ignore them. */
 export function comparableSpecs(e: Extraction): Norm[] {
   return e.specs.filter((s) => !isFinancialSpecKey(s.key)).map(norm);
@@ -253,8 +404,8 @@ export interface SpecComparison {
  * heuristic no longer makes is not a miss. Candidates stored before provenance behave as before.
  */
 export function compareSpecs(heur: Norm[], allRef: Norm[]): SpecComparison {
-  const ref = allRef.filter((r) => r.provenance !== "heuristic");
-  const dropped = allRef.filter((r) => r.provenance === "heuristic");
+  const ref = allRef.filter((r) => !isDropped(r));
+  const dropped = allRef.filter(isDropped);
   const usedR = new Set<number>();
   const usedH = new Set<number>();
   const pairs: SpecComparison["pairs"] = [];
@@ -338,6 +489,7 @@ export async function evaluateHeuristic(
       (c.raw?.trim().length ?? 0) >= minRaw && (opts.includeDiscarded || c.status !== "discarded"),
   );
   const sample = stratifiedSample(eligible, sampleSize, opts.seed ?? 1);
+  const verdicts = analystVerdicts(catalog);
 
   const strat: EvalReport["stratification"] = { platform: {}, outcome: {}, epoch: {} };
   const keyCounts = new Map<string, { tp: number; fp: number; fn: number }>();
@@ -403,7 +555,7 @@ export async function evaluateHeuristic(
     } catch {
       continue;
     }
-    const cmp = compareSpecs(comparableSpecs(heur), comparableSpecs(c.extraction));
+    const cmp = compareSpecs(comparableSpecs(heur), referenceSpecs(c, verdicts));
     for (const p of cmp.pairs) {
       bump(p.h.semantic, "tp");
       if (p.type === "differentReading") pushMis(c, "differentReading", p.h, p.r);
