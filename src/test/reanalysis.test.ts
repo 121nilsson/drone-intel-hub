@@ -209,6 +209,28 @@ describe("processPending with a re-analysis", () => {
     expect(candidates.find((c) => c.id === "old-pending")!.status).toBe("pending");
     expect(rows[0]).toMatchObject({ status: "pending", attempts: 1, reanalyze: true });
   });
+
+  it("keeps an analyst's rejection on the claim the re-run reproduces", async () => {
+    const rows = [post()];
+    const { dispatches, deps, drones } = setup(rows, matched);
+    const review = {
+      verdict: "rejected" as const,
+      issue: "value" as const,
+      at: "x",
+      by: "analyst" as const,
+    };
+    const range = drones[0]!.specs[0]!;
+    range.claims[0] = { ...range.claims[0]!, review };
+    requeueStale(dispatches, 10);
+    await processPending(dispatches, deps, 10);
+
+    // Otherwise the re-run would bring the rejected figure back as fresh evidence.
+    const fromPost = drones[0]!.specs
+      .find((s) => s.key === "range")!
+      .claims.filter((c) => c.source === SOURCE);
+    expect(fromPost).toHaveLength(1);
+    expect(fromPost[0]!.review).toEqual(review);
+  });
 });
 
 describe("requeueFailed", () => {

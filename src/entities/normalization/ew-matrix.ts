@@ -1,3 +1,4 @@
+import { claimCounts } from "@/entities/drone/claim-review";
 import type { Drone, RFLink } from "@/entities/drone/types";
 import { intersectBands, linkIsFiber } from "./rf";
 import { semanticKeyFor } from "./semantic";
@@ -118,7 +119,7 @@ export function specValue(d: Drone, semantic: string): number | undefined {
   for (const a of d.specs) {
     if ((a.semantic ?? semanticKeyFor(a.key, a.label)) !== semantic) continue;
     for (const c of a.claims) {
-      if (c.adjudication?.verdict === "outlier") continue;
+      if (!claimCounts(c)) continue;
       const v = c.normalized?.canonicalValue ?? (typeof c.value === "number" ? c.value : undefined);
       if (v !== undefined && Number.isFinite(v)) vals.push(v);
     }

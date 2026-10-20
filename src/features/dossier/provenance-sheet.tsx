@@ -1,6 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { ExternalSourceLink, SourceRef } from "@/shared/ui/links";
-import type { SpecAttribute, SpecClaim } from "@/entities/drone/types";
+import { useState } from "react";
+import type { ClaimIssue, SpecAttribute, SpecClaim } from "@/entities/drone/types";
 import { useDispatches, useServices, useSources } from "@/shared/infra/services";
 import {
   Sheet,
@@ -9,22 +10,31 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { Tag } from "@/shared/ui/primitives";
+import { Btn, Tag } from "@/shared/ui/primitives";
 import { TranslateButton } from "@/shared/ui/translate-button";
+import { claimKey } from "@/entities/drone/claim-review";
 
 export interface ClaimSelection {
   spec: SpecAttribute;
   claim: SpecClaim;
 }
 
+const ISSUE_LABEL: Record<ClaimIssue, string> = {
+  value: "wrong value",
+  unit: "wrong unit or parse",
+  system: "about another system",
+};
+
 /** Short chip naming a claim's source; tapping opens the provenance sheet. */
 export function ClaimChip({ claim, onOpen }: { claim: SpecClaim; onOpen: () => void }) {
-  const verdict = claim.adjudication;
+  // An analyst's verdict outranks the check's, so the chip shows only that one.
+  const verdict = claim.review ? undefined : claim.adjudication;
+  const rejected = claim.review?.verdict === "rejected";
   return (
     <button
       type="button"
       onClick={onOpen}
-      className="inline-flex max-w-full items-center gap-1 border border-border px-1.5 py-1 font-mono text-[11px] text-muted-foreground hover:border-primary hover:text-primary"
+      className={`inline-flex max-w-full items-center gap-1 border border-border px-1.5 py-1 font-mono text-[11px] text-muted-foreground hover:border-primary hover:text-primary ${rejected ? "opacity-60" : ""}`}
     >
       {/* min-w-0: a flex item's default min-width is its content size, so without this the
           source string refuses to shrink and the ellipsis never appears. */}
@@ -42,16 +52,128 @@ export function ClaimChip({ claim, onOpen }: { claim: SpecClaim; onOpen: () => v
           {verdict.verdict === "outlier" ? "⚠ outlier" : "✓ supported"}
         </span>
       )}
+      {claim.review && (
+        <span
+          className={`shrink-0 ${rejected ? "text-destructive line-through" : "text-primary"}`}
+          title={
+            rejected
+              ? `Rejected by an analyst — ${ISSUE_LABEL[claim.review.issue ?? "value"]}`
+              : "Confirmed by an analyst"
+          }
+        >
+          {rejected ? "✕ rejected" : "✓ confirmed"}
+        </span>
+      )}
     </button>
+  );
+}
+
+/**
+ * The analyst's verdict on one claim. "Correct" and "another system" apply at once; a wrong
+ * value or unit first asks for the right value, which is optional.
+ */
+function ClaimReviewPanel({ droneId, selection }: { droneId: string; selection: ClaimSelection }) {
+  const svc = useServices();
+  const [issue, setIssue] = useState<"value" | "unit" | null>(null);
+  const [correct, setCorrect] = useState("");
+  const { spec, claim } = selection;
+  const review = claim.review;
+  const apply = (verdict: Parameters<typeof svc.catalog.reviewClaim>[3]) => {
+    svc.catalog.reviewClaim(droneId, spec.key, claim, verdict);
+    setIssue(null);
+    setCorrect("");
+  };
+  return (
+    <div className="space-y-2 border-t border-border pt-4">
+      <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+        Analyst review
+      </p>
+      {review ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <Tag tone={review.verdict === "rejected" ? "danger" : "success"}>
+            {review.verdict === "rejected"
+              ? `Rejected — ${ISSUE_LABEL[review.issue ?? "value"]}`
+              : "Confirmed"}
+          </Tag>
+          <span className="font-mono text-xs text-muted-foreground">{review.at.slice(0, 10)}</span>
+          <Btn variant="ghost" className="px-2 py-1 text-xs" onClick={() => apply(null)}>
+            Undo
+          </Btn>
+        </div>
+      ) : issue ? (
+        <form
+          className="space-y-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            apply({
+              verdict: "rejected",
+              issue,
+              ...(correct.trim() ? { correctValue: correct } : {}),
+            });
+          }}
+        >
+          <label className="block text-xs text-muted-foreground">
+            Correct value (optional{spec.unit ? `, e.g. "20 ${spec.unit}"` : ""})
+            <input
+              autoFocus
+              value={correct}
+              onChange={(e) => setCorrect(e.target.value)}
+              className="mt-1 w-full border border-border bg-card px-3 py-2 font-mono text-sm focus:border-primary"
+            />
+          </label>
+          <div className="flex flex-wrap gap-2">
+            <Btn type="submit" variant="danger" className="px-2 py-1 text-xs">
+              Reject claim
+            </Btn>
+            <Btn
+              type="button"
+              variant="ghost"
+              className="px-2 py-1 text-xs"
+              onClick={() => setIssue(null)}
+            >
+              Cancel
+            </Btn>
+          </div>
+        </form>
+      ) : (
+        <div className="flex flex-wrap gap-2">
+          <Btn
+            variant="ghost"
+            className="px-2 py-1 text-xs"
+            onClick={() => apply({ verdict: "confirmed" })}
+          >
+            ✓ Correct
+          </Btn>
+          <Btn variant="danger" className="px-2 py-1 text-xs" onClick={() => setIssue("value")}>
+            Wrong value
+          </Btn>
+          <Btn variant="danger" className="px-2 py-1 text-xs" onClick={() => setIssue("unit")}>
+            Wrong unit / parse
+          </Btn>
+          <Btn
+            variant="danger"
+            className="px-2 py-1 text-xs"
+            onClick={() => apply({ verdict: "rejected", issue: "system" })}
+          >
+            Another system
+          </Btn>
+        </div>
+      )}
+      <p className="text-xs text-muted-foreground">
+        A rejected claim stays on the record but no longer counts towards the consensus value.
+      </p>
+    </div>
   );
 }
 
 export function ProvenanceSheet({
   selection,
+  droneId,
   droneName,
   onClose,
 }: {
   selection: ClaimSelection | null;
+  droneId: string;
   droneName: string;
   onClose: () => void;
 }) {
@@ -130,6 +252,11 @@ export function ProvenanceSheet({
                   </Tag>
                 )}
               </div>
+              <ClaimReviewPanel
+                key={`${selection.spec.key}|${claimKey(claim)}`}
+                droneId={droneId}
+                selection={selection}
+              />
               {dispatch ? (
                 <div className="space-y-2 border-t border-border pt-4">
                   <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">

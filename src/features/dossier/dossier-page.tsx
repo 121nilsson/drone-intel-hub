@@ -9,6 +9,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { consensus } from "@/entities/drone/consensus";
+import { claimKey } from "@/entities/drone/claim-review";
 import { ieeeLabel, natoLabel } from "@/entities/normalization/bands";
 import { effectiveIeeeBands, effectiveNatoBands, linkIsFiber } from "@/entities/normalization/rf";
 import { type Drone, type SpecAttribute } from "@/entities/drone/types";
@@ -55,8 +56,18 @@ function DossierSectionNav() {
   );
 }
 
+function liveSelection(drone: Drone, sel: ClaimSelection): ClaimSelection | null {
+  const spec = drone.specs.find((s) => s.key === sel.spec.key);
+  const key = claimKey(sel.claim);
+  const claim = spec?.claims.find((c) => claimKey(c) === key);
+  return spec && claim ? { spec, claim } : null;
+}
+
 export function SpecTable({ drone }: { drone: Drone }) {
   const [sel, setSel] = useState<ClaimSelection | null>(null);
+  // The sheet reads the selection from the live entry, so a verdict given in it shows at once
+  // instead of on the copy that was clicked.
+  const live = sel ? liveSelection(drone, sel) : null;
   const chips = (s: SpecAttribute) => (
     <div className="mt-1.5 flex flex-wrap gap-1">
       {s.claims.map((claim, i) => (
@@ -157,7 +168,12 @@ export function SpecTable({ drone }: { drone: Drone }) {
           })}
         </tbody>
       </table>
-      <ProvenanceSheet selection={sel} droneName={drone.name} onClose={() => setSel(null)} />
+      <ProvenanceSheet
+        selection={live}
+        droneId={drone.id}
+        droneName={drone.name}
+        onClose={() => setSel(null)}
+      />
     </>
   );
 }

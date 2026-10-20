@@ -1,5 +1,6 @@
 import { canonicalUnitForSemantic, semanticKeyFor } from "@/entities/normalization/semantic";
 import { convert, normalizeQuantity } from "@/entities/normalization/units";
+import { claimCounts } from "./claim-review";
 import type { SpecAttribute, SpecClaim } from "./types";
 
 function targetUnit(spec: SpecAttribute): string | undefined {
@@ -131,12 +132,11 @@ function round(n: number) {
 }
 
 export function consensus(spec: SpecAttribute): Consensus {
-  // An adjudicated "outlier" stays on the record (the report said what it said) but no longer
-  // feeds the aggregate: one rejected figure must not drag the median into a dispute. Kept
-  // claims carry their original index, so consensus().outliers still points into spec.claims.
-  const kept = spec.claims.flatMap((claim, i) =>
-    claim.adjudication?.verdict === "outlier" ? [] : [{ claim, i }],
-  );
+  // An adjudicated "outlier" or an analyst-rejected claim stays on the record (the report said
+  // what it said) but no longer feeds the aggregate: one rejected figure must not drag the
+  // median into a dispute. Kept claims carry their original index, so consensus().outliers
+  // still points into spec.claims.
+  const kept = spec.claims.flatMap((claim, i) => (claimCounts(claim) ? [{ claim, i }] : []));
   const sources = new Set(kept.map(({ claim }) => claim.source)).size;
   const measured = kept.flatMap(({ claim, i }) => {
     const m = measurement(spec, claim, i);

@@ -56,17 +56,23 @@ export async function adjudicateContradictions(
   const max = opts.max ?? MAX_CONTRADICTION_CHECKS;
   const queue = drones.list().flatMap((d) => disputedSpecs(d).map((spec) => ({ drone: d, spec })));
   for (const { drone, spec } of queue.slice(0, max)) {
+    // A claim an analyst rejected is settled. Offering it as a candidate would let the check
+    // back a figure a person has already ruled out, so it is left out of the question and its
+    // record is left as it is.
+    const asked = spec.claims.flatMap((c, i) => (c.review?.verdict === "rejected" ? [] : [i]));
     let verdict;
     try {
       verdict = await opts.adjudicate({
         drone,
         specLabel: spec.unit ? `${spec.label} (${spec.unit})` : spec.label,
-        // Claim order is the index space the verdict answers in.
-        claims: spec.claims.map((c) => ({
-          value: String(c.value),
-          source: c.source,
-          ...(c.evidence ? { evidence: c.evidence } : {}),
-        })),
+        // The order of `asked` is the index space the verdict answers in.
+        claims: asked
+          .map((i) => spec.claims[i]!)
+          .map((c) => ({
+            value: String(c.value),
+            source: c.source,
+            ...(c.evidence ? { evidence: c.evidence } : {}),
+          })),
       });
     } catch (e) {
       // An outage would fail every remaining call too; anything else is this one spec.
@@ -81,7 +87,7 @@ export async function adjudicateContradictions(
     const decided =
       verdict.confidence >= CONTRADICTION_CONFIDENCE &&
       verdict.supported >= 0 &&
-      verdict.supported < spec.claims.length;
+      verdict.supported < asked.length;
     if (!decided) {
       // Asked, not answered: the one-shot marker still applies, so an undecidable disagreement
       // is not re-asked on every run.
@@ -92,15 +98,20 @@ export async function adjudicateContradictions(
       });
       continue;
     }
-    const claims = spec.claims.map((c, i) => ({
-      ...c,
-      adjudication: {
-        verdict: i === verdict.supported ? ("supported" as const) : ("outlier" as const),
-        confidence: verdict.confidence,
-        at,
-        ...(i === verdict.supported && verdict.reason ? { reason: verdict.reason } : {}),
-      },
-    }));
+    const supported = asked[verdict.supported];
+    const claims = spec.claims.map((c, i) =>
+      asked.includes(i)
+        ? {
+            ...c,
+            adjudication: {
+              verdict: i === supported ? ("supported" as const) : ("outlier" as const),
+              confidence: verdict.confidence,
+              at,
+              ...(i === supported && verdict.reason ? { reason: verdict.reason } : {}),
+            },
+          }
+        : c,
+    );
     rep.outliers += claims.filter((c) => c.adjudication?.verdict === "outlier").length;
     drones.upsert({
       ...drone,

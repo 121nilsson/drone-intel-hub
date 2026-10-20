@@ -6,6 +6,7 @@ import type { FetchedPost } from "@/shared/infra/sources/source-fetch.functions"
 import type { DispatchRepository } from "@/shared/contracts/repository";
 import { runTwoTier, type PipelineDeps, type PipelineResult } from "@/shared/infra/ingest/pipeline";
 import type { Drone } from "@/entities/drone/types";
+import { heldReviews, restoreReviews, type HeldReview } from "@/entities/drone/claim-review";
 import { ProviderOutageError } from "@/shared/contracts/ai";
 import { EXTRACTION_PROMPT_VERSION } from "@/shared/contracts/extraction.schema";
 import { traceFailure, traceItem, traceLevel } from "@/shared/infra/pipeline-trace";
@@ -518,7 +519,7 @@ export async function processPending(
       const now = new Date().toISOString();
       // A re-analysis replaces this post's earlier contribution rather than adding to it. Kept
       // restorable until the new run succeeds, so a failed re-run loses nothing.
-      const restore = d.reanalyze ? retractContribution(d, deps) : undefined;
+      const retracted = d.reanalyze ? retractContribution(d, deps) : undefined;
       const isRelevant = DRONE_HINT.test(d.text) || (catalogPattern?.test(d.text) ?? false);
       if (!isRelevant) {
         dispatches.update(d.id, {
@@ -546,6 +547,7 @@ export async function processPending(
           ...(d.publishedAt ? { publishedAt: d.publishedAt } : {}),
         });
         if (d.reanalyze) supersedeCandidates(d, r.candidate.id, deps);
+        retracted?.restoreReviews();
         dispatches.update(d.id, {
           status: "processed",
           processedAt: now,
@@ -589,7 +591,7 @@ export async function processPending(
         else if (r.kind === "auto-discarded") rep.discarded++;
         else rep.queued++;
       } catch (e) {
-        restore?.();
+        retracted?.restore();
         const error = e instanceof Error ? e.message : "Processing failed";
         // A failure is the case where the log matters most, so it is traced even at level 0 and
         // names the post, so the line is actionable on its own.
@@ -699,16 +701,22 @@ export function requeueFailed(dispatches: DispatchRepository, ids?: string[]): n
 /**
  * Remove the spec claims a post contributed, from every catalog entry. A claim is the post's when
  * it carries the post's id (the merge paths) or its source line (promotion, which predates ids).
- * Returns a function that puts the entries back, for when the re-run fails.
+ * Returns `restore`, which puts the entries back for when the re-run fails, and
+ * `restoreReviews`, which puts analyst verdicts back on the claims a successful re-run produced.
  */
-function retractContribution(d: RawDispatch, deps: PipelineDeps): () => void {
+function retractContribution(
+  d: RawDispatch,
+  deps: PipelineDeps,
+): { restore: () => void; restoreReviews: () => void } {
   const source = `${d.sourceName} · ${d.url}`;
   const mine = (c: { sourceId?: string; source: string }) =>
     c.sourceId === d.id || c.source === source;
   const before: Drone[] = [];
+  const held: HeldReview[] = [];
   for (const drone of deps.drones.list()) {
     if (!drone.specs.some((s) => s.claims.some(mine))) continue;
     before.push(drone);
+    held.push(...heldReviews(drone, mine));
     deps.drones.upsert({
       ...drone,
       specs: drone.specs
@@ -716,8 +724,18 @@ function retractContribution(d: RawDispatch, deps: PipelineDeps): () => void {
         .filter((s) => s.claims.length > 0),
     });
   }
-  return () => {
-    for (const drone of before) deps.drones.upsert(drone);
+  return {
+    restore: () => {
+      for (const drone of before) deps.drones.upsert(drone);
+    },
+    restoreReviews: () => {
+      for (const id of new Set(held.map((h) => h.droneId))) {
+        const drone = deps.drones.get(id);
+        if (!drone) continue;
+        const next = restoreReviews(drone, held, mine);
+        if (next !== drone) deps.drones.upsert(next);
+      }
+    },
   };
 }
 

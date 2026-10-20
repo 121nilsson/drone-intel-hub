@@ -1,4 +1,4 @@
-import type { Drone } from "@/entities/drone/types";
+import type { ClaimIssue, Drone, SpecClaim } from "@/entities/drone/types";
 
 /**
  * What removing a catalog entry would touch, without changing anything.
@@ -38,4 +38,20 @@ export interface CatalogMutations {
    * become "discarded by the analyst".
    */
   remove(id: string): RemoveDroneReport | undefined;
+  /**
+   * Record an analyst's verdict on one spec claim: "confirmed", rejected for an `issue`, or
+   * null to clear an earlier verdict. A rejected claim stays on the record but stops feeding
+   * consensus. With `correctValue`, the value the analyst says is right is added as a confirmed
+   * claim of its own. Returns the updated entry, or undefined when the entry, spec or claim is
+   * gone.
+   */
+  reviewClaim(
+    droneId: string,
+    specKey: string,
+    claim: SpecClaim,
+    verdict: ClaimVerdict | null,
+  ): Drone | undefined;
 }
+
+export type ClaimVerdict =
+  { verdict: "confirmed" } | { verdict: "rejected"; issue: ClaimIssue; correctValue?: string };

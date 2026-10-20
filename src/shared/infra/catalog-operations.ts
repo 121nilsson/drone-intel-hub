@@ -1,4 +1,4 @@
-import type { Drone, SpecAttribute } from "@/entities/drone/types";
+import type { Drone, SpecAttribute, SpecClaim } from "@/entities/drone/types";
 import { attributeSemantic } from "@/entities/drone/spec-engine";
 import { mergeLinks } from "@/entities/normalization/apply";
 import type {
@@ -6,7 +6,8 @@ import type {
   DispatchRepository,
   DroneRepository,
 } from "@/shared/contracts/repository";
-import type { CatalogMutations, RemoveDroneReport } from "@/shared/contracts/catalog";
+import type { CatalogMutations, ClaimVerdict, RemoveDroneReport } from "@/shared/contracts/catalog";
+import { addAnalystClaim, reviewClaim } from "@/entities/drone/claim-review";
 
 /**
  * The repositories the catalog operations work on.
@@ -281,6 +282,37 @@ export function removeDrone(id: string, d: CatalogDeps): RemoveDroneReport | und
   return report;
 }
 
+/** See CatalogMutations.reviewClaim. */
+export function reviewSpecClaim(
+  droneId: string,
+  specKey: string,
+  claim: SpecClaim,
+  verdict: ClaimVerdict | null,
+  d: Pick<CatalogDeps, "drones">,
+  at = new Date().toISOString(),
+): Drone | undefined {
+  const drone = d.drones.get(droneId);
+  if (!drone) return undefined;
+  let next = reviewClaim(
+    drone,
+    specKey,
+    claim,
+    verdict
+      ? {
+          verdict: verdict.verdict,
+          ...(verdict.verdict === "rejected" ? { issue: verdict.issue } : {}),
+          at,
+          by: "analyst",
+        }
+      : null,
+  );
+  if (next && verdict?.verdict === "rejected" && verdict.correctValue?.trim()) {
+    next = addAnalystClaim(next, specKey, verdict.correctValue, at) ?? next;
+  }
+  if (next) d.drones.upsert(next);
+  return next;
+}
+
 /**
  * Binds the catalog operations to a set of repositories, so a page asks for "merge these two
  * entries" instead of assembling the repositories the operation happens to need.
@@ -290,5 +322,7 @@ export function createCatalogMutations(d: CatalogDeps): CatalogMutations {
     merge: (keepId, mergeId, reason) => mergeDrones(keepId, mergeId, d, reason),
     removalImpact: (id) => removalImpact(id, d),
     remove: (id) => removeDrone(id, d),
+    reviewClaim: (droneId, specKey, claim, verdict) =>
+      reviewSpecClaim(droneId, specKey, claim, verdict, d),
   };
 }

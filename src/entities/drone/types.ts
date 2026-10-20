@@ -33,6 +33,29 @@ export interface SpecClaim {
     at: string;
     reason?: string;
   };
+  /**
+   * An analyst's verdict on this claim, which outranks the contradiction check. Kept apart from
+   * `adjudication` rather than written over it: the two verdicts side by side are what later
+   * measures how often the model's check agrees with a person.
+   */
+  review?: ClaimReview;
+}
+
+/** What an analyst found wrong with a claim. */
+export type ClaimIssue =
+  /** The report gives the figure, but the figure is wrong. */
+  | "value"
+  /** The figure was read in the wrong unit or misparsed. */
+  | "unit"
+  /** The report is about another system. */
+  | "system";
+
+export interface ClaimReview {
+  verdict: "confirmed" | "rejected";
+  /** Set when rejected. */
+  issue?: ClaimIssue;
+  at: string;
+  by: "analyst";
 }
 
 /** Schema-less attribute: any key may be discovered by AI or analysts. */
