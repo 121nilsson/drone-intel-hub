@@ -3,6 +3,14 @@ import { attributeSemantic } from "@/entities/drone/spec-engine";
 import type { Drone, SpecAttribute } from "@/entities/drone/types";
 import { ProviderOutageError, type ContradictionAdjudicator } from "@/shared/contracts/ai";
 import type { DroneRepository } from "@/shared/contracts/repository";
+import { tallyBy, trustState, type TrustState } from "./earned-trust";
+
+export {
+  DISTRUST_AGREEMENT,
+  DISTRUST_MIN_REVIEWS,
+  TRUST_AGREEMENT,
+  TRUST_MIN_REVIEWS,
+} from "./earned-trust";
 
 /**
  * Contested figures, settled by the deep model instead of a reader. consensus() already flags a
@@ -23,23 +31,23 @@ export const MAX_CONTRADICTION_CHECKS = 10;
 export const CONTRADICTION_CONFIDENCE = 0.7;
 
 /**
- * The check earns autonomy per spec family the same way generated rules do: from analysts. Where
- * reviewed claims agree with its verdicts at least TRUST_AGREEMENT of the time over at least
- * TRUST_MIN_REVIEWS, it may act on a less certain pick; where they disagree often, it must be
- * more certain. A family nobody has reviewed keeps the default bar.
+ * The check earns autonomy per spec family from analysts (earned-trust.ts): where reviewed claims
+ * agree with its verdicts, it may act on a less certain pick; where they disagree often, it must
+ * be more certain. A family nobody has reviewed keeps the default bar.
  */
-export const TRUST_MIN_REVIEWS = 20;
-export const TRUST_AGREEMENT = 0.95;
 export const EARNED_CONFIDENCE = 0.6;
-export const DISTRUST_MIN_REVIEWS = 10;
-export const DISTRUST_AGREEMENT = 0.7;
 export const DISTRUSTED_CONFIDENCE = 0.9;
+const BAR: Record<TrustState, number> = {
+  earned: EARNED_CONFIDENCE,
+  default: CONTRADICTION_CONFIDENCE,
+  distrusted: DISTRUSTED_CONFIDENCE,
+};
 
 export interface CheckTrust {
   /** Reviewed claims whose verdict matched the check's: rejected outlier, confirmed supported. */
   agreed: number;
   disagreed: number;
-  state: "earned" | "default" | "distrusted";
+  state: TrustState;
   /** The confidence a verdict in this family needs to be recorded. */
   bar: number;
 }
@@ -49,31 +57,23 @@ export function specFamily(s: SpecAttribute): string {
   return attributeSemantic(s).split(".")[0]!;
 }
 
-function trustOf(agreed: number, disagreed: number): CheckTrust {
-  const n = agreed + disagreed;
-  const share = n ? agreed / n : 0;
-  if (n >= TRUST_MIN_REVIEWS && share >= TRUST_AGREEMENT)
-    return { agreed, disagreed, state: "earned", bar: EARNED_CONFIDENCE };
-  if (n >= DISTRUST_MIN_REVIEWS && share < DISTRUST_AGREEMENT)
-    return { agreed, disagreed, state: "distrusted", bar: DISTRUSTED_CONFIDENCE };
-  return { agreed, disagreed, state: "default", bar: CONTRADICTION_CONFIDENCE };
-}
-
 /** How often analysts agreed with the check, per spec family, from the claims both judged. */
 export function checkTrust(drones: readonly Drone[]): Map<string, CheckTrust> {
-  const tally = new Map<string, { agreed: number; disagreed: number }>();
-  for (const d of drones)
-    for (const s of d.specs)
-      for (const c of s.claims) {
-        if (!c.review || !c.adjudication) continue;
-        const t = tally.get(specFamily(s)) ?? { agreed: 0, disagreed: 0 };
-        const checkSaysWrong = c.adjudication.verdict === "outlier";
-        const analystSaysWrong = c.review.verdict === "rejected";
-        if (checkSaysWrong === analystSaysWrong) t.agreed++;
-        else t.disagreed++;
-        tally.set(specFamily(s), t);
-      }
-  return new Map([...tally].map(([family, t]) => [family, trustOf(t.agreed, t.disagreed)]));
+  const judged = drones.flatMap((d) => d.specs.flatMap((s) => s.claims.map((c) => ({ s, c }))));
+  const tally = tallyBy(judged, ({ s, c }) =>
+    c.review && c.adjudication
+      ? {
+          category: specFamily(s),
+          agreed: (c.adjudication.verdict === "outlier") === (c.review.verdict === "rejected"),
+        }
+      : null,
+  );
+  return new Map(
+    [...tally].map(([family, t]) => {
+      const state = trustState(t);
+      return [family, { ...t, state, bar: BAR[state] }];
+    }),
+  );
 }
 
 /** The confidence a verdict on this spec needs, given the family's record. */

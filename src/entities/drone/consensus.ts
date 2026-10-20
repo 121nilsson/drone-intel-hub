@@ -1,6 +1,6 @@
 import { canonicalUnitForSemantic, semanticKeyFor } from "@/entities/normalization/semantic";
 import { convert, normalizeQuantity } from "@/entities/normalization/units";
-import { claimCounts } from "./claim-review";
+import { claimCounts, correctedPoint } from "./claim-review";
 import type { SpecAttribute, SpecClaim } from "./types";
 
 function targetUnit(spec: SpecAttribute): string | undefined {
@@ -126,6 +126,18 @@ function isPoint(m: Point | Bound): m is Point {
   return "value" in m;
 }
 
+/**
+ * A claim's own point reading, in the unit consensus measures this spec in, before any
+ * correction. Undefined for ranges, bounds and text.
+ */
+export function rawPoint(
+  spec: SpecAttribute,
+  claim: SpecClaim,
+): { value: number; unit?: string } | undefined {
+  const m = measurement(spec, claim, 0);
+  return m && isPoint(m) ? { value: m.value, ...(m.unit ? { unit: m.unit } : {}) } : undefined;
+}
+
 /** Trim float noise (2000.0000000000002) without hiding meaningful precision (2.35). */
 function round(n: number) {
   return Number.isInteger(n) ? n : Number(n.toFixed(2));
@@ -139,6 +151,9 @@ export function consensus(spec: SpecAttribute): Consensus {
   const kept = spec.claims.flatMap((claim, i) => (claimCounts(claim) ? [{ claim, i }] : []));
   const sources = new Set(kept.map(({ claim }) => claim.source)).size;
   const measured = kept.flatMap(({ claim, i }) => {
+    // A corrected reading is already in the spec's unit (rawPoint is what it was derived from).
+    const fixed = correctedPoint(claim);
+    if (fixed) return [{ ...fixed, claimIndex: i }];
     const m = measurement(spec, claim, i);
     return m ? [m] : [];
   });

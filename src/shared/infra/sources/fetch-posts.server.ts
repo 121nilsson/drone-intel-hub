@@ -16,6 +16,7 @@ import {
 import { autoTriage } from "@/shared/infra/ingest/auto-triage";
 import { outletWeights } from "@/entities/source/outlet-record";
 import { adjudicateContradictions } from "@/shared/infra/ingest/contradictions";
+import { autoCorrect } from "@/shared/infra/ingest/auto-correct";
 import { dbConfigured } from "../postgres/db.server";
 import { PostgresStore } from "../postgres/postgres-store.server";
 import { DEFAULT_SETTINGS } from "../settings-defaults";
@@ -283,6 +284,16 @@ export async function fetchAllSources(
   )
     console.log(
       `[sources:sync] triage: ${triage.corroborated} corroborated, ${triage.adjudicatedMerged} merged and ${triage.adjudicatedReleased} released by adjudication, ${triage.agedOut} aged out${triage.stopReason ? ` (adjudication stopped: ${triage.stopReason})` : ""}`,
+    );
+  // Unit slips and impossible figures, found without a model. First, so a slip it settles is no
+  // longer a dispute to spend a contradiction check on. AUTOCORRECT=off keeps every finding a
+  // proposal, the way RULES_AUTOPROMOTE=off keeps rules in shadow.
+  const corrected = autoCorrect(drones, {
+    apply: process.env["AUTOCORRECT"]?.toLowerCase() !== "off",
+  });
+  if (corrected.proposed || corrected.applied || corrected.withdrawn)
+    console.log(
+      `[sources:sync] auto-correct: ${corrected.proposed} proposed, ${corrected.applied} applied, ${corrected.withdrawn} withdrawn`,
     );
   // Contested figures: the deep model says, once per disputed spec, which report behind the
   // disagreement is best supported. Provenance stays whole; the claims carry the verdict.

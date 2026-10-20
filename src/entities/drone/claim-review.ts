@@ -22,11 +22,24 @@ export function claimKey(c: SpecClaim): string {
 /**
  * Whether a claim feeds consensus and the other aggregates. The analyst's verdict wins in
  * both directions: a rejected claim is out even if the check backed it, and a confirmed one is
- * in even if the check called it an outlier.
+ * in even if the check called it an outlier. An applied correction comes next: an implausible
+ * figure is out, and a unit slip counts at its corrected value even if the check, which saw the
+ * slipped figure, called it an outlier.
  */
 export function claimCounts(c: SpecClaim): boolean {
   if (c.review) return c.review.verdict === "confirmed";
+  if (c.autoCorrection?.applied) return c.autoCorrection.kind === "unit";
   return c.adjudication?.verdict !== "outlier";
+}
+
+/**
+ * The corrected reading consensus uses in place of the claim's own, when there is one: an applied
+ * unit correction on a claim no analyst has ruled on.
+ */
+export function correctedPoint(c: SpecClaim): { value: number; unit?: string } | undefined {
+  const fix = c.autoCorrection;
+  if (c.review || !fix?.applied || fix.kind !== "unit" || fix.value === undefined) return undefined;
+  return { value: fix.value, ...(fix.unit ? { unit: fix.unit } : {}) };
 }
 
 /**

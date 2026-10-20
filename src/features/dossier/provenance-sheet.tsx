@@ -13,6 +13,7 @@ import {
 import { Btn, Tag } from "@/shared/ui/primitives";
 import { TranslateButton } from "@/shared/ui/translate-button";
 import { claimKey } from "@/entities/drone/claim-review";
+import { correctionMark, describeCorrection } from "@/shared/ui/correction";
 
 export interface ClaimSelection {
   spec: SpecAttribute;
@@ -27,8 +28,10 @@ const ISSUE_LABEL: Record<ClaimIssue, string> = {
 
 /** Short chip naming a claim's source; tapping opens the provenance sheet. */
 export function ClaimChip({ claim, onOpen }: { claim: SpecClaim; onOpen: () => void }) {
-  // An analyst's verdict outranks the check's, so the chip shows only that one.
-  const verdict = claim.review ? undefined : claim.adjudication;
+  // An analyst's verdict outranks the others, so the chip shows only that one. An applied
+  // correction outranks the check, which saw the uncorrected figure.
+  const fix = claim.review ? undefined : claim.autoCorrection;
+  const verdict = claim.review || fix?.applied ? undefined : claim.adjudication;
   const rejected = claim.review?.verdict === "rejected";
   return (
     <button
@@ -50,6 +53,14 @@ export function ClaimChip({ claim, onOpen }: { claim: SpecClaim; onOpen: () => v
           }
         >
           {verdict.verdict === "outlier" ? "⚠ outlier" : "✓ supported"}
+        </span>
+      )}
+      {fix && (
+        <span
+          className={`shrink-0 ${fix.kind === "implausible" ? "text-destructive" : "text-primary"} ${fix.applied ? "" : "opacity-70"}`}
+          title={describeCorrection(fix)}
+        >
+          {correctionMark(fix)}
         </span>
       )}
       {claim.review && (
@@ -83,11 +94,35 @@ function ClaimReviewPanel({ droneId, selection }: { droneId: string; selection: 
     setIssue(null);
     setCorrect("");
   };
+  const fix = claim.autoCorrection;
   return (
     <div className="space-y-2 border-t border-border pt-4">
       <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
         Analyst review
       </p>
+      {fix && !review && (
+        <div className="space-y-2 border border-border bg-secondary/40 p-3">
+          <p className="text-xs">
+            <span className="font-mono text-primary">{correctionMark(fix)}</span> —{" "}
+            {describeCorrection(fix)}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <Btn
+              className="px-2 py-1 text-xs"
+              onClick={() => svc.catalog.reviewCorrection(droneId, spec.key, claim, true)}
+            >
+              {fix.kind === "unit" ? "Accept correction" : "Reject figure"}
+            </Btn>
+            <Btn
+              variant="ghost"
+              className="px-2 py-1 text-xs"
+              onClick={() => svc.catalog.reviewCorrection(droneId, spec.key, claim, false)}
+            >
+              Figure is right
+            </Btn>
+          </div>
+        </div>
+      )}
       {review ? (
         <div className="flex flex-wrap items-center gap-2">
           <Tag tone={review.verdict === "rejected" ? "danger" : "success"}>

@@ -51,6 +51,18 @@ export interface CatalogMutations {
     claim: SpecClaim,
     verdict: ClaimVerdict | null,
   ): Drone | undefined;
+  /**
+   * The analyst's answer to the corrector's finding on a claim. Accepting a unit correction rejects
+   * the figure as misread and adds the corrected value as the analyst's; accepting an implausible
+   * finding rejects the figure; keeping confirms the figure as written. Either way the finding
+   * stays on the claim, since it is what the corrector's trust is measured on.
+   */
+  reviewCorrection(
+    droneId: string,
+    specKey: string,
+    claim: SpecClaim,
+    accept: boolean,
+  ): Drone | undefined;
 }
 
 export type ClaimVerdict =

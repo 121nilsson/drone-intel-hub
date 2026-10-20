@@ -1,4 +1,4 @@
-import { claimCounts } from "@/entities/drone/claim-review";
+import { claimCounts, correctedPoint } from "@/entities/drone/claim-review";
 import type { Drone, RFLink } from "@/entities/drone/types";
 import { intersectBands, linkIsFiber } from "./rf";
 import { semanticKeyFor } from "./semantic";
@@ -120,7 +120,10 @@ export function specValue(d: Drone, semantic: string): number | undefined {
     if ((a.semantic ?? semanticKeyFor(a.key, a.label)) !== semantic) continue;
     for (const c of a.claims) {
       if (!claimCounts(c)) continue;
-      const v = c.normalized?.canonicalValue ?? (typeof c.value === "number" ? c.value : undefined);
+      const v =
+        correctedPoint(c)?.value ??
+        c.normalized?.canonicalValue ??
+        (typeof c.value === "number" ? c.value : undefined);
       if (v !== undefined && Number.isFinite(v)) vals.push(v);
     }
   }

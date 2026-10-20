@@ -313,6 +313,20 @@ export function reviewSpecClaim(
   return next;
 }
 
+/** See CatalogMutations.reviewCorrection. */
+export function verdictForCorrection(claim: SpecClaim, accept: boolean): ClaimVerdict | null {
+  const fix = claim.autoCorrection;
+  if (!fix) return null;
+  if (!accept) return { verdict: "confirmed" };
+  if (fix.kind === "implausible" || fix.value === undefined)
+    return { verdict: "rejected", issue: "value" };
+  return {
+    verdict: "rejected",
+    issue: "unit",
+    correctValue: fix.unit ? `${fix.value} ${fix.unit}` : String(fix.value),
+  };
+}
+
 /**
  * Binds the catalog operations to a set of repositories, so a page asks for "merge these two
  * entries" instead of assembling the repositories the operation happens to need.
@@ -324,5 +338,9 @@ export function createCatalogMutations(d: CatalogDeps): CatalogMutations {
     remove: (id) => removeDrone(id, d),
     reviewClaim: (droneId, specKey, claim, verdict) =>
       reviewSpecClaim(droneId, specKey, claim, verdict, d),
+    reviewCorrection: (droneId, specKey, claim, accept) => {
+      const verdict = verdictForCorrection(claim, accept);
+      return verdict ? reviewSpecClaim(droneId, specKey, claim, verdict, d) : undefined;
+    },
   };
 }

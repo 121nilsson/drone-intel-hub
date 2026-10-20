@@ -39,6 +39,29 @@ export interface SpecClaim {
    * measures how often the model's check agrees with a person.
    */
   review?: ClaimReview;
+  /**
+   * What the deterministic corrector found wrong with this claim (auto-correction.ts). Like the
+   * other verdicts it never rewrites the claim; consensus reads it only once `applied`.
+   */
+  autoCorrection?: AutoCorrection;
+}
+
+export interface AutoCorrection {
+  /** "unit": the figure was read in the wrong unit; "implausible": no reading of it is possible. */
+  kind: "unit" | "implausible";
+  /** "consensus": the other sources agree on another figure; "bounds": physically out of range. */
+  basis: "consensus" | "bounds";
+  /** The corrected point value, in `unit` (kind "unit" only). */
+  value?: number;
+  unit?: string;
+  /** What the reading was multiplied by to reach `value`. */
+  factor?: number;
+  /**
+   * Whether consensus uses the correction. Set by the corrector from the trust analysts have given
+   * this kind of correction; until then it is a proposal shown beside the claim.
+   */
+  applied: boolean;
+  at: string;
 }
 
 /** What an analyst found wrong with a claim. */

@@ -30,6 +30,7 @@ import {
 import type { EvalKeyTrend } from "@/shared/infra/evaluation/evaluation.server";
 import { RulesPanel } from "./rules-panel";
 import { AnalystReviewPanel } from "./analyst-review-panel";
+import { CorrectionQueue } from "./correction-queue";
 
 const pct = (n: number) => `${Math.round(n * 100)}%`;
 const SIZES = [50, 100, 250, 500];
@@ -454,6 +455,8 @@ export function EvaluationPage() {
       </Panel>
 
       <AnalystReviewPanel drones={drones} />
+
+      <CorrectionQueue drones={drones} />
 
       <RulesPanel />
     </div>
