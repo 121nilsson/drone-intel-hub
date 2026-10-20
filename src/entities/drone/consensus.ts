@@ -141,9 +141,18 @@ export function rawPoint(
   return m && isPoint(m) ? { value: m.value, ...(m.unit ? { unit: m.unit } : {}) } : undefined;
 }
 
-/** Trim float noise (2000.0000000000002) without hiding meaningful precision (2.35). */
+/**
+ * Trim float noise (2000.0000000000002) without hiding meaningful precision (2.35).
+ *
+ * Two decimals is the display's precision, but on a small figure those decimals can be a
+ * large error - 0.0091 km (9.1 m) would read as 0.01 km - so three significant digits are kept
+ * whenever the decimals would eat the number.
+ */
 function round(n: number) {
-  return Number.isInteger(n) ? n : Number(n.toFixed(2));
+  if (Number.isInteger(n)) return n;
+  const fixed = Number(n.toFixed(2));
+  if (fixed === 0 || Math.abs(fixed - n) > Math.abs(n) * 0.01) return Number(n.toPrecision(3));
+  return fixed;
 }
 
 export function consensus(spec: SpecAttribute): Consensus {

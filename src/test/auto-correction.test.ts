@@ -135,6 +135,35 @@ describe("detectCorrection", () => {
     expect(detectCorrection(range(point(40, "km", "a")), 0, AT)).toBeUndefined();
   });
 
+  it("does not read a figure the report states verbatim as a slipped unit", () => {
+    // "600 kilometres per hour" filed under an altitude: the number is what the report wrote,
+    // so it is not a unit slip - it is a figure that does not belong on this attribute.
+    const speed = spec("altitude.max", "km", [
+      {
+        value: 600,
+        raw: "altitude and 600 kilometers",
+        source: "sUAS News",
+        date: "2026-10-01T00:00:00.000Z",
+      },
+    ]);
+    expect(detectCorrection(speed, 0, AT)).toMatchObject({ kind: "implausible", basis: "bounds" });
+    expect(detectCorrection(speed, 0, AT)).not.toMatchObject({ kind: "unit" });
+  });
+
+  it("leaves a sea-skimming altitude alone", () => {
+    // The GQM-163 Coyote cruises at 9.1 m (30 ft): a loitering munition flies at metres, so
+    // the figure is plausible and must not be read as kilometres.
+    const seaSkimmer = spec("altitude.max", "m", [
+      {
+        value: "9.1 m",
+        raw: "9.1 m",
+        source: "Wikipedia",
+        date: "2026-10-01T00:00:00.000Z",
+      },
+    ]);
+    expect(detectCorrection(seaSkimmer, 0, AT)).toBeUndefined();
+  });
+
   it("never flags an analyst's own value, text or a range", () => {
     const own = range(
       point(40, "km", "a"),

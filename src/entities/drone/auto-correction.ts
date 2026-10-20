@@ -1,6 +1,7 @@
 import { ANALYST_SOURCE } from "./claim-review";
 import { rawPoint } from "./consensus";
 import { attributeSemantic } from "./spec-engine";
+import { numbersIn } from "@/entities/normalization/numeric";
 import type { AutoCorrection, SpecAttribute, SpecClaim } from "./types";
 
 /**
@@ -52,7 +53,10 @@ interface Bounds {
 
 const RANGE: Bounds = { min: 0.1, max: 25_000, unit: "km" };
 const SPEED: Bounds = { min: 1, max: 4_000, unit: "km/h" };
-const ALTITUDE: Bounds = { min: 0.01, max: 35, unit: "km" };
+// A sea-skimming loitering munition flies at a few metres (the GQM-163 Coyote cruises at
+// 9.1 m), so the floor sits at a metre: below that a system is not flying, and a figure that
+// low is a misreading.
+const ALTITUDE: Bounds = { min: 0.001, max: 35, unit: "km" };
 const WEIGHT: Bounds = { min: 0.02, max: 60_000, unit: "kg" };
 const PAYLOAD: Bounds = { min: 0.005, max: 20_000, unit: "kg" };
 const ENDURANCE: Bounds = { min: 1, max: 100_000, unit: "min" };
@@ -127,6 +131,24 @@ function slipFactor(ratio: number, unit: string): number | undefined {
 const within = (v: number, b: Bounds) => v >= b.min && v <= b.max;
 
 /**
+ * True when the number the catalogue recorded is one the report actually wrote.
+ *
+ * A unit slip is a misread NUMBER: the report says "40 000 m" and the entry records 40. When
+ * the recorded number is a number the report states, the number was read right - so a figure
+ * that does not fit this attribute is not a slipped unit but a figure that does not belong
+ * here. Reading it as a slip would rewrite it: a "600 kilometres per hour" speed filed under
+ * an altitude would come out as 0.6 km of altitude.
+ */
+function statesRecordedNumber(c: SpecClaim, recorded: number): boolean {
+  if (!c.raw) return false;
+  const stated = numbersIn(c.raw);
+  if (!stated.length) return false;
+  const recordedNumbers = typeof c.value === "number" ? [c.value] : numbersIn(String(c.value));
+  const near = (a: number, b: number) => Math.abs(a - b) <= Math.abs(a) * 1e-6 + 1e-9;
+  return recordedNumbers.some((n) => stated.some((s) => near(s, n)));
+}
+
+/**
  * What is wrong with claim `i` of `spec`, if anything. Never flags a hand-entered analyst value,
  * text, or a range. A figure the other sources disagree with by no conversion factor is left
  * alone: that is a dispute, and the contradiction check's question.
@@ -142,11 +164,18 @@ export function detectCorrection(
   if (!p || !(p.value > 0) || !p.unit) return undefined;
 
   const agreed = agreedFigure(spec, i, p.unit);
+  // A figure the report states verbatim was read right. If it does not fit this attribute,
+  // that is a figure that does not belong here - not a slipped unit - so it is flagged, never
+  // rewritten.
+  const faithful = statesRecordedNumber(c, p.value);
   if (agreed !== undefined) {
     const ratio = p.value / agreed;
     if (Math.abs(ratio - 1) <= AGREEMENT_SPREAD) return undefined;
     const g = slipFactor(ratio, p.unit);
-    if (g !== undefined)
+    if (g !== undefined) {
+      // The number is one the report wrote, so a disagreement with the other sources is a
+      // dispute between them - the contradiction check's question - and not a misread unit.
+      if (faithful) return undefined;
       return {
         kind: "unit",
         basis: "consensus",
@@ -156,10 +185,13 @@ export function detectCorrection(
         applied: false,
         at,
       };
+    }
   }
 
   const bounds = PLAUSIBLE[attributeSemantic(spec)];
   if (!bounds || bounds.unit !== p.unit || within(p.value, bounds)) return undefined;
+  // Out of range, but the number is one the report wrote: it is not a slipped unit.
+  if (faithful) return { kind: "implausible", basis: "bounds", applied: false, at };
   const primary = UNIT_SLIPS[p.unit]?.[0];
   if (agreed === undefined && primary !== undefined) {
     for (const g of [primary, 1 / primary])
