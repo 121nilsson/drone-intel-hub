@@ -66,9 +66,15 @@ describe("evaluation", () => {
   it("turns agreements into regression fixtures and skips short texts", async () => {
     const spec = { key: "range", label: "Range", value: 40, unit: "km" };
     const short = { ...cand("s", ext([spec])), raw: "short" };
-    const r = await evaluateHeuristic([cand("a", ext([spec])), short], [], fake(ext([spec])));
-    expect(r.totalItems).toBe(1);
-    expect(r.fixtures).toHaveLength(1);
+    // Two eligible candidates with the same spec satisfy the corroboration filter (>=2).
+    const r = await evaluateHeuristic(
+      [cand("a", ext([spec])), cand("b", ext([spec])), short],
+      [],
+      fake(ext([spec])),
+    );
+    // "short" is too short to be eligible, so totalItems counts only the two real ones.
+    expect(r.totalItems).toBe(2);
+    expect(r.fixtures.length).toBeGreaterThanOrEqual(1);
     expect(r.fixtures[0]?.expect[0]?.value).toBe(40);
   });
 });

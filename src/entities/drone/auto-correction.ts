@@ -1,7 +1,7 @@
 import { ANALYST_SOURCE } from "./claim-review";
 import { rawPoint } from "./consensus";
 import { attributeSemantic } from "./spec-engine";
-import { numbersIn } from "@/entities/normalization/numeric";
+import { convert, normalizeQuantityLoose } from "@/entities/normalization/units";
 import type { AutoCorrection, SpecAttribute, SpecClaim } from "./types";
 
 /**
@@ -131,21 +131,24 @@ function slipFactor(ratio: number, unit: string): number | undefined {
 const within = (v: number, b: Bounds) => v >= b.min && v <= b.max;
 
 /**
- * True when the number the catalogue recorded is one the report actually wrote.
+ * True when the claim's figure is what the report wrote.
  *
- * A unit slip is a misread NUMBER: the report says "40 000 m" and the entry records 40. When
- * the recorded number is a number the report states, the number was read right - so a figure
- * that does not fit this attribute is not a slipped unit but a figure that does not belong
- * here. Reading it as a slip would rewrite it: a "600 kilometres per hour" speed filed under
- * an altitude would come out as 0.6 km of altitude.
+ * The claim's own text is read as a measurement and compared with the claim's reading: equal
+ * means the number and the unit were both read as written, so a figure that does not fit this
+ * attribute is a figure that does not belong here - not a slipped unit. A text that states no
+ * measurement contradicts nothing, so it counts as faithful too.
+ *
+ * The unit is what tells the two apart: a report saying "25 miles" that the entry recorded as
+ * 25 km read the number right and the unit wrong - which is exactly a unit slip.
  */
-function statesRecordedNumber(c: SpecClaim, recorded: number): boolean {
+function statesRecordedFigure(c: SpecClaim, p: { value: number; unit?: string }): boolean {
   if (!c.raw) return false;
-  const stated = numbersIn(c.raw);
-  if (!stated.length) return false;
-  const recordedNumbers = typeof c.value === "number" ? [c.value] : numbersIn(String(c.value));
-  const near = (a: number, b: number) => Math.abs(a - b) <= Math.abs(a) * 1e-6 + 1e-9;
-  return recordedNumbers.some((n) => stated.some((s) => near(s, n)));
+  const q = normalizeQuantityLoose(c.raw);
+  if (!q || q.canonicalValue === undefined || !q.canonicalUnit) return true;
+  if (!p.unit) return false;
+  const stated = convert(q.canonicalValue, q.canonicalUnit, p.unit);
+  if (stated === undefined) return true;
+  return Math.abs(stated - p.value) <= Math.abs(p.value) * 1e-6 + 1e-9;
 }
 
 /**
@@ -167,7 +170,7 @@ export function detectCorrection(
   // A figure the report states verbatim was read right. If it does not fit this attribute,
   // that is a figure that does not belong here - not a slipped unit - so it is flagged, never
   // rewritten.
-  const faithful = statesRecordedNumber(c, p.value);
+  const faithful = statesRecordedFigure(c, p);
   if (agreed !== undefined) {
     const ratio = p.value / agreed;
     if (Math.abs(ratio - 1) <= AGREEMENT_SPREAD) return undefined;

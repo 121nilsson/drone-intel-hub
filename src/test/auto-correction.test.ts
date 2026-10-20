@@ -269,3 +269,113 @@ describe("reviewCorrection", () => {
     expect(correctionTrust(all()).get("unit:consensus")).toMatchObject({ agreed: 0, disagreed: 1 });
   });
 });
+
+describe("auto-correction edge cases", () => {
+  it("detects a miles-vs-km slip via the 1.609 factor", () => {
+    // Two sources say 40 km; a third says "25 miles" and the entry recorded the number with the
+    // spec's unit, so 25 km sits 1.609 times off what the others agree on.
+    const s = range(point(40, "km", "a"), point(41, "km", "b"), {
+      value: 25,
+      raw: "25 miles",
+      source: "c",
+      date: "2026-10-01T00:00:00.000Z",
+      normalized: { raw: "25 miles", canonicalValue: 25, canonicalUnit: "km", confidence: 1 },
+    });
+    const fix = detectCorrection(s, 2, AT);
+    expect(fix).toMatchObject({ kind: "unit", basis: "consensus" });
+    // The factor is the mile conversion, to the precision the corrector keeps.
+    expect(fix!.factor).toBeCloseTo(1.609344, 4);
+    // The corrected value should be close to 40 km.
+    expect(fix!.value).toBeCloseTo(40.2, 0);
+  });
+
+  it("treats two posts from the same outlet as one source, not independent consensus", () => {
+    // Same outlet "Rybar" with two different sourceIds — they should not count as two independent
+    // agreeing sources against the third.
+    const s = range(
+      point(40, "km", "Rybar", { sourceId: "rybar|1" }),
+      point(40, "km", "Rybar", { sourceId: "rybar|2" }),
+      point(40_000, "km", "TWZ"),
+    );
+    const fix = detectCorrection(s, 2, AT);
+    // Only one distinct source agrees (both Rybar posts are the same outlet), so consensus cannot
+    // form against TWZ: the finding must not rest on the other sources agreeing.
+    expect(fix?.basis).not.toBe("consensus");
+    // It still falls to the bounds, which do not care who said what: 40 000 km is out of range
+    // and the metre slip lands inside it.
+    expect(fix).toMatchObject({ kind: "unit", basis: "bounds", value: 40 });
+  });
+
+  it("does not flag a range claim as a unit slip", () => {
+    // A range "80-120 km" stored with canonical value 100 should not be flagged.
+    const rangeSpec: SpecAttribute = {
+      key: "range_max",
+      label: "Range",
+      unit: "km",
+      semantic: "range.max",
+      canonicalUnit: "km",
+      discoveredBy: "ai",
+      claims: [
+        point(100, "km", "a"),
+        point(102, "km", "b"),
+        {
+          value: "80-120",
+          raw: "80-120 km",
+          source: "c",
+          date: "2026-10-01T00:00:00.000Z",
+          normalized: {
+            raw: "80-120 km",
+            canonicalValue: 100,
+            canonicalUnit: "km",
+            confidence: 0.8,
+            range: { min: 80, max: 120, qualifier: "range" },
+          },
+        },
+      ],
+    };
+    // The range claim's canonical value (100) is close to the others; no correction needed.
+    expect(detectCorrection(rangeSpec, 2, AT)).toBeUndefined();
+  });
+
+  it("does not flag valid C-UAS/SHORAD engagement ceilings", () => {
+    // A SHORAD system with 15 km engagement ceiling is valid.
+    const ceiling = spec("altitude.max", "km", [point(15, "km", "a"), point(15, "km", "b")]);
+    expect(detectCorrection(ceiling, 0, AT)).toBeUndefined();
+    expect(detectCorrection(ceiling, 1, AT)).toBeUndefined();
+  });
+
+  it("does not flag valid high-altitude HALE figures", () => {
+    // A HALE drone at 20 km service ceiling is within bounds.
+    const hale = spec("altitude.service_ceiling", "km", [
+      point(20, "km", "Janes"),
+      point(19.8, "km", "IISS"),
+    ]);
+    expect(detectCorrection(hale, 0, AT)).toBeUndefined();
+    expect(detectCorrection(hale, 1, AT)).toBeUndefined();
+  });
+
+  it("proposes the metre slip for an altitude too high to be real", () => {
+    // 50 km altitude is above the 35 km maximum bound for any unmanned system. A reading that
+    // far out is the metre slip the module documents: ÷1000 lands inside the range, so the
+    // finding is a unit slip (50 m), not a bare "implausible".
+    const absurd = spec("altitude.max", "km", [point(50, "km", "X")]);
+    expect(detectCorrection(absurd, 0, AT)).toMatchObject({
+      kind: "unit",
+      basis: "bounds",
+      value: 0.05,
+      factor: 0.001,
+    });
+  });
+
+  it("handles a knots-vs-km/h slip via the 1.852 factor", () => {
+    // Two sources say 200 km/h, one says 108 (knots → 200 km/h).
+    const s = spec("speed.max", "km/h", [
+      point(200, "km/h", "a"),
+      point(198, "km/h", "b"),
+      point(108, "km/h", "c"),
+    ]);
+    const fix = detectCorrection(s, 2, AT);
+    expect(fix).toMatchObject({ kind: "unit", basis: "consensus" });
+    expect(fix!.value).toBeCloseTo(200, 0);
+  });
+});

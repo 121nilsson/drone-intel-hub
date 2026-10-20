@@ -641,6 +641,12 @@ export async function evaluateHeuristic(
         return !proof || rawFolded.includes(fold(String(proof)));
       });
       if (hasEvidence && c.raw.trim().length > 50 && c.status !== "discarded") {
+        // Enforce corroboration: only keep agreed specs that >=2 candidates confirm.
+        const corroborated = agreed.filter((p) => {
+          const key = `${p.h.semantic}|${p.h.canonical ?? p.h.value}|${p.h.canonicalUnit ?? p.h.unit ?? ""}`;
+          return (refCounts.get(key) ?? 0) >= 2;
+        });
+        if (corroborated.length === 0) continue;
         const refNames = [
           c.extraction.name,
           ...(c.extraction.systems ?? []).map((s) => s.name),
@@ -651,7 +657,7 @@ export async function evaluateHeuristic(
           id: c.id,
           source: c.source,
           text: c.raw,
-          expect: agreed.map((p) => ({
+          expect: corroborated.map((p) => ({
             semantic: p.h.semantic,
             value: p.h.canonical ?? p.h.value,
             ...(p.h.canonicalUnit ? { unit: p.h.canonicalUnit } : {}),

@@ -6,6 +6,8 @@ export type Domain = "Air" | "Land" | "Sea" | "Multi";
 export const DOMAINS: Domain[] = ["Air", "Land", "Sea", "Multi"];
 
 export interface SpecClaim {
+  /** Stable identity assigned at creation. Older claims without one fall back to a composite key. */
+  id?: string;
   value: number | string;
   /** Verbatim text when the value was parsed from a string. */
   raw?: string;

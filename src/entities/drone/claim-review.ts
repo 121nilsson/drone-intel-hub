@@ -11,12 +11,25 @@ import type { ClaimReview, Drone, SpecClaim } from "./types";
 export const ANALYST_SOURCE = "Analyst";
 
 /**
- * Identity of a claim within its spec. Claims have no id, and the list is appended to and
- * re-filtered by merges and re-analysis, so an index held by a page goes stale; these fields
- * do not.
+ * A claim's identity by content rather than by object.
+ *
+ * The same report stating the same figure must produce the same fingerprint, so a verdict
+ * survives a re-analysis that re-creates the claim object, and two claims that merely share a
+ * value - the same number from two outlets - stay separate.
+ */
+export function claimFingerprint(c: SpecClaim): string {
+  const ev = (c.evidence ?? c.raw ?? "").trim().slice(0, 80);
+  return [c.source, c.sourceId ?? "", String(c.value), c.date, ev].join("|");
+}
+
+/**
+ * Identity of a claim within its spec. New claims carry a stable `id`; older ones fall back to a
+ * composite key enriched with an evidence fingerprint so two claims from the same source with the
+ * same value and date but different evidence are reviewed independently.
  */
 export function claimKey(c: SpecClaim): string {
-  return [c.source, c.sourceId ?? "", String(c.value), c.date].join("|");
+  if (c.id) return c.id;
+  return claimFingerprint(c);
 }
 
 /**
@@ -84,6 +97,7 @@ export function addAnalystClaim(
   const normalized = normalizeQuantity(raw);
   const numeric = Number(raw);
   const claim: SpecClaim = {
+    id: crypto.randomUUID(),
     value: normalized?.canonicalValue ?? (Number.isFinite(numeric) ? numeric : raw),
     ...(normalized
       ? { raw, normalized, normalizationConfidence: normalized.confidence }
@@ -107,6 +121,13 @@ export interface HeldReview {
   droneId: string;
   semantic: string;
   value: string;
+  /** The outlet the claim came from, so a verdict never crosses to another outlet's figure. */
+  source: string;
+  /**
+   * The claim's content fingerprint, so the verdict goes back to the same claim and not to
+   * another one that happens to carry the same number.
+   */
+  fingerprint: string;
   review: ClaimReview;
 }
 
@@ -120,6 +141,8 @@ export function heldReviews(drone: Drone, mine: (c: SpecClaim) => boolean): Held
               droneId: drone.id,
               semantic: attributeSemantic(s),
               value: String(c.value),
+              source: c.source,
+              fingerprint: claimFingerprint(c),
               review: c.review,
             },
           ]
@@ -146,7 +169,16 @@ export function restoreReviews(
     const semantic = attributeSemantic(s);
     const claims = s.claims.map((c) => {
       if (c.review || !mine(c)) return c;
-      const h = mineHere.find((x) => x.semantic === semantic && x.value === String(c.value));
+      // The claim itself, by content: a re-analysis re-creates the claim object, so the id moves
+      // but the fingerprint does not. Two claims that only share a number do not match.
+      const fingerprint = claimFingerprint(c);
+      const h =
+        mineHere.find((x) => x.fingerprint === fingerprint) ??
+        // A claim whose evidence was re-read differently keeps its source and value, so it still
+        // matches the verdict - but only that source's.
+        mineHere.find(
+          (x) => x.semantic === semantic && x.value === String(c.value) && x.source === c.source,
+        );
       if (!h) return c;
       changed = true;
       return { ...c, review: h.review };

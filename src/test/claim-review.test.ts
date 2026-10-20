@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { consensus } from "@/entities/drone/consensus";
-import { ANALYST_SOURCE, claimCounts } from "@/entities/drone/claim-review";
+import {
+  ANALYST_SOURCE,
+  claimCounts,
+  claimKey,
+  heldReviews,
+  restoreReviews,
+} from "@/entities/drone/claim-review";
 import { reviewSpecClaim } from "@/shared/infra/catalog-operations";
 import { adjudicateContradictions } from "@/shared/infra/ingest/contradictions";
 import type { ContradictionAdjudicator } from "@/shared/contracts/ai";
@@ -196,5 +202,69 @@ describe("the contradiction check after an analyst rejected a claim", () => {
       "outlier",
     ]);
     expect(claims[1]!.review?.verdict).toBe("rejected");
+  });
+});
+
+describe("claimKey identity", () => {
+  it("uses the stable id when present", () => {
+    const c = claim(40, "Militarnyi", { id: "uuid-1" });
+    expect(claimKey(c)).toBe("uuid-1");
+  });
+
+  it("falls back to a composite key that includes evidence for legacy claims", () => {
+    const a = claim(40, "Rybar", { evidence: "range 40 km per source A" });
+    const b = claim(40, "Rybar", { evidence: "range 40 km per source B" });
+    // Same source, same value, same date — but different evidence must produce different keys.
+    expect(claimKey(a)).not.toBe(claimKey(b));
+  });
+
+  it("does not collide when two legacy claims share source/value/date but differ in raw", () => {
+    const a: SpecClaim = {
+      value: 40,
+      source: "Rybar",
+      date: "2026-10-01T00:00:00.000Z",
+      raw: "40 km max range",
+    };
+    const b: SpecClaim = {
+      value: 40,
+      source: "Rybar",
+      date: "2026-10-01T00:00:00.000Z",
+      raw: "40 km combat radius",
+    };
+    expect(claimKey(a)).not.toBe(claimKey(b));
+  });
+
+  it("two id-bearing claims never collide even with identical evidence", () => {
+    const a = claim(40, "Rybar", { id: "uuid-a", evidence: "same text" });
+    const b = claim(40, "Rybar", { id: "uuid-b", evidence: "same text" });
+    expect(claimKey(a)).not.toBe(claimKey(b));
+  });
+});
+
+describe("restoring a verdict after a re-analysis", () => {
+  const reviewed = { verdict: "rejected" as const, by: "analyst" as const, at: AT };
+
+  it("puts the verdict back on the same claim, not on another with the same number", () => {
+    const original = drone([
+      range([
+        claim(40, "Militarnyi", { sourceId: "m|1", evidence: "range 40 km", review: reviewed }),
+        claim(40, "Rybar", { sourceId: "r|1", evidence: "range 40 km" }),
+      ]),
+    ]);
+    const held = heldReviews(original, () => true);
+    expect(held).toHaveLength(1);
+
+    // A re-analysis re-creates the claim objects: the ids move, the content does not.
+    const reanalysed = drone([
+      range([
+        claim(40, "Militarnyi", { sourceId: "m|1", evidence: "range 40 km", id: "new-1" }),
+        claim(40, "Rybar", { sourceId: "r|1", evidence: "range 40 km", id: "new-2" }),
+      ]),
+    ]);
+    const restored = restoreReviews(reanalysed, held, () => true);
+    const claims = restored.specs[0]!.claims;
+    expect(claims[0]!.review?.verdict).toBe("rejected");
+    // The other outlet's claim, which happens to carry the same number, is untouched.
+    expect(claims[1]!.review).toBeUndefined();
   });
 });

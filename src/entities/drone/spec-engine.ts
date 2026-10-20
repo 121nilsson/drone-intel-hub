@@ -21,6 +21,7 @@ function claimFor(
 ): SpecClaim {
   const evidence = spec.evidence ?? ref?.evidence;
   return {
+    id: crypto.randomUUID(),
     value: spec.value,
     source,
     date,

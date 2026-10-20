@@ -14,22 +14,6 @@ export interface QuantityRange {
 const THIN_SPACE = /[\u00a0\u202f\u2009]/g;
 
 /**
- * Every number a text states, in the order it states them.
- *
- * Used to tell a misread figure from a figure that simply does not fit: when the number the
- * catalogue recorded is one the report actually wrote, the number was read right, and the
- * figure is wrong for another reason.
- */
-export function numbersIn(text: string): number[] {
-  const out: number[] = [];
-  for (const m of text.matchAll(/\d(?:[\d., ]*\d)?/g)) {
-    const n = parseNumber(m[0]);
-    if (n !== undefined) out.push(n);
-  }
-  return out;
-}
-
-/**
  * Parse a number that may use a decimal comma ("1,5") or thousands grouping ("1,500" / "1 500").
  * Grouping applies only when every group after the first is exactly three digits and the first
  * group has no leading zero, so "0,500" stays 0.5 and "1,500" becomes 1500.
