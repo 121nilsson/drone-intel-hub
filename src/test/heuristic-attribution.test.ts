@@ -41,9 +41,12 @@ const CATALOG = [
 describe("heuristic attribution to a system that is only mentioned", () => {
   it("does not file the subject's measurements under a system named in another line", async () => {
     const out = await new HeuristicExtractor(2).extract(SPEC_SHEET, CATALOG);
-    const slices = (
-      out as unknown as { systemExtractions?: { name: string; matchId?: string; specs: unknown[] }[] }
-    ).systemExtractions ?? [];
+    const slices =
+      (
+        out as unknown as {
+          systemExtractions?: { name: string; matchId?: string; specs: unknown[] }[];
+        }
+      ).systemExtractions ?? [];
     const reaper = slices.find((s) => s.matchId === "mq-9a-reaper-fc46");
 
     // "MQ-9A Reaper" appears only in the Role line, which carries no measurement. The range
@@ -54,10 +57,26 @@ describe("heuristic attribution to a system that is only mentioned", () => {
   it("still reads a measurement that sits on the same line as the system", async () => {
     const raw = `• MQ-9A Reaper: дальність перельоту понад 3 000 морських миль`;
     const out = await new HeuristicExtractor(2).extract(raw, CATALOG);
-    const slices = (
-      out as unknown as { systemExtractions?: { matchId?: string; specs: { value: unknown }[] }[] }
-    ).systemExtractions ?? [];
+    const slices =
+      (
+        out as unknown as {
+          systemExtractions?: { matchId?: string; specs: { value: unknown }[] }[];
+        }
+      ).systemExtractions ?? [];
     const reaper = slices.find((s) => s.matchId === "mq-9a-reaper-fc46");
     expect(reaper?.specs.length).toBeGreaterThan(0);
+  });
+
+  it("keeps a spec sheet's figures in the post's own extraction", async () => {
+    // A sheet whose header names the system: the figures belong to it, and the extraction as a
+    // whole carries them, so a system that is not in the catalog yet is catalogued with them.
+    const raw = `Характеристики ракети 300 ER (UAV-300)
+• Довжина: ~5 м
+• Маса: ~900 кг
+• Дальність: від 250 км до 500+ км`;
+    const out = await new HeuristicExtractor(2).extract(raw, CATALOG);
+    const keys = out.specs.map((s) => s.semantic ?? s.key);
+    expect(keys).toContain("dimension.length");
+    expect(keys).toContain("range.max");
   });
 });
