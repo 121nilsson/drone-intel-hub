@@ -3,9 +3,10 @@ import { claimKey } from "@/entities/drone/claim-review";
 import type { Drone } from "@/entities/drone/types";
 import { correctionTrust } from "@/shared/infra/ingest/auto-correct";
 import { TRUST_AGREEMENT, TRUST_MIN_REVIEWS } from "@/shared/infra/ingest/earned-trust";
-import { useServices } from "@/shared/infra/services";
+import { useDispatches, useServices } from "@/shared/infra/services";
 import { correctionMark, describeCorrection } from "@/shared/ui/correction";
 import { SystemChip } from "@/shared/ui/links";
+import { ReviewSource } from "@/shared/ui/review-source";
 import { Btn, Card, ListRow, Panel, Tag } from "@/shared/ui/primitives";
 
 /** Rows shown at once; the rest wait for the next ones to be answered. */
@@ -26,6 +27,7 @@ const pct = (n: number) => `${Math.round(n * 100)}%`;
  */
 export function CorrectionQueue({ drones }: { drones: readonly Drone[] }) {
   const svc = useServices();
+  const dispatches = useDispatches();
   const trust = useMemo(() => correctionTrust(drones), [drones]);
   const pending = useMemo(
     () =>
@@ -39,6 +41,15 @@ export function CorrectionQueue({ drones }: { drones: readonly Drone[] }) {
     [drones],
   );
   const kinds = Object.keys(KIND_LABEL);
+  /** The post a claim was read from, so a reviewer can judge the figure in its own sentence. */
+  const posts = useMemo(() => {
+    const byId = new Map<string, (typeof dispatches)[number]>();
+    for (const d of dispatches) {
+      byId.set(d.id, d);
+      byId.set(d.externalId, d);
+    }
+    return byId;
+  }, [dispatches]);
   return (
     <Panel title={`Auto-corrections · ${pending.length} awaiting review`}>
       <p className="text-xs text-muted-foreground">
@@ -78,6 +89,7 @@ export function CorrectionQueue({ drones }: { drones: readonly Drone[] }) {
         <div className="mt-3 space-y-2">
           {pending.slice(0, QUEUE_SIZE).map(({ drone, spec, claim }) => {
             const fix = claim.autoCorrection!;
+            const post = claim.sourceId ? posts.get(claim.sourceId) : undefined;
             return (
               <Card
                 key={`${drone.id}|${spec.key}|${claimKey(claim)}`}
@@ -90,9 +102,13 @@ export function CorrectionQueue({ drones }: { drones: readonly Drone[] }) {
                   </span>
                   <span className="font-mono text-primary">{correctionMark(fix)}</span>
                 </div>
-                <p className="break-words text-muted-foreground">
-                  {claim.source} — {describeCorrection(fix)}
-                </p>
+                <ReviewSource
+                  source={claim.source}
+                  href={post?.url}
+                  text={post?.text || claim.evidence || claim.raw}
+                  textClassName="italic"
+                />
+                <p className="break-words text-muted-foreground">{describeCorrection(fix)}</p>
                 <div className="flex flex-wrap gap-2">
                   <Btn
                     className="px-2 py-1 text-xs"

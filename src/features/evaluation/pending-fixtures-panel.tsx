@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Btn, Card, Panel, Tag } from "@/shared/ui/primitives";
+import { ReviewSource } from "@/shared/ui/review-source";
 import {
   fetchPendingFixtures,
   triggerDecideFixture,
@@ -103,11 +104,8 @@ export function PendingFixturesPanel() {
                 <Tag mono tone="success">
                   auto
                 </Tag>
-                <span className="min-w-0 truncate font-mono text-muted-foreground">
-                  {f.fixture.source}
-                </span>
               </div>
-              <p className="whitespace-pre-wrap break-words">{f.fixture.text.slice(0, 400)}</p>
+              <ReviewSource source={f.fixture.source} text={f.fixture.text} />
               <p className="font-mono text-primary">
                 {f.fixture.expect.map(expectation).join(" · ") || "—"}
               </p>
@@ -131,11 +129,8 @@ export function PendingFixturesPanel() {
             <Card key={`${f.id}|${f.version}`} className="space-y-2 text-xs">
               <div className="flex min-w-0 flex-wrap items-center gap-2">
                 <Tag mono>{f.origin}</Tag>
-                <span className="min-w-0 truncate font-mono text-muted-foreground">
-                  {f.fixture.source}
-                </span>
               </div>
-              <p className="whitespace-pre-wrap break-words">{f.fixture.text.slice(0, 400)}</p>
+              <ReviewSource source={f.fixture.source} text={f.fixture.text} />
               <p className="font-mono text-primary">
                 {f.fixture.expect.map(expectation).join(" · ") || "—"}
                 {f.fixture.forbid?.length
