@@ -89,11 +89,8 @@ const QUALIFIER_PREFIX: Array<[RegExp, QuantityQualifier]> = [
   [/^(?:up\s*to|не\s+более)\s+/i, "up_to"],
   [/^(?:at\s+least|не\s+менее)\s+/i, "at_least"],
   [/^(?:less\s+than|under|меньше)\s+/i, "less_than"],
-  [
-    /^(?:more\s+than|greater\s+than|over|exceeding|понад|більше|exceeding|свыше|более)\s+/i,
-    "greater_than",
-  ],
-  [/^(?:~|≈|approx(?:imately)?|about|roughly|roughly|около|примерно)\s*/i, "approximate"],
+  [/^(?:more\s+than|greater\s+than|over|exceeding|понад|більше|свыше|более)\s+/i, "greater_than"],
+  [/^(?:~|≈|approx(?:imately)?|about|roughly|около|примерно)\s*/i, "approximate"],
 ];
 
 /**

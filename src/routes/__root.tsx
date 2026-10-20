@@ -16,7 +16,7 @@ import { ServicesProvider } from "@/shared/infra/services";
 import { AppShell } from "@/shared/ui/app-shell";
 import { DensityProvider } from "@/shared/ui/density";
 import { ThemeProvider } from "@/shared/ui/theme";
-import { Toaster } from "@/components/ui/sonner";
+import { ThemedToaster } from "@/shared/ui/theme";
 
 function NotFoundComponent() {
   return (
@@ -132,10 +132,10 @@ function RootComponent() {
               <Outlet />
             </AppShell>
           </DensityProvider>
+          {/* Toasts are app-wide feedback for triage/merge/delete; actions carry Undo where the
+              repository can restore the previous state. */}
+          <ThemedToaster />
         </ThemeProvider>
-        {/* Toasts are app-wide feedback for triage/merge/delete; actions carry Undo where the
-            repository can restore the previous state. */}
-        <Toaster position="bottom-right" theme="dark" />
       </ServicesProvider>
     </QueryClientProvider>
   );

@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { Toaster } from "@/components/ui/sonner";
 
 export type Theme = "dark" | "light";
 
@@ -51,4 +52,9 @@ export function ThemeToggle({ className }: { className?: string }) {
       {theme === "dark" ? "Light mode" : "Dark mode"}
     </button>
   );
+}
+
+export function ThemedToaster() {
+  const { theme } = useTheme();
+  return <Toaster position="bottom-right" theme={theme} />;
 }

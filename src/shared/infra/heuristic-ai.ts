@@ -17,10 +17,23 @@ export {
   resolveSystems,
 } from "./heuristics";
 
+/**
+ * The clauses that name `name`, and so the facts that can belong to it.
+ *
+ * Clauses break on a line break as well as on sentence punctuation, because the fact matcher
+ * is line-scoped: a cue and its measurement must sit on the same line (see measureCue). A
+ * clause that spanned lines would therefore hand one system's facts to whichever other system
+ * happened to be named in the same block - a spec sheet that reads
+ * "Role: replacement for the MQ-9A Reaper" followed by "Range: 8000 nmi" would file the range
+ * under the Reaper instead of under the platform the sheet is about.
+ *
+ * The hits are joined with a newline for the same reason: it keeps the line boundary the
+ * matcher relies on, so two hits cannot be read as one measurement.
+ */
 function contextForSystem(raw: string, name: string): string {
-  const clauses = raw.split(/(?<=[.!?;\n])\s+/);
+  const clauses = raw.split(/(?<=[.!?;])\s+|\r?\n+/);
   const hits = clauses.filter((clause) => mentionsName(clause, name));
-  return hits.join(" ");
+  return hits.join("\n");
 }
 
 function scan(raw: string, catalog: Drone[], deep: boolean, rules?: RuleSnapshot): Extraction {
