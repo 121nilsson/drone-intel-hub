@@ -218,7 +218,10 @@ export function openAIContradictionAdjudicator(
       .concat(input.drone.cyrillic ? [`Cyrillic: ${input.drone.cyrillic}`] : [])
       .join("\n");
     const claims = input.claims
-      .map((c, i) => `[${i}] ${c.value} — ${c.source}${c.evidence ? `\n    “${c.evidence}”` : ""}`)
+      .map(
+        (c, i) =>
+          `[${i}] ${c.value}${c.normalizedValue !== undefined ? ` (= ${c.normalizedValue} ${c.normalizedUnit ?? ""})` : ""} — ${c.source}${c.evidence ? `\n    “${c.evidence}”` : ""}`,
+      )
       .join("\n");
     const r = await chatContent(chat, {
       baseUrl: cfg.baseUrl,

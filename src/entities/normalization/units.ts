@@ -33,6 +33,8 @@ export interface NormalizedQuantity {
 const MILE_KM = 1.609344;
 /** Nautical mile in kilometres. */
 const NM_KM = 1.852;
+/** International foot in metres. */
+const FOOT_M = 0.3048;
 const LB_KG = 0.45359237;
 const OZ_KG = 0.028349523125;
 
@@ -101,7 +103,25 @@ const UNITS: UnitDef[] = [
     toCanonical: MILE_KM,
     pattern: /(?<![\p{L}])mi(?![\p{L}\p{N}])/iu,
   },
-  { token: "km", dimension: "distance", toCanonical: 1, pattern: /(?:km|км)(?![\p{L}\p{N}])/iu },
+  {
+    // Aviation and ordnance write altitude in feet; the catalogue keeps kilometres.
+    token: "ft",
+    dimension: "distance",
+    toCanonical: FOOT_M / 1000,
+    pattern: /(?:feet|foot)(?![\p{L}\p{N}])/iu,
+  },
+  {
+    token: "ft",
+    dimension: "distance",
+    toCanonical: FOOT_M / 1000,
+    pattern: /(?<![\p{L}])ft(?![\p{L}\p{N}])/iu,
+  },
+  {
+    token: "km",
+    dimension: "distance",
+    toCanonical: 1,
+    pattern: /(?:km|kilometers?|kilometres?|км)(?![\p{L}\p{N}])/iu,
+  },
   {
     token: "m",
     dimension: "distance",
@@ -144,7 +164,20 @@ const UNITS: UnitDef[] = [
     toCanonical: 1,
     pattern: /(?<![/\p{L}])(?:w|watts?|вт)(?![\p{L}\p{N}])/iu,
   },
-  { token: "kg", dimension: "mass", toCanonical: 1, pattern: /(?:kg|кг)(?![\p{L}\p{N}])/iu },
+  {
+    token: "kg",
+    dimension: "mass",
+    toCanonical: 1,
+    pattern: /(?:kg|kilograms?|kilogrammes?|kilos?|кг)(?![\p{L}\p{N}])/iu,
+  },
+  {
+    // Metric tonnes only: a bare "ton" is ambiguous (short ton is 907 kg), and the catalogue
+    // is SI, so an ambiguous word is left unparsed rather than read wrong.
+    token: "t",
+    dimension: "mass",
+    toCanonical: 1000,
+    pattern: /(?:metric\s+tons?|tonnes?|т)(?![\p{L}\p{N}])/iu,
+  },
   { token: "g", dimension: "mass", toCanonical: 0.001, pattern: /(?:grams?|гр)(?![\p{L}\p{N}])/iu },
   {
     token: "g",
@@ -207,6 +240,24 @@ function findUnit(text: string): { def: UnitDef; index: number } | undefined {
   return best;
 }
 
+/**
+ * A unit written *before* its number ("Mach 0.8", "kg 150").
+ *
+ * The suffix form is the common one, but English aviation writing puts the unit first, and a
+ * value that cannot be read is a value that never reaches the consensus - it stays a string and
+ * the row shows whatever spelling the source happened to use.
+ */
+function findLeadingUnit(text: string): { def: UnitDef; rest: string } | undefined {
+  for (const def of UNITS) {
+    const m = def.pattern.exec(text);
+    if (!m || m.index !== 0) continue;
+    const rest = text.slice(m[0].length).trim();
+    if (!/^[\p{N}]/u.test(rest)) continue;
+    return { def, rest };
+  }
+  return undefined;
+}
+
 export function convert(value: number, from: string, to: string): number | undefined {
   if (!Number.isFinite(value)) return undefined;
   const src = UNITS.find((u) => u.token === from || u.pattern.test(from));
@@ -264,13 +315,15 @@ export function normalizeQuantity(raw: string): NormalizedQuantity | undefined {
     .trim();
   if (!text) return undefined;
   const found = findUnit(text);
-  if (!found) return undefined;
-  const numeric = text.slice(0, found.index).trim();
+  // A unit before its number is read the same way, with the number taken from what follows.
+  const leading = found ? undefined : findLeadingUnit(text);
+  const def = found?.def ?? leading?.def;
+  if (!def) return undefined;
+  const numeric = (found ? text.slice(0, found.index) : leading!.rest).trim();
   const range = parseRange(numeric);
   if (!range) return undefined;
-
-  const factor = found.def.toCanonical;
-  const canonicalUnit = CANONICAL_UNIT[found.def.dimension];
+  const factor = def.toCanonical;
+  const canonicalUnit = CANONICAL_UNIT[def.dimension];
   const usedMagnitude = /(?:k|thousand|тыс|тис|M|million|млн|млрд|billion|\bbn\b)\s*$/i.test(
     numeric,
   );
@@ -286,12 +339,30 @@ export function normalizeQuantity(raw: string): NormalizedQuantity | undefined {
   return {
     raw,
     ...(range.value !== undefined ? { value: range.value } : {}),
-    unit: found.def.token,
+    unit: def.token,
     ...(point && scaled.value !== undefined ? { canonicalValue: scaled.value } : {}),
     canonicalUnit,
     range: scaled,
     confidence,
   };
+}
+
+/**
+ * The same measurement, read from the part of the text that carries it.
+ *
+ * A source often writes the figure twice - "3,000 kg (6,600 lb)", "130 to 140 km (81 to 87
+ * miles)" - and the second, parenthesised figure is the same measurement in another unit. The
+ * text is read as it stands first; only when that fails is the parenthetical dropped and the
+ * rest tried, so the primary figure wins.
+ */
+export function normalizeQuantityLoose(raw: string): NormalizedQuantity | undefined {
+  const direct = normalizeQuantity(raw);
+  if (direct) return direct;
+  const text = raw.trim();
+  const stripped = text.replace(/\s*\([^()]*\)\s*$/, "").trim();
+  if (!stripped || stripped === text) return undefined;
+  const q = normalizeQuantity(stripped);
+  return q ? { ...q, raw } : undefined;
 }
 
 const THIN_SPACE_RE = /[\u00a0\u202f\u2009]/g;

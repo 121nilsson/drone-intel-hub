@@ -1,9 +1,10 @@
 import type { ExtractedSpec, Extraction, RFLink, RFRole } from "@/entities/drone/types";
 import { parseMoney, parseMoneyRange } from "./currency";
+import { normalizeDate } from "./dates";
 import { normalizeRF, intersectBands, type NormalizedRFLink, type NormalizedRFRole } from "./rf";
 import { canonicalUnitForSemantic, semanticKeyFor } from "./semantic";
 import { resolveTerm, SEEDED_TERMS, type TaxonomyTerm } from "./taxonomy";
-import { normalizeQuantity, rebaseQuantity } from "./units";
+import { normalizeQuantityLoose, rebaseQuantity } from "./units";
 
 export interface UnknownTerm {
   taxonomy: string;
@@ -76,18 +77,23 @@ function normalizeSpec(spec: ExtractedSpec): ExtractedSpec {
     semantic === "cost.unit" && typeof spec.value === "string"
       ? parseMoneyRange(spec.value)
       : undefined;
+  // A date is a value, not a measurement: the catalogue keeps dates as ISO days, so a source
+  // that writes "12 жовтня 2025 року" is read back as 2025-10-12 and the source's wording
+  // stays in `raw`.
+  const day = typeof spec.value === "string" ? normalizeDate(spec.value) : undefined;
   const targetUnit = canonicalUnitForSemantic(semantic);
   let measured =
     typeof spec.value === "string"
-      ? (normalizeQuantity(spec.value) ??
-        (spec.unit ? normalizeQuantity(`${spec.value} ${spec.unit}`) : undefined))
+      ? (normalizeQuantityLoose(spec.value) ??
+        (spec.unit ? normalizeQuantityLoose(`${spec.value} ${spec.unit}`) : undefined))
       : spec.unit
-        ? normalizeQuantity(`${spec.value} ${spec.unit}`)
+        ? normalizeQuantityLoose(`${spec.value} ${spec.unit}`)
         : undefined;
   if (measured && targetUnit) measured = rebaseQuantity(measured, targetUnit);
   return {
     ...spec,
     semantic,
+    ...(day ? { value: day } : {}),
     ...(targetUnit ? { canonicalUnit: targetUnit } : {}),
     ...(typeof spec.value === "string" ? { raw: spec.value } : {}),
     ...(measured ? { normalized: measured } : {}),

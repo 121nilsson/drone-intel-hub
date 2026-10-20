@@ -1,4 +1,4 @@
-import { consensus } from "@/entities/drone/consensus";
+import { consensus, rawPoint } from "@/entities/drone/consensus";
 import { attributeSemantic } from "@/entities/drone/spec-engine";
 import type { Drone, SpecAttribute } from "@/entities/drone/types";
 import { ProviderOutageError, type ContradictionAdjudicator } from "@/shared/contracts/ai";
@@ -130,11 +130,20 @@ export async function adjudicateContradictions(
         // The order of `asked` is the index space the verdict answers in.
         claims: asked
           .map((i) => spec.claims[i]!)
-          .map((c) => ({
-            value: String(c.value),
-            source: c.source,
-            ...(c.evidence ? { evidence: c.evidence } : {}),
-          })),
+          .map((c) => {
+            // The figure as a number, when the claim can be read as one. The model is asked
+            // which report is best supported, so it has to see the numbers: "0.8 Mach",
+            // "Mach 0.8" and "0.8 Маха" are one figure, and read as three strings they
+            // look like a disagreement that is not there.
+            const point = rawPoint(spec, c);
+            return {
+              value: String(c.value),
+              ...(point ? { normalizedValue: point.value } : {}),
+              ...(point?.unit ? { normalizedUnit: point.unit } : {}),
+              source: c.source,
+              ...(c.evidence ? { evidence: c.evidence } : {}),
+            };
+          }),
       });
     } catch (e) {
       // An outage would fail every remaining call too; anything else is this one spec.

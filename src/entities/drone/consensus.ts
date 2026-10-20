@@ -1,5 +1,5 @@
 import { canonicalUnitForSemantic, semanticKeyFor } from "@/entities/normalization/semantic";
-import { convert, normalizeQuantity } from "@/entities/normalization/units";
+import { convert, normalizeQuantity, normalizeQuantityLoose } from "@/entities/normalization/units";
 import { claimCounts, correctedPoint } from "./claim-review";
 import type { SpecAttribute, SpecClaim } from "./types";
 
@@ -85,19 +85,22 @@ function measurement(
     }
   }
   if (typeof claim.value !== "number") {
-    if (spec.unit) {
-      const converted = normalizeQuantity(`${claim.value} ${spec.unit}`);
-      if (converted?.canonicalValue !== undefined) {
-        const unit = converted.canonicalUnit ?? "";
-        const aligned = unit
-          ? alignUnit(converted.canonicalValue, unit, spec)
-          : { value: converted.canonicalValue, unit: "" };
-        return {
-          value: aligned.value,
-          ...(aligned.unit ? { unit: aligned.unit } : {}),
-          claimIndex,
-        };
-      }
+    // A value may carry its own unit ("0.8 Mach", "45,000 feet", "0.8 Маха"), so it is read
+    // on its own before the spec's unit is tried. A claim the reader cannot read is a claim
+    // that never counts, and the row then shows whatever spelling the source used.
+    const own = normalizeQuantityLoose(String(claim.value));
+    const withSpec = spec.unit ? normalizeQuantityLoose(`${claim.value} ${spec.unit}`) : undefined;
+    const converted = own ?? withSpec;
+    if (converted?.canonicalValue !== undefined) {
+      const unit = converted.canonicalUnit ?? "";
+      const aligned = unit
+        ? alignUnit(converted.canonicalValue, unit, spec)
+        : { value: converted.canonicalValue, unit: "" };
+      return {
+        value: aligned.value,
+        ...(aligned.unit ? { unit: aligned.unit } : {}),
+        claimIndex,
+      };
     }
     const numeric = Number(claim.value);
     if (Number.isFinite(numeric)) {
@@ -106,7 +109,7 @@ function measurement(
     return undefined;
   }
   if (spec.unit) {
-    const converted = normalizeQuantity(`${claim.value} ${spec.unit}`);
+    const converted = normalizeQuantityLoose(`${claim.value} ${spec.unit}`);
     if (converted?.canonicalValue !== undefined) {
       const unit = converted.canonicalUnit ?? "";
       const aligned = unit

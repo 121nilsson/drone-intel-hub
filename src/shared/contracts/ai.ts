@@ -33,7 +33,20 @@ export interface ContradictionInput {
   /** Human-readable spec identity, e.g. "Range (km)". */
   specLabel: string;
   /** The conflicting claims, in the spec's claim order. */
-  claims: { value: string; source: string; evidence?: string }[];
+  claims: {
+    value: string;
+    source: string;
+    evidence?: string;
+    /**
+     * The same figure read as a number in one unit, when the claim can be read as one.
+     *
+     * Without it the check compares spellings: "0.8 Mach", "Mach 0.8" and "0.8 Маха" look
+     * like three different figures, so the check picks one of them and calls the others
+     * outliers. With it, the check sees that they are the same number.
+     */
+    normalizedValue?: number;
+    normalizedUnit?: string;
+  }[];
 }
 
 export interface ContradictionVerdict {
