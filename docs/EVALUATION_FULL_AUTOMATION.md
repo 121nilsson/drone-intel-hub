@@ -1,9 +1,9 @@
 # Spec & Guide: Helt autonom självförbättrande loop utan extern CI
 
-**Status:** Fas 1–3 implementerade, alla fem regeltyper tillämpas (se §6.1 för avvikelser).  
+**Status:** Fas 1–3 implementerade, alla fem regeltyper tillämpas (se §6.1 för avvikelser). Sedan 2026-10 finns analytikerverdikt på enskilda anspråk som facit, förtjänat förtroende för motsägelsekontrollen och deterministisk autokorrigering (se §6.2).  
 **Fil:** `docs/EVALUATION_FULL_AUTOMATION.md`  
 **Relaterade specifikationer:** `docs/EVALUATION_MODE.md` (v1, manuell utvärdering), `docs/EVALUATION_AUTOMATION.md` (v2, halvautonom loop med mänskligt godkännande)  
-**Relaterad kod:** `src/features/evaluation/**`, `src/shared/infra/evaluation/*`, `src/shared/infra/heuristics/**`, `src/shared/lexicons/**`, `tasks/evaluation/**`
+**Relaterad kod:** `src/features/evaluation/**`, `src/shared/infra/evaluation/*`, `src/shared/infra/heuristics/**`, `src/shared/lexicons/**`, `tasks/evaluation/**`, `src/entities/drone/{claim-review,auto-correction}.ts`, `src/shared/infra/ingest/{contradictions,auto-correct,earned-trust}.ts`
 
 ---
 
@@ -220,6 +220,8 @@ När `eval_corpus` växer mot 2 000+ fixtures blir en fullständig provkörning 
 - **Positiv effekt ($\Delta \text{F1} > 0$):** Regeln måste faktiskt öka precision/recall eller eliminera den observerade avvikelsen.
 - **Ingen global degradering:** Total F1 över testkorpuset får inte minska med ens $0.001$.
 
+Korpuset består av `eval_corpus`, git-filerna och analytikerfixtures. De sista härleds live ur katalogens verdikt vid varje körning och sparas aldrig (§6.2). En regel som rättar ett värde en analytiker avvisat räknas som förbättring. En regel som får ett avvisat värde att komma tillbaka räknas som regression.
+
 ---
 
 ### Pelare 4: AI-hypotesgenerator, Skuggläge & Gradvis autonomi
@@ -230,7 +232,7 @@ Om hypotesgeneratorn automatiskt läser en mismatch mellan heuristik och AI frå
 
 En avvikelse (`EvalMismatch`) får **endast** användas som underlag för en hypotes om den uppfyller minst ett av följande tre kriterier:
 
-1. **Analytikerverifierad (`origin = 'analyst'`):** En människa har markerat vad som är sant och falskt via gränssnittet.
+1. **Analytikerverifierad (`origin = 'analyst'`):** En människa har markerat vad som är sant och falskt via gränssnittet. I drift sker det genom verdikt på enskilda anspråk på systemsidan (`SpecClaim.review`, §6.2). Ett avvisat värde blir en `rejected`-avvikelse, den starkaste typen av falskt positivt, och granskade rapporter ingår alltid i generatorns urval.
 2. **Källkorroborerad konsensus:** Värdet bekräftas av $\ge 2$ oberoende källor i databasen med samma kanoniska värde.
 3. **Strukturell eller semantisk kollision:** Avvikelsen beror på ett entydigt och strukturellt mönster:
    - Ett generiskt stoppord som felaktigt tolkats som systemnamn (t.ex. `"БПЛА"`, `"FPV"`).
@@ -501,6 +503,57 @@ Avvikelser, med skäl:
 
 Avstängning: `RULES_AUTOPROMOTE=off` stoppar auto-aktivering. Skuggmätningen fortsätter, och panelen visar vad som blockerar varje regel.
 
+## 6.2 Tillägg 2026-10: analytikerverdikt och autokorrigering
+
+Fas 1–3 lät regler förtjäna autonomi, men facit var fortfarande AI:ns lagrade extraction. Det här tillägget ger loopen ett mänskligt facit och låter två andra automatiska domare förtjäna autonomi på samma sätt.
+
+### A. Verdikt på enskilda anspråk
+
+På systemsidan kan analytikern bekräfta eller avvisa ett anspråk (fel värde, fel enhet/tolkning, annat system), med valfritt rätt värde. Domen sparas på anspråket (`SpecClaim.review`) och vinner alltid över allt annat. Detaljer: `EVALUATION_MODE.md` §10.
+
+Domen är facit i hela regelloopen:
+
+| Var                         | Effekt                                                                                         |
+| :-------------------------- | :--------------------------------------------------------------------------------------------- |
+| Referens (`referenceSpecs`) | Avvisat värde räknas som struket (`rejected`), bekräftat som träff även om AI:n strök det      |
+| Sandlåda (`loadFixtures`)   | Analytikerfixtures härleds live (`analystFixtures`) via riktad SQL på kandidaternas `source`   |
+| Hypotesgenerator            | Granskade rapporter ingår alltid i urvalet; avvisningar driver `context_filter`/stoppord       |
+| Skuggpoäng (`shadowStep`)   | Poängsätts mot referensen med verdikt                                                          |
+| Git-korpus (`/evaluation`)  | Bekräftade värden i "Download corpus", avvisade som `pending_fix` i "Download mismatch-corpus" |
+
+### B. Förtjänat förtroende, samma regel för alla domare
+
+`shared/infra/ingest/earned-trust.ts` håller policyn: **förtjänat** vid ≥ 20 analytikersvar och ≥ 95 % överensstämmelse, **misstrott** vid ≥ 10 svar och < 70 %, annars **standard**. Den räknas om vid varje körning, så en kategori vars överensstämmelse sjunker förlorar autonomin direkt.
+
+| Domare               | Kategori                 | Överensstämmer när analytikern…                                          | Förtjänat                   | Misstrott           |
+| :------------------- | :----------------------- | :----------------------------------------------------------------------- | :-------------------------- | :------------------ |
+| Motsägelsekontrollen | spec-familj (`range`, …) | avvisar en `outlier` eller bekräftar en `supported`                      | konfidensgräns 0.6 (av 0.7) | konfidensgräns 0.9  |
+| Autokorrigeraren     | `kind:basis` (se C)      | avvisar det flaggade värdet (en enhetsrättning: inte som "annat system") | rättningen tillämpas        | stannar vid förslag |
+| Regler (fas 3)       | `kind:targetKey`         | aktiverar en genererad regel (oförändrat, §6.1 punkt 4)                  | auto-aktivering             | —                   |
+
+Motsägelsekontrollen frågar dessutom aldrig om ett anspråk en analytiker redan avvisat.
+
+### C. Deterministisk autokorrigering
+
+`entities/drone/auto-correction.ts` hittar fel i enskilda anspråk utan modell och utan att vänta på en tvist:
+
+- **`unit:consensus`:** minst två andra källor är överens (spridning ≤ 25 %), och anspråket avviker från dem med en enhetsfaktor inom 4 %, bland annat ×1000 (m/km, g/kg), ×3.6 (m/s–km/h), ×1.609 (mile), ×1.852 (knop/nautisk mil), ×3.28 (fot), ×60 (h/min), ×745.7 (hk).
+- **`unit:bounds`:** ett ensamt anspråk utanför generösa fysiska gränser som ×/÷ den vanligaste faktorn för enheten tar in igen.
+- **`implausible:bounds`:** utanför gränserna, och ingen faktor förklarar det.
+
+En avvikelse som ingen faktor förklarar lämnas till motsägelsekontrollen. Analytikerns egna värden, text och intervall flaggas aldrig.
+
+Synkjobbet (`shared/infra/ingest/auto-correct.ts`, i `fetch-posts.server.ts`) körs efter varje synk och **före** motsägelsekontrollen, så att en rättad enhetsglidning inte längre är en tvist som kostar ett AI-anrop. Fyndet sparas som `SpecClaim.autoCorrection`:
+
+- **Förslag** (`applied: false`): visas vid anspråket (`↻? 40 km`). Konsensus använder fortfarande värdet som det står.
+- **Tillämpat** (`applied: true`): bara när kategorin är förtjänad. Konsensus använder det rättade värdet (eller utesluter ett orimligt värde). Anspråket skrivs aldrig om.
+- **Tillbakarullning:** sjunker överensstämmelsen tas `applied` bort överallt vid nästa körning.
+- **Frysning:** ett anspråk som en analytiker dömt lämnas orört, eftersom fyndet på det är vad förtroendet mäts på.
+
+Analytikern svarar i provenance-panelen eller i kön **Auto-corrections** på `/evaluation` (25 åt gången, med varje kategoris framsteg). "Accept correction" avvisar det feltolkade värdet som "fel enhet" och lägger till det rättade, så att svaret också blir facit enligt A.
+
+Avstängning: `AUTOCORRECT=off` låter alla fynd stanna som förslag.
+
 ## 7. Sammanfattning av säkerhetsgarantier
 
 1. **Den incheckade Git-korpusen (`eval-corpus.json`):** Systemets grundlag. Automatiken får aldrig skriva över eller ta bort dessa fixtures.
@@ -514,3 +567,6 @@ Avstängning: `RULES_AUTOPROMOTE=off` stoppar auto-aktivering. Skuggmätningen f
 9. **Multi-Process synk:** Konsekvent regeluppsättning i alla noder via monotona versioner och cache-TTL.
 10. **Graceful Fallback:** Vid databasavbrott hålls alltid föregående in-memory snapshot eller statiska baslexikon aktiva. Extraktionen avbryts aldrig.
 11. **Katalogsäkerhet:** Inga frikopplade "dangling pointer"-alias till raderade eller sammanslagna drönare.
+12. **Analytikern har sista ordet:** Ett verdikt på ett anspråk vinner över motsägelsekontroll och autokorrigering, överlever omanalys och är facit för all poängsättning av heuristiken.
+13. **Inga omskrivna anspråk:** Varken motsägelsekontrollen eller autokorrigeringen ändrar vad en rapport sa. De lägger en dom bredvid, och den går att ångra.
+14. **Förtjänad, återkallelig autonomi för alla domare:** Regler, motsägelsekontrollen och autokorrigeraren agerar på egen hand bara inom kategorier där analytikerns svar ger ≥ 95 % överensstämmelse över ≥ 20 beslut, och tappar det vid nästa körning om överensstämmelsen sjunker.

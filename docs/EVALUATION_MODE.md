@@ -1,8 +1,8 @@
 # Spec: Utvärderingsläge för heuristikmotorn
 
-**Status:** Implementerat (v1 + automation)  
+**Status:** Implementerat (v1 + automation + analytikerverdikt som facit, se §10)  
 **Fil:** `docs/EVALUATION_MODE.md`  
-**Relaterad kod:** `src/shared/infra/evaluation/evaluation.ts`, `src/features/evaluation/evaluation-page.tsx`, `src/shared/infra/evaluation/evaluation.server.ts`, `src/shared/infra/evaluation/evaluation.functions.ts`, `src/test/eval-corpus.test.ts`, `src/test/eval-mismatches.test.ts`, `src/test/fixtures/eval-corpus.json`, `src/test/fixtures/eval-mismatches.json`, `src/test/fixtures/eval-catalog.json`
+**Relaterad kod:** `src/shared/infra/evaluation/evaluation.ts`, `src/entities/drone/claim-review.ts`, `src/features/evaluation/evaluation-page.tsx`, `src/shared/infra/evaluation/evaluation.server.ts`, `src/shared/infra/evaluation/evaluation.functions.ts`, `src/test/eval-corpus.test.ts`, `src/test/eval-mismatches.test.ts`, `src/test/fixtures/eval-corpus.json`, `src/test/fixtures/eval-mismatches.json`, `src/test/fixtures/eval-catalog.json`
 
 ---
 
@@ -25,6 +25,8 @@ Från den live-DB-analysen (2026-10-17) framkom flera problem som ett utvärderi
 Ett utvärderingsläge ska låta oss köra heuristikmotorn **isolerat från AI:n** på ett urval av redan bearbetade källor, för att mäta **överensstämmelse mot den lagrade kombinerade extractionen** per spec-nyckel — **utan att skriva något till databasen** (inga nya kandidater, inga dronspecs, inga sammanslagningar).
 
 > **Viktigt:** AI är inte "fasit". `combineExtractions()` slår ihop heuristikens och AI:s specs i `engine: "combined"` — deterministiska fakta (tal) tas aldrig bort. Måtten ska därför kallas "överensstämmelse mot lagrad kombinerad extraction", inte "precision mot AI". För att göra rapporten tolkbar bör heuristik- och AI-ursprung spåras via `discoveredBy` (`"seed" | "ai" | "analyst"` i `spec-engine.ts`) så att evalen kan jämföra heuristiken mot AI-tillförda specs separat.
+>
+> **Sedan 2026-10:** referensen är inte längre den lagrade extractionen rakt av. Varje spec bär AI:ns dom över heuristikens observation (`provenance`), och en analytiker kan döma enskilda anspråk på systemsidan. Den domen väger tyngst. Se §10.
 
 Resultatet är en rapport som visar var heuristiken är stark och var den sviker, så vi kan prioritera nästa kodändring.
 
@@ -95,6 +97,10 @@ Två specs anses matcha enligt denna prioriterade ordning:
 | **Felaktig nyckel**    | Heuristiken hittade ett värde men under fel nyckel (annan `semantic`)                                       |
 | **Miss**               | AI hittade ett värde som heuristiken missade helt                                                           |
 | **Falskt positivt**    | Heuristiken hittade ett värde som AI inte hittade                                                           |
+| **Annan läsning**      | Samma punkt men annan läsning (`up to 120 km` mot `120 km`). Räknas som parserdefekt, inte regelfel         |
+| **Avvisad**            | Heuristiken ger ett värde som AI:n strök eller som en analytiker avvisat: falskt positivt med bevis         |
+
+Ett värde som AI:n strök (`provenance: "heuristic"`) eller som en analytiker avvisat räknas aldrig som träff, och att heuristiken inte längre ger det räknas inte som miss. Ett värde som en analytiker bekräftat räknas som träff även om AI:n strök det (§10).
 
 Normalisering använder `Extraction` fältet `normalized` (från `normalizeQuantity`) eller faller tillbaka på `parseMagnitude`/`parseNumber` om det inte finns.
 
@@ -284,7 +290,7 @@ Domän (`domain`) och ursprungsland (`origin`) bör ingå i rapporten som inform
 Utvärderingen är inte bara ett mätverktyg — den är grunden för att systemet ska **lära sig bli bättre** över tid:
 
 1. **Kör** utvärderingen mot live-data (eller ett urval).
-2. **Exportera** överenskomna fall till `src/test/fixtures/eval-corpus.json` via "Ladda ner corpus" på `/evaluation`.
+2. **Exportera** överenskomna fall till `src/test/fixtures/eval-corpus.json` via "Download corpus" på `/evaluation`. Exporten tar också med analytikerns bekräftade värden, men bara de som dagens heuristik klarar. Analytikerns avvisade värden hamnar i "Download mismatch-corpus", som `pending_fix` så länge heuristiken fortfarande ger dem (§10).
 3. **Replay:** `eval-corpus.test.ts` kör heuristiken mot varje sparad rapport och kräver att alla förväntade värden fortfarande produceras.
 4. **Fixa:** om en heuristik-ändring bryter ett test, justera koden (eller uppdatera corpus medvetet).
 5. **Upprepa:** nya rapporter läggs till corpus, så regressioner fångas automatiskt.
@@ -299,3 +305,22 @@ På sikt kan samma loop driva automatiska förbättringar: analysera mismatch-m�
 - Ska utvärderingen också jämföra `components[]` och `payloads[]`, eller bara `specs[]` och identitet?
 - Vilken stratifiering är mest värdefull: `outcome`, `source.platform`, eller båda?
 - Bör rapporten också innehålla domän- och ursprungsidentifiering (domain/origin) precision/recall?
+
+---
+
+## 10. Analytikerverdikt som facit (2026-10)
+
+AI:ns lagrade extraction är en modells åsikt. Det enda facit som inte är det är analytikerns dom över ett enskilt anspråk på systemsidan. Analytikern öppnar ett källchip under en spec och väljer **Correct**, **Wrong value**, **Wrong unit / parse** eller **Another system**, med valfritt rätt värde.
+
+- **Lagring:** domen sparas på själva anspråket (`SpecClaim.review`, `src/entities/drone/claim-review.ts`), inte i en egen tabell, så att den fungerar i alla tre lagren (localStorage, PostgreSQL, Lovable Cloud). Den skriver aldrig om anspråket. Ett avvisat anspråk ligger kvar men räknas inte i konsensus. Ett rätt värde läggs till som ett eget bekräftat anspråk med källa `Analyst`.
+- **Företräde:** analytikerns dom vinner över både motsägelsekontrollen (`adjudication`) och autokorrigeringen. Kontrollens dom sparas bredvid, inte över, så att man kan mäta hur ofta modellen håller med en människa.
+- **Överlever omanalys:** när en rapport analyseras om flyttas domen till det återskapade anspråket (samma post, samma mätning, samma värde). Annars skulle ett avvisat värde komma tillbaka som färskt belägg.
+
+### 10.1 Hur domen når utvärderingen
+
+Read-only-kontraktet (§4.3) gäller fortfarande: domen läses ur katalogen (`Drone[]`), som utvärderingen redan får.
+
+- **Referensen** (`referenceSpecs`, `evaluation.ts`): kandidatens lagrade specs, med analytikerns dom på det anspråk varje spec blev. Kopplingen sker via anspråkets källrad (= kandidatens `source`) och bara till kandidaten som matade just den katalogposten (`resolvedInto`/`matchId`). En rapport som nämner två system har en kandidat per system, och ett värde som avvisats som "Another system" på det ena kan vara rätt för det andra.
+- Samma referens används överallt där heuristiken poängsätts: `/evaluation`, sandlådans F1-mätning, skuggpoängen, hypotesgeneratorn och `runAdjudication` (som därför aldrig frågar AI:n om ett värde en människa redan dömt).
+- **Regressionsfall** (`analystFixtures`): per kandidat ett positivt fall (bekräftade värden ska fortsätta hittas) och ett negativt (`forbid`: avvisade värden får inte komma tillbaka), i kanoniska enheter. De härleds ur katalogen vid varje laddning och sparas inte, så ett ångrat verdikt tar sitt testfall med sig. "Another system" blir inget testfall, eftersom ett fall kontrollerar hela textens utdata och värdet kan vara rätt för ett annat system i samma rapport.
+- **Git-export** (`analystCorpus`): se §9, steg 2.
