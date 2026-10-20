@@ -353,9 +353,11 @@ export function analystFixtures(
         ...(unit ? { unit } : {}),
       });
     }
+    // "review-", not "analyst-": recordAnalystFixture stores Queue decisions in eval_corpus as
+    // "analyst-<candidate id>", and loadFixtures would let one silently replace the other.
     const base = { source: c.source, text: c.raw, status: "approved" as const };
-    if (expect.length) out.push({ ...base, id: `analyst-${c.id}`, expect });
-    if (forbid.length) out.push({ ...base, id: `analyst-neg-${c.id}`, expect: [], forbid });
+    if (expect.length) out.push({ ...base, id: `review-${c.id}`, expect });
+    if (forbid.length) out.push({ ...base, id: `review-neg-${c.id}`, expect: [], forbid });
   }
   return out;
 }

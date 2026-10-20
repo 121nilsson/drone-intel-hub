@@ -155,12 +155,12 @@ describe("analystFixtures", () => {
     const fixtures = analystFixtures([c], analystVerdicts(catalog));
     expect(fixtures).toEqual([
       expect.objectContaining({
-        id: "analyst-c1",
+        id: "review-c1",
         text: TEXT,
         expect: [{ semantic: "range.max", value: 40, unit: "km" }],
       }),
       expect.objectContaining({
-        id: "analyst-neg-c1",
+        id: "review-neg-c1",
         expect: [],
         // "About another system" is not forbidden: the figure may be right for the other system.
         forbid: [{ semantic: "range.max", value: 4, unit: "km" }],
@@ -175,7 +175,7 @@ describe("analystFixtures", () => {
     const c = candidate("c1", "lancet-3", [range("40 km"), range("4 km")]);
     // Still produces the rejected figure: the negative is pending a fix, the positive passes.
     const still = await analystCorpus([c], catalog, reads(range("40 km"), range("4 km")));
-    expect(still.positive.map((f) => f.id)).toEqual(["analyst-c1"]);
+    expect(still.positive.map((f) => f.id)).toEqual(["review-c1"]);
     expect(still.negative).toEqual([expect.objectContaining({ status: "pending_fix" })]);
     // Lost the confirmed figure and stopped producing the rejected one.
     const fixed = await analystCorpus([c], catalog, reads());

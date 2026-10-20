@@ -1,47 +1,56 @@
-# Spec: Utvärderingsläge för heuristikmotorn
+# Utvärderingsläge för heuristikmotorn
 
-**Status:** Implementerat (v1 + automation + analytikerverdikt som facit, se §10)  
+**Status:** Implementerat. Manuell körning på `/evaluation`, schemalagd körning och hälsokontroll på servern, regressionskorpus i git och Postgres, analytikerverdikt som facit.  
 **Fil:** `docs/EVALUATION_MODE.md`  
-**Relaterad kod:** `src/shared/infra/evaluation/evaluation.ts`, `src/entities/drone/claim-review.ts`, `src/features/evaluation/evaluation-page.tsx`, `src/shared/infra/evaluation/evaluation.server.ts`, `src/shared/infra/evaluation/evaluation.functions.ts`, `src/test/eval-corpus.test.ts`, `src/test/eval-mismatches.test.ts`, `src/test/fixtures/eval-corpus.json`, `src/test/fixtures/eval-mismatches.json`, `src/test/fixtures/eval-catalog.json`
+**Relaterade dokument:** `docs/EVALUATION_AUTOMATION.md` (v2, halvautonom loop), `docs/EVALUATION_FULL_AUTOMATION.md` (dynamiska regler, sandlåda, skuggläge, autokorrigering)  
+**Relaterad kod:** `src/shared/infra/evaluation/evaluation.ts` (ren, read-only), `src/shared/infra/evaluation/evaluation.server.ts`, `src/shared/infra/evaluation/evaluation.functions.ts`, `src/features/evaluation/*`, `src/entities/drone/claim-review.ts`, `tasks/evaluation/{run,health}.ts`, `src/test/eval-corpus.test.ts`, `src/test/eval-mismatches.test.ts`, `src/test/fixtures/{eval-corpus,eval-mismatches,eval-catalog}.json`
 
 ---
 
 ## 1. Bakgrund
 
-Idag körs heuristikmotorn alltid först i `runTwoTier()` (pipeline.ts:406-409), men AI:n (`tier1`/`tier2`) förfinar nästan alltid resultatet därefter. Det innebär att man aldrig får se hur bra heuristiken är på egen hand — AI:n döljer både fel och brister.
+Heuristikmotorn körs alltid först i `runTwoTier()` (`src/shared/infra/ingest/pipeline.ts`), och AI:n (`tier1`/`tier2`) förfinar sedan nästan alltid resultatet. Man får därför aldrig se hur bra heuristiken är på egen hand: AI:n döljer både fel och brister.
 
-Från den live-DB-analysen (2026-10-17) framkom flera problem som ett utvärderingsläge skulle kunna mäta:
+Analysen av live-databasen 2026-10-17 visade de problem utvärderingsläget byggdes för att mäta (historik, siffrorna gäller den dagen):
 
-- **Korsklasskontamination:** PAC-3/THAAD fick `altitude: 32–40 km` (target altitude) istället för fordons-takthöjd
-- **Felaktig sammanslagning:** En Starlink-artikel auto-mergades in i drönaren "Lyutyi" via katalogaliaset "Февраль" (ryska för februari) + saknad stop-ord-vakt — inte generisk "БПЛА"-matchning
-- **Pengar som strängar:** 32 olika `unit_cost`-format; `$832 мільйони` tolkas nu efter lexikon-arbetet, men legacy-verbatim-strängar migreras gradvis (v6-omkörning)
-- **Spec-key-explosion:** 631 olika spec-nycklar, bara 22 används fler än 10 gånger
-- **~3 450 discarded candidates (66,7 %):** varav ~1 797 (52 % av de kasserade) saknar systemnamn — andelen nameless har minskat efter A3-fixen (alias-vakt), vilket är en positiv signal
+- **Korsklasskontamination:** PAC-3/THAAD fick `altitude: 32–40 km` (målets höjd) i stället för farkostens takhöjd.
+- **Felaktig sammanslagning:** en Starlink-artikel slogs automatiskt ihop med drönaren "Lyutyi" via katalogaliaset "Февраль" (ryska för februari) och en saknad stoppordsvakt.
+- **Pengar som strängar:** 32 olika `unit_cost`-format.
+- **Spec-key-explosion:** 631 olika spec-nycklar, bara 22 använda fler än 10 gånger.
+- **~3 450 kasserade kandidater (66,7 %)**, varav ~1 797 utan systemnamn.
 
 ---
 
 ## 2. Syfte
 
-Ett utvärderingsläge ska låta oss köra heuristikmotorn **isolerat från AI:n** på ett urval av redan bearbetade källor, för att mäta **överensstämmelse mot den lagrade kombinerade extractionen** per spec-nyckel — **utan att skriva något till databasen** (inga nya kandidater, inga dronspecs, inga sammanslagningar).
+Utvärderingsläget kör heuristikmotorn **isolerat från AI:n** på ett urval redan bearbetade rapporter och mäter överensstämmelse per spec-nyckel och för systemidentitet, **utan att skriva något** till katalogen, kandidaterna eller flödet.
 
-> **Viktigt:** AI är inte "fasit". `combineExtractions()` slår ihop heuristikens och AI:s specs i `engine: "combined"` — deterministiska fakta (tal) tas aldrig bort. Måtten ska därför kallas "överensstämmelse mot lagrad kombinerad extraction", inte "precision mot AI". För att göra rapporten tolkbar bör heuristik- och AI-ursprung spåras via `discoveredBy` (`"seed" | "ai" | "analyst"` i `spec-engine.ts`) så att evalen kan jämföra heuristiken mot AI-tillförda specs separat.
+> **AI är inte facit.** `combineExtractions()` slår ihop heuristikens och AI:ns specs och tar aldrig bort ett deterministiskt faktum, så den lagrade extractionen innehåller heuristikens egen utdata. Referensen är därför inte den lagrade extractionen rakt av:
 >
-> **Sedan 2026-10:** referensen är inte längre den lagrade extractionen rakt av. Varje spec bär AI:ns dom över heuristikens observation (`provenance`), och en analytiker kan döma enskilda anspråk på systemsidan. Den domen väger tyngst. Se §10.
+> 1. Varje spec bär AI:ns dom över heuristikens observation (`provenance: "both" | "heuristic" | "ai"`, `src/entities/drone/extraction-gates.ts`). Ett värde AI:n strök (`"heuristic"`) räknas som avvisat, inte som träff.
+> 2. En analytikers dom över det anspråk specen blev i katalogen väger tyngst, i båda riktningarna (§8).
+>
+> Måtten heter därför "överensstämmelse mot referensen", inte "precision mot AI".
 
-Resultatet är en rapport som visar var heuristiken är stark och var den sviker, så vi kan prioritera nästa kodändring.
+Rapporten visar var heuristiken är stark och var den sviker, så att nästa kodändring kan prioriteras. Den är också grunden för regressionskorpuset (§6) och för regel-loopen i `EVALUATION_FULL_AUTOMATION.md`.
 
 ---
 
 ## 3. Användning
 
-Utvärderingsläget körs manuellt — **inte** som en del av den vanliga intake-pipelinen. Det påverkar inte `drones`, `candidates` eller `dispatches`.
+| Var                                    | Vad                                                                                                                                         |
+| :------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------ |
+| `/evaluation` → **Run evaluation**     | Körs i webbläsaren mot laddade kandidater och katalog. Urval 50/100/250/500, valfritt med kasserade kandidater, nytt slumpfrö varje körning |
+| `/evaluation` → **Run on server**      | `runEvaluation()`: 200 kandidater, frö 1, sparas i `eval_reports`                                                                           |
+| Schemalagt `evaluation:run` (03:15)    | Samma som ovan, varje natt                                                                                                                  |
+| Schemalagt `evaluation:health` (03:45) | Hälsokontroll mot föregående rapport (§7)                                                                                                   |
+| `/evaluation` → trendpaneler           | F1 över tid (de 20 senaste rapporterna) och per spec-nyckel (se §4.6, känd brist)                                                           |
 
-> **Obs:** Repo:t har ingen `tsx`/`vite-node` i devDeps. CLI kräver ny devDep — repo-idiomet är en server-funktion (`*.server.ts` + dynamisk import) eller en admin-knapp. Föredra server-funktion + admin-knapp.
+Schemat ligger i `vite.config.ts` (`scheduledTasks`). Där finns också `evaluation:rules` (04:15) och `evaluation:shadow` (:35 varje timme), som beskrivs i `EVALUATION_FULL_AUTOMATION.md`.
 
-```
-# Exempel (konceptuellt)
-npm run eval:heuristic -- --sample 100 --output eval-report.json
-```
+**Webbläsare och server mäter inte exakt samma motor.** Servern kör med de aktiva dynamiska reglerna (`getOrRefreshRuleSnapshot()`). Webbläsaren har ingen regelsnapshot och kör med de statiska lexikonen. En skillnad mellan de två är därför inte i sig en regression.
+
+Servern skyddar sina körningar med låset `eval_lock` (10 minuter), så att två körningar inte överlappar. Utan `DATABASE_URL` hoppar serverkörningarna över med orsaken "no database configured".
 
 ---
 
@@ -49,278 +58,245 @@ npm run eval:heuristic -- --sample 100 --output eval-report.json
 
 ### 4.1 Indata
 
-- En lista med `Candidate`-objekt (från `candidates`-samlingen) med icke-tom `raw`. Kandidater med `status === 'discarded'` kan inkluderas för att mäta noise, men filtreras bort som default.
-- Urvalet bör **stratifieras** på `status` och/eller `source` (kandidaten har ingen `platform`-fält) så att sällsynta klasser (CUAS, USV) inte missas
-- **Obligatorisk stratifiering:** `quality.decision` (med fallback till `status` — `quality` finns bara på ~927 nyare rader) och **epok** (`metadata.promptVersion ?? "legacy"`). 647 kandidater (12,5 %) har NULL-metadata (legacy-era); utan epok-stratifiering blir rapporten ojämförbar.
-- Katalog (`Drone[]`) för matchning av systemidentitet
-
-Varje kandidat bär hela `Extraction` (heuristik + AI-förfining) plus den råa texten (`raw`), vilket gör att spec-anspråken kan kopplas direkt till källan.
+- **Kandidater** med minst 50 tecken `raw`. Kasserade kandidater utesluts om inte `includeDiscarded` anges.
+- **Urval:** stratifierat på plattform × utfall (`quality.decision`, annars `status`), round-robin över hinkarna med en deterministisk PRNG. Samma frö ger samma urval.
+  - **Känd brist:** plattformen läses ur ett prefix i `source` (`tg:` → `telegram`), men dagens källrader har formen `Outlet · https://…` och blir nästan alla `web`. I praktiken stratifieras urvalet därför bara på utfall.
+- **Epok** (`metadata.promptVersion ?? "legacy"`) stratifieras inte, men räknas i rapporten, så att man ser om urvalet domineras av gamla kandidater.
+- **Katalog** (`Drone[]`): används för identitetsmatchning och för att läsa analytikerns verdikt (§8).
 
 ### 4.2 Flöde
 
 ```
-1. Välj ett stratifierat urval av kandidater (default 100)
-2. För varje kandidat:
-   a. Kör heuristic.extract(candidate.raw, catalog) — AI:n anropas INTE
-   b. Kör normalizeExtraction() på heuristikens resultat så att normalized-fält finns (annars saknas canonicalValue)
-   c. Jämför heuristikens specs mot kandidatens extraction.specs (AI-förfinat resultat)
-   c. Jämför heuristikens system-identitet mot kandidatens extraction.systems / matchId
-3. Beräkna precision och recall per spec-nyckel och per identitetsdimension
-4. Samla mismatch-exempel för manuell granskning
-5. Skriv rapport (konsol eller fil, aldrig databasen)
+1. Välj ett stratifierat urval (default 100).
+2. Läs analytikerns verdikt ur katalogen en gång (analystVerdicts).
+3. För varje kandidat:
+   a. heuristic.extract(raw, catalog) - AI:n anropas INTE
+   b. normalizeExtraction() på resultatet, så att kanoniska värden finns
+   c. jämför specs mot referensen (referenceSpecs: lagrade specs + provenance + verdikt)
+   d. jämför namn och matchId mot den lagrade extractionen
+   e. samla överenskomna fall som regressionsfall (§6.1)
+4. Beräkna P/R/F1 per spec-nyckel, totalt och per identitetsdimension.
+5. Returnera rapporten. Webbläsaren visar den, servern sparar den i eval_reports.
 ```
 
 ### 4.3 Read-only-kontrakt (invariant)
 
-`evaluateHeuristic()` får **endast**:
+`evaluateHeuristic()` och allt i `evaluation.ts` får **endast**:
 
-- Anropa `heuristic.extract(raw, catalog)`
-- Läsa `Candidate.extraction`, `Candidate.raw`, `Drone[]`
+- anropa `heuristic.extract(raw, catalog)`
+- läsa `Candidate.extraction`, `Candidate.raw` och `Drone[]` (inklusive anspråkens `review`)
 
-Den får **inte**:
+De får **inte** skriva till något repository, anropa en AI-tier eller ändra en kandidat. Bara serverfunktionerna i `evaluation.server.ts` skriver, och då bara till utvärderingstabellerna (`eval_reports`, `eval_corpus`, `eval_corpus_version`, `eval_lock`).
 
-- Anropa `drones.upsert()`, `candidates.add()`, `dispatches.update()` eller någon annan skrivning
-- Anropa AI-providern (`tier1`, `tier2`)
-- Ändra kandidatens status, matchId eller något annat fält
+### 4.4 Jämförelse: specs
 
-Detta säkerställer att utvärderingen är säker att köra även mot den live-DB:n.
+Finansiella nycklar (`contract_value`, `*_funding`, …) jämförs inte; de routas ut till `procurements`. Alla nycklar mappas till kanonisk semantik med `semanticKeyFor()` på båda sidor. `cost.unit` jämförs på belopp (`money.amount`), utan valuta.
 
-### 4.4 Jämförelsesemantik — spec-nycklar
+Parningen är en-till-en och girig, i den här ordningen:
 
-Två specs anses matcha enligt denna prioriterade ordning:
+| Utfall             | Villkor                                                                                           | Räknas som                  |
+| :----------------- | :------------------------------------------------------------------------------------------------ | :-------------------------- |
+| `exact`            | Samma semantik, samma kanoniska värde inom tolerans, samma kanoniska enhet, samma nyckel          | träff                       |
+| `semantic`         | Som `exact` men under en annan nyckel med samma semantik                                          | träff                       |
+| `differentReading` | Samma punkt, men en sida är ett intervall eller en gräns (`up to 120 km` mot `120 km`)            | träff, listas som avvikelse |
+| `raw`              | Samma värde som sträng (skiftlägesokänsligt) och samma enhet, när de kanoniska värdena inte avgör | träff                       |
+| `wrongKey`         | Exakt samma värde under en annan semantik                                                         | fp + fn                     |
+| `rejected`         | Heuristiken ger ett värde som AI:n strök eller som en analytiker avvisat                          | fp                          |
+| `falsePositive`    | Heuristiken ger ett värde som inte finns i referensen                                             | fp                          |
+| `miss`             | Referensen har ett värde som heuristiken inte gav                                                 | fn                          |
 
-| Kriterium              | Beskrivning                                                                                                 |
-| ---------------------- | ----------------------------------------------------------------------------------------------------------- |
-| **Normaliserad match** | Samma `semanticKey`, samma `normalized.canonicalValue` (inom 1% tolerans), samma `normalized.canonicalUnit` |
-| **Semantisk match**    | Samma `semantic` (via `semanticKeyFor()`), samma värde/enhet                                                |
-| **Rå match**           | Samma `key`, samma `value` (som sträng), samma `unit`                                                       |
-| **Felaktig nyckel**    | Heuristiken hittade ett värde men under fel nyckel (annan `semantic`)                                       |
-| **Miss**               | AI hittade ett värde som heuristiken missade helt                                                           |
-| **Falskt positivt**    | Heuristiken hittade ett värde som AI inte hittade                                                           |
-| **Annan läsning**      | Samma punkt men annan läsning (`up to 120 km` mot `120 km`). Räknas som parserdefekt, inte regelfel         |
-| **Avvisad**            | Heuristiken ger ett värde som AI:n strök eller som en analytiker avvisat: falskt positivt med bevis         |
+Ett struket eller avvisat referensvärde räknas aldrig som träff, och att heuristiken inte längre ger det räknas inte som miss. Ett värde en analytiker bekräftat räknas som referens även om AI:n strök det.
 
-Ett värde som AI:n strök (`provenance: "heuristic"`) eller som en analytiker avvisat räknas aldrig som träff, och att heuristiken inte längre ger det räknas inte som miss. Ett värde som en analytiker bekräftat räknas som träff även om AI:n strök det (§10).
+**Tolerans:** `|a − b| ≤ max(1 % av det största av beloppen, 1e-6)` (`numbersClose`). Strängvärden jämförs skiftlägesokänsligt.
 
-Normalisering använder `Extraction` fältet `normalized` (från `normalizeQuantity`) eller faller tillbaka på `parseMagnitude`/`parseNumber` om det inte finns.
+`differentReading` blir aldrig en dynamisk regel. Det är en parserdefekt som ska rättas i koden (`EVALUATION_FULL_AUTOMATION.md`, pelare 4).
 
-**Parningsregler (one-to-one, greedy):**
+### 4.5 Jämförelse: systemidentitet
 
-1. Matcha först `exact` → `semantic` → `raw`; varje spec får matchas högst en gång (annars kan en heuristik-spec matcha flera AI-specs).
-2. `range`: `canonicalValue` är `undefined` för `up to`/`80–120 km`. Jämför `range.min`/`range.max` individuellt med samma tolerans, eller klassificera skillnad i qualifier som `differentReading` (inte `miss`) — "up to 120 km" är en annan läsning än "120 km".
-3. Legacy-nycklar (t.ex. `payloadCapacity` camelCase, enhet "tonne") normaliseras av `semanticKeyFor()`. Kör `semanticKeyFor()` på **båda** sidor så att jämförelsen sker på kanoniska semantiska nycklar, inte råa nycklar.
+| Mått        | Underlag                                                                             |
+| :---------- | :----------------------------------------------------------------------------------- |
+| **name**    | `name` + `systems[].name`, jämförda som mängder av fonetiska nycklar (`phoneticKey`) |
+| **matchId** | `matchId` + `systems[].matchId`, jämförda som mängder                                |
 
-### 4.5 Jämförelsesemantik — systemidentitet
-
-Utvärderingen mäter också identitetsförmågan separat:
-
-| Mått                  | Beskrivning                                                      |
-| --------------------- | ---------------------------------------------------------------- |
-| **Name precision**    | Andel heuristik-namn som matchar AI-namn (exakt eller fonetiskt) |
-| **Name recall**       | Andel AI-namn som heuristiken hittade                            |
-| **MatchId precision** | Andel heuristik-`matchId` som stämmer med AI-`matchId`           |
-
-> **Obs:** Identitets-recall är strukturellt partisk — AI:n släpper medvetet obekräftade heuristik-system ("National", "Ukrinform"). Låg recall är därför inte automatiskt ett fel.
-> | **MatchId recall** | Andel AI-`matchId` som heuristiken hittade |
-> | **Systems precision/recall** | Samma men för `extraction.systems[]` |
-
-Identitetsjämförelse använder `phoneticKey()`/`nameKey()` från `name-key.ts` för fonetisk matchning, och `±1%` tolerans gäller numeriska `canonicalValue` (strängvärden som `guidance`/`engine` jämförs exakt).
+> Identitets-recall är strukturellt partisk: AI:n släpper medvetet obekräftade heuristiksystem ("National", "Ukrinform"). Låg recall är därför inte automatiskt ett fel.
 
 ### 4.6 Mått
 
-Per spec-nyckel:
+Per spec-nyckel (kanonisk semantik) räknas `tp`, `fp` och `fn` enligt tabellen i §4.4. En `wrongKey` ger fp på heuristikens semantik och fn på referensens.
 
-- **Precision** = träffar / (träffar + falskt positiva)
-- **Recall** = träffar / (träffar + missar)
+- **Precision** = tp / (tp + fp), **Recall** = tp / (tp + fn), **F1** = 2PR / (P + R). Saknas underlag blir måttet 0.
+- **summary** summerar alla nycklars tp/fp/fn.
+- **topIssues** genereras: de fem nycklar med lägst F1 bland dem med minst tre fall, med en notering om felen främst är falska positiva eller missar.
+- **mismatches** begränsas till fem exempel per nyckel och utfall (`maxMismatchesPerKey`).
 
-> Tolerans för numeriska värden: `max(1%, |a−b|)` (absolut epsilon för små värden), inte rent procentuellt — annars blir 1 % av 0,1 = 0,001.
+`totalItems` kan vara mindre än `sampleSize` när det finns färre behöriga kandidater.
 
-- **F1** = 2 × precision × recall / (precision + recall)
-- **Antal fall** = hur många kandidater som innehöll nyckeln i AI-resultatet
+**Trender:** totaltrenden på `/evaluation` visar de 20 senaste rapporterna. **Känd brist:** trenden per nyckel (`getEvalKeyTrends`) hämtar de 20 _äldsta_ (`order by generated_at asc limit 20`) och slutar därför uppdateras när det finns fler än 20 rapporter.
 
-Per identitetsdimension (name, matchId, systems):
-
-- Precision och recall som ovan
-
-`totalItems` kan vara mindre än `sampleSize` om kandidater filtreras bort (tom `raw` eller `discarded`).
-
-### 4.7 Rapportstruktur (JSON)
+### 4.7 Rapportstruktur
 
 ```json
 {
-  "generatedAt": "2026-10-17T22:00:00Z",
-  "sampleSize": 100,
-  "totalItems": 97,
-  "stratification": { "outcome": { "queued": 40, "merged": 35, "promoted": 15, "discarded": 7 } },
-  "summary": {
-    "overallPrecision": 0.81,
-    "overallRecall": 0.69,
-    "overallF1": 0.75
+  "generatedAt": "2026-10-20T03:15:00Z",
+  "sampleSize": 200,
+  "totalItems": 200,
+  "stratification": {
+    "platform": { "web": 196, "telegram": 4 },
+    "outcome": { "auto-merged": 81, "queued": 64, "auto-promoted": 33, "merged": 22 },
+    "epoch": { "drone-osint-v3": 171, "legacy": 29 }
   },
+  "summary": { "precision": 0.81, "recall": 0.69, "f1": 0.75, "tp": 412, "fp": 97, "fn": 185 },
   "identity": {
-    "name": { "precision": 0.88, "recall": 0.92 },
-    "matchId": { "precision": 0.76, "recall": 0.71 },
-    "systems": { "precision": 0.64, "recall": 0.58 }
+    "name": { "precision": 0.88, "recall": 0.62, "f1": 0.73, "tp": 160, "fp": 22, "fn": 98 },
+    "matchId": { "precision": 0.76, "recall": 0.71, "f1": 0.73, "tp": 120, "fp": 38, "fn": 49 }
   },
   "perKey": {
-    "range": { "precision": 0.82, "recall": 0.74, "count": 43 },
-    "speed": { "precision": 0.91, "recall": 0.68, "count": 31 },
-    "unit_cost": { "precision": 0.45, "recall": 0.33, "count": 12 },
-    "altitude": { "precision": 0.33, "recall": 0.21, "count": 8 }
+    "range.max": { "precision": 0.82, "recall": 0.74, "f1": 0.78, "tp": 31, "fp": 7, "fn": 11 }
   },
   "mismatches": [
     {
       "candidateId": "f30a9092-84d9-4f5b-9adf-e3d72625e48b",
-      "source": "dronebomber|tg:dva_majors/100461",
-      "specKey": "altitude",
+      "source": "dronebomber · https://t.me/dva_majors/100461",
+      "text": "…",
+      "specKey": "altitude.max",
+      "matchType": "falsePositive",
       "heuristicValue": 40,
       "heuristicUnit": "km",
-      "heuristicSemantic": "altitude.max",
-      "aiValue": null,
-      "aiUnit": null,
-      "aiSemantic": null,
-      "matchType": "falsePositive",
+      "referenceValue": null,
+      "referenceUnit": null,
       "evidence": "engagement altitude of 40 km",
       "normalizedHeuristic": { "canonicalValue": 40, "canonicalUnit": "km" }
     }
   ],
-  "topIssues": [
-    "altitude: F1 0.26 — target altitude reads as vehicle ceiling",
-    "unit_cost: F1 0.38 — unparseable strings (e.g. $832 мільйони)",
-    "matchId: F1 0.73 — generic 'БПЛА' matched to wrong catalog entry"
-  ]
-
-> `topIssues` ska genereras regelbaserat (t.ex. nycklar med lägst F1), inte hårdkodas — annars blir rapporten inaktuell när felen fixas.
+  "topIssues": ["altitude.max: F1 0.26 — mostly false positives (fp 9, fn 2)"],
+  "fixtures": []
 }
 ```
 
-### 4.8 API (förslag)
+Siffrorna är illustrativa. `fixtures` beskrivs i §6.1.
+
+### 4.8 API (`src/shared/infra/evaluation/evaluation.ts`)
 
 ```ts
-// src/shared/infra/evaluation/evaluation.ts
-
-export interface EvalMismatch {
-  candidateId: string;
-  source: string;
-  specKey: string;
-  heuristicValue: string | number | null;
-  heuristicUnit: string | null;
-  heuristicSemantic: string | null;
-  aiValue: string | number | null;
-  aiUnit: string | null;
-  aiSemantic: string | null;
-  matchType: "exact" | "semantic" | "raw" | "wrongKey" | "falsePositive" | "miss";
-  evidence: string;
-  normalizedHeuristic?: { canonicalValue: number; canonicalUnit: string };
-  normalizedAI?: { canonicalValue: number; canonicalUnit: string };
-}
-
-export interface EvalIdentityResult {
-  name: { precision: number; recall: number; count: number };
-  matchId: { precision: number; recall: number; count: number };
-  systems: { precision: number; recall: number; count: number };
-}
-
-export interface EvalKeyStats {
-  precision: number;
-  recall: number;
-  count: number;
-}
-
-export interface EvalReport {
-  generatedAt: string;
-  sampleSize: number;
-  totalItems: number;
-  stratification: Record<string, Record<string, number>>;
-  summary: {
-    overallPrecision: number;
-    overallRecall: number;
-    overallF1: number;
-  };
-  identity: EvalIdentityResult;
-  perKey: Record<string, EvalKeyStats>;
-  mismatches: EvalMismatch[];
-  topIssues: string[];
-}
-
-export async function evaluateHeuristic(
-  candidates: Candidate[],
+evaluateHeuristic(
+  candidates: readonly Candidate[],
   catalog: Drone[],
   heuristic: IntelExtractor,
   opts?: {
-    sampleSize?: number;
-    seed?: number;
-    stratifyBy?: ("outcome" | "source.platform" | "none")[];
+    sampleSize?: number; // 100
+    seed?: number; // 1
+    includeDiscarded?: boolean; // false
+    minRawLength?: number; // 50
+    maxMismatchesPerKey?: number; // 5
+    onProgress?: (done: number, total: number) => void;
   },
 ): Promise<EvalReport>;
+
+comparableSpecs(e: Extraction): Norm[]; // utan finansiella nycklar, normaliserade
+compareSpecs(heur: Norm[], ref: Norm[]): SpecComparison; // parningen i §4.4
+analystVerdicts(catalog): AnalystVerdicts; // verdikt per källrad (§8)
+referenceSpecs(c: Candidate, verdicts): Norm[]; // referensen för en kandidat
+checkFixture(fx: EvalFixture, heuristic, catalog?); // { missing, missingNames, forbidden }
+mismatchesToFixtures(mismatches, limit = 50): EvalFixture[]; // falsePositive → forbid
+fixturesToCorpus(fixtures, existing = [], limit = 50): EvalFixture[]; // slås ihop på id
+analystFixtures(candidates, verdicts): EvalFixture[]; // ur analytikerverdikt (§8)
+analystCorpus(candidates, catalog, heuristic); // { positive, negative } för git-export
 ```
 
 ---
 
-## 5. Domän och ursprung (informativt, ej P/R)
+## 5. Domän och ursprung
 
-Domän (`domain`) och ursprungsland (`origin`) bör ingå i rapporten som informativa fält (hög signal för framtida deployment), men **inte** som precision/recall-mått i v1 — de är för brusiga för att vara meningsfulla i v1.
-
----
-
-## 6. Implementationsanteckningar
-
-- **Read-only:** `evaluateHeuristic()` får bara anropa `heuristic.extract()` och läsa kandidater/katalog. Inga `upsert`, `add`, `update` eller `resolve`. Detta bör skrivas som en explicit invariant i koden (t.ex. en kommentar ovanför funktionen).
-- **Återanvänd befintlig kod:** `semanticKeyFor()` från `semantic.ts`, `ExtractedSpecSchema` från `extraction.schema.ts`, `parseMagnitude`/`parseNumber` från `numeric.ts`.
-- **Stöd för heuristik-endast:** Funktionen bör kunna köras även när AI-providern är nere, eftersom den bara använder heuristiken + redan lagrade AI-resultat i kandidaterna.
-- **Testbar:** Skriv tester som kör `evaluateHeuristic()` på ett litet syntetiskt dataset med kända förväntade resultat. Inkludera "trap"-fall:
-  1. Target altitude som tolkas som vehicle altitude ("engagement altitude of 40 km" → `altitude.max` istället för `altitude.target_max`)
-  2. Pengar på flera språk ("$2 miljarder", "$2 млрд", "$2 мільйони")
-  3. Generiskt systemnamn ("БПЛА") som inte ska matcha någon specifik katalogpost
-- **Provenance:** Kör `normalizeExtraction()` på heuristikens resultat innan jämförelse. Spåra heuristik- vs AI-ursprung via `discoveredBy` (`"seed" | "ai" | "analyst"`) så rapporten kan visa vilka specs heuristiken själv hittade vs AI-tillförda.
+Domän (`domain`) och ursprungsland (`origin`) mäts inte. De är för brusiga för precision/recall och används bara informativt i katalogen.
 
 ---
 
-## 7. Förslag till nästa steg
+## 6. Regressionskorpus och självlärande loop
 
-1. Implementera `src/shared/infra/evaluation/evaluation.ts` enligt specen ovan
-2. Lägg till ett CLI-kommando eller en server-funktion för att köra utvärderingen
-3. Kör utvärderingen mot den live-DB:n (3 170 dispatches, 1 632 processade, 4 646 kandidater)
-4. Använd rapporten för att prioritera nästa heuristik-fix (t.ex. altitud-kontamination eller pengar)
+### 6.1 Var fallen kommer ifrån
+
+Ett regressionsfall (`EvalFixture`) är en rapporttext med värden heuristiken ska ge (`expect`, `expectNames`) och värden den inte får ge (`forbid`).
+
+| Källa                                | Hur                                                                                                                                   | Status                            |
+| :----------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------ | :-------------------------------- |
+| Överensstämmelse (`report.fixtures`) | Varje körning: kandidater där heuristik och referens är överens (`exact`/`semantic`), minst en evidens finns i texten, inte kasserade | —                                 |
+| Skörd (`harvestCorpus`, server)      | Som ovan, men minst ett av värdena måste ges av ≥ 2 kandidater; högst 5 per nyckeluppsättning och 25 per körning; ny korpusversion    | `approved`                        |
+| AI-adjudikering (`runAdjudication`)  | Upp till 10 konflikter per körning avgörs av tier-2-modellen med ett ord (`heuristic`/`ai`/`neither`)                                 | `pending`, negativa `pending_fix` |
+| Kö-beslut (`recordAnalystFixture`)   | När en analytiker befordrar, slår ihop eller kasserar en kandidat i kön: ett positivt fall med kandidatens specs                      | `approved`                        |
+| Anspråksverdikt (`analystFixtures`)  | Härleds live ur katalogens verdikt vid varje laddning, sparas aldrig (§8)                                                             | `approved`                        |
+| Git-import (`importGitCorpus`)       | Filerna i `src/test/fixtures/` läses in i `eval_corpus`                                                                               | `approved`                        |
+| Avvikelseexport                      | "Download mismatch-corpus": `falsePositive` → `forbid`, högst 50                                                                      | —                                 |
+
+> **Känd brist:** kö-beslutet "Discard" sparar i dag också ett _positivt_ fall med alla kandidatens specs, alltså raka motsatsen till analytikerns beslut. Kö-fallen tar dessutom med specs som AI:n strök. Rättas separat; till dess är `origin = 'analyst'` i `eval_corpus` inte helt pålitligt.
+
+`eval_corpus` har statusarna `pending`, `pending_fix`, `approved`, `rejected` och `superseded`. Sandlådan provkör mot `approved` och `pending_fix` (senaste versionen per id), git-filerna och de live-härledda anspråksfallen. Inget i gränssnittet godkänner i dag ett `pending`-fall, så AI-adjudikeringens positiva fall används inte förrän någon gör det i databasen.
+
+### 6.2 Git-korpuset
+
+Två filer replayas av vitest med `eval-catalog.json` som katalog och de statiska lexikonen (ingen dynamisk regel):
+
+- `eval-corpus.json` → `eval-corpus.test.ts`: kräver att inga förväntade värden eller namn saknas.
+- `eval-mismatches.json` → `eval-mismatches.test.ts`: kräver dessutom att inga förbjudna värden förekommer. Fall med `status: "pending_fix"` hoppas över.
+
+Filerna skrivs bara för hand, via knapparna på `/evaluation`:
+
+- **Download corpus:** körningens överenskomna fall plus analytikerns bekräftade värden, men bara de dagens heuristik klarar.
+- **Download mismatch-corpus:** analytikerns avvisade värden (som `pending_fix` så länge heuristiken fortfarande ger dem) plus körningens falska positiva.
+- **Download catalog:** katalogen som `eval-catalog.json`.
+
+Automatiken skriver aldrig över eller tar bort git-fallen.
+
+### 6.3 Loopen
+
+1. **Kör** utvärderingen (manuellt eller nattligt).
+2. **Granska** avvikelserna per nyckel på `/evaluation`, och döm enskilda anspråk på systemsidan (§8).
+3. **Lås in** korrekt beteende: ladda ner korpus och checka in, eller låt skörden lägga det i `eval_corpus`.
+4. **Förbättra:** rätta koden, eller låt regel-loopen föreslå, sandlådepröva och skuggköra en dynamisk regel (`EVALUATION_FULL_AUTOMATION.md`).
+5. **Upprepa:** varje nytt fall gör att nästa regression fångas automatiskt.
 
 ---
 
-## 9. Självlärande loop (mål)
+## 7. Hälsokontroll
 
-Utvärderingen är inte bara ett mätverktyg — den är grunden för att systemet ska **lära sig bli bättre** över tid:
+`runEvaluationHealth()` (`evaluation:health`, 03:45) kör en ny utvärdering, sparar den och jämför med föregående rapport:
 
-1. **Kör** utvärderingen mot live-data (eller ett urval).
-2. **Exportera** överenskomna fall till `src/test/fixtures/eval-corpus.json` via "Download corpus" på `/evaluation`. Exporten tar också med analytikerns bekräftade värden, men bara de som dagens heuristik klarar. Analytikerns avvisade värden hamnar i "Download mismatch-corpus", som `pending_fix` så länge heuristiken fortfarande ger dem (§10).
-3. **Replay:** `eval-corpus.test.ts` kör heuristiken mot varje sparad rapport och kräver att alla förväntade värden fortfarande produceras.
-4. **Fixa:** om en heuristik-ändring bryter ett test, justera koden (eller uppdatera corpus medvetet).
-5. **Upprepa:** nya rapporter läggs till corpus, så regressioner fångas automatiskt.
+- **Regression:** total F1 sjunker mer än 0.02, eller en nyckel med minst 10 fall tappar mer än 0.05 i F1.
+- **Information:** antalet nya avvikelsemönster (kandidat + nyckel som inte fanns förra gången).
 
-På sikt kan samma loop driva automatiska förbättringar: analysera mismatch-mönster, föreslå lexikon-tillägg eller notAfter-ändringar, och verifiera via corpus-testerna.
+Hälsokontrollen loggar bara (`console.warn` vid regression) och ändrar ingenting. Kretsbrytaren som sätter regler i karantän är en egen mekanism; den jämför aktiva regler mot aktiva minus de senaste 24 timmarnas på samma urval (`EVALUATION_FULL_AUTOMATION.md` §6.1).
 
----
-
-## 8. Frågor till kollegan (GLM-5.3 Free)
-
-- Är `normalized.canonicalValue/canonicalUnit` tillräckligt pålitligt för jämförelse, eller behöver vi en tolerans (t.ex. ±1%)?
-- Ska utvärderingen också jämföra `components[]` och `payloads[]`, eller bara `specs[]` och identitet?
-- Vilken stratifiering är mest värdefull: `outcome`, `source.platform`, eller båda?
-- Bör rapporten också innehålla domän- och ursprungsidentifiering (domain/origin) precision/recall?
+Eftersom referensen förbättras när nya kandidater med `provenance` och nya analytikerverdikt kommer in, kan total F1 flytta sig utan att heuristiken ändrats. En enstaka varning är därför inte i sig ett bevis på regression.
 
 ---
 
-## 10. Analytikerverdikt som facit (2026-10)
+## 8. Analytikerverdikt som facit
 
 AI:ns lagrade extraction är en modells åsikt. Det enda facit som inte är det är analytikerns dom över ett enskilt anspråk på systemsidan. Analytikern öppnar ett källchip under en spec och väljer **Correct**, **Wrong value**, **Wrong unit / parse** eller **Another system**, med valfritt rätt värde.
 
 - **Lagring:** domen sparas på själva anspråket (`SpecClaim.review`, `src/entities/drone/claim-review.ts`), inte i en egen tabell, så att den fungerar i alla tre lagren (localStorage, PostgreSQL, Lovable Cloud). Den skriver aldrig om anspråket. Ett avvisat anspråk ligger kvar men räknas inte i konsensus. Ett rätt värde läggs till som ett eget bekräftat anspråk med källa `Analyst`.
-- **Företräde:** analytikerns dom vinner över både motsägelsekontrollen (`adjudication`) och autokorrigeringen. Kontrollens dom sparas bredvid, inte över, så att man kan mäta hur ofta modellen håller med en människa.
+- **Företräde:** analytikerns dom vinner över både motsägelsekontrollen (`adjudication`) och autokorrigeringen (`autoCorrection`). Kontrollens dom sparas bredvid, inte över, så att man kan mäta hur ofta modellen håller med en människa.
 - **Överlever omanalys:** när en rapport analyseras om flyttas domen till det återskapade anspråket (samma post, samma mätning, samma värde). Annars skulle ett avvisat värde komma tillbaka som färskt belägg.
 
-### 10.1 Hur domen når utvärderingen
+### 8.1 Hur domen når utvärderingen
 
-Read-only-kontraktet (§4.3) gäller fortfarande: domen läses ur katalogen (`Drone[]`), som utvärderingen redan får.
+Read-only-kontraktet (§4.3) gäller: domen läses ur katalogen, som utvärderingen redan får.
 
-- **Referensen** (`referenceSpecs`, `evaluation.ts`): kandidatens lagrade specs, med analytikerns dom på det anspråk varje spec blev. Kopplingen sker via anspråkets källrad (= kandidatens `source`) och bara till kandidaten som matade just den katalogposten (`resolvedInto`/`matchId`). En rapport som nämner två system har en kandidat per system, och ett värde som avvisats som "Another system" på det ena kan vara rätt för det andra.
+- **Referensen** (`referenceSpecs`): kandidatens lagrade specs, med analytikerns dom på det anspråk varje spec blev. Kopplingen sker via anspråkets källrad (= kandidatens `source`) och bara till kandidaten som matade just den katalogposten (`resolvedInto`/`matchId`). En rapport som nämner två system har en kandidat per system, och ett värde som avvisats som "Another system" på det ena kan vara rätt för det andra.
 - Samma referens används överallt där heuristiken poängsätts: `/evaluation`, sandlådans F1-mätning, skuggpoängen, hypotesgeneratorn och `runAdjudication` (som därför aldrig frågar AI:n om ett värde en människa redan dömt).
-- **Regressionsfall** (`analystFixtures`): per kandidat ett positivt fall (bekräftade värden ska fortsätta hittas) och ett negativt (`forbid`: avvisade värden får inte komma tillbaka), i kanoniska enheter. De härleds ur katalogen vid varje laddning och sparas inte, så ett ångrat verdikt tar sitt testfall med sig. "Another system" blir inget testfall, eftersom ett fall kontrollerar hela textens utdata och värdet kan vara rätt för ett annat system i samma rapport.
-- **Git-export** (`analystCorpus`): se §9, steg 2.
+- **Regressionsfall** (`analystFixtures`): per kandidat ett positivt fall `review-<id>` (bekräftade värden ska fortsätta hittas) och ett negativt `review-neg-<id>` (avvisade värden får inte komma tillbaka), i kanoniska enheter. De härleds vid varje laddning och sparas inte, så ett ångrat verdikt tar sitt fall med sig. "Another system" blir inget fall, eftersom ett fall kontrollerar hela textens utdata och värdet kan vara rätt för ett annat system i samma rapport.
+- **Git-export** (`analystCorpus`): se §6.2.
+
+Hur verdikten också styr motsägelsekontrollens och autokorrigeringens självständighet beskrivs i `EVALUATION_FULL_AUTOMATION.md` §6.2.
+
+---
+
+## 9. Avgjorda designfrågor
+
+| Fråga                                                     | Beslut                                                                           |
+| :-------------------------------------------------------- | :------------------------------------------------------------------------------- |
+| Räcker `normalized.canonicalValue` för jämförelse?        | Ja, med relativ tolerans 1 % och absolut golv 1e-6 (§4.4)                        |
+| Ska `components[]` och `payloads[]` jämföras?             | Nej, bara `specs[]` och identitet                                                |
+| Vilken stratifiering?                                     | Plattform × utfall; epok räknas men stratifieras inte (§4.1)                     |
+| Ska domän och ursprung mätas?                             | Nej (§5)                                                                         |
+| Hur undviker vi att mäta heuristiken mot sin egen utdata? | AI:ns dom per spec (`provenance`) och analytikerns verdikt i referensen (§2, §8) |
+| CLI eller serverfunktion?                                 | Serverfunktioner (`evaluation.functions.ts`) och Nitro-tasks; ingen CLI          |
