@@ -44,7 +44,7 @@ Rapporten visar var heuristiken är stark och var den sviker, så att nästa kod
 | `/evaluation` → **Run on server**      | `runEvaluation()`: 200 kandidater, frö 1, sparas i `eval_reports`                                                                           |
 | Schemalagt `evaluation:run` (03:15)    | Samma som ovan, varje natt                                                                                                                  |
 | Schemalagt `evaluation:health` (03:45) | Hälsokontroll mot föregående rapport (§7)                                                                                                   |
-| `/evaluation` → trendpaneler           | F1 över tid (de 20 senaste rapporterna) och per spec-nyckel (se §4.6, känd brist)                                                           |
+| `/evaluation` → trendpaneler           | F1 över tid och per spec-nyckel, ur de 20 senaste `eval_reports`                                                                            |
 
 Schemat ligger i `vite.config.ts` (`scheduledTasks`). Där finns också `evaluation:rules` (04:15) och `evaluation:shadow` (:35 varje timme), som beskrivs i `EVALUATION_FULL_AUTOMATION.md`.
 
@@ -60,7 +60,7 @@ Servern skyddar sina körningar med låset `eval_lock` (10 minuter), så att tv�
 
 - **Kandidater** med minst 50 tecken `raw`. Kasserade kandidater utesluts om inte `includeDiscarded` anges.
 - **Urval:** stratifierat på plattform × utfall (`quality.decision`, annars `status`), round-robin över hinkarna med en deterministisk PRNG. Samma frö ger samma urval.
-  - **Känd brist:** plattformen läses ur ett prefix i `source` (`tg:` → `telegram`), men dagens källrader har formen `Outlet · https://…` och blir nästan alla `web`. I praktiken stratifieras urvalet därför bara på utfall.
+  - Plattformen läses ur källraden (`platformOf`): först ur postens värd (`t.me` → `telegram`, `x.com`/`twitter.com`/`nitter.*` → `x`, `reddit.com`, `youtube.com`/`youtu.be`, annars `web`), sedan ur ett äldre prefix (`tg:` → `telegram`, `rss:` → `rss`). RSS-poster länkar till artiklar och räknas därför som `web`.
 - **Epok** (`metadata.promptVersion ?? "legacy"`) stratifieras inte, men räknas i rapporten, så att man ser om urvalet domineras av gamla kandidater.
 - **Katalog** (`Drone[]`): används för identitetsmatchning och för att läsa analytikerns verdikt (§8).
 
@@ -131,7 +131,7 @@ Per spec-nyckel (kanonisk semantik) räknas `tp`, `fp` och `fn` enligt tabellen 
 
 `totalItems` kan vara mindre än `sampleSize` när det finns färre behöriga kandidater.
 
-**Trender:** totaltrenden på `/evaluation` visar de 20 senaste rapporterna. **Känd brist:** trenden per nyckel (`getEvalKeyTrends`) hämtar de 20 _äldsta_ (`order by generated_at asc limit 20`) och slutar därför uppdateras när det finns fler än 20 rapporter.
+**Trender:** båda trendpanelerna på `/evaluation` visar de 20 senaste rapporterna, äldst först.
 
 ### 4.7 Rapportstruktur
 
@@ -217,19 +217,25 @@ Domän (`domain`) och ursprungsland (`origin`) mäts inte. De är för brusiga f
 
 Ett regressionsfall (`EvalFixture`) är en rapporttext med värden heuristiken ska ge (`expect`, `expectNames`) och värden den inte får ge (`forbid`).
 
-| Källa                                | Hur                                                                                                                                   | Status                            |
-| :----------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------ | :-------------------------------- |
-| Överensstämmelse (`report.fixtures`) | Varje körning: kandidater där heuristik och referens är överens (`exact`/`semantic`), minst en evidens finns i texten, inte kasserade | —                                 |
-| Skörd (`harvestCorpus`, server)      | Som ovan, men minst ett av värdena måste ges av ≥ 2 kandidater; högst 5 per nyckeluppsättning och 25 per körning; ny korpusversion    | `approved`                        |
-| AI-adjudikering (`runAdjudication`)  | Upp till 10 konflikter per körning avgörs av tier-2-modellen med ett ord (`heuristic`/`ai`/`neither`)                                 | `pending`, negativa `pending_fix` |
-| Kö-beslut (`recordAnalystFixture`)   | När en analytiker befordrar, slår ihop eller kasserar en kandidat i kön: ett positivt fall med kandidatens specs                      | `approved`                        |
-| Anspråksverdikt (`analystFixtures`)  | Härleds live ur katalogens verdikt vid varje laddning, sparas aldrig (§8)                                                             | `approved`                        |
-| Git-import (`importGitCorpus`)       | Filerna i `src/test/fixtures/` läses in i `eval_corpus`                                                                               | `approved`                        |
-| Avvikelseexport                      | "Download mismatch-corpus": `falsePositive` → `forbid`, högst 50                                                                      | —                                 |
+| Källa                                | Hur                                                                                                                                                                 | Status                                                                                       |
+| :----------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------ | :------------------------------------------------------------------------------------------- |
+| Överensstämmelse (`report.fixtures`) | Varje körning: kandidater där heuristik och referens är överens (`exact`/`semantic`), minst en evidens finns i texten, inte kasserade                               | —                                                                                            |
+| Skörd (`harvestCorpus`, server)      | Som ovan, men minst ett av värdena måste ges av ≥ 2 kandidater; högst 5 per nyckeluppsättning och 25 per körning; ny korpusversion                                  | `approved`                                                                                   |
+| AI-adjudikering (`runAdjudication`)  | Upp till 10 konflikter per körning avgörs av tier-2-modellen med ett ord (`heuristic`/`ai`/`neither`)                                                               | positiva `pending` (`approved` när förtroendet är förtjänat, §6.1.1), negativa `pending_fix` |
+| Kö-beslut (`queueFixtures`)          | Härleds live ur kandidater som en analytiker befordrat eller slagit ihop i kön: värdena referensen godtar, i kanoniska enheter. Kasserade kandidater ger inget fall | `approved`                                                                                   |
+| Anspråksverdikt (`analystFixtures`)  | Härleds live ur katalogens verdikt vid varje laddning, sparas aldrig (§8)                                                                                           | `approved`                                                                                   |
+| Git-import (`importGitCorpus`)       | Filerna i `src/test/fixtures/` läses in i `eval_corpus`                                                                                                             | `approved`                                                                                   |
+| Avvikelseexport                      | "Download mismatch-corpus": `falsePositive` → `forbid`, högst 50                                                                                                    | —                                                                                            |
 
-> **Känd brist:** kö-beslutet "Discard" sparar i dag också ett _positivt_ fall med alla kandidatens specs, alltså raka motsatsen till analytikerns beslut. Kö-fallen tar dessutom med specs som AI:n strök. Rättas separat; till dess är `origin = 'analyst'` i `eval_corpus` inte helt pålitligt.
+Kö-besluten sparades tidigare i `eval_corpus` (`analyst-<id>`, origin `analyst`) med alla kandidatens specs, även vid Discard och även specs AI:n strukit. Migration `015_supersede_queue_fixtures.sql` sätter de raderna till `superseded`; de härleds nu live i stället, så ett ångrat kö-beslut tar sitt fall med sig.
 
-`eval_corpus` har statusarna `pending`, `pending_fix`, `approved`, `rejected` och `superseded`. Sandlådan provkör mot `approved` och `pending_fix` (senaste versionen per id), git-filerna och de live-härledda anspråksfallen. Inget i gränssnittet godkänner i dag ett `pending`-fall, så AI-adjudikeringens positiva fall används inte förrän någon gör det i databasen.
+`eval_corpus` har statusarna `pending`, `pending_fix`, `approved`, `rejected` och `superseded`. Sandlådan provkör mot `approved` och `pending_fix` (senaste versionen per id), git-filerna och de live-härledda kö- och anspråksfallen.
+
+#### 6.1.1 Väntande fall
+
+Ett `pending`-fall används inte av sandlådan förrän det godkänts. Panelen **Pending test cases** på `/evaluation` listar dem (25 åt gången) med **Approve** och **Reject** (`decidePendingFixture`, `decided_by = 'analyst'`).
+
+AI-adjudikeringens positiva fall förtjänar självständighet enligt samma regel som övriga domare (`shared/infra/ingest/earned-trust.ts`): när analytikerns beslut på sådana fall är godkännanden till ≥ 95 % över ≥ 20 beslut, sparar `runAdjudication` nya positiva fall direkt som `approved` med `decided_by = 'autonomous'`. De räknas aldrig in i förtroendet. Faller förtroendet lämnas nya fall som `pending` igen, och de fall adjudikeringen godkänt på egen hand flyttas tillbaka till `pending`.
 
 ### 6.2 Git-korpuset
 

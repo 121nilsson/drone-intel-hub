@@ -10,12 +10,12 @@ import {
   referenceSpecs,
 } from "@/shared/infra/evaluation/evaluation";
 import { normalizeExtraction } from "@/entities/normalization/apply";
-import { semanticKeyFor } from "@/entities/normalization/semantic";
 import { sanitizeJson } from "@/shared/infra/json-sanitize";
 import type { JSONValue } from "postgres";
 import type { Candidate, Drone } from "@/entities/drone/types";
 import type { EvalFixture } from "@/shared/infra/evaluation/evaluation";
 import { readProviderEnvConfig } from "@/shared/infra/provider-env.server";
+import { trustState, type TrustState, type TrustTally } from "@/shared/infra/ingest/earned-trust";
 import { chatCompletionOnce } from "@/shared/infra/ai-proxy.server";
 import fs from "node:fs";
 import path from "node:path";
@@ -325,6 +325,14 @@ export async function runAdjudication(): Promise<{
     let adjudicated = 0;
     let inserted = 0;
     const MAX = 10;
+    // A positive fixture from the model's pick is approved on its own only while analysts have
+    // earned the adjudicator that trust; otherwise it waits in "pending" for a person, and
+    // approvals made on its own are handed back when the trust is gone.
+    const trust = await adjudicationTrust();
+    const autoApprove = trust.state === "earned";
+    if (!autoApprove) await revokeAutonomousApprovals();
+    const positiveStatus = autoApprove ? "approved" : "pending";
+    const decidedBy = autoApprove ? "autonomous" : null;
     // A claim an analyst ruled on is settled: it compares as dropped or confirmed, never as a
     // conflict to put to the model.
     const verdicts = analystVerdicts(drones);
@@ -368,8 +376,8 @@ export async function runAdjudication(): Promise<{
             ],
             status: "pending",
           };
-          await db()`insert into eval_corpus (id, version, kind, fixture, status, origin, observed_at)
-            values (${fx.id}, 1, 'positive', ${db().json(sanitizeJson(fx as unknown as JSONValue))}, 'pending', 'adjudication', now())
+          await db()`insert into eval_corpus (id, version, kind, fixture, status, origin, observed_at, decided_at, decided_by)
+            values (${fx.id}, 1, 'positive', ${db().json(sanitizeJson({ ...fx, status: positiveStatus } as unknown as JSONValue))}, ${positiveStatus}, 'adjudication', now(), ${decidedBy ? new Date() : null}, ${decidedBy})
             on conflict (id, version) do nothing`;
           inserted++;
         } else if (answer === "ai" && r) {
@@ -386,8 +394,8 @@ export async function runAdjudication(): Promise<{
             ],
             status: "pending",
           };
-          await db()`insert into eval_corpus (id, version, kind, fixture, status, origin, observed_at)
-            values (${fx.id}, 1, 'positive', ${db().json(sanitizeJson(fx as unknown as JSONValue))}, 'pending', 'adjudication', now())
+          await db()`insert into eval_corpus (id, version, kind, fixture, status, origin, observed_at, decided_at, decided_by)
+            values (${fx.id}, 1, 'positive', ${db().json(sanitizeJson({ ...fx, status: positiveStatus } as unknown as JSONValue))}, ${positiveStatus}, 'adjudication', now(), ${decidedBy ? new Date() : null}, ${decidedBy})
             on conflict (id, version) do nothing`;
           inserted++;
           // negative against heuristic's value
@@ -442,8 +450,12 @@ export interface EvalKeyTrend {
 
 export async function getEvalKeyTrends(limit = 20): Promise<EvalKeyTrend[]> {
   if (!dbConfigured()) return [];
-  const rows =
-    await db()`select generated_at, report from eval_reports order by generated_at asc limit ${limit}`;
+  // The newest `limit` reports, oldest first for the sparkline. Ordering ascending before the
+  // limit took the oldest ones, so the trend froze once there were more than `limit` reports.
+  const rows = await db()`
+    select generated_at, report from (
+      select generated_at, report from eval_reports order by generated_at desc limit ${limit}
+    ) newest order by generated_at asc`;
   const byKey = new Map<string, { values: number[]; dates: string[] }>();
   for (const r of rows) {
     const rep = r["report"] as Record<string, unknown>;
@@ -480,22 +492,73 @@ export async function getEvalReports(limit = 20): Promise<EvalReportRow[]> {
   });
 }
 
-export async function recordAnalystFixture(candidate: Candidate): Promise<{ ok: boolean }> {
-  if (!dbConfigured()) return { ok: false };
-  const fx = {
-    id: "analyst-" + candidate.id,
-    source: candidate.source,
-    text: candidate.raw,
-    expect: (candidate.extraction?.specs ?? []).map((s) => ({
-      semantic: semanticKeyFor(s.key, s.label),
-      value: s.value,
-      ...(s.unit ? { unit: s.unit } : {}),
-    })),
-    status: "approved",
-  };
+/** Analyst decisions on AI-adjudicated positive fixtures: an approval agrees with the model. */
+export async function adjudicationTrust(): Promise<TrustTally & { state: TrustState }> {
+  const empty = { agreed: 0, disagreed: 0 };
+  if (!dbConfigured()) return { ...empty, state: trustState(empty) };
+  const rows = await db()`
+    select status, count(*)::int as n from eval_corpus
+    where origin = 'adjudication' and kind = 'positive' and decided_by = 'analyst'
+      and status in ('approved', 'rejected')
+    group by status`;
+  const count = (s: string) => (rows.find((r) => r["status"] === s)?.["n"] as number) ?? 0;
+  const t = { agreed: count("approved"), disagreed: count("rejected") };
+  return { ...t, state: trustState(t) };
+}
+
+/** Approvals the adjudicator made on its own go back to "pending" once it lost the trust. */
+async function revokeAutonomousApprovals() {
   await db()`
-    insert into eval_corpus (id, version, kind, fixture, status, origin, observed_at)
-    values (${fx.id}, 1, 'positive', ${db().json(sanitizeJson(fx as unknown as JSONValue))}, 'approved', 'analyst', now())
-    on conflict (id, version) do nothing`;
-  return { ok: true };
+    update eval_corpus set status = 'pending', decided_at = null, decided_by = null
+    where origin = 'adjudication' and decided_by = 'autonomous' and status = 'approved'`;
+}
+
+export interface PendingFixture {
+  id: string;
+  version: number;
+  kind: "positive" | "negative";
+  origin: string;
+  observedAt: string;
+  fixture: EvalFixture;
+}
+
+/** Fixtures waiting for an analyst, newest first. The sandbox does not use them until approved. */
+export async function listPendingFixtures(
+  limit = 25,
+): Promise<{ total: number; items: PendingFixture[]; trust: TrustTally & { state: TrustState } }> {
+  const trust = await adjudicationTrust();
+  if (!dbConfigured()) return { total: 0, items: [], trust };
+  const [{ n } = { n: 0 }] = (await db()`
+    select count(*)::int as n from eval_corpus where status = 'pending'`) as unknown as {
+    n: number;
+  }[];
+  const rows = await db()`
+    select id, version, kind, origin, observed_at, fixture from eval_corpus
+    where status = 'pending' order by observed_at desc limit ${limit}`;
+  return {
+    total: n,
+    trust,
+    items: rows.map((r) => ({
+      id: r["id"] as string,
+      version: r["version"] as number,
+      kind: r["kind"] as "positive" | "negative",
+      origin: r["origin"] as string,
+      observedAt: (r["observed_at"] as Date).toISOString(),
+      fixture: r["fixture"] as EvalFixture,
+    })),
+  };
+}
+
+/** An analyst's decision on one pending fixture. Only a still-pending row changes. */
+export async function decidePendingFixture(
+  id: string,
+  version: number,
+  approve: boolean,
+): Promise<{ ok: boolean }> {
+  if (!dbConfigured()) return { ok: false };
+  const status = approve ? "approved" : "rejected";
+  const rows = await db()`
+    update eval_corpus set status = ${status}, decided_at = now(), decided_by = 'analyst'
+    where id = ${id} and version = ${version} and status = 'pending' returning id`;
+  return { ok: rows.length > 0 };
 }

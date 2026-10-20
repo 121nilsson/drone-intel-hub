@@ -96,15 +96,26 @@ export interface EvalOptions {
 
 const MIN_RAW = 50;
 
+/**
+ * The platform a candidate's report came from, for stratification. Candidates carry only their
+ * source line - "Outlet · https://t.me/outlet/1" today, "outlet|tg:handle/1" or "tg:handle/1"
+ * in older rows - so the platform is read from the post's host, then from a scheme prefix.
+ * Reading the leading word instead, as this once did, made almost every row "web" (current
+ * format) or the outlet's own name (legacy format), and the sample was stratified on outcome alone.
+ */
 export function platformOf(source: string): string {
-  const m = /^([a-z]+)[:|]/i.exec(source.trim());
-  if (m) {
-    const p = (m[1] ?? "").toLowerCase();
-    if (p === "tg" || p === "telegram") return "telegram";
-    return p;
+  const s = source.trim();
+  if (/(?:^|[|\s])(?:tg|telegram):/i.test(s)) return "telegram";
+  const host = /https?:\/\/(?:www\.)?([^/\s?#]+)/i.exec(s)?.[1]?.toLowerCase();
+  if (host) {
+    if (/^(?:t|telegram)\.me$/.test(host)) return "telegram";
+    if (/^(?:x|twitter|mobile\.twitter)\.com$|^nitter\./.test(host)) return "x";
+    if (/(?:^|\.)reddit\.com$/.test(host)) return "reddit";
+    if (/(?:^|\.)youtube\.com$|^youtu\.be$/.test(host)) return "youtube";
+    return "web";
   }
-  if (/https?:\/\//i.test(source)) return "web";
-  return "other";
+  const scheme = /^([a-z]+):/i.exec(s)?.[1];
+  return scheme ? scheme.toLowerCase() : "other";
 }
 
 const outcomeOf = (c: Candidate) => c.quality?.decision ?? c.status;
@@ -353,8 +364,8 @@ export function analystFixtures(
         ...(unit ? { unit } : {}),
       });
     }
-    // "review-", not "analyst-": recordAnalystFixture stores Queue decisions in eval_corpus as
-    // "analyst-<candidate id>", and loadFixtures would let one silently replace the other.
+    // "review-", not "analyst-": eval_corpus still holds retired Queue fixtures under
+    // "analyst-<candidate id>" (migration 015), and loadFixtures keys every source by id.
     const base = { source: c.source, text: c.raw, status: "approved" as const };
     if (expect.length) out.push({ ...base, id: `review-${c.id}`, expect });
     if (forbid.length) out.push({ ...base, id: `review-neg-${c.id}`, expect: [], forbid });
@@ -381,6 +392,34 @@ export async function analystCorpus(
     else if (!r.missing.length) positive.push(fx);
   }
   return { positive, negative };
+}
+
+/**
+ * Regression fixtures from Queue decisions: a candidate an analyst promoted or merged is a report
+ * whose figures they accepted, so the heuristic should keep finding them. Only the figures that
+ * survive the reference (none the AI dropped or an analyst rejected), in canonical terms. A
+ * discarded candidate yields nothing: the analyst rejected the report, and its figures may be
+ * right or wrong. Derived from the candidates' current state like analystFixtures, so an undone
+ * decision takes its fixture with it.
+ */
+export function queueFixtures(
+  candidates: readonly Candidate[],
+  verdicts: AnalystVerdicts,
+): EvalFixture[] {
+  const out: EvalFixture[] = [];
+  for (const c of candidates) {
+    if (c.resolvedBy !== "analyst" || (c.status !== "promoted" && c.status !== "merged")) continue;
+    if ((c.raw?.trim().length ?? 0) < MIN_RAW) continue;
+    const expect = referenceSpecs(c, verdicts)
+      .filter((n) => !isDropped(n))
+      .map((n) => {
+        const unit = n.canonical !== undefined ? n.canonicalUnit : n.unit;
+        return { semantic: n.semantic, value: n.canonical ?? n.value, ...(unit ? { unit } : {}) };
+      });
+    if (expect.length)
+      out.push({ id: `queue-${c.id}`, source: c.source, text: c.raw, expect, status: "approved" });
+  }
+  return out;
 }
 
 /** Usable specs only: financial/procurement keys are routed out of drone specs, so ignore them. */

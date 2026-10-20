@@ -4,6 +4,7 @@ import {
   analystCorpus,
   analystFixtures,
   analystVerdicts,
+  queueFixtures,
   compareSpecs,
   comparableSpecs,
   referenceSpecs,
@@ -232,5 +233,45 @@ describe("contradiction-check trust", () => {
     };
     expect((await run([contested])).outliers).toBe(0);
     expect((await run([contested, history])).outliers).toBe(2);
+  });
+});
+
+describe("queueFixtures", () => {
+  const speed = (value: string, over: Partial<ExtractedSpec> = {}): ExtractedSpec => ({
+    key: "speed",
+    label: "Speed",
+    value,
+    ...over,
+  });
+
+  it("keeps the figures of a report an analyst promoted or merged, as the reference reads them", () => {
+    const catalog = [drone("lancet-3", [km(40, { review: rejected("value") })])];
+    const c = {
+      ...candidate("c1", "lancet-3", [
+        range("40 km"),
+        speed("300 km/h"),
+        // The AI dropped this one: it is not a figure the analyst accepted.
+        speed("3 km/h", { key: "speed_cruise", label: "Cruise speed", provenance: "heuristic" }),
+      ]),
+      resolvedBy: "analyst" as const,
+    };
+    const [fx] = queueFixtures([c], analystVerdicts(catalog));
+    // Range is out too: an analyst rejected that figure on the catalog entry.
+    expect(fx).toMatchObject({
+      id: "queue-c1",
+      text: TEXT,
+      status: "approved",
+      expect: [{ semantic: "speed", value: 300, unit: "km/h" }],
+    });
+  });
+
+  it("yields nothing for a discarded report, or one resolved automatically", () => {
+    const base = candidate("c1", "lancet-3", [range("40 km")]);
+    const verdicts = analystVerdicts([]);
+    expect(
+      queueFixtures([{ ...base, status: "discarded", resolvedBy: "analyst" }], verdicts),
+    ).toEqual([]);
+    expect(queueFixtures([{ ...base, resolvedBy: "auto" }], verdicts)).toEqual([]);
+    expect(queueFixtures([{ ...base, resolvedBy: "analyst" }], verdicts)).toHaveLength(1);
   });
 });

@@ -39,6 +39,14 @@ describe("evaluation", () => {
     expect(platformOf("rss:militaer")).toBe("rss");
   });
 
+  it("reads the platform from the post's host in today's source lines", () => {
+    expect(platformOf("Rybar · https://t.me/rybar/71234")).toBe("telegram");
+    expect(platformOf("OSINTtechnical · https://x.com/Osinttechnical/status/1")).toBe("x");
+    expect(platformOf("Militarnyi · https://www.mil.in.ua/en/news/1")).toBe("web");
+    // Legacy "outlet|tg:handle" rows were read as the outlet's name.
+    expect(platformOf("dronebomber|tg:dva_majors/100461")).toBe("telegram");
+  });
+
   it("counts a target altitude read as vehicle altitude as a wrong key", async () => {
     const ref = ext([
       { key: "target_altitude_max", label: "Target altitude", value: 40, unit: "km" },

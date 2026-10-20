@@ -1,14 +1,14 @@
 import { createServerFn } from "@tanstack/react-start";
-import type { Candidate } from "@/entities/drone/types";
 import {
   runEvaluation,
   runEvaluationHealth,
   importGitCorpus,
   harvestCorpus,
   runAdjudication,
-  recordAnalystFixture,
   getEvalReports,
   getEvalKeyTrends,
+  listPendingFixtures,
+  decidePendingFixture,
 } from "./evaluation.server";
 import {
   activateRule,
@@ -94,12 +94,6 @@ export const triggerRejectRule = createServerFn({ method: "POST" })
     return await rejectRule(data.id);
   });
 
-export const triggerRecordAnalyst = createServerFn({ method: "POST" })
-  .validator((d: { candidate: unknown }) => d)
-  .handler(async ({ data }) => {
-    return await recordAnalystFixture(data.candidate as Candidate);
-  });
-
 export const fetchEvalReports = createServerFn({ method: "GET" }).handler(async () => {
   return await getEvalReports(20);
 });
@@ -107,3 +101,13 @@ export const fetchEvalReports = createServerFn({ method: "GET" }).handler(async 
 export const fetchEvalKeyTrends = createServerFn({ method: "GET" }).handler(async () => {
   return await getEvalKeyTrends(20);
 });
+
+export const fetchPendingFixtures = createServerFn({ method: "GET" }).handler(async () => {
+  return await listPendingFixtures(25);
+});
+
+export const triggerDecideFixture = createServerFn({ method: "POST" })
+  .validator((d: { id: string; version: number; approve: boolean }) => d)
+  .handler(async ({ data }) => {
+    return await decidePendingFixture(data.id, data.version, data.approve === true);
+  });

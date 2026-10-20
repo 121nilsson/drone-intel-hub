@@ -30,6 +30,7 @@ import { hypothesisId, mineHypotheses } from "@/shared/infra/evaluation/hypothes
 import {
   analystFixtures,
   analystVerdicts,
+  queueFixtures,
   type EvalFixture,
 } from "@/shared/infra/evaluation/evaluation";
 import type { Candidate, Drone } from "@/entities/drone/types";
@@ -143,6 +144,15 @@ async function reviewedCandidates(drones: readonly Drone[]) {
   return asCandidates(rows as unknown as { data: unknown }[]);
 }
 
+/** Candidates an analyst promoted or merged from the Queue, newest first (queueFixtures). */
+async function analystResolvedCandidates(limit = 2000) {
+  const rows = await db()`
+    select data from candidates where ${eligible()}
+      and status in ('promoted', 'merged') and data->>'resolvedBy' = 'analyst'
+    order by created_at desc limit ${limit}`;
+  return asCandidates(rows as unknown as { data: unknown }[]);
+}
+
 const mergeById = (...lists: Candidate[][]) => [
   ...new Map(lists.flat().map((c) => [c.id, c])).values(),
 ];
@@ -180,7 +190,8 @@ async function withActivationLock<T>(
 
 /**
  * Approved + pending_fix fixtures: latest DB version per id, then git files not in the DB, then
- * the analyst verdicts in the catalog (analystFixtures), which are never stored.
+ * the fixtures derived live and never stored: Queue decisions (queueFixtures) and the analyst
+ * verdicts in the catalog (analystFixtures).
  */
 async function loadFixtures(drones: readonly Drone[]): Promise<EvalFixture[]> {
   const rows = await db()`
@@ -202,8 +213,9 @@ async function loadFixtures(drones: readonly Drone[]): Promise<EvalFixture[]> {
     for (const fx of JSON.parse(fs.readFileSync(full, "utf8")) as EvalFixture[])
       if (!byId.has(fx.id)) byId.set(fx.id, fx);
   }
-  for (const fx of analystFixtures(await reviewedCandidates(drones), analystVerdicts(drones)))
-    byId.set(fx.id, fx);
+  const verdicts = analystVerdicts(drones);
+  for (const fx of queueFixtures(await analystResolvedCandidates(), verdicts)) byId.set(fx.id, fx);
+  for (const fx of analystFixtures(await reviewedCandidates(drones), verdicts)) byId.set(fx.id, fx);
   return [...byId.values()].filter((f) => typeof f.text === "string" && f.text.length > 0);
 }
 

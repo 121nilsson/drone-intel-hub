@@ -525,11 +525,12 @@ Domen är facit i hela regelloopen:
 
 `shared/infra/ingest/earned-trust.ts` håller policyn: **förtjänat** vid ≥ 20 analytikersvar och ≥ 95 % överensstämmelse, **misstrott** vid ≥ 10 svar och < 70 %, annars **standard**. Den räknas om vid varje körning, så en kategori vars överensstämmelse sjunker förlorar autonomin direkt.
 
-| Domare               | Kategori                 | Överensstämmer när analytikern…                                          | Förtjänat                   | Misstrott           |
-| :------------------- | :----------------------- | :----------------------------------------------------------------------- | :-------------------------- | :------------------ |
-| Motsägelsekontrollen | spec-familj (`range`, …) | avvisar en `outlier` eller bekräftar en `supported`                      | konfidensgräns 0.6 (av 0.7) | konfidensgräns 0.9  |
-| Autokorrigeraren     | `kind:basis` (se C)      | avvisar det flaggade värdet (en enhetsrättning: inte som "annat system") | rättningen tillämpas        | stannar vid förslag |
-| Regler (fas 3)       | `kind:targetKey`         | aktiverar en genererad regel (oförändrat, §6.1 punkt 4)                  | auto-aktivering             | —                   |
+| Domare                  | Kategori                             | Överensstämmer när analytikern…                                          | Förtjänat                    | Misstrott           |
+| :---------------------- | :----------------------------------- | :----------------------------------------------------------------------- | :--------------------------- | :------------------ |
+| Motsägelsekontrollen    | spec-familj (`range`, …)             | avvisar en `outlier` eller bekräftar en `supported`                      | konfidensgräns 0.6 (av 0.7)  | konfidensgräns 0.9  |
+| Autokorrigeraren        | `kind:basis` (se C)                  | avvisar det flaggade värdet (en enhetsrättning: inte som "annat system") | rättningen tillämpas         | stannar vid förslag |
+| Regler (fas 3)          | `kind:targetKey`                     | aktiverar en genererad regel (oförändrat, §6.1 punkt 4)                  | auto-aktivering              | —                   |
+| AI-adjudikeringens fall | positiva fall från `runAdjudication` | godkänner fallet på `/evaluation` (Pending test cases)                   | sparas direkt som `approved` | —                   |
 
 Motsägelsekontrollen frågar dessutom aldrig om ett anspråk en analytiker redan avvisat.
 
