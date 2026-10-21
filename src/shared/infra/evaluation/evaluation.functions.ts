@@ -52,6 +52,8 @@ export const fetchRules = createServerFn({ method: "GET" }).handler(async () => 
   const rules = await listRules();
   return rules.map((r) => ({
     ...r,
+    // The evidence is a debugging aid: the rule's own samples, not the report it came from.
+    // A long one is cut so the list stays readable; the full evidence stays in the database.
     evidence: typeof r.evidence === "string" ? r.evidence.slice(0, 200) : r.evidence,
   }));
 });
@@ -68,6 +70,9 @@ export const triggerSandboxRule = createServerFn({ method: "POST" })
     const r = await sandboxRule(data.id, data.mode === "full" ? "full" : "fast");
     if (!r.ok || !r.result) return r;
     const res = r.result;
+    // A rule that breaks half the corpus would send every break and every preview to the
+    // browser, so the lists are cut. The counts are not: a caller that reads
+    // `regressions.length` must learn how many there were, not how many were sent.
     return {
       ok: r.ok,
       reason: r.reason,
@@ -76,6 +81,8 @@ export const triggerSandboxRule = createServerFn({ method: "POST" })
         reasons: res.reasons,
         mode: res.mode,
         corpusSize: res.corpusSize,
+        regressionCount: res.regressions.length,
+        fixedCount: res.fixed.length,
         regressions: res.regressions.slice(0, 5),
         fixed: res.fixed.slice(0, 5),
         affectedCandidates: res.affectedCandidates,

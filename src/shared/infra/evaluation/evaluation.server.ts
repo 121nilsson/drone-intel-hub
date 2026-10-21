@@ -338,13 +338,17 @@ export async function runAdjudication(): Promise<{
     // A claim an analyst ruled on is settled: it compares as dropped or confirmed, never as a
     // conflict to put to the model.
     const verdicts = analystVerdicts(drones);
+    // The fixture ids the adjudication writes are deterministic, so a conflict that was already
+    // judged can be recognised and left to the model no more. They are read in one query: the
+    // candidate list is thousands long, and a query per candidate would be thousands of round
+    // trips to learn what a set lookup answers.
+    const judged = new Set(
+      (await db()`select id from eval_corpus where id like 'adj-%'`).map((r) => r["id"] as string),
+    );
 
     for (const c of candidates) {
       if (adjudicated >= MAX) break;
       if (!c.raw || c.raw.trim().length < 50) continue;
-      const existing =
-        await db()`select 1 from eval_corpus where id like ${"adj-" + c.id + "%"} limit 1`;
-      if (existing.length) continue;
       const heur = normalizeExtraction(await heuristic.extract(c.raw, drones)).extraction;
       const cmp = compareSpecs(comparableSpecs(heur), referenceSpecs(c, verdicts));
       const conflicts = [...cmp.wrongKeys, ...cmp.falsePositives.map((h) => ({ h, r: null }))];
@@ -354,6 +358,15 @@ export async function runAdjudication(): Promise<{
         if (adjudicated >= MAX) break;
         const h = conf.h;
         const r = conf.r;
+        // The model is only asked about a conflict no fixture covers yet. The id the verdict
+        // would be filed under is deterministic, so this is exact: the same disagreement is
+        // never put to the model twice, while a different disagreement in the same report
+        // still is.
+        if (
+          judged.has(`adj-${c.id}-${h.semantic}`) ||
+          (r && judged.has(`adj-${c.id}-${r.semantic}`))
+        )
+          continue;
         const prompt = `You are an OSINT adjudicator. A heuristic extractor and an AI extractor disagree on a spec.\n\nRaw text:\n${c.raw.slice(0, 1500)}\n\nHeuristic says: ${h.semantic} = ${h.value} ${h.unit ?? ""}\nAI says: ${r ? `${r.semantic} = ${r.value} ${r.unit ?? ""}` : "(no value)"}\n\nWhich is better supported by the text? Answer only one of: heuristic, ai, neither.`;
         const res = await chatCompletionOnce({
           model: env.tier2Model ?? "gpt-4o",
@@ -384,6 +397,7 @@ export async function runAdjudication(): Promise<{
           await db()`insert into eval_corpus (id, version, kind, fixture, status, origin, observed_at, decided_at, decided_by)
             values (${fx.id}, 1, 'positive', ${db().json(sanitizeJson({ ...fx, status: positiveStatus } as unknown as JSONValue))}, ${positiveStatus}, 'adjudication', now(), ${decidedBy ? new Date() : null}, ${decidedBy})
             on conflict (id, version) do nothing`;
+          judged.add(fx.id);
           inserted++;
         } else if (answer === "ai" && r) {
           const fx: EvalFixture = {
@@ -402,6 +416,7 @@ export async function runAdjudication(): Promise<{
           await db()`insert into eval_corpus (id, version, kind, fixture, status, origin, observed_at, decided_at, decided_by)
             values (${fx.id}, 1, 'positive', ${db().json(sanitizeJson({ ...fx, status: positiveStatus } as unknown as JSONValue))}, ${positiveStatus}, 'adjudication', now(), ${decidedBy ? new Date() : null}, ${decidedBy})
             on conflict (id, version) do nothing`;
+          judged.add(fx.id);
           inserted++;
           // negative against heuristic's value
           const neg: EvalFixture = {
