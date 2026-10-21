@@ -26,16 +26,25 @@ const drone = (id: string): Drone =>
 /** In-memory store for the drones collection, so attach/remove/re-attach is a real reload. */
 function storeFor() {
   let items: Drone[] | null = null;
+  const revisions = new Map<string, number>();
   return {
-    load: async () => items,
+    load: async () =>
+      items ? items.map((doc) => ({ doc, rev: revisions.get(doc.id) ?? 0 })) : null,
     seed: async (_c: string, seeded: Drone[]) => {
-      if (items === null) items = [...seeded];
+      if (items === null) {
+        items = [...seeded];
+        for (const doc of seeded) revisions.set(doc.id, 0);
+      }
     },
     put: async (_c: string, doc: Drone) => {
       items = [...(items ?? []).filter((d) => d.id !== doc.id), doc];
+      const rev = (revisions.get(doc.id) ?? -1) + 1;
+      revisions.set(doc.id, rev);
+      return rev;
     },
     remove: async (_c: string, id: string) => {
       items = (items ?? []).filter((d) => d.id !== id);
+      revisions.delete(id);
     },
   } as unknown as DocumentStore;
 }
@@ -67,6 +76,7 @@ describe("seeded systems survive an analyst's removal", () => {
     expect(first.get("geran-2")).toBeDefined();
 
     first.remove("geran-2");
+    await first.flush();
     expect(first.get("geran-2")).toBeUndefined();
 
     // A reload is a new repository instance attaching to the same store.

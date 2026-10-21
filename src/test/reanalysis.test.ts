@@ -210,6 +210,45 @@ describe("processPending with a re-analysis", () => {
     expect(rows[0]).toMatchObject({ status: "pending", attempts: 1, reanalyze: true });
   });
 
+  it("restores the earlier claims without discarding a concurrent edit", async () => {
+    // A re-run can fail after an analyst has already added another attribute. Putting the old
+    // whole document back would erase that edit; the restore has to merge only the claims the
+    // retraction removed.
+    let inject = () => {};
+    const failing: IntelExtractor = {
+      tier: 1,
+      label: "ai",
+      extract: async () => {
+        inject();
+        throw new Error("Invalid extraction JSON: nope");
+      },
+    };
+    const rows = [post()];
+    const { dispatches, deps, drones } = setup(rows, failing);
+    inject = () => {
+      drones[0]!.specs.push({
+        key: "speed",
+        label: "Speed",
+        discoveredBy: "analyst",
+        claims: [
+          {
+            value: 120,
+            source: "Analyst",
+            extractionEngine: "analyst",
+            date: "2026-10-09",
+          },
+        ],
+      });
+    };
+    requeueStale(dispatches, 10);
+    await processPending(dispatches, deps, 10);
+
+    const range = drones[0]!.specs.find((s) => s.key === "range")!;
+    expect(range.claims).toHaveLength(2);
+    const speed = drones[0]!.specs.find((s) => s.key === "speed")!;
+    expect(speed.claims[0]).toMatchObject({ value: 120, extractionEngine: "analyst" });
+  });
+
   it("keeps an analyst's rejection on the claim the re-run reproduces", async () => {
     const rows = [post()];
     const { dispatches, deps, drones } = setup(rows, matched);

@@ -5,8 +5,13 @@ import { clusterEvents } from "@/entities/dispatch/events";
 import type { FetchedPost } from "@/shared/infra/sources/source-fetch.functions";
 import type { DispatchRepository } from "@/shared/contracts/repository";
 import { runTwoTier, type PipelineDeps, type PipelineResult } from "@/shared/infra/ingest/pipeline";
-import type { Drone } from "@/entities/drone/types";
-import { heldReviews, restoreReviews, type HeldReview } from "@/entities/drone/claim-review";
+import type { Drone, SpecClaim } from "@/entities/drone/types";
+import {
+  claimKey,
+  heldReviews,
+  restoreReviews,
+  type HeldReview,
+} from "@/entities/drone/claim-review";
 import { ProviderOutageError } from "@/shared/contracts/ai";
 import { EXTRACTION_PROMPT_VERSION } from "@/shared/contracts/extraction.schema";
 import { traceFailure, traceItem, traceLevel } from "@/shared/infra/pipeline-trace";
@@ -709,33 +714,64 @@ function retractContribution(
   deps: PipelineDeps,
 ): { restore: () => void; restoreReviews: () => void } {
   const source = `${d.sourceName} · ${d.url}`;
+  const at = new Date().toISOString();
   // A claim the analyst filed (a moved figure, a hand-entered one) is not the post's
   // contribution: the post is re-read, the analyst's own reading stands.
-  const mine = (c: { sourceId?: string; source: string; extractionEngine?: string }) =>
+  const mine = (c: SpecClaim) =>
     c.extractionEngine !== "analyst" && (c.sourceId === d.id || c.source === source);
+  /** Remove this post's claims from a fresh copy, so a concurrent review survives the retry. */
+  const withoutMine = (drone: Drone): Drone => ({
+    ...drone,
+    specs: drone.specs
+      .map((s) => ({ ...s, claims: s.claims.filter((c) => !mine(c)) }))
+      .filter((s) => s.claims.length > 0),
+    updatedAt: at,
+  });
   const before: Drone[] = [];
   const held: HeldReview[] = [];
   for (const drone of deps.drones.list()) {
     if (!drone.specs.some((s) => s.claims.some(mine))) continue;
     before.push(drone);
     held.push(...heldReviews(drone, mine));
-    deps.drones.upsert({
-      ...drone,
-      specs: drone.specs
-        .map((s) => ({ ...s, claims: s.claims.filter((c) => !mine(c)) }))
-        .filter((s) => s.claims.length > 0),
-    });
+    deps.drones.upsert(withoutMine(drone), withoutMine);
   }
   return {
     restore: () => {
-      for (const drone of before) deps.drones.upsert(drone);
+      for (const drone of before) {
+        // Put back only the claims this retraction removed, never the whole old document: the
+        // re-run may have reviewed, merged or otherwise edited the drone while it was failing.
+        const removed = drone.specs.flatMap((s) =>
+          s.claims.filter(mine).map((claim) => ({ spec: s, claim })),
+        );
+        const restoreRemoved = (fresh: Drone): Drone => {
+          const specs = fresh.specs.map((s) => ({ ...s, claims: [...s.claims] }));
+          const byKey = new Map(specs.map((s) => [s.key, s]));
+          let changed = false;
+          for (const { spec, claim } of removed) {
+            let target = byKey.get(spec.key);
+            if (!target) {
+              target = { ...spec, claims: [] };
+              byKey.set(spec.key, target);
+              specs.push(target);
+            }
+            if (!target.claims.some((c) => claimKey(c) === claimKey(claim))) {
+              target.claims.push(claim);
+              changed = true;
+            }
+          }
+          return changed ? { ...fresh, specs, updatedAt: at } : fresh;
+        };
+        const fresh = deps.drones.get(drone.id);
+        if (fresh) deps.drones.upsert(restoreRemoved(fresh), restoreRemoved);
+      }
     },
     restoreReviews: () => {
       for (const id of new Set(held.map((h) => h.droneId))) {
         const drone = deps.drones.get(id);
         if (!drone) continue;
-        const next = restoreReviews(drone, held, mine);
-        if (next !== drone) deps.drones.upsert(next);
+        const apply = (fresh: Drone) => restoreReviews(fresh, held, mine);
+        const next = apply(drone);
+        if (next !== drone) deps.drones.upsert(next, apply);
       }
     },
   };

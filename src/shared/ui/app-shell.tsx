@@ -1,7 +1,7 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState, type ReactNode } from "react";
 import { Menu, Plus, Search, X, Radar } from "lucide-react";
-import { useDrones } from "@/shared/infra/services";
+import { useDrones, useServices } from "@/shared/infra/services";
 import { droneHaystack } from "@/shared/infra/storage/local-repository";
 import { CountryBadge } from "@/shared/ui/country-badge";
 
@@ -21,9 +21,10 @@ const NAV = [
 
 function CommandSearch({ open, onClose }: { open: boolean; onClose: () => void }) {
   const drones = useDrones();
+  const { attached } = useServices();
   const [q, setQ] = useState("");
   const nav = useNavigate();
-  if (!open) return null;
+  if (!open || !attached) return null;
   const hits = drones.filter((d) => droneHaystack(d).includes(q.toLowerCase())).slice(0, 8);
   return (
     <div
@@ -73,6 +74,7 @@ function CommandSearch({ open, onClose }: { open: boolean; onClose: () => void }
 }
 
 export function AppShell({ children }: { children: ReactNode }) {
+  const svc = useServices();
   const [cmd, setCmd] = useState(false);
   const [drawer, setDrawer] = useState(false);
   useEffect(() => {
@@ -131,6 +133,21 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </div>
       </header>
+      {svc.storageWarning && (
+        <div role="status" className="border-b border-amber-500/40 bg-amber-500/10">
+          <div className="mx-auto flex max-w-7xl items-start gap-3 px-4 py-2 text-xs">
+            <span className="font-mono uppercase tracking-wider text-amber-500">Storage</span>
+            <span className="flex-1 text-foreground/90">{svc.storageWarning}</span>
+            <button
+              onClick={svc.clearStorageWarning}
+              className="text-muted-foreground hover:text-foreground"
+              aria-label="Dismiss storage warning"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
       {drawer && (
         <div
           className="fixed inset-0 z-50 bg-background/80 lg:hidden"
@@ -168,7 +185,32 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
       )}
       <CommandSearch open={cmd} onClose={() => setCmd(false)} />
-      <main className="mx-auto max-w-7xl px-4 py-6">{children}</main>
+      {svc.storageError && !svc.attached ? (
+        <section role="alert" className="mx-auto max-w-2xl px-4 py-16">
+          <div className="border border-destructive/40 bg-destructive/5 p-6">
+            <h1 className="font-mono text-sm uppercase tracking-widest text-destructive">
+              Catalog unavailable
+            </h1>
+            <p className="mt-3 text-sm text-muted-foreground">{svc.storageError}</p>
+            <div className="mt-5 flex flex-wrap gap-2">
+              <button
+                onClick={() => window.location.reload()}
+                className="border border-border px-3 py-1.5 font-mono text-xs uppercase text-muted-foreground hover:text-foreground"
+              >
+                Reload
+              </button>
+              <button
+                onClick={() => void svc.continueInBrowser()}
+                className="border border-destructive/40 px-3 py-1.5 font-mono text-xs uppercase text-destructive hover:bg-destructive/10"
+              >
+                Continue in this browser
+              </button>
+            </div>
+          </div>
+        </section>
+      ) : (
+        <main className="mx-auto max-w-7xl px-4 py-6">{children}</main>
+      )}
     </div>
   );
 }

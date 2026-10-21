@@ -362,9 +362,9 @@ describe("fingerprint bookkeeping", () => {
     // kept, this would still pass - the assertion is that clearing it does not break the match,
     // i.e. the lazy path really does rebuild from the documents.
     await dispatches.attach({
-      load: () => Promise.resolve(dispatches.list()),
+      load: () => Promise.resolve(dispatches.list().map((doc) => ({ doc, rev: 0 }))),
       seed: () => Promise.resolve(),
-      put: () => Promise.resolve(),
+      put: () => Promise.resolve(0),
       remove: () => Promise.resolve(),
     } as never);
     await collectSource(source("b", "B"), fetcherFor({ b: [post("1", REPORT_A)] }), dispatches);

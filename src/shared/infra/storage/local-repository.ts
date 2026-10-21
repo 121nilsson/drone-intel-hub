@@ -34,7 +34,13 @@ import type {
   DroneRepository,
   Subscribable,
 } from "@/shared/contracts/repository";
-import type { Collection, CollectionMap, DocumentStore } from "@/shared/contracts/store";
+import {
+  DocumentConflictError,
+  type Collection,
+  type CollectionMap,
+  type DocumentStore,
+  type VersionedDoc,
+} from "@/shared/contracts/store";
 
 const norm = (s: string) => s.toLowerCase().normalize("NFKD");
 
@@ -57,9 +63,20 @@ export function droneHaystack(d: Drone) {
  * Write-through cache: synchronous reads for the UI, async persistence to any DocumentStore.
  * Swapping storage = attaching a different store; features never change.
  */
+type Replay<T> = (fresh: T) => T;
+
 abstract class CachedRepository<C extends Collection> implements Subscribable {
   private fns = new Set<() => void>();
+  private problemFns = new Set<(message: string) => void>();
   protected store: DocumentStore | null = null;
+  /** Revision of each document in `items`, as last read from or written to the store. */
+  protected revs = new Map<string, number>();
+  /**
+   * Per-document write chains. Two writes to the same document must run in order: the second
+   * has to use the revision the first returned, or it would conflict with its own predecessor.
+   */
+  private writes = new Map<string, Promise<void>>();
+  private inflight = new Set<Promise<void>>();
   constructor(
     protected collection: C,
     protected items: CollectionMap[C][],
@@ -74,12 +91,65 @@ abstract class CachedRepository<C extends Collection> implements Subscribable {
     this.fns.forEach((f) => f());
   }
 
+  /**
+   * Failures the UI has to know about: a write the store refused, a conflict whose edit could
+   * not be saved, or a delete that did not happen. Kept separate from `subscribe` because a
+   * storage problem must survive the cache reload that follows it.
+   */
+  onStorageError(fn: (message: string) => void) {
+    this.problemFns.add(fn);
+    return () => {
+      this.problemFns.delete(fn);
+    };
+  }
+
+  private reportProblem(message: string, cause?: unknown) {
+    const detail =
+      cause === undefined
+        ? message
+        : `${message} (${cause instanceof Error ? cause.message : String(cause)})`;
+    console.error(`[store] ${detail}`, cause ?? "");
+    this.problemFns.forEach((fn) => {
+      try {
+        fn(detail);
+      } catch (e) {
+        // A UI listener must not break persistence or another listener.
+        console.error("[store] storage-error listener failed", e);
+      }
+    });
+  }
+
+  /**
+   * A failed write may have advanced a revision or may have landed despite the error. Reload the
+   * stored truth so the cache does not keep showing an edit that was not saved; if even the
+   * reload fails, the warning above is all the UI can trust.
+   */
+  private async recoverAfterFailure(message: string, cause: unknown) {
+    this.reportProblem(message, cause);
+    try {
+      await this.reload();
+    } catch (e) {
+      this.reportProblem(`could not reload ${this.collection}`, e);
+    }
+  }
+
+  /** Replace the cache with a store snapshot, revisions included. */
+  protected adopt(loaded: VersionedDoc<CollectionMap[C]>[]) {
+    this.items = loaded.map((entry) => entry.doc);
+    this.revs = new Map(loaded.map((entry) => [entry.doc.id, entry.rev]));
+  }
+
   async attach(store: DocumentStore) {
-    this.store = store;
+    // Load and seed before switching the pointer: a failed attach must leave the repository on
+    // its previous store, never half-attached to one that cannot read or write it.
     const loaded = await store.load(this.collection);
-    if (loaded === null) await store.seed(this.collection, this.items);
-    else {
-      this.items = loaded;
+    if (loaded === null) {
+      await store.seed(this.collection, this.items);
+      this.store = store;
+      this.revs = new Map(this.items.map((doc) => [doc.id, 0]));
+    } else {
+      this.adopt(loaded);
+      this.store = store;
       this.emit();
     }
   }
@@ -93,21 +163,110 @@ abstract class CachedRepository<C extends Collection> implements Subscribable {
     if (!this.store) return;
     const loaded = await this.store.load(this.collection);
     if (!loaded || !apply()) return;
-    this.items = loaded;
+    this.adopt(loaded);
     this.emit();
   }
-  protected save(doc: CollectionMap[C]) {
-    this.emit();
-    this.store
-      ?.put(this.collection, doc)
-      .catch((e) => console.error(`[store] put ${this.collection}`, e));
+
+  /** Wait until every queued write and delete for this repository has settled. */
+  async flush() {
+    while (this.inflight.size) await Promise.allSettled([...this.inflight]);
   }
+
+  /**
+   * Persist a document the caller has already placed in `items`.
+   *
+   * `replay` is what makes a conflict recoverable: after another writer changes the stored
+   * copy, it receives the fresh document and returns the change applied to it. Callers that
+   * cannot reapply their edit should omit it - the cache is then reloaded, so the user sees
+   * the stored truth rather than an edit that was silently thrown away.
+   */
+  protected save(doc: CollectionMap[C], replay?: Replay<CollectionMap[C]>) {
+    this.emit();
+    const store = this.store;
+    if (!store) return;
+    this.track(store, doc, replay);
+  }
+
+  private track(store: DocumentStore, doc: CollectionMap[C], replay?: Replay<CollectionMap[C]>) {
+    const previous = this.writes.get(doc.id) ?? Promise.resolve();
+    const next = previous
+      .catch(() => {})
+      .then(() => this.persist(store, doc, replay))
+      .catch((e) => this.reportProblem(`could not save ${this.collection}`, e));
+    this.writes.set(doc.id, next);
+    this.inflight.add(next);
+    void next.finally(() => {
+      if (this.writes.get(doc.id) === next) this.writes.delete(doc.id);
+      this.inflight.delete(next);
+    });
+  }
+
+  private async persist(
+    store: DocumentStore,
+    doc: CollectionMap[C],
+    replay?: Replay<CollectionMap[C]>,
+  ) {
+    let candidate = doc;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const expected = this.revs.get(candidate.id) ?? null;
+      try {
+        const rev = await store.put(this.collection, candidate, expected);
+        this.revs.set(candidate.id, rev);
+        return;
+      } catch (e) {
+        if (!(e instanceof DocumentConflictError)) {
+          await this.recoverAfterFailure(`could not save ${this.collection}/${candidate.id}`, e);
+          return;
+        }
+        await this.reload();
+        const fresh = this.items.find((x) => x.id === candidate.id);
+        if (!replay || !fresh) {
+          this.reportProblem(
+            `${this.collection}/${candidate.id} changed in another session; your edit was reloaded, not saved`,
+          );
+          return;
+        }
+        candidate = replay(fresh);
+        // Only replace the optimistic copy if it is still the one this write was based on; a
+        // newer local edit belongs to the next write in the chain.
+        const current = this.items.find((x) => x.id === candidate.id);
+        if (current === doc || current === fresh) {
+          this.items = this.items.map((x) => (x.id === candidate.id ? candidate : x));
+          this.emit();
+        }
+      }
+    }
+    this.reportProblem(
+      `${this.collection}/${doc.id} kept changing in other sessions; the stored copy was reloaded`,
+    );
+    await this.reload();
+  }
+
   protected drop(id: string) {
     this.emit();
-    this.store
-      ?.remove(this.collection, id)
-      .catch((e) => console.error(`[store] remove ${this.collection}`, e));
+    const store = this.store;
+    if (!store) {
+      this.revs.delete(id);
+      return;
+    }
+    const previous = this.writes.get(id) ?? Promise.resolve();
+    const next = previous
+      .catch(() => {})
+      .then(async () => {
+        await store.remove(this.collection, id);
+        // Keep the revision until the delete has actually run: a save queued before this drop
+        // still has to update the existing document, and a save queued after it must insert.
+        this.revs.delete(id);
+      })
+      .catch((e) => this.recoverAfterFailure(`could not delete ${this.collection}/${id}`, e));
+    this.writes.set(id, next);
+    this.inflight.add(next);
+    void next.finally(() => {
+      if (this.writes.get(id) === next) this.writes.delete(id);
+      this.inflight.delete(next);
+    });
   }
+
   list() {
     return this.items;
   }
@@ -120,11 +279,11 @@ export class LocalDroneRepository extends CachedRepository<"drones"> implements 
   get(id: string) {
     return this.items.find((d) => d.id === id);
   }
-  upsert(drone: Drone) {
+  upsert(drone: Drone, replay?: (fresh: Drone) => Drone) {
     const i = this.items.findIndex((d) => d.id === drone.id);
     this.items =
       i >= 0 ? this.items.map((d) => (d.id === drone.id ? drone : d)) : [...this.items, drone];
-    this.save(drone);
+    this.save(drone, replay);
   }
   remove(id: string) {
     this.items = this.items.filter((d) => d.id !== id);
@@ -204,7 +363,7 @@ export class LocalCandidateRepository
   update(id: string, patch: Partial<Candidate>) {
     this.items = this.items.map((c) => (c.id === id ? { ...c, ...patch } : c));
     const doc = this.items.find((c) => c.id === id);
-    if (doc) this.save(doc);
+    if (doc) this.save(doc, (fresh) => ({ ...fresh, ...patch }));
   }
 }
 
@@ -219,7 +378,7 @@ export class LocalSourceRepository extends CachedRepository<"sources"> implement
   update(id: string, patch: Partial<MonitoredSource>) {
     this.items = this.items.map((x) => (x.id === id ? { ...x, ...patch } : x));
     const doc = this.items.find((x) => x.id === id);
-    if (doc) this.save(doc);
+    if (doc) this.save(doc, (fresh) => ({ ...fresh, ...patch }));
   }
   remove(id: string) {
     this.items = this.items.filter((x) => x.id !== id);
@@ -293,7 +452,7 @@ export class LocalDispatchRepository
     this.forget(id);
     this.fingerprint(doc);
     this.indexUrl(doc);
-    this.save(doc);
+    this.save(doc, (fresh) => ({ ...fresh, ...patch }));
   }
   pending(limit: number) {
     return this.items
@@ -430,15 +589,25 @@ export class LocalTaxonomyRepository
 
   /** Stored edits replace the seed with the same id. Seeds missing from the store stay available. */
   override async attach(store: DocumentStore) {
-    this.store = store;
+    // Same rule as the base repository: a failed load or seed leaves the old store in place.
     const loaded = await store.load(this.collection);
     if (loaded === null) {
       await store.seed(this.collection, this.items);
+      this.store = store;
+      this.revs = new Map(this.items.map((t) => [t.id, 0]));
       return;
     }
     const byId = new Map(this.items.map((t) => [t.id, t]));
-    for (const doc of loaded) byId.set(doc.id, doc);
+    // Seed-only terms are deliberately absent from `revs`: they do not exist in the store
+    // yet, so their first write must be an insert rather than a conditional update.
+    const revs = new Map<string, number>();
+    for (const entry of loaded) {
+      byId.set(entry.doc.id, entry.doc);
+      revs.set(entry.doc.id, entry.rev);
+    }
     this.items = [...byId.values()];
+    this.revs = revs;
+    this.store = store;
     this.emit();
   }
 
@@ -475,17 +644,23 @@ export class LocalTaxonomyCandidateRepository
     const id = candidateId(taxonomy, rawTerm);
     const now = new Date().toISOString();
     const sourceKey = source.sourceId ?? source.source;
+    // Apply the observation to the freshest copy. If the source is already listed there the
+    // observation is not counted twice, which is what makes this safe to replay after a conflict.
+    const apply = (base: TaxonomyCandidate): TaxonomyCandidate => {
+      if (base.sources.some((s) => (s.sourceId ?? s.source) === sourceKey)) return base;
+      return {
+        ...base,
+        occurrences: base.occurrences + 1,
+        lastSeen: now,
+        sources: [...base.sources, { ...source, seenAt: now }],
+      };
+    };
     const existing = this.items.find((c) => c.id === id);
     if (existing) {
-      if (existing.sources.some((s) => (s.sourceId ?? s.source) === sourceKey)) return existing;
-      const next: TaxonomyCandidate = {
-        ...existing,
-        occurrences: existing.occurrences + 1,
-        lastSeen: now,
-        sources: [...existing.sources, { ...source, seenAt: now }],
-      };
+      const next = apply(existing);
+      if (next === existing) return existing;
       this.items = this.items.map((c) => (c.id === id ? next : c));
-      this.save(next);
+      this.save(next, apply);
       return next;
     }
     const created: TaxonomyCandidate = {
@@ -499,23 +674,21 @@ export class LocalTaxonomyCandidateRepository
       sources: [{ ...source, seenAt: now }],
     };
     this.items = [created, ...this.items];
-    this.save(created);
+    this.save(created, apply);
     return created;
   }
 
   resolve(id: string, to: "mapped" | "promoted" | "rejected", target?: string) {
-    this.items = this.items.map((c) =>
-      c.id === id
-        ? {
-            ...c,
-            status: to,
-            ...(target ? { resolvedCanonicalId: target } : {}),
-            lastSeen: new Date().toISOString(),
-          }
-        : c,
-    );
+    const at = new Date().toISOString();
+    const apply = (fresh: TaxonomyCandidate): TaxonomyCandidate => ({
+      ...fresh,
+      status: to,
+      ...(target ? { resolvedCanonicalId: target } : {}),
+      lastSeen: at,
+    });
+    this.items = this.items.map((c) => (c.id === id ? apply(c) : c));
     const doc = this.items.find((c) => c.id === id);
-    if (doc) this.save(doc);
+    if (doc) this.save(doc, apply);
   }
 
   /**
@@ -523,14 +696,14 @@ export class LocalTaxonomyCandidateRepository
    * through resolve() because "candidate" is the absence of a decision, not one of its outcomes.
    */
   unresolve(id: string) {
-    this.items = this.items.map((c) => {
-      if (c.id !== id) return c;
-      const next: TaxonomyCandidate = { ...c, status: "candidate" };
+    const apply = (fresh: TaxonomyCandidate): TaxonomyCandidate => {
+      const next: TaxonomyCandidate = { ...fresh, status: "candidate" };
       delete next.resolvedCanonicalId;
       return next;
-    });
+    };
+    this.items = this.items.map((c) => (c.id === id ? apply(c) : c));
     const doc = this.items.find((c) => c.id === id);
-    if (doc) this.save(doc);
+    if (doc) this.save(doc, apply);
   }
 }
 

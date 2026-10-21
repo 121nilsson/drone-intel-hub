@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
-import { COLLECTIONS, type Collection } from "@/shared/contracts/store";
+import type { ProviderEnvConfig } from "@/shared/contracts/ai";
+import { COLLECTIONS, DocumentConflictError, type Collection } from "@/shared/contracts/store";
 import { MAX_LEASE_MS } from "@/shared/infra/ingest/auto-ingest";
 
 const checkCollection = (c: unknown): Collection => {
@@ -11,6 +12,13 @@ const checkDoc = (d: unknown) => {
     throw new Error("Invalid document");
   if (JSON.stringify(d).length > 500_000) throw new Error("Document too large");
   return d;
+};
+/** `null` is the insert-only case; a number is the revision the caller read. */
+const checkRev = (r: unknown): number | null => {
+  if (r === null) return null;
+  const n = Number(r);
+  if (!Number.isSafeInteger(n) || n < 0) throw new Error("Invalid revision");
+  return n;
 };
 
 /** DATABASE_URL (self-hosted PostgreSQL) wins; otherwise Lovable Cloud when configured. */
@@ -25,14 +33,24 @@ async function store() {
 
 /** Storage backend plus non-secret inference settings for the Settings UI. */
 export const getStoreStatus = createServerFn({ method: "POST" }).handler(async () => {
-  const { readProviderEnvConfig } = await import("../provider-env.server");
-  return {
-    postgres:
-      !!process.env["DATABASE_URL"] ||
-      (!!process.env["SUPABASE_URL"] && !!process.env["SUPABASE_SERVICE_ROLE_KEY"]),
-    // Awaited: readProviderEnvConfig also reads the multi-provider table, so it is async now.
-    provider: await readProviderEnvConfig(),
-  };
+  const postgres =
+    !!process.env["DATABASE_URL"] ||
+    (!!process.env["SUPABASE_URL"] && !!process.env["SUPABASE_SERVICE_ROLE_KEY"]);
+
+  // The provider settings are optional and live in a different system from the catalog. A
+  // failure to read them must not make the client think there is no server storage and switch to
+  // a browser catalog - that is precisely the silent fork this status call exists to prevent.
+  let provider: ProviderEnvConfig | null = null;
+  let providerError: string | null = null;
+  try {
+    const { readProviderEnvConfig } = await import("../provider-env.server");
+    provider = await readProviderEnvConfig();
+  } catch (e) {
+    providerError = e instanceof Error ? e.message : String(e);
+    console.error("[store] provider settings unavailable", e);
+  }
+
+  return { postgres, provider, providerError };
 });
 
 export const storeLoad = createServerFn({ method: "POST" })
@@ -50,13 +68,21 @@ export const storeSeed = createServerFn({ method: "POST" })
   });
 
 export const storePut = createServerFn({ method: "POST" })
-  .validator((d: { c: Collection; doc: unknown }) => ({
+  .validator((d: { c: Collection; doc: unknown; expectedRev: unknown }) => ({
     c: checkCollection(d?.c),
     doc: checkDoc(d?.doc),
+    expectedRev: checkRev(d?.expectedRev),
   }))
-  .handler(async ({ data }) => {
-    await (await store()).put(data.c, data.doc as never);
-    return { ok: true };
+  .handler(async ({ data }): Promise<{ ok: true; rev: number } | { ok: false }> => {
+    try {
+      const rev = await (await store()).put(data.c, data.doc as never, data.expectedRev);
+      return { ok: true, rev };
+    } catch (e) {
+      // A stale revision is an expected outcome, not a server fault: the caller reloads and
+      // reapplies. Anything else is a real storage failure and must surface as one.
+      if (e instanceof DocumentConflictError) return { ok: false };
+      throw e;
+    }
   });
 
 export const storeRemove = createServerFn({ method: "POST" })

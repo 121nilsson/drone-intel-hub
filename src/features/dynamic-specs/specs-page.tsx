@@ -15,17 +15,23 @@ export function SpecsPage() {
   const [confirmingDrop, setConfirmingDrop] = useState<string | null>(null);
 
   const rename = (key: string) => {
+    const apply = (d: Parameters<typeof repo.upsert>[0]) => ({
+      ...d,
+      specs: d.specs.map((s) => (s.key === key ? { ...s, label } : s)),
+    });
     drones.forEach((d) => {
-      if (d.specs.some((s) => s.key === key))
-        repo.upsert({ ...d, specs: d.specs.map((s) => (s.key === key ? { ...s, label } : s)) });
+      if (d.specs.some((s) => s.key === key)) repo.upsert(apply(d), apply);
     });
     setEditing(null);
     toast("Attribute renamed", { description: `${key} → ${label}` });
   };
   const remove = (key: string) => {
+    const apply = (d: Parameters<typeof repo.upsert>[0]) => ({
+      ...d,
+      specs: d.specs.filter((s) => s.key !== key),
+    });
     drones.forEach((d) => {
-      if (d.specs.some((s) => s.key === key))
-        repo.upsert({ ...d, specs: d.specs.filter((s) => s.key !== key) });
+      if (d.specs.some((s) => s.key === key)) repo.upsert(apply(d), apply);
     });
     setConfirmingDrop(null);
     toast("Attribute dropped", { description: key });

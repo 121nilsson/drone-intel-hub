@@ -3,6 +3,7 @@ import { PostgresStore } from "@/shared/infra/postgres/postgres-store.server";
 import { HeuristicExtractor } from "@/shared/infra/heuristic-ai";
 import { getOrRefreshRuleSnapshot } from "@/shared/infra/heuristics/rule-registry.server";
 import { sanitizeJson } from "@/shared/infra/json-sanitize";
+import { documentsOf } from "@/shared/contracts/store";
 import {
   compileRuleSnapshot,
   ruleTerms,
@@ -93,7 +94,7 @@ const iso = (v: unknown) => (v instanceof Date ? v.toISOString() : v ? String(v)
 const json = (v: unknown) => db().json(sanitizeJson(v as JSONValue));
 
 async function loadCatalog() {
-  return ((await new PostgresStore().load("drones")) ?? []) as unknown as Drone[];
+  return (documentsOf(await new PostgresStore().load("drones")) ?? []) as unknown as Drone[];
 }
 
 // Targeted candidate loads. The rule loop runs hourly and per click, so it never pulls the whole

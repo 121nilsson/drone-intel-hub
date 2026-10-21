@@ -7,7 +7,7 @@ import type {
   DroneRepository,
 } from "@/shared/contracts/repository";
 import type { CatalogMutations, ClaimVerdict, RemoveDroneReport } from "@/shared/contracts/catalog";
-import { addAnalystClaim, moveClaim, reviewClaim } from "@/entities/drone/claim-review";
+import { addAnalystClaim, claimKey, moveClaim, reviewClaim } from "@/entities/drone/claim-review";
 
 /**
  * The repositories the catalog operations work on.
@@ -21,16 +21,13 @@ export interface CatalogDeps {
   dispatches?: DispatchRepository;
 }
 
-export function mergeDrones(
-  keepId: string,
-  mergeId: string,
-  d: Pick<CatalogDeps, "drones" | "candidates">,
-  reason?: string,
-): Drone | undefined {
-  if (keepId === mergeId) return undefined;
-  const keep = d.drones.get(keepId);
-  const merge = d.drones.get(mergeId);
-  if (!keep || !merge) return undefined;
+/**
+ * The pure half of a merge: take two catalog entries and return the one that should remain.
+ * Kept separate so a conflicting write can reapply the merge to the freshest stored copy.
+ */
+function mergeDronePair(keep: Drone, merge: Drone, reason?: string): Drone {
+  const keepId = keep.id;
+  const mergeId = merge.id;
 
   // 1. Merge metadata & descriptive fields
   const name =
@@ -170,9 +167,49 @@ export function mergeDrones(
     updatedAt: new Date().toISOString(),
   };
 
-  // Upsert merged target
-  d.drones.upsert(result);
+  return result;
+}
 
+/** Rewrite another entry's links from a merged-away id to the entry that remains. */
+function relinkAfterMerge(doc: Drone, from: string, to: string, at: string): Drone {
+  if (!linksTo(doc, from)) return doc;
+  const { variantOfId, ...rest } = doc;
+  const counterpartIds = [
+    ...new Set(
+      doc.counterpartIds.map((id) => (id === from ? to : id)).filter((id) => id !== doc.id),
+    ),
+  ];
+  return {
+    ...rest,
+    counterpartIds,
+    ...(variantOfId ? { variantOfId: variantOfId === from ? to : variantOfId } : {}),
+    ...(doc.variantIds
+      ? { variantIds: [...new Set(doc.variantIds.map((id) => (id === from ? to : id)))] }
+      : {}),
+    updatedAt: at,
+  };
+}
+
+export function mergeDrones(
+  keepId: string,
+  mergeId: string,
+  d: Pick<CatalogDeps, "drones" | "candidates">,
+  reason?: string,
+): Drone | undefined {
+  if (keepId === mergeId) return undefined;
+  const keep = d.drones.get(keepId);
+  const merge = d.drones.get(mergeId);
+  if (!keep || !merge) return undefined;
+
+  const result = mergeDronePair(keep, merge, reason);
+  // A conflicting write reapplies the merge to the freshest keep copy. The other side is
+  // re-read too: another writer may have enriched the entry being merged away in the meantime.
+  d.drones.upsert(result, (fresh) => {
+    const current = d.drones.get(mergeId);
+    return current && current.id !== fresh.id ? mergeDronePair(fresh, current, reason) : fresh;
+  });
+
+  const at = new Date().toISOString();
   // 7. Update counterpart links on other drones pointing to mergeId
   for (const other of d.drones.list()) {
     if (other.id === keepId || other.id === mergeId) continue;
@@ -181,26 +218,9 @@ export function mergeDrones(
       other.variantOfId === mergeId ||
       other.variantIds?.includes(mergeId)
     ) {
-      const updated = [
-        ...new Set(
-          other.counterpartIds
-            .map((cId) => (cId === mergeId ? keepId : cId))
-            .filter((cId) => cId !== other.id),
-        ),
-      ];
-      d.drones.upsert({
-        ...other,
-        counterpartIds: updated,
-        ...(other.variantOfId === mergeId ? { variantOfId: keepId } : {}),
-        ...(other.variantIds
-          ? {
-              variantIds: [
-                ...new Set(other.variantIds.map((id) => (id === mergeId ? keepId : id))),
-              ],
-            }
-          : {}),
-        updatedAt: new Date().toISOString(),
-      });
+      d.drones.upsert(relinkAfterMerge(other, mergeId, keepId, at), (fresh) =>
+        relinkAfterMerge(fresh, mergeId, keepId, at),
+      );
     }
   }
 
@@ -239,6 +259,19 @@ function linksTo(drone: Drone, id: string): boolean {
   );
 }
 
+/** Drop every link to a removed entry, keeping the rest of the document as it is. */
+function unlinkAfterRemove(doc: Drone, id: string, at: string): Drone {
+  if (!linksTo(doc, id)) return doc;
+  const { variantOfId, ...rest } = doc;
+  return {
+    ...rest,
+    ...(variantOfId && variantOfId !== id ? { variantOfId } : {}),
+    counterpartIds: doc.counterpartIds.filter((x) => x !== id),
+    ...(doc.variantIds ? { variantIds: doc.variantIds.filter((x) => x !== id) } : {}),
+    updatedAt: at,
+  };
+}
+
 /**
  * Remove a catalog entry an analyst has judged wrong (a unit or an outlet promoted as a system).
  *
@@ -255,14 +288,9 @@ export function removeDrone(id: string, d: CatalogDeps): RemoveDroneReport | und
 
   for (const other of d.drones.list()) {
     if (other.id === id || !linksTo(other, id)) continue;
-    const { variantOfId, ...rest } = other;
-    d.drones.upsert({
-      ...rest,
-      ...(variantOfId && variantOfId !== id ? { variantOfId } : {}),
-      counterpartIds: other.counterpartIds.filter((x) => x !== id),
-      ...(other.variantIds ? { variantIds: other.variantIds.filter((x) => x !== id) } : {}),
-      updatedAt: now,
-    });
+    d.drones.upsert(unlinkAfterRemove(other, id, now), (fresh) =>
+      unlinkAfterRemove(fresh, id, now),
+    );
     report.unlinked++;
   }
 
@@ -293,23 +321,27 @@ export function reviewSpecClaim(
 ): Drone | undefined {
   const drone = d.drones.get(droneId);
   if (!drone) return undefined;
-  let next = reviewClaim(
-    drone,
-    specKey,
-    claim,
-    verdict
-      ? {
-          verdict: verdict.verdict,
-          ...(verdict.verdict === "rejected" ? { issue: verdict.issue } : {}),
-          at,
-          by: "analyst",
-        }
-      : null,
-  );
-  if (next && verdict?.verdict === "rejected" && verdict.correctValue?.trim()) {
-    next = addAnalystClaim(next, specKey, verdict.correctValue, at) ?? next;
-  }
-  if (next) d.drones.upsert(next);
+  const apply = (base: Drone): Drone | undefined => {
+    let next = reviewClaim(
+      base,
+      specKey,
+      claim,
+      verdict
+        ? {
+            verdict: verdict.verdict,
+            ...(verdict.verdict === "rejected" ? { issue: verdict.issue } : {}),
+            at,
+            by: "analyst",
+          }
+        : null,
+    );
+    if (next && verdict?.verdict === "rejected" && verdict.correctValue?.trim()) {
+      next = addAnalystClaim(next, specKey, verdict.correctValue, at) ?? next;
+    }
+    return next;
+  };
+  const next = apply(drone);
+  if (next) d.drones.upsert(next, (fresh) => apply(fresh) ?? fresh);
   return next;
 }
 
@@ -339,8 +371,15 @@ export function moveSpecClaim(
 ): Drone | undefined {
   const drone = d.drones.get(droneId);
   if (!drone) return undefined;
+  const key = claimKey(claim);
+  // A retry must not file the same moved claim twice if the target already received it.
+  const apply = (base: Drone) => {
+    const target = base.specs.find((s) => s.key === targetSpecKey);
+    if (target?.claims.some((c) => c.movedFrom === key)) return base;
+    return moveClaim(base, specKey, claim, targetSpecKey, figure, at) ?? base;
+  };
   const next = moveClaim(drone, specKey, claim, targetSpecKey, figure, at);
-  if (next) d.drones.upsert(next);
+  if (next) d.drones.upsert(next, apply);
   return next;
 }
 

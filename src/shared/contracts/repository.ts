@@ -27,7 +27,12 @@ export interface CatalogFacets {
 export interface DroneRepository {
   list(): Drone[];
   get(id: string): Drone | undefined;
-  upsert(drone: Drone): void;
+  /**
+   * Apply a whole-document edit. `replay` receives the stored copy when another writer wins
+   * the race and must return the same edit applied to that copy; without it a conflict reloads
+   * rather than overwriting the other writer.
+   */
+  upsert(drone: Drone, replay?: (fresh: Drone) => Drone): void;
   remove(id: string): void;
   search(query: string, facets?: CatalogFacets): Drone[];
   /** Add seed entries the catalog lacks (the catalog page's "Load missing"); retired ids are excluded. */

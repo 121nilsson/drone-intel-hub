@@ -38,16 +38,64 @@ export interface Snapshot {
   taxonomy_candidates: TaxonomyCandidate[];
 }
 
+/** A document together with the revision of the stored copy it was read from. */
+export interface VersionedDoc<T> {
+  doc: T;
+  /** Monotonic per-document revision. 0 means the stored copy has never been updated. */
+  rev: number;
+}
+
+/**
+ * Thrown by `DocumentStore.put` when the stored revision no longer matches `expectedRev`.
+ *
+ * The caller read a copy that another writer has since replaced. Its write was not applied, and
+ * it must reload and reapply the change rather than overwrite the other writer's document.
+ */
+export class DocumentConflictError extends Error {
+  constructor(
+    readonly collection: Collection,
+    readonly id: string,
+  ) {
+    super(`conflict writing ${collection}/${id}: the stored document changed`);
+    this.name = "DocumentConflictError";
+  }
+}
+
+/** Documents without their revisions, for callers that only read the catalog. */
+export function documentsOf<T>(loaded: VersionedDoc<T>[] | null): T[] | null {
+  return loaded ? loaded.map((entry) => entry.doc) : null;
+}
+
 /**
  * Async document persistence — the only seam between repositories and storage.
  * Implementations: browser localStorage, remote server-function bridge, PostgreSQL.
+ *
+ * A write is conditional on the revision it was read from. That is what stops two writers
+ * holding whole-collection snapshots from replacing each other's documents: the second writer
+ * gets `DocumentConflictError` and can reload and reapply its change instead of clobbering the
+ * first. The revision is stored beside the document, never inside it, so domain documents stay
+ * free of storage metadata.
  */
 export interface DocumentStore {
   /** Returns null when the collection has never been initialised. */
-  load<C extends Collection>(c: C): Promise<CollectionMap[C][] | null>;
+  load<C extends Collection>(c: C): Promise<VersionedDoc<CollectionMap[C]>[] | null>;
   /** Initialise an empty collection with seed data. */
   seed<C extends Collection>(c: C, items: CollectionMap[C][]): Promise<void>;
-  put<C extends Collection>(c: C, doc: CollectionMap[C]): Promise<void>;
+  /**
+   * Write a whole document.
+   *
+   * `expectedRev` is the revision the caller read: `null` means the caller believes the
+   * document does not exist yet and wants an insert-only write; a number means update-only.
+   * Returns the revision of the stored copy after the write.
+   *
+   * Throws `DocumentConflictError` when the document was inserted, deleted or updated by
+   * another writer since that read.
+   */
+  put<C extends Collection>(
+    c: C,
+    doc: CollectionMap[C],
+    expectedRev: number | null,
+  ): Promise<number>;
   remove(c: Collection, id: string): Promise<void>;
   /**
    * Atomically lease up to `limit` pending documents, oldest first, and return exactly those.

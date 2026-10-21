@@ -269,7 +269,10 @@ function DossierSummary({ drone, svc }: { drone: Drone; svc: ReturnType<typeof u
         if (res.ok) {
           setTranslated(res.translated);
           try {
-            svc.drones.upsert({ ...drone, summaryEnglish: res.translated });
+            svc.drones.upsert({ ...drone, summaryEnglish: res.translated }, (fresh) => ({
+              ...fresh,
+              summaryEnglish: res.translated,
+            }));
           } catch (err) {
             console.warn("[dossier] could not persist translated summary", err);
           }
@@ -312,13 +315,13 @@ function DossierSummary({ drone, svc }: { drone: Drone; svc: ReturnType<typeof u
           return;
         }
         const generatedAt = new Date().toISOString();
-        svc.drones.upsert({
-          ...drone,
+        const brief = {
           llmSummary: result.summary,
           llmBrief: result.brief,
           llmSummaryGeneratedAt: generatedAt,
           llmSummaryFingerprint: briefFingerprint,
-        });
+        };
+        svc.drones.upsert({ ...drone, ...brief }, (fresh) => ({ ...fresh, ...brief }));
       } catch (err) {
         setBriefError(err instanceof Error ? err.message : "AI brief failed");
       } finally {

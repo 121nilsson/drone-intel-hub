@@ -1,4 +1,9 @@
-import type { Collection, CollectionMap, DocumentStore } from "@/shared/contracts/store";
+import type {
+  Collection,
+  CollectionMap,
+  DocumentStore,
+  VersionedDoc,
+} from "@/shared/contracts/store";
 
 /** True when the server has Lovable Cloud credentials. */
 export function cloudConfigured() {
@@ -118,7 +123,7 @@ function row<C extends Collection>(c: C, doc: CollectionMap[C]): Record<string, 
 
 /** Lovable Cloud implementation of the DocumentStore contract (server-only). */
 export class CloudStore implements DocumentStore {
-  async load<C extends Collection>(c: C) {
+  async load<C extends Collection>(c: C): Promise<VersionedDoc<CollectionMap[C]>[] | null> {
     const db = await client();
     const o = ORDER[c];
     let q = db.from(c).select("data").order(o.col, { ascending: o.asc });
@@ -128,7 +133,11 @@ export class CloudStore implements DocumentStore {
       const meta = check<unknown[]>(await db.from("collection_meta").select("name").eq("name", c));
       if (!meta.length) return null;
     }
-    return rows.map((r) => r.data);
+    // The managed Cloud schema has no revision column yet, so every stored document is
+    // reported at revision 0. PostgreSQL is the backend that enforces compare-and-swap;
+    // this one keeps the pre-existing last-write-wins behaviour rather than pretending to
+    // have a revision it cannot check.
+    return rows.map((r) => ({ doc: r.data, rev: 0 }));
   }
 
   async seed<C extends Collection>(c: C, items: CollectionMap[C][]) {
@@ -141,10 +150,15 @@ export class CloudStore implements DocumentStore {
       check(await db.from(c).upsert(rows.slice(i, i + 200)));
   }
 
-  async put<C extends Collection>(c: C, doc: CollectionMap[C]) {
+  async put<C extends Collection>(
+    c: C,
+    doc: CollectionMap[C],
+    _expectedRev: number | null,
+  ): Promise<number> {
     const db = await client();
     check(await db.from(c).upsert(row(c, doc)));
     await db.from("collection_meta").upsert({ name: c }, { ignoreDuplicates: true });
+    return 0;
   }
 
   async remove(c: Collection, id: string) {

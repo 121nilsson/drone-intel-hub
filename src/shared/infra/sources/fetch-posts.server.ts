@@ -337,5 +337,15 @@ export async function fetchAllSources(
         }
       : {}),
   });
+  // Writes are queued per document behind the read-modify-write; the request (and the cron tick
+  // that owns it) must not return while they are still in flight.
+  await Promise.all([
+    sources.flush(),
+    drones.flush(),
+    candidates.flush(),
+    dispatches.flush(),
+    taxonomies.flush(),
+    taxonomyCandidates.flush(),
+  ]);
   return { reports, ...(p.stopReason ? { stopReason: p.stopReason } : {}) };
 }

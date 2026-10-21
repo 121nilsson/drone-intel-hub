@@ -327,16 +327,25 @@ pointing at the `db` service. For `npm run dev`, `DATABASE_URL` must use the pub
 The authoritative schema is the SQL files under `migrations/` (not `drizzle/`, which is not used
 at runtime). Applied in order on a fresh volume:
 
-| File                            | Purpose                                      |
-| ------------------------------- | -------------------------------------------- |
-| `001_init.sql`                  | Core collections as JSONB documents          |
-| `002_sync_state.sql`            | Auto-sync throttle and briefing summary slot |
-| `003_dispatches.sql`            | Dispatch archive fields                      |
-| `004_dispatch_lease.sql`        | Per-dispatch claim leases                    |
-| `004_procurements.sql`          | Procurement collection                       |
-| `005_normalization.sql`         | Taxonomy collections                         |
-| `006_dispatch_content_hash.sql` | Content fingerprint for dedupe               |
-| `007_source_endpoints.sql`      | Per-source fetch endpoints                   |
+| File                               | Purpose                                      |
+| ---------------------------------- | -------------------------------------------- |
+| `001_init.sql`                     | Core collections as JSONB documents          |
+| `002_sync_state.sql`               | Auto-sync throttle and briefing summary slot |
+| `003_dispatches.sql`               | Dispatch archive fields                      |
+| `004_dispatch_lease.sql`           | Per-dispatch claim leases                    |
+| `004_procurements.sql`             | Procurement collection                       |
+| `005_normalization.sql`            | Taxonomy collections                         |
+| `006_dispatch_content_hash.sql`    | Content fingerprint for dedupe               |
+| `007_source_endpoints.sql`         | Per-source fetch endpoints                   |
+| `008_evaluation.sql`               | Evaluation reports and corpus                |
+| `009_lexicon_overrides.sql`        | Per-language lexicon overrides               |
+| `010_dynamic_rules.sql`            | Dynamic heuristic rules                      |
+| `011_rule_sandbox.sql`             | Rule sandbox and rule evaluations            |
+| `012_rule_decisions.sql`           | Analyst decisions on rules                   |
+| `013_shadow_metrics.sql`           | Shadow scoring metrics                       |
+| `014_rule_status_check.sql`        | Rule status constraints                      |
+| `015_supersede_queue_fixtures.sql` | Retired queue fixtures                       |
+| `016_document_rev.sql`             | Per-document revision for conditional writes |
 
 To start from an empty database, drop the volume: `docker compose down -v`.
 

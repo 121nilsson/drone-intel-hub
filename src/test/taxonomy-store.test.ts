@@ -19,6 +19,7 @@ describe("taxonomy store", () => {
 
     const piston = first.terms("propulsion").find((t) => t.canonicalId === "piston")!;
     first.upsertTerm({ ...piston, aliases: [...piston.aliases, "moped motor"], origin: "db" });
+    await first.flush();
 
     const second = new LocalTaxonomyRepository();
     await second.attach(store);

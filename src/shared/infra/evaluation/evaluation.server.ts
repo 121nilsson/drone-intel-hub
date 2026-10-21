@@ -11,6 +11,7 @@ import {
 } from "@/shared/infra/evaluation/evaluation";
 import { normalizeExtraction } from "@/entities/normalization/apply";
 import { sanitizeJson } from "@/shared/infra/json-sanitize";
+import { documentsOf } from "@/shared/contracts/store";
 import type { JSONValue } from "postgres";
 import type { Candidate, Drone } from "@/entities/drone/types";
 import type { EvalFixture } from "@/shared/infra/evaluation/evaluation";
@@ -77,8 +78,9 @@ export async function runEvaluation(): Promise<EvaluationRunResult> {
 
   try {
     const store = new PostgresStore();
-    const drones = ((await store.load("drones")) ?? []) as unknown as Drone[];
-    const candidates = ((await store.load("candidates")) ?? []) as unknown as Candidate[];
+    const drones = (documentsOf(await store.load("drones")) ?? []) as unknown as Drone[];
+    const candidates = (documentsOf(await store.load("candidates")) ??
+      []) as unknown as Candidate[];
     const heuristic = new HeuristicExtractor(1, await getOrRefreshRuleSnapshot());
     const report = await evaluateHeuristic(candidates, drones, heuristic, {
       sampleSize: 200,
@@ -106,8 +108,9 @@ export async function runEvaluationHealth(): Promise<EvaluationHealthResult> {
 
   try {
     const store = new PostgresStore();
-    const drones = ((await store.load("drones")) ?? []) as unknown as Drone[];
-    const candidates = ((await store.load("candidates")) ?? []) as unknown as Candidate[];
+    const drones = (documentsOf(await store.load("drones")) ?? []) as unknown as Drone[];
+    const candidates = (documentsOf(await store.load("candidates")) ??
+      []) as unknown as Candidate[];
     const heuristic = new HeuristicExtractor(1, await getOrRefreshRuleSnapshot());
     const report = await evaluateHeuristic(candidates, drones, heuristic, {
       sampleSize: 200,
@@ -222,8 +225,9 @@ export async function harvestCorpus(): Promise<{
 
   try {
     const store = new PostgresStore();
-    const drones = ((await store.load("drones")) ?? []) as unknown as Drone[];
-    const candidates = ((await store.load("candidates")) ?? []) as unknown as Candidate[];
+    const drones = (documentsOf(await store.load("drones")) ?? []) as unknown as Drone[];
+    const candidates = (documentsOf(await store.load("candidates")) ??
+      []) as unknown as Candidate[];
     const heuristic = new HeuristicExtractor(1, await getOrRefreshRuleSnapshot());
     const report = await evaluateHeuristic(candidates, drones, heuristic, {
       sampleSize: 200,
@@ -319,8 +323,9 @@ export async function runAdjudication(): Promise<{
 
   try {
     const store = new PostgresStore();
-    const drones = ((await store.load("drones")) ?? []) as unknown as Drone[];
-    const candidates = ((await store.load("candidates")) ?? []) as unknown as Candidate[];
+    const drones = (documentsOf(await store.load("drones")) ?? []) as unknown as Drone[];
+    const candidates = (documentsOf(await store.load("candidates")) ??
+      []) as unknown as Candidate[];
     const heuristic = new HeuristicExtractor(1, await getOrRefreshRuleSnapshot());
     const { chatCompletionOnce } = await import("@/shared/infra/ai-proxy.server");
 

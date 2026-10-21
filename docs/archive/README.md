@@ -10,3 +10,5 @@ Superseded planning documents kept for history. For current behavior use
 | [improvements-round3.md](./improvements-round3.md)                   | Bugs, inference, and testing pass            |
 | [input_plan_implementation.md](./input_plan_implementation.md)       | Ingest quality implementation plan (shipped) |
 | [normalization_implementation.md](./normalization_implementation.md) | Normalization rollout plan (shipped)         |
+| [bream_ux.md](./bream_ux.md)                                         | UI/UX brainstorm (absorbed into `ideas.md`)  |
+| [flint_ll_alpha.md](./flint_ll_alpha.md)                             | UI/UX brainstorm (absorbed into `ideas.md`)  |

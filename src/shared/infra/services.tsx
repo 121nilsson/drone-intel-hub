@@ -1,5 +1,6 @@
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useMemo,
@@ -77,6 +78,22 @@ interface Services {
    * must gate on this.
    */
   attached: boolean;
+  /**
+   * A blocking storage failure: the server or browser catalog could not be opened. The shell
+   * replaces the page with an explanation instead of showing seed data as if it were the catalog.
+   */
+  storageError: string | null;
+  /**
+   * A non-blocking persistence problem: a write was rejected or a conflicting edit was reloaded.
+   * The shell keeps the app usable but shows the warning so the failure is never silent.
+   */
+  storageWarning: string | null;
+  clearStorageWarning(): void;
+  /**
+   * Explicit opt-in to a browser-only catalog after server storage failed. Never selected
+   * automatically, because edits there would diverge from the server's copy.
+   */
+  continueInBrowser(): Promise<void>;
 }
 
 const Ctx = createContext<Services | null>(null);
@@ -84,6 +101,9 @@ const SETTINGS_KEY = "dti.settings.v1";
 
 /** Non-secret provider config from .env.local; null when the server has none. */
 type EnvProviderConfig = ProviderEnvConfig;
+
+/** One short line from a failed promise, safe to show in the shell. */
+const reason = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 /** Composition root: the only place concrete implementations are chosen. */
 export function ServicesProvider({ children }: { children: ReactNode }) {
@@ -97,6 +117,40 @@ export function ServicesProvider({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
   const [envCfg, setEnvCfg] = useState<EnvProviderConfig | null>(null);
   const [attached, setAttached] = useState(false);
+  const [storageError, setStorageError] = useState<string | null>(null);
+  const [storageWarning, setStorageWarning] = useState<string | null>(null);
+
+  const repos = useMemo(
+    () => [drones, candidates, sources, dispatches, procurements, taxonomies, taxonomyCandidates],
+    [drones, candidates, sources, dispatches, procurements, taxonomies, taxonomyCandidates],
+  );
+
+  /**
+   * The explicit escape hatch from a failed server catalog. It is never chosen automatically:
+   * silently continuing on localStorage would give the analyst a second, unsynced catalog.
+   */
+  const continueInBrowser = useCallback(async () => {
+    setStorageError(null);
+    setStorageWarning(null);
+    try {
+      const local = new LocalStorageStore();
+      const results = await Promise.allSettled(repos.map((repo) => repo.attach(local)));
+      const failure = results.find(
+        (result): result is PromiseRejectedResult => result.status === "rejected",
+      );
+      if (failure) {
+        setStorageError(`Browser storage could not be opened (${reason(failure.reason)}).`);
+        return;
+      }
+      setAttached(true);
+      setStorageWarning(
+        "Using browser storage. Changes are saved in this browser and are not synced to the server.",
+      );
+    } catch (e) {
+      setStorageError(`Browser storage could not be opened (${reason(e)}).`);
+    }
+  }, [repos]);
+
   useEffect(() => {
     try {
       const s = localStorage.getItem(SETTINGS_KEY);
@@ -104,43 +158,70 @@ export function ServicesProvider({ children }: { children: ReactNode }) {
     } catch {
       /* ignore */
     }
-    // Storage selection: PostgreSQL when the server has DATABASE_URL, otherwise this browser.
+  }, []);
+
+  // Write failures and dropped conflicting edits are reported by the repositories. Keeping the
+  // subscription outside the attach effect means a failure after startup stays visible.
+  useEffect(() => {
+    const offs = repos.map((repo) => repo.onStorageError((message) => setStorageWarning(message)));
+    return () => offs.forEach((off) => off());
+  }, [repos]);
+
+  useEffect(() => {
+    let cancelled = false;
     (async () => {
-      let store: DocumentStore = new LocalStorageStore();
+      // Storage selection: PostgreSQL when the server has DATABASE_URL (or Cloud), otherwise
+      // this browser. A status call that fails is not evidence that there is no server storage,
+      // so it must not fall back silently - the error path asks the analyst to retry.
+      let store: DocumentStore;
+      let server = false;
       try {
         const status = await getStoreStatus();
+        if (cancelled) return;
         setEnvCfg(status.provider ?? null);
-        if (status.postgres) store = new RemoteStore();
-      } catch {
-        setEnvCfg(null);
-      }
-      try {
-        await Promise.all([
-          drones.attach(store),
-          candidates.attach(store),
-          sources.attach(store),
-          dispatches.attach(store),
-          procurements.attach(store),
-          taxonomies.attach(store),
-          taxonomyCandidates.attach(store),
-        ]);
+        server = status.postgres;
+        store = server ? new RemoteStore() : new LocalStorageStore();
       } catch (e) {
-        console.error("[store] remote unavailable, falling back to browser storage", e);
-        const local = new LocalStorageStore();
-        await Promise.all([
-          drones.attach(local),
-          candidates.attach(local),
-          sources.attach(local),
-          dispatches.attach(local),
-          procurements.attach(local),
-          taxonomies.attach(local),
-          taxonomyCandidates.attach(local),
-        ]);
-      } finally {
+        if (cancelled) return;
+        setEnvCfg(null);
+        setStorageError(
+          `The storage service could not be reached (${reason(e)}). Reload to try again, or continue in this browser.`,
+        );
+        return;
+      }
+
+      try {
+        const results = await Promise.allSettled(repos.map((repo) => repo.attach(store)));
+        if (cancelled) return;
+        const failure = results.find(
+          (result): result is PromiseRejectedResult => result.status === "rejected",
+        );
+        if (failure) {
+          // No automatic local fallback. Wait for every attach to settle first, so the explicit
+          // browser choice below cannot race a still-running server attach. Some repositories
+          // may have opened the server catalog; continuing in the browser is a deliberate,
+          // warned choice made from the error screen.
+          setStorageError(
+            `The ${server ? "server" : "browser"} catalog could not be opened (${reason(
+              failure.reason,
+            )}). Reload to try again${server ? ", or continue in this browser." : "."}`,
+          );
+          return;
+        }
         setAttached(true);
+      } catch (e) {
+        if (cancelled) return;
+        setStorageError(
+          `The ${server ? "server" : "browser"} catalog could not be opened (${reason(e)}). Reload to try again${
+            server ? ", or continue in this browser." : "."
+          }`,
+        );
       }
     })();
-  }, [drones, candidates, sources, dispatches, procurements, taxonomies, taxonomyCandidates]);
+    return () => {
+      cancelled = true;
+    };
+  }, [repos]);
 
   // The catalog operations are bound to the repository instances, not to a snapshot of their
   // contents: the instances are stable for the provider's life, and they read through to
@@ -199,6 +280,10 @@ export function ServicesProvider({ children }: { children: ReactNode }) {
       summarizer: remote ? new OpenAICompatibleSummarizer(resolved) : new HeuristicSummarizer(),
       catalog,
       attached,
+      storageError,
+      storageWarning,
+      clearStorageWarning: () => setStorageWarning(null),
+      continueInBrowser,
     };
   }, [
     drones,
@@ -211,6 +296,9 @@ export function ServicesProvider({ children }: { children: ReactNode }) {
     settings,
     envCfg,
     attached,
+    storageError,
+    storageWarning,
+    continueInBrowser,
     catalog,
   ]);
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
