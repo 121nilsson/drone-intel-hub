@@ -7,7 +7,7 @@ import type {
   DroneRepository,
 } from "@/shared/contracts/repository";
 import type { CatalogMutations, ClaimVerdict, RemoveDroneReport } from "@/shared/contracts/catalog";
-import { addAnalystClaim, reviewClaim } from "@/entities/drone/claim-review";
+import { addAnalystClaim, moveClaim, reviewClaim } from "@/entities/drone/claim-review";
 
 /**
  * The repositories the catalog operations work on.
@@ -327,6 +327,23 @@ export function verdictForCorrection(claim: SpecClaim, accept: boolean): ClaimVe
   };
 }
 
+/** See CatalogMutations.moveClaim. */
+export function moveSpecClaim(
+  droneId: string,
+  specKey: string,
+  claim: SpecClaim,
+  targetSpecKey: string,
+  figure: string,
+  d: Pick<CatalogDeps, "drones">,
+  at = new Date().toISOString(),
+): Drone | undefined {
+  const drone = d.drones.get(droneId);
+  if (!drone) return undefined;
+  const next = moveClaim(drone, specKey, claim, targetSpecKey, figure, at);
+  if (next) d.drones.upsert(next);
+  return next;
+}
+
 /**
  * Binds the catalog operations to a set of repositories, so a page asks for "merge these two
  * entries" instead of assembling the repositories the operation happens to need.
@@ -342,5 +359,7 @@ export function createCatalogMutations(d: CatalogDeps): CatalogMutations {
       const verdict = verdictForCorrection(claim, accept);
       return verdict ? reviewSpecClaim(droneId, specKey, claim, verdict, d) : undefined;
     },
+    moveClaim: (droneId, specKey, claim, targetSpecKey, figure) =>
+      moveSpecClaim(droneId, specKey, claim, targetSpecKey, figure ?? "", d),
   };
 }

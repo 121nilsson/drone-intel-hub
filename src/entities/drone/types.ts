@@ -24,6 +24,11 @@ export interface SpecClaim {
   model?: string;
   date: string; // ISO
   /**
+   * The key of the claim this one was moved from, when an analyst filed it under another
+   * attribute. Undoing the move finds the copy through it.
+   */
+  movedFrom?: string;
+  /**
    * Set when the deep model was asked which report behind a contested spec this one supports
    * (features/intake/contradictions.ts). An "outlier" verdict never removes or rewrites the
    * claim - the report said what it said - it records what the check concluded, so a reader
@@ -73,12 +78,16 @@ export type ClaimIssue =
   /** The figure was read in the wrong unit or misparsed. */
   | "unit"
   /** The report is about another system. */
-  | "system";
+  | "system"
+  /** The figure is right, but it describes another attribute of this system. */
+  | "attribute";
 
 export interface ClaimReview {
   verdict: "confirmed" | "rejected";
   /** Set when rejected. */
   issue?: ClaimIssue;
+  /** The attribute the figure was filed under instead, when the analyst moved it. */
+  movedTo?: string;
   at: string;
   by: "analyst";
 }

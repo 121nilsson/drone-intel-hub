@@ -277,11 +277,11 @@ Eftersom referensen förbättras när nya kandidater med `provenance` och nya an
 
 ## 8. Analytikerverdikt som facit
 
-AI:ns lagrade extraction är en modells åsikt. Det enda facit som inte är det är analytikerns dom över ett enskilt anspråk på systemsidan. Analytikern öppnar ett källchip under en spec och väljer **Correct**, **Wrong value**, **Wrong unit / parse** eller **Another system**, med valfritt rätt värde.
+AI:ns lagrade extraction är en modells åsikt. Det enda facit som inte är det är analytikerns dom över ett enskilt anspråk på systemsidan. Analytikern öppnar ett källchip under en spec och väljer **✓ Correct**, **Wrong figure**, **Wrong unit or parse**, **About another system** eller **About another attribute**, med valfritt rätt värde.
 
-- **Lagring:** domen sparas på själva anspråket (`SpecClaim.review`, `src/entities/drone/claim-review.ts`), inte i en egen tabell, så att den fungerar i alla tre lagren (localStorage, PostgreSQL, Lovable Cloud). Den skriver aldrig om anspråket. Ett avvisat anspråk ligger kvar men räknas inte i konsensus. Ett rätt värde läggs till som ett eget bekräftat anspråk med källa `Analyst`.
+- **Lagring:** domen sparas på själva anspråket (`SpecClaim.review`, `src/entities/drone/claim-review.ts`), inte i en egen tabell, så att den fungerar i alla tre lagren (localStorage, PostgreSQL, Lovable Cloud). Den skriver aldrig om anspråket. Ett avvisat anspråk ligger kvar men räknas inte i konsensus. Ett rätt värde läggs till som ett eget bekräftat anspråk med källa `Analyst`. Ett anspråk som flyttas (`moveClaim`) ligger kvar där reporten satte det, räknas inte längre där, och läggs in under det attribut analytikern pekar ut, med läsningen analytikern anger.
 - **Företräde:** analytikerns dom vinner över både motsägelsekontrollen (`adjudication`) och autokorrigeringen (`autoCorrection`). Kontrollens dom sparas bredvid, inte över, så att man kan mäta hur ofta modellen håller med en människa.
-- **Överlever omanalys:** när en rapport analyseras om flyttas domen till det återskapade anspråket (samma post, samma mätning, samma värde). Annars skulle ett avvisat värde komma tillbaka som färskt belägg.
+- **Överlever omanalys:** när en rapport analyseras om flyttas domen till det återskapade anspråket (samma post, samma mätning, samma värde). Annars skulle ett avvisat värde komma tillbaka som färskt belägg. Ett flytt anspråk är analytikerns eget och dras inte tillbaka när posten läses om igen.
 
 ### 8.1 Hur domen når utvärderingen
 
@@ -289,7 +289,7 @@ Read-only-kontraktet (§4.3) gäller: domen läses ur katalogen, som utvärderin
 
 - **Referensen** (`referenceSpecs`): kandidatens lagrade specs, med analytikerns dom på det anspråk varje spec blev. Kopplingen sker via anspråkets källrad (= kandidatens `source`) och bara till kandidaten som matade just den katalogposten (`resolvedInto`/`matchId`). En rapport som nämner två system har en kandidat per system, och ett värde som avvisats som "Another system" på det ena kan vara rätt för det andra.
 - Samma referens används överallt där heuristiken poängsätts: `/evaluation`, sandlådans F1-mätning, skuggpoängen, hypotesgeneratorn och `runAdjudication` (som därför aldrig frågar AI:n om ett värde en människa redan dömt).
-- **Regressionsfall** (`analystFixtures`): per kandidat ett positivt fall `review-<id>` (bekräftade värden ska fortsätta hittas) och ett negativt `review-neg-<id>` (avvisade värden får inte komma tillbaka), i kanoniska enheter. De härleds vid varje laddning och sparas inte, så ett ångrat verdikt tar sitt fall med sig. "Another system" blir inget fall, eftersom ett fall kontrollerar hela textens utdata och värdet kan vara rätt för ett annat system i samma rapport.
+- **Regressionsfall** (`analystFixtures`): per kandidat ett positivt fall `review-<id>` (bekräftade värden ska fortsätta hittas) och ett negativt `review-neg-<id>` (avvisade värden får inte komma tillbaka), i kanoniska enheter. De härleds vid varje laddning och sparas inte, så ett ångrat verdikt tar sitt fall med sig. "About another system" blir inget fall, eftersom ett fall kontrollerar hela textens utdata och värdet kan vara rätt för ett annat system i samma rapport. Ett flytt anspråk räknas inte heller som fall: det är analytikerns egen läsning, inte något heuristiken ska hitta ur texten.
 - **Git-export** (`analystCorpus`): se §6.2.
 
 Hur verdikten också styr motsägelsekontrollens och autokorrigeringens självständighet beskrivs i `EVALUATION_FULL_AUTOMATION.md` §6.2.

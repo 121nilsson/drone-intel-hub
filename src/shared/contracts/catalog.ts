@@ -63,6 +63,19 @@ export interface CatalogMutations {
     claim: SpecClaim,
     accept: boolean,
   ): Drone | undefined;
+  /**
+   * Move a claim to another attribute of the same system: the claim stays on the record where
+   * the post put it but stops counting there, and the figure is filed under the attribute the
+   * analyst says it describes. `figure` is the reading in the target attribute ("600 km/h");
+   * without it the claim keeps its own number and the target's unit applies.
+   */
+  moveClaim(
+    droneId: string,
+    specKey: string,
+    claim: SpecClaim,
+    targetSpecKey: string,
+    figure?: string,
+  ): Drone | undefined;
 }
 
 export type ClaimVerdict =

@@ -709,8 +709,10 @@ function retractContribution(
   deps: PipelineDeps,
 ): { restore: () => void; restoreReviews: () => void } {
   const source = `${d.sourceName} · ${d.url}`;
-  const mine = (c: { sourceId?: string; source: string }) =>
-    c.sourceId === d.id || c.source === source;
+  // A claim the analyst filed (a moved figure, a hand-entered one) is not the post's
+  // contribution: the post is re-read, the analyst's own reading stands.
+  const mine = (c: { sourceId?: string; source: string; extractionEngine?: string }) =>
+    c.extractionEngine !== "analyst" && (c.sourceId === d.id || c.source === source);
   const before: Drone[] = [];
   const held: HeldReview[] = [];
   for (const drone of deps.drones.list()) {

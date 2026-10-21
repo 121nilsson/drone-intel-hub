@@ -268,6 +268,43 @@ describe("reviewCorrection", () => {
     expect(all()[0]!.specs[0]!.claims[2]!.review?.verdict).toBe("confirmed");
     expect(correctionTrust(all()).get("unit:consensus")).toMatchObject({ agreed: 0, disagreed: 1 });
   });
+
+  it("a figure the analyst says belongs to another attribute is not agreement with a unit fix", () => {
+    const { catalog, all, claim } = setup();
+    // A unit fix would have applied a value to a figure that is not this attribute's at all.
+    catalog.reviewClaim("lancet-3", "range_max", claim, {
+      verdict: "rejected",
+      issue: "attribute",
+    });
+    expect(correctionTrust(all()).get("unit:consensus")).toMatchObject({
+      agreed: 0,
+      disagreed: 1,
+    });
+  });
+
+  it("a figure the analyst says belongs to another attribute agrees with an implausible finding", () => {
+    // The corrector said the figure cannot stand on this attribute; the analyst says it is not
+    // this attribute's figure. That is the same conclusion.
+    const s = spec("altitude.max", "km", [
+      {
+        value: 600,
+        raw: "altitude and 600 kilometers",
+        source: "sUAS News",
+        date: "2026-10-01T00:00:00.000Z",
+      },
+    ]);
+    const fix = detectCorrection(s, 0, AT)!;
+    s.claims[0] = {
+      ...s.claims[0]!,
+      autoCorrection: fix,
+      review: { verdict: "rejected", issue: "attribute", at: AT, by: "analyst" },
+    };
+    const { all } = repo([drone("geran", [s])]);
+    expect(correctionTrust(all()).get("implausible:bounds")).toMatchObject({
+      agreed: 1,
+      disagreed: 0,
+    });
+  });
 });
 
 describe("auto-correction edge cases", () => {

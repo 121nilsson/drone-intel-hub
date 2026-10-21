@@ -20,10 +20,20 @@ export interface ClaimSelection {
   claim: SpecClaim;
 }
 
+/** Why a claim was ruled out, as the analyst reads it on the tag. */
 const ISSUE_LABEL: Record<ClaimIssue, string> = {
-  value: "wrong value",
-  unit: "wrong unit or parse",
-  system: "about another system",
+  value: "the figure is wrong",
+  unit: "the unit or parse is wrong",
+  system: "it is about another system",
+  attribute: "it belongs to another attribute",
+};
+
+/** The same reasons as the buttons that pick them. */
+const ISSUE_BUTTON: Record<ClaimIssue, string> = {
+  value: "Wrong figure",
+  unit: "Wrong unit or parse",
+  system: "About another system",
+  attribute: "About another attribute",
 };
 
 /** Short chip naming a claim's source; tapping opens the provenance sheet. */
@@ -80,13 +90,26 @@ export function ClaimChip({ claim, onOpen }: { claim: SpecClaim; onOpen: () => v
 }
 
 /**
- * The analyst's verdict on one claim. "Correct" and "another system" apply at once; a wrong
- * value or unit first asks for the right value, which is optional.
+ * The analyst's verdict on one claim. "Correct" and "about another system" apply at once; a
+ * wrong figure or unit first asks for the right figure, which is optional.
+ *
+ * "About another attribute" moves the claim: a speed read as a height is not a wrong figure but
+ * a wrong place, so the figure is filed under the attribute it describes and kept on the record
+ * where the post put it.
  */
-function ClaimReviewPanel({ droneId, selection }: { droneId: string; selection: ClaimSelection }) {
+function ClaimReviewPanel({
+  droneId,
+  selection,
+  specs,
+}: {
+  droneId: string;
+  selection: ClaimSelection;
+  specs: readonly SpecAttribute[];
+}) {
   const svc = useServices();
-  const [issue, setIssue] = useState<"value" | "unit" | null>(null);
+  const [issue, setIssue] = useState<ClaimIssue | null>(null);
   const [correct, setCorrect] = useState("");
+  const [target, setTarget] = useState("");
   const { spec, claim } = selection;
   const review = claim.review;
   const apply = (verdict: Parameters<typeof svc.catalog.reviewClaim>[3]) => {
@@ -94,7 +117,15 @@ function ClaimReviewPanel({ droneId, selection }: { droneId: string; selection: 
     setIssue(null);
     setCorrect("");
   };
+  const move = () => {
+    if (!target) return;
+    svc.catalog.moveClaim(droneId, spec.key, claim, target, correct.trim());
+    setIssue(null);
+    setTarget("");
+    setCorrect("");
+  };
   const fix = claim.autoCorrection;
+  const movedTo = review?.movedTo ? specs.find((s) => s.key === review.movedTo) : undefined;
   return (
     <div className="space-y-2 border-t border-border pt-4">
       <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
@@ -130,11 +161,67 @@ function ClaimReviewPanel({ droneId, selection }: { droneId: string; selection: 
               ? `Rejected — ${ISSUE_LABEL[review.issue ?? "value"]}`
               : "Confirmed"}
           </Tag>
+          {movedTo && <Tag mono>filed under {movedTo.label}</Tag>}
           <span className="font-mono text-xs text-muted-foreground">{review.at.slice(0, 10)}</span>
           <Btn variant="ghost" className="px-2 py-1 text-xs" onClick={() => apply(null)}>
             Undo
           </Btn>
         </div>
+      ) : issue === "attribute" ? (
+        <form
+          className="space-y-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            move();
+          }}
+        >
+          <label className="block text-xs text-muted-foreground">
+            Belongs to
+            <select
+              autoFocus
+              value={target}
+              onChange={(e) => setTarget(e.target.value)}
+              className="mt-1 w-full border border-border bg-card px-3 py-2 font-mono text-sm focus:border-primary"
+            >
+              <option value="">Choose an attribute…</option>
+              {specs
+                .filter((s) => s.key !== spec.key)
+                .map((s) => (
+                  <option key={s.key} value={s.key}>
+                    {s.label}
+                  </option>
+                ))}
+            </select>
+          </label>
+          <label className="block text-xs text-muted-foreground">
+            Figure as it reads there (optional
+            {specs.find((s) => s.key === target)?.unit
+              ? `, e.g. "600 ${specs.find((s) => s.key === target)!.unit}"`
+              : ""}
+            )
+            <input
+              value={correct}
+              onChange={(e) => setCorrect(e.target.value)}
+              className="mt-1 w-full border border-border bg-card px-3 py-2 font-mono text-sm focus:border-primary"
+            />
+          </label>
+          <div className="flex flex-wrap gap-2">
+            <Btn type="submit" variant="danger" className="px-2 py-1 text-xs" disabled={!target}>
+              Move claim
+            </Btn>
+            <Btn
+              type="button"
+              variant="ghost"
+              className="px-2 py-1 text-xs"
+              onClick={() => {
+                setIssue(null);
+                setTarget("");
+              }}
+            >
+              Cancel
+            </Btn>
+          </div>
+        </form>
       ) : issue ? (
         <form
           className="space-y-2"
@@ -148,7 +235,7 @@ function ClaimReviewPanel({ droneId, selection }: { droneId: string; selection: 
           }}
         >
           <label className="block text-xs text-muted-foreground">
-            Correct value (optional{spec.unit ? `, e.g. "20 ${spec.unit}"` : ""})
+            Correct figure (optional{spec.unit ? `, e.g. "20 ${spec.unit}"` : ""})
             <input
               autoFocus
               value={correct}
@@ -179,23 +266,31 @@ function ClaimReviewPanel({ droneId, selection }: { droneId: string; selection: 
           >
             ✓ Correct
           </Btn>
-          <Btn variant="danger" className="px-2 py-1 text-xs" onClick={() => setIssue("value")}>
-            Wrong value
-          </Btn>
-          <Btn variant="danger" className="px-2 py-1 text-xs" onClick={() => setIssue("unit")}>
-            Wrong unit / parse
-          </Btn>
-          <Btn
-            variant="danger"
-            className="px-2 py-1 text-xs"
-            onClick={() => apply({ verdict: "rejected", issue: "system" })}
-          >
-            Another system
-          </Btn>
+          {(Object.keys(ISSUE_BUTTON) as ClaimIssue[]).map((k) => (
+            <Btn
+              key={k}
+              variant="danger"
+              className="px-2 py-1 text-xs"
+              onClick={() => {
+                // A figure about another system has no place here at all, so it is ruled out
+                // straight away; the others ask what the right reading is.
+                if (k === "system") {
+                  apply({ verdict: "rejected", issue: "system" });
+                  return;
+                }
+                setIssue(k);
+                setTarget("");
+                setCorrect("");
+              }}
+            >
+              {ISSUE_BUTTON[k]}
+            </Btn>
+          ))}
         </div>
       )}
       <p className="text-xs text-muted-foreground">
-        A rejected claim stays on the record but no longer counts towards the consensus value.
+        A rejected claim stays on the record but no longer counts towards the consensus value. A
+        moved one keeps its place in the report and is filed under the attribute it describes.
       </p>
     </div>
   );
@@ -205,11 +300,14 @@ export function ProvenanceSheet({
   selection,
   droneId,
   droneName,
+  specs,
   onClose,
 }: {
   selection: ClaimSelection | null;
   droneId: string;
   droneName: string;
+  /** The entry's attributes, so a claim can be moved to the one it belongs to. */
+  specs: readonly SpecAttribute[];
   onClose: () => void;
 }) {
   const dispatches = useDispatches();
@@ -291,6 +389,7 @@ export function ProvenanceSheet({
                 key={`${selection.spec.key}|${claimKey(claim)}`}
                 droneId={droneId}
                 selection={selection}
+                specs={specs}
               />
               {dispatch ? (
                 <div className="space-y-2 border-t border-border pt-4">

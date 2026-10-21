@@ -58,6 +58,9 @@ export function correctedPoint(c: SpecClaim): { value: number; unit?: string } |
 /**
  * Set or clear (`review` null) the verdict on one claim. Undefined when the spec or claim is no
  * longer on the entry, so a page holding a stale copy changes nothing.
+ *
+ * Clearing the verdict of a move takes the copy that was filed under the other attribute back
+ * out again - undoing the verdict undoes what the verdict did.
  */
 export function reviewClaim(
   drone: Drone,
@@ -67,16 +70,24 @@ export function reviewClaim(
 ): Drone | undefined {
   const spec = drone.specs.find((s) => s.key === specKey);
   const key = claimKey(claim);
-  if (!spec?.claims.some((c) => claimKey(c) === key)) return undefined;
+  const current = spec?.claims.find((c) => claimKey(c) === key);
+  if (!spec || !current) return undefined;
   const claims = spec.claims.map((c) => {
     if (claimKey(c) !== key) return c;
     const next = { ...c };
     delete next.review;
     return review ? { ...next, review } : next;
   });
+  const undo =
+    !review && current.review?.issue === "attribute" ? current.review.movedTo : undefined;
   return {
     ...drone,
-    specs: drone.specs.map((s) => (s === spec ? { ...s, claims } : s)),
+    specs: drone.specs.map((s) => {
+      if (s === spec) return { ...s, claims };
+      if (undo && s.key === undo)
+        return { ...s, claims: s.claims.filter((c) => c.movedFrom !== key) };
+      return s;
+    }),
     updatedAt: review?.at ?? new Date().toISOString(),
   };
 }
@@ -112,6 +123,75 @@ export function addAnalystClaim(
   return {
     ...drone,
     specs: drone.specs.map((s) => (s === spec ? { ...s, claims: [...s.claims, claim] } : s)),
+    updatedAt: at,
+  };
+}
+
+/**
+ * Move a claim to another attribute of the same system.
+ *
+ * The claim stays on the record where the post put it - the post did say it - but it stops
+ * counting there, and the figure is filed under the attribute it actually describes. A speed
+ * read as a height is not a wrong figure but a wrong place: ruling it out would throw the
+ * figure away, so it is moved instead.
+ *
+ * The moved claim carries the analyst's own reading ("600 km/h"), because only the analyst
+ * knows that the sentence's "kilometres" was an hour and not a height. Without a reading the
+ * claim keeps its number and the target attribute's unit applies.
+ */
+export function moveClaim(
+  drone: Drone,
+  specKey: string,
+  claim: SpecClaim,
+  targetKey: string,
+  figure: string,
+  at: string,
+): Drone | undefined {
+  const spec = drone.specs.find((s) => s.key === specKey);
+  const target = drone.specs.find((s) => s.key === targetKey);
+  if (!spec || !target || spec === target) return undefined;
+  const key = claimKey(claim);
+  if (!spec.claims.some((c) => claimKey(c) === key)) return undefined;
+
+  const raw = figure.trim();
+  const normalized = raw ? normalizeQuantity(raw) : undefined;
+  // Number("") is 0, so an empty reading has to be ruled out before it is tried.
+  const numeric = raw ? Number(raw) : Number.NaN;
+  const moved: SpecClaim = {
+    id: crypto.randomUUID(),
+    value: normalized?.canonicalValue ?? (Number.isFinite(numeric) ? numeric : claim.value),
+    ...(normalized
+      ? { raw, normalized, normalizationConfidence: normalized.confidence }
+      : { raw: claim.raw ?? String(claim.value) }),
+    source: claim.source,
+    ...(claim.sourceId ? { sourceId: claim.sourceId } : {}),
+    ...(claim.evidence ? { evidence: claim.evidence } : {}),
+    date: claim.date ?? at,
+    movedFrom: key,
+    extractionEngine: "analyst",
+    review: { verdict: "confirmed", at, by: "analyst" },
+  };
+  const claims = spec.claims.map((c) =>
+    claimKey(c) === key
+      ? {
+          ...c,
+          review: {
+            verdict: "rejected",
+            issue: "attribute",
+            movedTo: targetKey,
+            at,
+            by: "analyst",
+          } satisfies ClaimReview,
+        }
+      : c,
+  );
+  return {
+    ...drone,
+    specs: drone.specs.map((s) => {
+      if (s === spec) return { ...s, claims };
+      if (s === target) return { ...s, claims: [...s.claims, moved] };
+      return s;
+    }),
     updatedAt: at,
   };
 }

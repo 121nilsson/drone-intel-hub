@@ -231,6 +231,36 @@ describe("processPending with a re-analysis", () => {
     expect(fromPost).toHaveLength(1);
     expect(fromPost[0]!.review).toEqual(review);
   });
+
+  it("keeps a claim the analyst moved to another attribute when the post is re-read", async () => {
+    const rows = [post()];
+    const { dispatches, deps, drones } = setup(rows, matched);
+    // The analyst filed the post's figure under the attribute it describes and ruled out the
+    // claim where the post put it. Re-reading the post must not take the analyst's figure away.
+    drones[0]!.specs.push({
+      key: "speed",
+      label: "Cruise speed",
+      semantic: "speed.cruise",
+      discoveredBy: "ai",
+      claims: [
+        {
+          value: 40,
+          source: SOURCE,
+          sourceId: "rybar|1",
+          date: "2026-10-09",
+          extractionEngine: "analyst",
+          movedFrom: "legacy-key",
+          review: { verdict: "confirmed", at: "x", by: "analyst" },
+        },
+      ],
+    });
+    requeueStale(dispatches, 10);
+    await processPending(dispatches, deps, 10);
+
+    const speed = drones[0]!.specs.find((s) => s.key === "speed")!;
+    expect(speed.claims).toHaveLength(1);
+    expect(speed.claims[0]).toMatchObject({ value: 40, extractionEngine: "analyst" });
+  });
 });
 
 describe("requeueFailed", () => {

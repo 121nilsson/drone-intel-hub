@@ -172,6 +172,7 @@ export function SpecTable({ drone }: { drone: Drone }) {
         selection={live}
         droneId={drone.id}
         droneName={drone.name}
+        specs={drone.specs}
         onClose={() => setSel(null)}
       />
     </>

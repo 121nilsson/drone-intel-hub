@@ -7,7 +7,7 @@ import {
   heldReviews,
   restoreReviews,
 } from "@/entities/drone/claim-review";
-import { reviewSpecClaim } from "@/shared/infra/catalog-operations";
+import { reviewSpecClaim, moveSpecClaim } from "@/shared/infra/catalog-operations";
 import { adjudicateContradictions } from "@/shared/infra/ingest/contradictions";
 import type { ContradictionAdjudicator } from "@/shared/contracts/ai";
 import type { DroneRepository } from "@/shared/contracts/repository";
@@ -171,6 +171,95 @@ describe("reviewSpecClaim", () => {
       reviewSpecClaim("nope", "range", gone, { verdict: "confirmed" }, { drones }, AT),
     ).toBeUndefined();
     expect(writes()).toBe(0);
+  });
+});
+
+describe("moving a claim to the attribute it describes", () => {
+  const altitude = (claims: SpecClaim[]): SpecAttribute => ({
+    key: "altitude",
+    label: "Maximum altitude",
+    unit: "km",
+    semantic: "altitude.max",
+    discoveredBy: "ai",
+    claims,
+  });
+  const speed = (claims: SpecClaim[]): SpecAttribute => ({
+    key: "speed",
+    label: "Cruise speed",
+    unit: "km/h",
+    semantic: "speed.cruise",
+    discoveredBy: "ai",
+    claims,
+  });
+
+  it("keeps the claim where the post put it and files the figure under the other attribute", () => {
+    const wrong = claim(600, "sUAS News", {
+      raw: "altitude and 600 kilometers",
+      sourceId: "suas|1",
+    });
+    const { drones, all } = repo([drone([altitude([wrong]), speed([claim(500, "Defense News")])])]);
+    const out = moveSpecClaim("lancet-3", "altitude", wrong, "speed", "600 km/h", { drones }, AT);
+    expect(out).toBeDefined();
+    const [alt, spd] = all()[0]!.specs;
+    // The claim stays on the record where the post put it, but stops counting there.
+    expect(alt!.claims).toHaveLength(1);
+    expect(alt!.claims[0]!.review).toEqual({
+      verdict: "rejected",
+      issue: "attribute",
+      movedTo: "speed",
+      at: AT,
+      by: "analyst",
+    });
+    expect(consensus(alt!)).toMatchObject({ display: "—", sources: 0 });
+    // And the figure is filed where it belongs, as the analyst read it.
+    expect(spd!.claims).toHaveLength(2);
+    expect(spd!.claims[1]).toMatchObject({
+      source: "sUAS News",
+      value: 600,
+      raw: "600 km/h",
+      normalized: { canonicalValue: 600, canonicalUnit: "km/h" },
+      extractionEngine: "analyst",
+      review: { verdict: "confirmed", by: "analyst" },
+    });
+    expect(consensus(spd!)).toMatchObject({ sources: 2 });
+  });
+
+  it("keeps the claim's own number when the analyst gives no reading", () => {
+    const wrong = claim(600, "sUAS News", { raw: "altitude and 600 kilometers" });
+    const { drones, all } = repo([drone([altitude([wrong]), speed([])])]);
+    moveSpecClaim("lancet-3", "altitude", wrong, "speed", "", { drones }, AT);
+    const spd = all()[0]!.specs[1]!;
+    expect(spd.claims[0]).toMatchObject({ value: 600, source: "sUAS News" });
+    // No reading of its own: the target attribute's unit applies.
+    expect(spd.claims[0]!.normalized).toBeUndefined();
+    expect(consensus(spd)).toMatchObject({ display: "600 km/h", sources: 1 });
+  });
+
+  it("writes nothing when the claim is not on the entry or the target is the same attribute", () => {
+    const wrong = claim(600, "sUAS News");
+    const { drones, writes } = repo([drone([altitude([wrong]), speed([])])]);
+    expect(
+      moveSpecClaim("lancet-3", "altitude", claim(1, "Other"), "speed", "", { drones }, AT),
+    ).toBeUndefined();
+    expect(
+      moveSpecClaim("lancet-3", "altitude", wrong, "altitude", "", { drones }, AT),
+    ).toBeUndefined();
+    expect(writes()).toBe(0);
+  });
+
+  it("undoing the verdict undoes the move with it", () => {
+    const wrong = claim(600, "sUAS News", { raw: "altitude and 600 kilometers" });
+    const { drones, all } = repo([drone([altitude([wrong]), speed([])])]);
+    moveSpecClaim("lancet-3", "altitude", wrong, "speed", "600 km/h", { drones }, AT);
+    expect(all()[0]!.specs[1]!.claims).toHaveLength(1);
+
+    reviewSpecClaim("lancet-3", "altitude", wrong, null, { drones }, AT);
+    const [alt, spd] = all()[0]!.specs;
+    // The claim counts again where the post put it...
+    expect(alt!.claims[0]!.review).toBeUndefined();
+    expect(consensus(alt!)).toMatchObject({ display: "600 km", sources: 1 });
+    // ...and the copy filed under the other attribute is gone.
+    expect(spd!.claims).toHaveLength(0);
   });
 });
 

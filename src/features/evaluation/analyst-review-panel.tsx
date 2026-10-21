@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import type { Drone } from "@/entities/drone/types";
+import type { ClaimIssue, Drone } from "@/entities/drone/types";
 import {
   DISTRUST_AGREEMENT,
   DISTRUST_MIN_REVIEWS,
@@ -12,7 +12,7 @@ import { ListRow, Panel, Tag } from "@/shared/ui/primitives";
 const pct = (n: number) => `${Math.round(n * 100)}%`;
 
 function tally(drones: readonly Drone[]) {
-  const t = { confirmed: 0, value: 0, unit: 0, system: 0 };
+  const t = { confirmed: 0, value: 0, unit: 0, system: 0, attribute: 0 };
   for (const d of drones)
     for (const s of d.specs)
       for (const c of s.claims) {
@@ -23,6 +23,14 @@ function tally(drones: readonly Drone[]) {
       }
   return t;
 }
+
+/** The reasons a claim was ruled out, as the summary counts them. */
+const ISSUE_COUNT: Record<ClaimIssue, string> = {
+  value: "wrong figure",
+  unit: "wrong unit or parse",
+  system: "about another system",
+  attribute: "about another attribute",
+};
 
 /**
  * What analysts' claim verdicts have taught the automation: how many there are, and how far
@@ -37,13 +45,13 @@ export function AnalystReviewPanel({ drones }: { drones: readonly Drone[] }) {
       ),
     [drones],
   );
-  const total = t.confirmed + t.value + t.unit + t.system;
+  const total = t.confirmed + t.value + t.unit + t.system + t.attribute;
   return (
     <Panel title="Analyst claim reviews">
       <p className="text-sm text-muted-foreground">
         {total === 0
           ? "No claim has been reviewed yet. Open a source chip under a spec on a system page to confirm or reject it."
-          : `${t.confirmed} confirmed · ${t.value} wrong value · ${t.unit} wrong unit or parse · ${t.system} about another system.`}
+          : `${t.confirmed} confirmed · ${t.value} ${ISSUE_COUNT.value} · ${t.unit} ${ISSUE_COUNT.unit} · ${t.system} ${ISSUE_COUNT.system} · ${t.attribute} ${ISSUE_COUNT.attribute}.`}
       </p>
       <p className="mt-2 text-xs text-muted-foreground">
         Every review is scored as ground truth: rule sandboxes, shadow scoring and this page's

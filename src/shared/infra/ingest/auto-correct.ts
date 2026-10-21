@@ -19,12 +19,15 @@ export interface CorrectionTrust extends TrustTally {
 }
 
 /**
- * Whether the analyst reached the corrector's verdict. Rejecting the figure agrees, except that a
- * unit fix on a figure about another system would have applied a wrong value.
+ * Whether the analyst reached the corrector's verdict. Rejecting the figure agrees, except in
+ * two cases: a unit fix on a figure about another system or about another attribute would have
+ * applied a wrong value. An implausible figure agrees either way - it cannot stand on this
+ * attribute whether the analyst called the number wrong or called the attribute wrong.
  */
 function agrees(fix: AutoCorrection, review: ClaimReview): boolean {
   if (review.verdict === "confirmed") return false;
-  return fix.kind === "implausible" || review.issue !== "system";
+  if (fix.kind === "implausible") return true;
+  return review.issue !== "system" && review.issue !== "attribute";
 }
 
 /** Analyst agreement per kind of correction (correctionKey), from claims both have judged. */
