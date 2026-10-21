@@ -2,9 +2,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
  * What happens when providers run out: a non-JSON reply moves on to the next provider, a 429
- * falls through at once and parks that provider, a chain where everyone is refusing reports an
- * outage (so a queue keeps the post pending), and the server's key never follows a base URL the
- * caller chose.
+ * falls through at once and parks that provider, a config error (a model the provider does not
+ * have) parks that model rather than being re-paid on every document, a chain where everyone is
+ * refusing reports an outage (so a queue keeps the post pending), and the server's key never
+ * follows a base URL the caller chose.
  *
  * Pacing and the timeout are module constants read at import, hence the dynamic import below.
  */
@@ -40,7 +41,13 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-type Reply = { status: number; content?: string; headers?: Record<string, string> };
+type Reply = {
+  status: number;
+  content?: string;
+  headers?: Record<string, string>;
+  /** The provider's own `error.message`, for tests about what a failure explanation says. */
+  message?: string;
+};
 
 /** Answers per host; records host and Authorization header of every request. */
 function stubHosts(byHost: Record<string, Reply>) {
@@ -54,7 +61,7 @@ function stubHosts(byHost: Record<string, Reply>) {
       const body =
         r.status === 200
           ? JSON.stringify({ choices: [{ message: { content: r.content ?? "" } }] })
-          : JSON.stringify({ error: { message: `status ${r.status}` } });
+          : JSON.stringify({ error: { message: r.message ?? `status ${r.status}` } });
       return new Response(body, { status: r.status, headers: r.headers ?? {} });
     }),
   );
@@ -125,7 +132,11 @@ describe("an unusable reply falls through to the next provider", () => {
 
     const r = await call();
 
-    expect(r).toEqual({ ok: true, content: '{"name":"Geran-2"}' });
+    expect(r).toEqual({
+      ok: true,
+      content: '{"name":"Geran-2"}',
+      model: "nvidia/nemotron-3-super-120b-a12b",
+    });
   });
 
   it("is not an outage when the only failure was the reply", async () => {
@@ -242,5 +253,63 @@ describe("cooldown scope", () => {
     stubHosts({ "api.groq.com": { status: 401 } });
     await call({ model: "qwen/qwen3.8-27b" });
     expect(await call({ model: "openai/gpt-oss-120b" })).toMatchObject({ ok: false, outage: true });
+  });
+
+  it("parks the model after a 404, since a missing model id never becomes right", async () => {
+    process.env["NVIDIA_API_KEY"] = "k-nv";
+    process.env["GROQ_API_KEY"] = "k-gq";
+    const seen = stubHosts({ "integrate.api.nvidia.com": { status: 404 } });
+
+    expect(await call()).toMatchObject({ ok: true, provider: "groq" });
+    expect(await call()).toMatchObject({ ok: true, provider: "groq" });
+
+    // One NVIDIA request in total: the 404 is a config error, not something the next post fixes.
+    expect(seen.map((s) => s.host)).toEqual([
+      "integrate.api.nvidia.com",
+      "api.groq.com",
+      "api.groq.com",
+    ]);
+  });
+
+  it("parks the model when a 400's own message names the missing model", async () => {
+    process.env["NVIDIA_API_KEY"] = "k-nv";
+    process.env["GROQ_API_KEY"] = "k-gq";
+    const seen = stubHosts({
+      "integrate.api.nvidia.com": {
+        status: 400,
+        message: "The model `nvidia/retil-70b` does not exist",
+      },
+    });
+
+    expect(await call()).toMatchObject({ ok: true, provider: "groq" });
+    expect(await call()).toMatchObject({ ok: true, provider: "groq" });
+
+    expect(seen.map((s) => s.host)).toEqual([
+      "integrate.api.nvidia.com",
+      "api.groq.com",
+      "api.groq.com",
+    ]);
+  });
+
+  it("leaves a 400 about this request alone, since the next document may be fine", async () => {
+    process.env["NVIDIA_API_KEY"] = "k-nv";
+    process.env["GROQ_API_KEY"] = "k-gq";
+    const seen = stubHosts({
+      "integrate.api.nvidia.com": {
+        status: 400,
+        message: "'messages' must contain the word 'json' to use response_format",
+      },
+    });
+
+    await call();
+    await call();
+
+    // NVIDIA is asked both times: one request the provider refused did not condemn a model.
+    expect(seen.map((s) => s.host)).toEqual([
+      "integrate.api.nvidia.com",
+      "api.groq.com",
+      "integrate.api.nvidia.com",
+      "api.groq.com",
+    ]);
   });
 });

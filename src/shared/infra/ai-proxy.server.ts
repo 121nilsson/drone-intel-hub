@@ -43,7 +43,17 @@ export interface ChatInput {
 }
 
 export type ChatResult =
-  | { ok: true; content: string; provider?: string }
+  | {
+      ok: true;
+      content: string;
+      provider?: string;
+      /**
+       * The model that actually produced this reply. After a fall-through that is the serving
+       * provider's own model, not the configured one - so provenance recorded from it names what
+       * answered, not what was asked for. Absent only for transports that do not report it.
+       */
+      model?: string;
+    }
   | {
       ok: false;
       error: string;
@@ -166,9 +176,31 @@ function cooling(provider: string, model: string): { ms: number; reason: string 
  * an availability failure.
  */
 const MAX_COOLDOWN_MS = 60 * 60_000;
+/**
+ * A model id the provider does not have will not exist for the next document either, and without
+ * this the chain re-pays that doomed request on every post (seen live: both tiers re-asking
+ * NVIDIA for a retired id). The window only has to bridge the gap until the configuration is
+ * fixed - which is what a restart re-reads anyway.
+ */
+const CONFIG_COOLDOWN_MS = 30 * 60_000;
+
+/**
+ * Whether a 400's own explanation says the model is what is missing: "does not exist",
+ * "not found", "no such model". Deliberately narrow - "unsupported", "too large" and the json-mode
+ * wording are about this request, and a post the provider choked on must not condemn a model
+ * every other document can use.
+ */
+function namesMissingModel(said: string): boolean {
+  return (
+    /\bmodel\b/i.test(said) &&
+    /(does\s+not\s+exist|not\s+found|no\s+such\b|unknown\s+model)/i.test(said)
+  );
+}
+
 function cooldownFor(
   status: number,
   retryAfter?: number,
+  said = "",
 ): { ms: number; scope: "model" | "provider" } | undefined {
   // Uncapped by MAX_BACKOFF_MS on purpose: a daily-quota 429 can say "come back in hours", and
   // honouring it is what stops the chain from re-asking on every document.
@@ -178,6 +210,11 @@ function cooldownFor(
     return { ms: 15 * 60_000, scope: "provider" };
   if (status === 425 || status === 500 || status === 502 || status === 503 || status === 504)
     return { ms: 30_000, scope: "provider" };
+  // A config error, not an availability one: parked per model so the provider's other models
+  // keep serving. 404 is unambiguous (model id or endpoint path wrong for this provider).
+  if (status === 404) return { ms: CONFIG_COOLDOWN_MS, scope: "model" };
+  // 400 only when the provider itself names the missing model - otherwise it stays document-level.
+  if (status === 400 && namesMissingModel(said)) return { ms: CONFIG_COOLDOWN_MS, scope: "model" };
   return undefined;
 }
 
@@ -372,6 +409,9 @@ function providerKindLabel(status: number): string {
   if (status === 429) return "rate limit";
   if (status === 402) return "credits";
   if (status === 401 || status === 403) return "auth";
+  // Only reached for a 404, or a 400 whose own message named the missing model (see
+  // cooldownFor) - so "model not found" is the provider's own verdict, not our guess.
+  if (status === 404 || status === 400) return "model not found";
   return "unavailable";
 }
 
@@ -384,8 +424,9 @@ function providerKindLabel(status: number): string {
  * multi-provider) and then failed with "No API key" - the fallback work being pointless in
  * exactly the configuration that needs it most. Order still comes from priority.
  *
- * `fallThrough` is set when another provider can take the call: a 429 or a timeout then gives up
- * after one attempt, because the next provider is a better use of the wait than this one's retry.
+ * `fallThrough` is set when another provider can take the call: a 429, a timeout or any transport
+ * failure then gives up after one attempt, because the next provider is a better use of the wait
+ * than this one's retries.
  */
 async function callSingleProvider(
   d: ChatInput,
@@ -463,9 +504,8 @@ async function callSingleProvider(
           : {}),
       });
     } catch (e) {
-      // Transport-level failure (DNS, TLS, socket reset, timeout) is worth another try - unless
-      // another provider is waiting, in which case a 90-second timeout is not worth repeating.
-      // The error message can echo the URL, so it is not surfaced verbatim.
+      // Transport-level failure (DNS, TLS, socket reset, timeout): the document is not at fault,
+      // and the error message can echo the URL, so it is not surfaced verbatim.
       error = transportError(e);
       lastFailure = `transport: ${error}`;
       if (error === "Provider timeout") {
@@ -479,8 +519,12 @@ async function callSingleProvider(
           lastFailure += ` — ${streak} in a row, cooling down ${TIMEOUT_COOLDOWN_MS / 1000}s`;
           break;
         }
-        if (opts.fallThrough) break;
       }
+      // A refuted socket earns nothing by being retried while the next provider waits: the
+      // failure says nothing about the document or about the next host, so the chain moves at
+      // once instead of stalling on a dead endpoint. Without a successor the retry stands - a
+      // blip on the only configured provider is worth riding out.
+      if (opts.fallThrough) break;
       owed = backoffMs(attempt);
       continue;
     }
@@ -507,11 +551,11 @@ async function callSingleProvider(
           parseModelJson(content) ??
           (content.trim() ? undefined : parseModelJson(msg?.reasoning_content ?? ""));
         if (!parsed) return unusable("Invalid provider response (no JSON object)");
-        return { ok: true, content: JSON.stringify(parsed) };
+        return { ok: true, content: JSON.stringify(parsed), model: d.model };
       }
       const out = content.trim() ? content : (msg?.reasoning_content ?? "");
       if (!out.trim()) return unusable("Invalid provider response (empty)");
-      return { ok: true, content: out };
+      return { ok: true, content: out, model: d.model };
     }
 
     // The provider's own explanation is the part that says WHY, so it is kept - but only
@@ -529,7 +573,7 @@ async function callSingleProvider(
     // One line per provider, when it finally gives up - not per attempt, which would bury the
     // signal under retry noise.
     if (giveUp) {
-      const cool = cooldownFor(res.status, retryAfter);
+      const cool = cooldownFor(res.status, retryAfter, said);
       if (cool)
         coolDown(cool.scope === "model" ? mk : name, cool.ms, providerKindLabel(res.status));
       console.warn(

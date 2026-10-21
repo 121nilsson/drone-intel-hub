@@ -130,7 +130,11 @@ export class OpenAICompatibleExtractor implements IntelExtractor {
       metadata: {
         schemaVersion: EXTRACTION_SCHEMA_VERSION,
         engine: "ai",
-        model: this.tier === 1 ? this.cfg.tier1Model : this.cfg.tier2Model,
+        // The model that actually served, which after a fall-through is the fallback provider's
+        // own model rather than this configured one - recording the configured name was
+        // provenance that named the wrong model. The fallback covers transports that do not
+        // report what answered.
+        model: r.model ?? (this.tier === 1 ? this.cfg.tier1Model : this.cfg.tier2Model),
         promptVersion: EXTRACTION_PROMPT_VERSION,
         analyzedAt: new Date().toISOString(),
       },

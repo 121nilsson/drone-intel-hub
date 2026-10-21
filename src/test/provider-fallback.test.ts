@@ -102,6 +102,8 @@ describe("fallback chain sends each provider its own model", () => {
 
     expect(r.ok).toBe(true);
     expect(r.provider).toBe("groq");
+    // The result names what answered: the fallback's own model, not the configured NVIDIA id.
+    expect(r).toMatchObject({ model: "openai/gpt-oss-20b" });
     expect(seen.map((s) => `${s.host}|${s.model}`)).toEqual([
       // First: exactly what the operator configured, unchanged.
       "integrate.api.nvidia.com|nvidia/nemotron-3-super-120b-a12b",
@@ -232,6 +234,42 @@ describe("fallback chain sends each provider its own model", () => {
   });
 });
 
+describe("a provider that cannot be reached is left after one attempt", () => {
+  it("falls through on a transport failure instead of spending the retry budget on a dead socket", async () => {
+    process.env["NVIDIA_API_KEY"] = "k-nv";
+    process.env["GROQ_API_KEY"] = "k-gq";
+    const seen: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string | URL) => {
+        const host = new URL(String(url)).host;
+        seen.push(host);
+        if (host === "integrate.api.nvidia.com") throw new TypeError("fetch failed");
+        return new Response(
+          JSON.stringify({ choices: [{ message: { content: '{"ok":true}' } }] }),
+          {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          },
+        );
+      }),
+    );
+
+    const r = await chatCompletionOnce({
+      model: "nvidia/nemotron-3-super-120b-a12b",
+      tier: "tier1",
+      system: "s",
+      prompt: "p",
+      json: true,
+    });
+
+    expect(r).toMatchObject({ ok: true, provider: "groq" });
+    // One attempt against the unreachable host, not three: a refuted socket is not worth
+    // retrying while the next provider waits.
+    expect(seen).toEqual(["integrate.api.nvidia.com", "api.groq.com"]);
+  });
+});
+
 /**
  * The quick-paste path end to end: OpenAICompatibleExtractor -> the shared transport -> the
  * chain. The browser reaches the transport through the `chatCompletion` server function, whose
@@ -268,5 +306,34 @@ describe("the extractor declares its tier, so a fallback serves a tier-appropria
     expect(seen).toHaveLength(2);
     expect(seen[0]).toEqual({ host: "integrate.api.nvidia.com", model: "meta/muse-glimmer-30b" });
     expect(seen[1]).toEqual({ host: "api.groq.com", model: "openai/gpt-oss-20b" });
+  });
+
+  it("records the model that actually served, not the configured one, in the metadata", async () => {
+    process.env["NVIDIA_API_KEY"] = "k-nv";
+    process.env["GROQ_API_KEY"] = "k-gq";
+    stubFetch((host) => host === "integrate.api.nvidia.com");
+
+    const { OpenAICompatibleExtractor } = await import("@/shared/infra/openai-compatible-ai");
+    const extractor = new OpenAICompatibleExtractor(
+      1,
+      {
+        baseUrl: "https://integrate.api.nvidia.com/v1",
+        apiKey: "",
+        tier1Model: "nvidia/nemotron-3-super-120b-a12b",
+        tier2Model: "meta/muse-glimmer-30b",
+        translateModel: "",
+        escalationThreshold: 0.6,
+        autoMergeThreshold: 0.85,
+        autoPromoteThreshold: 0.9,
+        autoDiscardThreshold: 0.25,
+        heuristicFirst: true,
+      },
+      chatCompletionOnce,
+    );
+
+    const result = await extractor.extract("a report", []);
+
+    // Provenance: NVIDIA 404'd, Groq answered - the extraction is Groq's, not NVIDIA's.
+    expect(result.metadata?.model).toBe("openai/gpt-oss-20b");
   });
 });

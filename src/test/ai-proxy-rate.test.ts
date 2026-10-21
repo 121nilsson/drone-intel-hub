@@ -80,7 +80,7 @@ describe("chatCompletionOnce retry", () => {
     await vi.advanceTimersByTimeAsync(60_000);
     const res = await p;
 
-    expect(res).toEqual({ ok: true, content: "recovered" });
+    expect(res).toEqual({ ok: true, content: "recovered", model: "test-model" });
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
@@ -139,7 +139,7 @@ describe("chatCompletionOnce retry", () => {
     const p = chat(INPUT);
     await vi.advanceTimersByTimeAsync(60_000);
 
-    expect(await p).toEqual({ ok: true, content: "recovered" });
+    expect(await p).toEqual({ ok: true, content: "recovered", model: "test-model" });
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
@@ -156,7 +156,7 @@ describe("chatCompletionOnce retry", () => {
     const p = chat(INPUT);
     await vi.advanceTimersByTimeAsync(60_000);
 
-    expect(await p).toEqual({ ok: true, content: "recovered" });
+    expect(await p).toEqual({ ok: true, content: "recovered", model: "test-model" });
     expect(fn).toHaveBeenCalledTimes(2);
   });
 
@@ -268,7 +268,7 @@ describe("chatCompletionOnce request handling", () => {
     const p = chat(INPUT);
     await vi.advanceTimersByTimeAsync(60_000);
 
-    expect(await p).toEqual({ ok: true, content: "from reasoning" });
+    expect(await p).toEqual({ ok: true, content: "from reasoning", model: "test-model" });
   });
 
   // Regression: the provider body was embedded verbatim in the error string, which lands in
