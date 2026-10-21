@@ -329,6 +329,17 @@ describe("HeuristicExtractor extraction", () => {
     expect(specOf(e.specs, "missiles")).toBe(6);
   });
 
+  it("reads a spaced thousands group as one number", async () => {
+    // "3 000 missiles" is three thousand, not the three hundred the tail of the group would say.
+    const e = await t1.extract("A battery of 3 000 missiles rides under the fuselage", CATALOG);
+    expect(specOf(e.specs, "missiles")).toBe(3000);
+  });
+
+  it("does not read a number that follows a letter as a quantity", async () => {
+    const e = await t1.extract("The Shahed136 missiles are assembled in Iran", CATALOG);
+    expect(specOf(e.specs, "missiles")).toBeUndefined();
+  });
+
   it("picks up RF bands", async () => {
     const e = await t1.extract("operating on 900 MHz with CRPA", CATALOG);
     expect(e.rfBands).toContain("900 MHZ");

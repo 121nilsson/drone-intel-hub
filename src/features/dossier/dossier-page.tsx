@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { consensus } from "@/entities/drone/consensus";
 import { claimKey } from "@/entities/drone/claim-review";
+import { payloadSpecs, sensorSpecs } from "@/entities/drone/observations";
 import { ieeeLabel, natoLabel } from "@/entities/normalization/bands";
 import { effectiveIeeeBands, effectiveNatoBands, linkIsFiber } from "@/entities/normalization/rf";
 import { type Drone, type SpecAttribute } from "@/entities/drone/types";
@@ -456,6 +457,10 @@ export function DossierPage({ id }: { id: string }) {
   const variants = d
     ? drones.filter((x) => d.variantIds?.includes(x.id) || x.variantOfId === d.id)
     : [];
+  // The payload and sensor panels read the observations and the figures: a report's list of
+  // what a system carries, and the specs that measure it.
+  const payloadFacts = d ? payloadSpecs(d) : [];
+  const sensorFacts = d ? sensorSpecs(d) : [];
 
   if (!d)
     return svc.attached ? (
@@ -622,8 +627,28 @@ export function DossierPage({ id }: { id: string }) {
                 )}
               </li>
             ))}
-            {!d.payloads?.length && <li className="text-muted-foreground">No payloads traced.</li>}
+            {!d.payloads?.length && !payloadFacts.length && (
+              <li className="text-muted-foreground">No payloads traced.</li>
+            )}
           </ul>
+          {payloadFacts.length > 0 && (
+            <>
+              <p className="mt-3 text-xs font-medium text-muted-foreground">Figures</p>
+              <ul className="mt-1 space-y-2 text-sm">
+                {payloadFacts.map((s) => {
+                  const c = consensus(s);
+                  return (
+                    <li key={s.key}>
+                      <p>{s.label}</p>
+                      <p className="font-mono text-xs text-muted-foreground">
+                        {c.display} · {c.sources} source{c.sources === 1 ? "" : "s"}
+                      </p>
+                    </li>
+                  );
+                })}
+              </ul>
+            </>
+          )}
         </Panel>
         <Panel id="sensors" title="Sensors & cameras" className="md:scroll-mt-24">
           <ul className="space-y-2 text-sm">
@@ -638,8 +663,28 @@ export function DossierPage({ id }: { id: string }) {
                 )}
               </li>
             ))}
-            {!d.sensors?.length && <li className="text-muted-foreground">No sensors traced.</li>}
+            {!d.sensors?.length && !sensorFacts.length && (
+              <li className="text-muted-foreground">No sensors traced.</li>
+            )}
           </ul>
+          {sensorFacts.length > 0 && (
+            <>
+              <p className="mt-3 text-xs font-medium text-muted-foreground">Figures</p>
+              <ul className="mt-1 space-y-2 text-sm">
+                {sensorFacts.map((s) => {
+                  const c = consensus(s);
+                  return (
+                    <li key={s.key}>
+                      <p>{s.label}</p>
+                      <p className="font-mono text-xs text-muted-foreground">
+                        {c.display} · {c.sources} source{c.sources === 1 ? "" : "s"}
+                      </p>
+                    </li>
+                  );
+                })}
+              </ul>
+            </>
+          )}
         </Panel>
         <Panel id="variants" title="Variant family" className="md:scroll-mt-24">
           {parent && (

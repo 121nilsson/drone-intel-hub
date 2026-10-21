@@ -1,7 +1,14 @@
 import "./lib/error-capture";
 
 import { consumeLastCapturedError } from "./lib/error-capture";
+import { stampLogLines } from "./lib/log-timestamp";
 import { renderErrorPage } from "./lib/error-page";
+
+// The production server stamps its lines from a nitro plugin, before the migrations and the
+// scheduled jobs write their first line. The dev server has no plugin runner, so the same
+// wrapper is installed here, when the server entry loads. Stamping twice is harmless: a line
+// that already carries a timestamp is left as it is.
+stampLogLines();
 
 type ServerEntry = {
   fetch: (request: Request, env: unknown, ctx: unknown) => Promise<Response> | Response;

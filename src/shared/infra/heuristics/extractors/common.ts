@@ -85,6 +85,10 @@ export function measureCue(
  * Count nouns like "4 jammers", "2 cameras", "6 missiles" with a left-boundary guard so a
  * designation's number (e.g. "UAV-300") is not read as a quantity. The lookbehind rejects a digit
  * that follows a letter, digit or hyphen.
+ *
+ * A spaced thousands group is one number ("3 000 missiles" is three thousand, not three
+ * hundred), so the group is captured whole and read with the same parser the rest of the
+ * catalogue uses.
  */
 export function extractCountedNouns(
   raw: string,
@@ -94,7 +98,10 @@ export function extractCountedNouns(
   onMatch?: (noun: string, quantity: number, evidence: string) => void,
 ) {
   const nounAlt = nouns.join("|");
-  for (const m of raw.matchAll(getRe(`(?<![-\\p{L}\\p{N}])(\\d+)\\s+(${nounAlt})`, "giu"))) {
+  // String.raw: in a plain template literal \p and \d lose their backslashes, which would
+  // leave the lookbehind matching the letters p, L and N instead of any letter or digit.
+  const re = getRe(String.raw`(?<![-\p{L}\p{N}])(\d+(?:[ \u00a0]\d{3})*)\s+(${nounAlt})`, "giu");
+  for (const m of raw.matchAll(re)) {
     // Attack tallies ("launched 167 missiles overnight") are not system specs.
     const before = raw.slice(Math.max(0, m.index! - 40), m.index!);
     if (
@@ -104,7 +111,8 @@ export function extractCountedNouns(
     )
       continue;
     const noun = m[2]!.toLowerCase().replace(/s$/, "");
-    const qty = Number(m[1]);
+    const qty = parseNumber(m[1]!);
+    if (qty === undefined) continue;
     add(`${noun}s`, `Number of ${noun}s`, qty, undefined, m[0]);
     onMatch?.(noun, qty, m[0]);
   }

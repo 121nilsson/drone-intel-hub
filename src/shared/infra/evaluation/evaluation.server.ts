@@ -342,6 +342,9 @@ export async function runAdjudication(): Promise<{
     for (const c of candidates) {
       if (adjudicated >= MAX) break;
       if (!c.raw || c.raw.trim().length < 50) continue;
+      const existing =
+        await db()`select 1 from eval_corpus where id like ${"adj-" + c.id + "%"} limit 1`;
+      if (existing.length) continue;
       const heur = normalizeExtraction(await heuristic.extract(c.raw, drones)).extraction;
       const cmp = compareSpecs(comparableSpecs(heur), referenceSpecs(c, verdicts));
       const conflicts = [...cmp.wrongKeys, ...cmp.falsePositives.map((h) => ({ h, r: null }))];

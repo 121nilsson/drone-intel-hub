@@ -49,7 +49,11 @@ export const triggerMineRules = createServerFn({ method: "POST" }).handler(async
 });
 
 export const fetchRules = createServerFn({ method: "GET" }).handler(async () => {
-  return await listRules();
+  const rules = await listRules();
+  return rules.map((r) => ({
+    ...r,
+    evidence: typeof r.evidence === "string" ? r.evidence.slice(0, 200) : r.evidence,
+  }));
 });
 
 export const triggerProposeRule = createServerFn({ method: "POST" })
@@ -61,7 +65,27 @@ export const triggerProposeRule = createServerFn({ method: "POST" })
 export const triggerSandboxRule = createServerFn({ method: "POST" })
   .validator((d: { id: string; mode?: "fast" | "full" }) => d)
   .handler(async ({ data }) => {
-    return await sandboxRule(data.id, data.mode === "full" ? "full" : "fast");
+    const r = await sandboxRule(data.id, data.mode === "full" ? "full" : "fast");
+    if (!r.ok || !r.result) return r;
+    const res = r.result;
+    return {
+      ok: r.ok,
+      reason: r.reason,
+      result: {
+        passed: res.passed,
+        reasons: res.reasons,
+        mode: res.mode,
+        corpusSize: res.corpusSize,
+        regressions: res.regressions.slice(0, 5),
+        fixed: res.fixed.slice(0, 5),
+        affectedCandidates: res.affectedCandidates,
+        changedCandidates: res.changedCandidates,
+        before: res.before,
+        after: res.after,
+        f1Delta: res.f1Delta,
+        preview: res.preview.slice(0, 5),
+      },
+    };
   });
 
 export const triggerActivateRule = createServerFn({ method: "POST" })
