@@ -148,6 +148,31 @@ describe("repository revisions", () => {
     expect(repo.get(base.id)!.summary).toBe(base.summary);
   });
 
+  it("backfills legacy claim ids once and persists them", async () => {
+    const store = new LocalStorageStore();
+    const legacy = drone();
+    legacy.specs[0]!.claims = legacy.specs[0]!.claims.map((c) => ({
+      value: c.value,
+      source: c.source,
+      date: c.date,
+      ...(c.evidence ? { evidence: c.evidence } : {}),
+    }));
+    await store.seed("drones", [legacy]);
+
+    const repo = new LocalDroneRepository();
+    await repo.attach(store);
+    const loaded = repo.get(legacy.id)!;
+    const ids = loaded.specs[0]!.claims.map((c) => c.id);
+    expect(ids[0]).toBeTruthy();
+    expect(ids[1]).toBeTruthy();
+    expect(ids[0]).not.toBe(ids[1]);
+    await repo.flush();
+
+    const reloaded = new LocalDroneRepository();
+    await reloaded.attach(store);
+    expect(reloaded.get(legacy.id)!.specs[0]!.claims.map((c) => c.id)).toEqual(ids);
+  });
+
   it("stays on the old store when the new store cannot be loaded", async () => {
     const store = new LocalStorageStore();
     const base = drone();

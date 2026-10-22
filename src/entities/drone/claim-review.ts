@@ -33,6 +33,26 @@ export function claimKey(c: SpecClaim): string {
 }
 
 /**
+ * Give every stored claim a stable identity. Older catalogs and seed entries predate `SpecClaim.id`;
+ * backfilling once at attach means two passages that happen to share source, value and evidence
+ * still resolve to different claims. Returns the same object when every claim already has one.
+ */
+export function ensureClaimIds(drone: Drone): Drone {
+  let changed = false;
+  const specs = drone.specs.map((spec) => {
+    let specChanged = false;
+    const claims = spec.claims.map((claim) => {
+      if (claim.id) return claim;
+      specChanged = true;
+      changed = true;
+      return { ...claim, id: crypto.randomUUID() };
+    });
+    return specChanged ? { ...spec, claims } : spec;
+  });
+  return changed ? { ...drone, specs } : drone;
+}
+
+/**
  * Whether a claim feeds consensus and the other aggregates. The analyst's verdict wins in
  * both directions: a rejected claim is out even if the check backed it, and a confirmed one is
  * in even if the check called it an outlier. An applied correction comes next: an implausible
@@ -67,6 +87,7 @@ export function reviewClaim(
   specKey: string,
   claim: SpecClaim,
   review: ClaimReview | null,
+  at = new Date().toISOString(),
 ): Drone | undefined {
   const spec = drone.specs.find((s) => s.key === specKey);
   const key = claimKey(claim);
@@ -80,15 +101,21 @@ export function reviewClaim(
   });
   const undo =
     !review && current.review?.issue === "attribute" ? current.review.movedTo : undefined;
+  const undoMoveId = !review ? current.review?.moveId : undefined;
   return {
     ...drone,
     specs: drone.specs.map((s) => {
       if (s === spec) return { ...s, claims };
       if (undo && s.key === undo)
-        return { ...s, claims: s.claims.filter((c) => c.movedFrom !== key) };
+        return {
+          ...s,
+          claims: s.claims.filter(
+            (c) => c.movedFrom !== key && (!undoMoveId || c.movedFromMoveId !== undoMoveId),
+          ),
+        };
       return s;
     }),
-    updatedAt: review?.at ?? new Date().toISOString(),
+    updatedAt: review?.at ?? at,
   };
 }
 
@@ -127,6 +154,40 @@ export function addAnalystClaim(
   };
 }
 
+const attributeMoveId = (sourceKey: string, targetKey: string) =>
+  `attribute:${sourceKey}|${targetKey}`;
+
+const systemMoveId = (sourceKey: string, targetDroneId: string, targetSpecKey: string) =>
+  `system:${sourceKey}|${targetDroneId}|${targetSpecKey}`;
+
+function filedClaim(
+  claim: SpecClaim,
+  sourceKey: string,
+  figure: string,
+  at: string,
+  moveId: string,
+): SpecClaim {
+  const raw = figure.trim();
+  const normalized = raw ? normalizeQuantity(raw) : undefined;
+  // Number("") is 0, so an empty reading has to be ruled out before it is tried.
+  const numeric = raw ? Number(raw) : Number.NaN;
+  return {
+    id: crypto.randomUUID(),
+    value: normalized?.canonicalValue ?? (Number.isFinite(numeric) ? numeric : claim.value),
+    ...(normalized
+      ? { raw, normalized, normalizationConfidence: normalized.confidence }
+      : { raw: claim.raw ?? String(claim.value) }),
+    source: claim.source,
+    ...(claim.sourceId ? { sourceId: claim.sourceId } : {}),
+    ...(claim.evidence ? { evidence: claim.evidence } : {}),
+    date: claim.date ?? at,
+    movedFrom: sourceKey,
+    movedFromMoveId: moveId,
+    extractionEngine: "analyst",
+    review: { verdict: "confirmed", at, by: "analyst" },
+  };
+}
+
 /**
  * Move a claim to another attribute of the same system.
  *
@@ -153,24 +214,8 @@ export function moveClaim(
   const key = claimKey(claim);
   if (!spec.claims.some((c) => claimKey(c) === key)) return undefined;
 
-  const raw = figure.trim();
-  const normalized = raw ? normalizeQuantity(raw) : undefined;
-  // Number("") is 0, so an empty reading has to be ruled out before it is tried.
-  const numeric = raw ? Number(raw) : Number.NaN;
-  const moved: SpecClaim = {
-    id: crypto.randomUUID(),
-    value: normalized?.canonicalValue ?? (Number.isFinite(numeric) ? numeric : claim.value),
-    ...(normalized
-      ? { raw, normalized, normalizationConfidence: normalized.confidence }
-      : { raw: claim.raw ?? String(claim.value) }),
-    source: claim.source,
-    ...(claim.sourceId ? { sourceId: claim.sourceId } : {}),
-    ...(claim.evidence ? { evidence: claim.evidence } : {}),
-    date: claim.date ?? at,
-    movedFrom: key,
-    extractionEngine: "analyst",
-    review: { verdict: "confirmed", at, by: "analyst" },
-  };
+  const moveId = attributeMoveId(key, targetKey);
+  const moved = filedClaim(claim, key, figure, at, moveId);
   const claims = spec.claims.map((c) =>
     claimKey(c) === key
       ? {
@@ -179,6 +224,7 @@ export function moveClaim(
             verdict: "rejected",
             issue: "attribute",
             movedTo: targetKey,
+            moveId,
             at,
             by: "analyst",
           } satisfies ClaimReview,
@@ -194,6 +240,159 @@ export function moveClaim(
     }),
     updatedAt: at,
   };
+}
+
+/**
+ * Mark the source claim as belonging to another system. The claim stays where the post put it,
+ * stops counting there, and points at the entry and attribute that now hold the figure.
+ */
+export function markClaimMovedToSystem(
+  source: Drone,
+  specKey: string,
+  claim: SpecClaim,
+  targetDroneId: string,
+  targetSpecKey: string,
+  at: string,
+): Drone | undefined {
+  const spec = source.specs.find((s) => s.key === specKey);
+  const key = claimKey(claim);
+  const current = spec?.claims.find((c) => claimKey(c) === key);
+  if (!spec || !current || source.id === targetDroneId) return undefined;
+  const moveId = systemMoveId(key, targetDroneId, targetSpecKey);
+  if (
+    current.review?.issue === "system" &&
+    current.review.movedToDroneId === targetDroneId &&
+    current.review.movedTo === targetSpecKey &&
+    current.review.moveId === moveId
+  )
+    return source;
+  return {
+    ...source,
+    specs: source.specs.map((s) =>
+      s === spec
+        ? {
+            ...s,
+            claims: s.claims.map((c) =>
+              claimKey(c) === key
+                ? {
+                    ...c,
+                    review: {
+                      verdict: "rejected",
+                      issue: "system",
+                      movedTo: targetSpecKey,
+                      movedToDroneId: targetDroneId,
+                      moveId,
+                      at,
+                      by: "analyst",
+                    } satisfies ClaimReview,
+                  }
+                : c,
+            ),
+          }
+        : s,
+    ),
+    updatedAt: at,
+  };
+}
+
+/**
+ * File the moved figure under the target system's attribute. Idempotent: a retried write that
+ * already landed on the target leaves it unchanged instead of appending a second copy.
+ */
+export function fileMovedClaim(
+  target: Drone,
+  targetSpecKey: string,
+  claim: SpecClaim,
+  sourceDroneId: string,
+  sourceKey: string,
+  figure: string,
+  at: string,
+): Drone | undefined {
+  const spec = target.specs.find((s) => s.key === targetSpecKey);
+  if (!spec || target.id === sourceDroneId) return undefined;
+  const moveId = systemMoveId(sourceKey, target.id, targetSpecKey);
+  const existing = spec.claims.find(
+    (c) =>
+      c.movedFromMoveId === moveId ||
+      (c.movedFrom === sourceKey && c.movedFromDroneId === sourceDroneId),
+  );
+  if (existing) {
+    if (existing.movedFromMoveId === moveId) return target;
+    // A copy filed before move ids existed, or by a retry with the same source claim, takes the
+    // move id its source review now carries so a later re-analysis cannot orphan it.
+    return {
+      ...target,
+      specs: target.specs.map((s) =>
+        s === spec
+          ? {
+              ...s,
+              claims: s.claims.map((c) => (c === existing ? { ...c, movedFromMoveId: moveId } : c)),
+            }
+          : s,
+      ),
+      updatedAt: at,
+    };
+  }
+  const moved = {
+    ...filedClaim(claim, sourceKey, figure, at, moveId),
+    movedFromDroneId: sourceDroneId,
+  };
+  return {
+    ...target,
+    specs: target.specs.map((s) => (s === spec ? { ...s, claims: [...s.claims, moved] } : s)),
+    updatedAt: at,
+  };
+}
+
+/** Pure cross-system move, used by tests and any caller holding both entries. */
+export function moveClaimToSystem(
+  source: Drone,
+  target: Drone,
+  specKey: string,
+  claim: SpecClaim,
+  targetSpecKey: string,
+  figure: string,
+  at: string,
+): { source: Drone; target: Drone } | undefined {
+  if (source.id === target.id) return undefined;
+  const sourceKey = claimKey(claim);
+  const movedSource = markClaimMovedToSystem(source, specKey, claim, target.id, targetSpecKey, at);
+  const movedTarget = fileMovedClaim(
+    target,
+    targetSpecKey,
+    claim,
+    source.id,
+    sourceKey,
+    figure,
+    at,
+  );
+  return movedSource && movedTarget ? { source: movedSource, target: movedTarget } : undefined;
+}
+
+/**
+ * Take the filed copy back out when the analyst undoes a cross-system move. The source verdict is
+ * cleared separately, because the two entries are written independently and either may be stale.
+ */
+export function removeMovedClaim(
+  target: Drone,
+  sourceDroneId: string,
+  sourceKey: string,
+  targetSpecKey?: string,
+  at = new Date().toISOString(),
+  moveId?: string,
+): Drone {
+  const matches = (c: SpecClaim) =>
+    (Boolean(moveId) && c.movedFromMoveId === moveId) ||
+    (c.movedFrom === sourceKey && c.movedFromDroneId === sourceDroneId);
+  let changed = false;
+  const specs = target.specs.map((s) => {
+    if (targetSpecKey && s.key !== targetSpecKey) return s;
+    const claims = s.claims.filter((c) => !matches(c));
+    if (claims.length === s.claims.length) return s;
+    changed = true;
+    return { ...s, claims };
+  });
+  return changed ? { ...target, specs, updatedAt: at } : target;
 }
 
 /** A verdict given on a post's claim, kept so a re-analysis of the post can restore it. */

@@ -12,6 +12,7 @@ import type {
   AIProviderSettings,
   BriefingSummarizer,
   IntelExtractor,
+  ProcurementExtractor,
   ProviderEnvConfig,
 } from "@/shared/contracts/ai";
 import type { CatalogMutations } from "@/shared/contracts/catalog";
@@ -30,6 +31,7 @@ import { RemoteStore } from "./storage/remote-store";
 import { getStoreStatus } from "./storage/store.functions";
 import { HeuristicExtractor, HeuristicSummarizer } from "./heuristic-ai";
 import { OpenAICompatibleExtractor, OpenAICompatibleSummarizer } from "./openai-compatible-ai";
+import { openAIProcurementExtractor } from "./procurement-extractor";
 import { createCatalogMutations } from "./catalog-operations";
 
 export { DEFAULT_SETTINGS } from "./settings-defaults";
@@ -64,6 +66,8 @@ interface Services {
   /** Built-in heuristic engine the pipeline degrades to when an AI tier throws. */
   fallback: IntelExtractor;
   summarizer: BriefingSummarizer;
+  /** Fills buyer, programme and announcement date when a post carries a financial figure. */
+  procurementExtractor?: ProcurementExtractor;
   /**
    * Catalog edits that span more than one collection: merging two entries, and removing one.
    *
@@ -278,6 +282,15 @@ export function ServicesProvider({ children }: { children: ReactNode }) {
       heuristic: new HeuristicExtractor(1),
       fallback: new HeuristicExtractor(1),
       summarizer: remote ? new OpenAICompatibleSummarizer(resolved) : new HeuristicSummarizer(),
+      ...(remote
+        ? {
+            procurementExtractor: openAIProcurementExtractor({
+              baseUrl: resolved.baseUrl,
+              apiKey: resolved.apiKey,
+              model: resolved.tier2Model,
+            }),
+          }
+        : {}),
       catalog,
       attached,
       storageError,

@@ -23,6 +23,12 @@ import path from "node:path";
 
 const LOCK_NAME = "evaluation";
 const LOCK_MS = 10 * 60 * 1000;
+/**
+ * One seed for every run, on purpose: the sample must be the same sample, or a trend line compares
+ * two different corpora and calls the difference progress. Stored with each report so a report can
+ * be reproduced. The corpus version is what changes over time.
+ */
+const EVAL_SEED = 1;
 
 export interface EvaluationRunResult {
   ran: boolean;
@@ -54,17 +60,40 @@ export interface AdjudicationResult {
   inserted: number;
 }
 
-/** Try to acquire the evaluation lock; returns true if acquired. */
-async function claimLock(): Promise<boolean> {
-  const conn = db();
-  const rows = await conn`
-    insert into eval_lock (name, held_until)
-    values (${LOCK_NAME}, now() + (${LOCK_MS}::int * interval '1 millisecond'))
-    on conflict (name) do update
-      set held_until = excluded.held_until
-      where eval_lock.held_until < now()
-    returning name`;
-  return rows.length > 0;
+/**
+ * Try to acquire the evaluation lock. Never throws: a claim that cannot be made (the lock table
+ * missing on a database that has not finished migrating, a dropped connection) is reported to the
+ * caller, because a scheduled run has nowhere to put a rejected promise. "lock held" keeps its
+ * meaning - another run is active, not a broken database.
+ */
+async function claimLock(): Promise<{ ok: true } | { ok: false; reason: string }> {
+  try {
+    const conn = db();
+    const rows = await conn`
+      insert into eval_lock (name, held_until)
+      values (${LOCK_NAME}, now() + (${LOCK_MS}::int * interval '1 millisecond'))
+      on conflict (name) do update
+        set held_until = excluded.held_until
+        where eval_lock.held_until < now()
+      returning name`;
+    return rows.length > 0 ? { ok: true } : { ok: false, reason: "lock held" };
+  } catch (e) {
+    return {
+      ok: false,
+      reason: `lock unavailable: ${e instanceof Error ? e.message : String(e)}`,
+    };
+  }
+}
+
+/**
+ * The corpus version a run is pinned to, read before its report is stored. Storing a constant
+ * instead would let a metric move caused by corpus growth (harvest added fixtures) read as a
+ * heuristic change, because the trend compares consecutive reports. 0 means nothing is harvested
+ * yet, which is a true statement about the corpus.
+ */
+async function pinnedCorpusVersion(): Promise<number> {
+  const rows = await db()`select coalesce(max(version), 0) as v from eval_corpus_version`;
+  return (rows[0]?.["v"] as number) ?? 0;
 }
 
 async function releaseLock() {
@@ -73,10 +102,11 @@ async function releaseLock() {
 
 export async function runEvaluation(): Promise<EvaluationRunResult> {
   if (!dbConfigured()) return { ran: false, reason: "no database configured" };
-  const claimed = await claimLock();
-  if (!claimed) return { ran: false, reason: "lock held" };
+  const lock = await claimLock();
+  if (!lock.ok) return { ran: false, reason: lock.reason };
 
   try {
+    const corpusVersion = await pinnedCorpusVersion();
     const store = new PostgresStore();
     const drones = (documentsOf(await store.load("drones")) ?? []) as unknown as Drone[];
     const candidates = (documentsOf(await store.load("candidates")) ??
@@ -84,14 +114,14 @@ export async function runEvaluation(): Promise<EvaluationRunResult> {
     const heuristic = new HeuristicExtractor(1, await getOrRefreshRuleSnapshot());
     const report = await evaluateHeuristic(candidates, drones, heuristic, {
       sampleSize: 200,
-      seed: 1,
+      seed: EVAL_SEED,
       includeDiscarded: false,
     });
 
     const id = crypto.randomUUID();
     await db()`
       insert into eval_reports (id, generated_at, seed, sample_size, corpus_version, report)
-      values (${id}, ${report.generatedAt}, ${1}, ${report.totalItems}, ${1}, ${db().json(sanitizeJson(report as unknown as JSONValue))})`;
+      values (${id}, ${report.generatedAt}, ${EVAL_SEED}, ${report.totalItems}, ${corpusVersion}, ${db().json(sanitizeJson(report as unknown as JSONValue))})`;
     return { ran: true, reason: "ok", reportId: id, totalItems: report.totalItems };
   } catch (e) {
     return { ran: false, reason: e instanceof Error ? e.message : String(e) };
@@ -103,10 +133,11 @@ export async function runEvaluation(): Promise<EvaluationRunResult> {
 export async function runEvaluationHealth(): Promise<EvaluationHealthResult> {
   if (!dbConfigured())
     return { ran: false, reason: "no database configured", regression: false, details: [] };
-  const claimed = await claimLock();
-  if (!claimed) return { ran: false, reason: "lock held", regression: false, details: [] };
+  const lock = await claimLock();
+  if (!lock.ok) return { ran: false, reason: lock.reason, regression: false, details: [] };
 
   try {
+    const corpusVersion = await pinnedCorpusVersion();
     const store = new PostgresStore();
     const drones = (documentsOf(await store.load("drones")) ?? []) as unknown as Drone[];
     const candidates = (documentsOf(await store.load("candidates")) ??
@@ -114,7 +145,7 @@ export async function runEvaluationHealth(): Promise<EvaluationHealthResult> {
     const heuristic = new HeuristicExtractor(1, await getOrRefreshRuleSnapshot());
     const report = await evaluateHeuristic(candidates, drones, heuristic, {
       sampleSize: 200,
-      seed: 1,
+      seed: EVAL_SEED,
       includeDiscarded: false,
     });
 
@@ -127,7 +158,7 @@ export async function runEvaluationHealth(): Promise<EvaluationHealthResult> {
     const id = crypto.randomUUID();
     await db()`
       insert into eval_reports (id, generated_at, seed, sample_size, corpus_version, report)
-      values (${id}, ${report.generatedAt}, ${1}, ${report.totalItems}, ${1}, ${db().json(sanitizeJson(report as unknown as JSONValue))})`;
+      values (${id}, ${report.generatedAt}, ${EVAL_SEED}, ${report.totalItems}, ${corpusVersion}, ${db().json(sanitizeJson(report as unknown as JSONValue))})`;
 
     if (prev) {
       const prevSummary = (prev["summary"] ?? {}) as Record<string, unknown>;
@@ -220,8 +251,8 @@ export async function harvestCorpus(): Promise<{
 }> {
   if (!dbConfigured())
     return { ran: false, reason: "no database configured", inserted: 0, skipped: 0 };
-  const claimed = await claimLock();
-  if (!claimed) return { ran: false, reason: "lock held", inserted: 0, skipped: 0 };
+  const lock = await claimLock();
+  if (!lock.ok) return { ran: false, reason: lock.reason, inserted: 0, skipped: 0 };
 
   try {
     const store = new PostgresStore();
@@ -231,12 +262,11 @@ export async function harvestCorpus(): Promise<{
     const heuristic = new HeuristicExtractor(1, await getOrRefreshRuleSnapshot());
     const report = await evaluateHeuristic(candidates, drones, heuristic, {
       sampleSize: 200,
-      seed: 1,
+      seed: EVAL_SEED,
       includeDiscarded: false,
     });
 
-    const vRows = await db()`select coalesce(max(version), 0) as v from eval_corpus_version`;
-    const currentVersion = (vRows[0]?.["v"] as number) ?? 0;
+    const currentVersion = await pinnedCorpusVersion();
     const nextVersion = currentVersion + 1;
 
     let inserted = 0;
@@ -318,8 +348,8 @@ export async function runAdjudication(): Promise<{
   const env = await (await import("@/shared/infra/provider-env.server")).readProviderEnvConfig();
   if (!env.hasKey) return { ran: false, reason: "no AI provider key", adjudicated: 0, inserted: 0 };
 
-  const claimed = await claimLock();
-  if (!claimed) return { ran: false, reason: "lock held", adjudicated: 0, inserted: 0 };
+  const lock = await claimLock();
+  if (!lock.ok) return { ran: false, reason: lock.reason, adjudicated: 0, inserted: 0 };
 
   try {
     const store = new PostgresStore();

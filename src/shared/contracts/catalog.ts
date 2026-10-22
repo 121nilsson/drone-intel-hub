@@ -76,6 +76,24 @@ export interface CatalogMutations {
     targetSpecKey: string,
     figure?: string,
   ): Drone | undefined;
+  /**
+   * Move a claim to an attribute of another system. The source claim stays on its entry as
+   * rejected evidence, and a confirmed analyst claim is filed under `targetSpecKey` on the target
+   * entry. Returns the updated source entry, or undefined when either entry/spec/claim is gone.
+   */
+  moveClaimToSystem(
+    droneId: string,
+    specKey: string,
+    claim: SpecClaim,
+    targetDroneId: string,
+    targetSpecKey: string,
+    figure?: string,
+  ): Drone | undefined;
+  /**
+   * Undo a cross-system move: remove the filed copy from the target and clear the source verdict.
+   * Returns the updated source entry, or undefined when the source entry is gone.
+   */
+  undoMoveClaimToSystem(droneId: string, specKey: string, claim: SpecClaim): Drone | undefined;
 }
 
 export type ClaimVerdict =

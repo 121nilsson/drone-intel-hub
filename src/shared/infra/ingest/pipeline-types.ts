@@ -6,7 +6,11 @@ import type {
   ExtractedSpec,
   SystemExtraction,
 } from "@/entities/drone/types";
-import { ProviderOutageError, type IntelExtractor } from "@/shared/contracts/ai";
+import {
+  ProviderOutageError,
+  type IntelExtractor,
+  type ProcurementExtractor,
+} from "@/shared/contracts/ai";
 import type {
   CandidateRepository,
   DroneRepository,
@@ -39,6 +43,11 @@ export interface PipelineDeps {
   taxonomyCandidates?: TaxonomyCandidateRepository;
   /** Receives contract/deal figures routed out of drone specs. Absent in tests and older callers. */
   procurements?: ProcurementRepository;
+  /**
+   * Fills buyer/programme/announcement metadata for a post that carried a financial figure. Only
+   * called when there is a procurement to enrich, so posts without a deal cost no model call.
+   */
+  procurementExtractor?: ProcurementExtractor;
   escalationThreshold: number;
   autoMergeThreshold: number;
   /** Unset disables auto-promotion; every new system then waits for review. */

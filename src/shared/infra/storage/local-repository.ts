@@ -1,4 +1,5 @@
 import type { Candidate, Drone } from "@/entities/drone/types";
+import { ensureClaimIds } from "@/entities/drone/claim-review";
 import { ACTIVE_SEED_DRONES, SEED_DRONES } from "@/entities/drone/seed";
 import { isNearDuplicate, simHash64 } from "@/entities/dispatch/simhash";
 import { canonicalUrl } from "@/entities/dispatch/url-key";
@@ -6,6 +7,7 @@ import type { MonitoredSource } from "@/entities/source/types";
 import { ACTIVE_SEED_SOURCES, SEED_SOURCES } from "@/entities/source/seed";
 import type { RawDispatch } from "@/entities/dispatch/types";
 import type { Procurement } from "@/entities/procurement/types";
+import { procurementDedupeKey } from "@/entities/procurement/routing";
 import {
   effectiveInstallationId,
   effectivePropulsionId,
@@ -275,6 +277,18 @@ abstract class CachedRepository<C extends Collection> implements Subscribable {
 export class LocalDroneRepository extends CachedRepository<"drones"> implements DroneRepository {
   constructor() {
     super("drones", SEED_DRONES);
+  }
+  /**
+   * Backfill identities for catalogs written before `SpecClaim.id` existed. One write per affected
+   * entry, immediately after load, so a review given later always has a stable key to refer to.
+   */
+  override async attach(store: DocumentStore) {
+    await super.attach(store);
+    const normalized = this.items.map((drone) => ensureClaimIds(drone));
+    const changed = normalized.filter((drone, i) => drone !== this.items[i]);
+    if (!changed.length) return;
+    this.items = normalized;
+    for (const drone of changed) this.save(drone);
   }
   get(id: string) {
     return this.items.find((d) => d.id === id);
@@ -711,7 +725,16 @@ export class LocalProcurementRepository extends CachedRepository<"procurements">
   constructor() {
     super("procurements", []);
   }
+  /**
+   * Idempotent by content: a post re-analysed after a heuristic or model change produces a new
+   * document id, so `p.id` cannot prevent a duplicate row. The source claim and figure can.
+   */
   add(p: Procurement) {
+    const key = p.dedupeKey ?? procurementDedupeKey(p);
+    if (
+      this.items.some((existing) => (existing.dedupeKey ?? procurementDedupeKey(existing)) === key)
+    )
+      return;
     this.items = [p, ...this.items];
     this.save(p);
   }

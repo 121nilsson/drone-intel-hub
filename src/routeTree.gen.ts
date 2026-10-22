@@ -15,6 +15,7 @@ import { Route as CounterpartsRouteImport } from './routes/counterparts'
 import { Route as DispatchesRouteImport } from './routes/dispatches'
 import { Route as EvaluationRouteImport } from './routes/evaluation'
 import { Route as IntakeRouteImport } from './routes/intake'
+import { Route as ProcurementRouteImport } from './routes/procurement'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as SourcesRouteImport } from './routes/sources'
 import { Route as SpecsRouteImport } from './routes/specs'
@@ -50,6 +51,11 @@ const EvaluationRoute = EvaluationRouteImport.update({
 const IntakeRoute = IntakeRouteImport.update({
   id: '/intake',
   path: '/intake',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProcurementRoute = ProcurementRouteImport.update({
+  id: '/procurement',
+  path: '/procurement',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SettingsRoute = SettingsRouteImport.update({
@@ -90,6 +96,7 @@ export interface FileRoutesByFullPath {
   '/dispatches': typeof DispatchesRoute
   '/evaluation': typeof EvaluationRoute
   '/intake': typeof IntakeRoute
+  '/procurement': typeof ProcurementRoute
   '/settings': typeof SettingsRoute
   '/sources': typeof SourcesRoute
   '/specs': typeof SpecsRoute
@@ -104,6 +111,7 @@ export interface FileRoutesByTo {
   '/dispatches': typeof DispatchesRoute
   '/evaluation': typeof EvaluationRoute
   '/intake': typeof IntakeRoute
+  '/procurement': typeof ProcurementRoute
   '/settings': typeof SettingsRoute
   '/sources': typeof SourcesRoute
   '/specs': typeof SpecsRoute
@@ -119,6 +127,7 @@ export interface FileRoutesById {
   '/dispatches': typeof DispatchesRoute
   '/evaluation': typeof EvaluationRoute
   '/intake': typeof IntakeRoute
+  '/procurement': typeof ProcurementRoute
   '/settings': typeof SettingsRoute
   '/sources': typeof SourcesRoute
   '/specs': typeof SpecsRoute
@@ -135,6 +144,7 @@ export interface FileRouteTypes {
     | '/dispatches'
     | '/evaluation'
     | '/intake'
+    | '/procurement'
     | '/settings'
     | '/sources'
     | '/specs'
@@ -149,6 +159,7 @@ export interface FileRouteTypes {
     | '/dispatches'
     | '/evaluation'
     | '/intake'
+    | '/procurement'
     | '/settings'
     | '/sources'
     | '/specs'
@@ -163,6 +174,7 @@ export interface FileRouteTypes {
     | '/dispatches'
     | '/evaluation'
     | '/intake'
+    | '/procurement'
     | '/settings'
     | '/sources'
     | '/specs'
@@ -178,6 +190,7 @@ export interface RootRouteChildren {
   DispatchesRoute: typeof DispatchesRoute
   EvaluationRoute: typeof EvaluationRoute
   IntakeRoute: typeof IntakeRoute
+  ProcurementRoute: typeof ProcurementRoute
   SettingsRoute: typeof SettingsRoute
   SourcesRoute: typeof SourcesRoute
   SpecsRoute: typeof SpecsRoute
@@ -228,6 +241,13 @@ declare module '@tanstack/react-router' {
       path: '/intake'
       fullPath: '/intake'
       preLoaderRoute: typeof IntakeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/procurement': {
+      id: '/procurement'
+      path: '/procurement'
+      fullPath: '/procurement'
+      preLoaderRoute: typeof ProcurementRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/settings': {
@@ -282,6 +302,7 @@ const rootRouteChildren: RootRouteChildren = {
   DispatchesRoute: DispatchesRoute,
   EvaluationRoute: EvaluationRoute,
   IntakeRoute: IntakeRoute,
+  ProcurementRoute: ProcurementRoute,
   SettingsRoute: SettingsRoute,
   SourcesRoute: SourcesRoute,
   SpecsRoute: SpecsRoute,

@@ -415,6 +415,25 @@ describe("fetchOne fetch options", () => {
     expect(r.posts[0]!.text).toContain("tail-marker");
   });
 
+  it("keeps a full-text feed item up to the storage ceiling instead of the old 8000 cut", async () => {
+    // The ceiling is a storage decision: the back half of long reports used to be discarded before
+    // any extractor saw it. The AI prompt keeps its own, smaller budget.
+    const body = `${"A detailed report with the technical detail that matters. ".repeat(1400)}tail-marker`;
+    const xml = `<rss><channel>
+      <item><title>Shahed strike on Odesa</title><link>https://x.test/a</link>
+        <content:encoded><![CDATA[${body}]]></content:encoded></item>
+    </channel></rss>`;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => ok(xml)),
+    );
+    const r = await fetchOne({ platform: "RSS", handle: "https://x.test/feed" });
+    if (!r.ok) throw new Error(r.error);
+    expect(r.posts[0]!.text.length).toBeLessThanOrEqual(50_000);
+    expect(r.posts[0]!.text.length).toBeGreaterThan(8_000);
+    expect(r.posts[0]!.text).not.toContain("tail-marker");
+  });
+
   it("follows more teaser items than a web index does", async () => {
     const xml = `<rss><channel>
       ${[1, 2, 3, 4, 5, 6]
@@ -461,6 +480,52 @@ describe("fetchOne X bridge", () => {
     const r = await fetchOne({ platform: "X", handle: "@osinttechnical" });
     expect(r.ok).toBe(false);
     expect(spy).not.toHaveBeenCalled();
+  });
+
+  it("ignores X_JINA_READER in the environment; the caller has to pass the option", async () => {
+    const previous = process.env["X_JINA_READER"];
+    process.env["X_JINA_READER"] = "1";
+    try {
+      const spy = vi.fn();
+      vi.stubGlobal("fetch", spy);
+      const r = await fetchOne({ platform: "X", handle: "@osinttechnical" });
+      expect(r).toEqual({
+        ok: false,
+        error: "X/Twitter needs X_BRIDGE_BASE or X_JINA_READER=1",
+      });
+      expect(spy).not.toHaveBeenCalled();
+    } finally {
+      if (previous === undefined) delete process.env["X_JINA_READER"];
+      else process.env["X_JINA_READER"] = previous;
+    }
+  });
+
+  it("reads a timeline through Jina Reader when the caller asks for it", async () => {
+    const body = `# osinttechnical
+* [Post](https://x.com/osinttechnical/status/1234567890) A detailed report about a new drone type and its payload.
+* [Post](https://x.com/osinttechnical/status/1234567891) Another report with enough text to pass the parser.
+`;
+    const fn = stubRoutes({
+      "https://r.jina.ai/https://x.com/osinttechnical": () => new Response(body, { status: 200 }),
+    });
+    const r = await fetchOne({ platform: "X", handle: "@osinttechnical" }, { xJinaReader: true });
+    if (!r.ok) throw new Error(r.error);
+    expect(r.posts).toHaveLength(2);
+    expect(r.posts[0]!.id).toBe("1234567890");
+    expect(r.posts[0]!.url).toBe("https://x.com/osinttechnical/status/1234567890");
+    expect(fn).toHaveBeenCalledWith(
+      "https://r.jina.ai/https://x.com/osinttechnical",
+      expect.anything(),
+    );
+  });
+
+  it("surfaces an empty Jina timeline instead of an empty success", async () => {
+    stubRoutes({
+      "https://r.jina.ai/https://x.com/osinttechnical": () =>
+        new Response("no posts here", { status: 200 }),
+    });
+    const r = await fetchOne({ platform: "X", handle: "@osinttechnical" }, { xJinaReader: true });
+    expect(r).toEqual({ ok: false, error: "X/Jina returned no posts" });
   });
 
   it("reads a timeline through an operator-configured bridge", async () => {

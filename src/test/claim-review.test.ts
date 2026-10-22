@@ -207,6 +207,7 @@ describe("moving a claim to the attribute it describes", () => {
       verdict: "rejected",
       issue: "attribute",
       movedTo: "speed",
+      moveId: expect.any(String),
       at: AT,
       by: "analyst",
     });
@@ -222,6 +223,28 @@ describe("moving a claim to the attribute it describes", () => {
       review: { verdict: "confirmed", by: "analyst" },
     });
     expect(consensus(spd!)).toMatchObject({ sources: 2 });
+  });
+
+  it("undoes an attribute move after a re-analysis recreates the source claim", () => {
+    const wrong = claim(600, "sUAS News", {
+      id: "claim-1",
+      raw: "altitude and 600 kilometers",
+    });
+    const first = repo([drone([altitude([wrong]), speed([])])]);
+    moveSpecClaim("lancet-3", "altitude", wrong, "speed", "600 km/h", { drones: first.drones }, AT);
+    const after = first.all()[0]!;
+    const review = after.specs[0]!.claims[0]!.review!;
+    const moved = after.specs[1]!.claims[0]!;
+
+    const reanalysedClaim = claim(600, "sUAS News", {
+      id: "claim-2",
+      raw: "altitude and 600 kilometers",
+      review,
+    });
+    const later = repo([drone([altitude([reanalysedClaim]), speed([moved])])]);
+    reviewSpecClaim("lancet-3", "altitude", reanalysedClaim, null, { drones: later.drones }, AT);
+    expect(later.all()[0]!.specs[0]!.claims[0]!.review).toBeUndefined();
+    expect(later.all()[0]!.specs[1]!.claims).toHaveLength(0);
   });
 
   it("keeps the claim's own number when the analyst gives no reading", () => {

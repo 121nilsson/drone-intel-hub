@@ -13,7 +13,19 @@ export interface Procurement {
   customer?: string; // who is buying, e.g. "Ukrainian MoD", "Russian MoD"
   announcedAt?: string; // ISO date
   source: string; // where this was reported
+  sourceId?: string; // RawDispatch id when this came from ingestion
   sourceUrl?: string;
+  /**
+   * Catalog entries the contract names, when the extraction resolved them. Kept apart from
+   * `product`, which stays the report's own wording, so the UI can link only what was matched.
+   */
+  systemIds?: string[];
+  systemNames?: string[];
   notes?: string;
+  /**
+   * Content identity for a contract, used to ignore the same deal when a post is analysed
+   * again. A random document id cannot do that.
+   */
+  dedupeKey?: string;
   createdAt: string;
 }

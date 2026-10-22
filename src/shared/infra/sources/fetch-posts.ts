@@ -78,9 +78,10 @@ function parseTelegram(html: string, chan: string): FetchedPost[] {
  * Ceiling on one RSS item's stored text. Feeds that publish full articles (the WordPress common
  * case) used to be cut at 3000 characters mid-sentence, so the pipeline only ever saw the
  * opening of a story. Aligned with the Readability bodies' own ceiling: a dispatch is one
- * document either way, and the store's document cap is an order of magnitude above both.
+ * document either way, and the store's document cap is an order of magnitude above both. The
+ * extractor's context budget is applied on the prompt side, not here.
  */
-const RSS_ITEM_CHARS = 8000;
+const RSS_ITEM_CHARS = 50_000;
 
 function parseRss(xml: string): FetchedPost[] {
   const items = xml.split(/<item[\s>]|<entry[\s>]/).slice(1);
@@ -138,7 +139,7 @@ const FOLLOW_CONCURRENCY = 3;
 /** Below this, Readability has found chrome rather than an article, so the anchor text stays. */
 const MIN_ARTICLE_CHARS = 400;
 /** Above this a body is truncated: dispatches are stored, and the store caps a document. */
-const MAX_ARTICLE_CHARS = 8000;
+const MAX_ARTICLE_CHARS = 50_000;
 /** RSS items shorter than this are usually a teaser, and are worth following to the article. */
 const RSS_TEASER_CHARS = 500;
 
@@ -301,7 +302,7 @@ export async function fetchOne(
         if (!r.ok) return { ok: false, error: r.status ? "X " + r.status : r.error };
         return { ok: true, posts: parseRss(r.body) };
       }
-      if (opts.xJinaReader || process.env["X_JINA_READER"] === "1") {
+      if (opts.xJinaReader) {
         const r = await getText("https://r.jina.ai/https://x.com/" + handle, timeoutMs);
         if (!r.ok) return { ok: false, error: r.status ? "X/Jina " + r.status : r.error };
         const posts = parseJinaTwitter(r.body);

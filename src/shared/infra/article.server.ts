@@ -14,8 +14,14 @@
  */
 
 const MIN_CHARS = 400;
-/** Dispatch text is stored, and a document is size-capped; a long report is truncated, not kept whole. */
-const MAX_CHARS = 8000;
+/**
+ * Storage ceiling, not a prompt window. Long-form defence reporting states its facts past the
+ * first few thousand characters (a 8000-char cut lost the back half of 2% of collected posts), so
+ * what the source wrote is kept, and each consumer chooses its own context: the heuristic reads
+ * all of it, the AI extractor has its own `EXTRACT_PROMPT_CHARS` budget. Still far below the
+ * store's 500k document cap.
+ */
+const MAX_CHARS = 50_000;
 /** Below this many paragraphs, the page is a stub or a redirect rather than a report. */
 const MIN_PARAGRAPHS = 2;
 

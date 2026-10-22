@@ -29,6 +29,13 @@ import { mentionsName } from "./heuristic-ai";
 import extractionPrompt from "@/shared/contracts/extraction-prompt.json";
 
 const EXTRACT_SYS = extractionPrompt.system;
+/**
+ * How much of a stored report the AI extractor reads. Storage keeps more (see
+ * `article.server.ts`), so the heuristic and later jobs see the whole post; this is the prompt
+ * budget, kept explicit so raising storage cannot silently multiply the token cost of every
+ * escalated call. The pipeline's evidence check still searches the full stored text.
+ */
+const EXTRACT_PROMPT_CHARS = 30_000;
 
 /** A failed call as an exception, typed so a queue can tell a provider outage from a bad post. */
 function failure(r: Extract<ChatResult, { ok: false }>): Error {
@@ -82,7 +89,7 @@ export class OpenAICompatibleExtractor implements IntelExtractor {
           : ""),
       prompt: `Catalog candidates:\n${index || "(none)"}\n\nDeterministic observations:\n${
         context ? JSON.stringify(context) : "(none)"
-      }\n\nReport:\n${raw}`,
+      }\n\nReport:\n${raw.slice(0, EXTRACT_PROMPT_CHARS)}`,
       json: true,
       tier: this.tier === 1 ? "tier1" : "tier2",
     });

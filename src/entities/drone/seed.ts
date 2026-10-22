@@ -11,7 +11,15 @@ const s = (
   label,
   ...(unit ? { unit } : {}),
   discoveredBy: "seed",
-  claims: claims.map(([value, source, d]) => ({ value, source, date: ago(d) })),
+  claims: claims.map(([value, source, d], i) => ({
+    // Deterministic identity: seed claims are recreated on every process start, and the same
+    // seeded figure must keep the same review across those restarts. `i` keeps two identical
+    // seed figures in one attribute distinct.
+    id: `seed:${key}:${i}:${source}:${String(value)}:${d}`,
+    value,
+    source,
+    date: ago(d),
+  })),
 });
 
 export const SEED_DRONES: Drone[] = [

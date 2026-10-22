@@ -28,6 +28,7 @@ export const fetchSourcePosts = createServerFn({ method: "POST" })
       {
         timeoutMs: Number(process.env["FETCH_TIMEOUT_MS"] ?? 15_000),
         ...(process.env["X_BRIDGE_BASE"] ? { xBridgeBase: process.env["X_BRIDGE_BASE"] } : {}),
+        ...(process.env["X_JINA_READER"] === "1" ? { xJinaReader: true } : {}),
         articleText: extractArticleText,
       },
     );

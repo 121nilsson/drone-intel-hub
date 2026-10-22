@@ -4,6 +4,7 @@ import {
   LocalCandidateRepository,
   LocalDispatchRepository,
   LocalDroneRepository,
+  LocalProcurementRepository,
   LocalSourceRepository,
   LocalTaxonomyCandidateRepository,
   LocalTaxonomyRepository,
@@ -14,6 +15,7 @@ import {
   openAIContradictionAdjudicator,
 } from "../openai-compatible-ai";
 import { autoTriage } from "@/shared/infra/ingest/auto-triage";
+import { openAIProcurementExtractor } from "../procurement-extractor";
 import { outletWeights } from "@/entities/source/outlet-record";
 import { adjudicateContradictions } from "@/shared/infra/ingest/contradictions";
 import { autoCorrect } from "@/shared/infra/ingest/auto-correct";
@@ -71,6 +73,7 @@ export async function fetchAllSources(
   const drones = new LocalDroneRepository();
   const candidates = new LocalCandidateRepository();
   const dispatches = new LocalDispatchRepository();
+  const procurements = new LocalProcurementRepository();
   const taxonomies = new LocalTaxonomyRepository();
   const taxonomyCandidates = new LocalTaxonomyCandidateRepository();
   await Promise.all([
@@ -78,6 +81,7 @@ export async function fetchAllSources(
     drones.attach(store),
     candidates.attach(store),
     dispatches.attach(store),
+    procurements.attach(store),
     taxonomies.attach(store),
     taxonomyCandidates.attach(store),
   ]);
@@ -103,7 +107,16 @@ export async function fetchAllSources(
   const deps = {
     drones,
     candidates,
+    procurements,
     taxonomyCandidates,
+    ...(useRemote
+      ? {
+          procurementExtractor: openAIProcurementExtractor(
+            { baseUrl: cfg.baseUrl, apiKey: cfg.apiKey, model: cfg.tier2Model },
+            chatCompletionOnce,
+          ),
+        }
+      : {}),
     tier1: useRemote
       ? new OpenAICompatibleExtractor(1, cfg, chatCompletionOnce)
       : new HeuristicExtractor(1),
@@ -344,6 +357,7 @@ export async function fetchAllSources(
     drones.flush(),
     candidates.flush(),
     dispatches.flush(),
+    procurements.flush(),
     taxonomies.flush(),
     taxonomyCandidates.flush(),
   ]);

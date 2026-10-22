@@ -51,11 +51,13 @@ describe("extractArticleText", () => {
 
   it("truncates a very long article instead of failing the size cap", async () => {
     // Migration 001 documents and the document-store validator both cap a stored document, so an
-    // unusually long report must be cut rather than rejected.
+    // unusually long report must be cut rather than rejected. The ceiling keeps far more than the
+    // old 8000-char cut, which was losing the back half of long-form reports before extraction.
     const huge = articlePage(400);
     const text = await extractArticleText(huge, "https://x.test/long");
     expect(text).not.toBeNull();
-    expect(text!.length).toBeLessThanOrEqual(8000);
+    expect(text!.length).toBeLessThanOrEqual(50_000);
+    expect(text!.length).toBeGreaterThan(8_000);
     expect(text).toContain("Shahed strike on Odesa");
   });
 });

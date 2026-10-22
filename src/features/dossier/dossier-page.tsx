@@ -11,15 +11,18 @@ import {
 import { consensus } from "@/entities/drone/consensus";
 import { claimKey } from "@/entities/drone/claim-review";
 import { payloadSpecs, sensorSpecs } from "@/entities/drone/observations";
+import { contractsForDrone } from "@/entities/procurement/match";
 import { ieeeLabel, natoLabel } from "@/entities/normalization/bands";
 import { effectiveIeeeBands, effectiveNatoBands, linkIsFiber } from "@/entities/normalization/rf";
 import { type Drone, type SpecAttribute } from "@/entities/drone/types";
 import { CountryBadge } from "@/shared/ui/country-badge";
 import { ClaimChip, ProvenanceSheet, type ClaimSelection } from "./provenance-sheet";
 import { useDrones, useServices } from "@/shared/infra/services";
+import { useProcurements } from "@/shared/infra/use-procurements";
 import { translateText, generateSystemSummary } from "@/shared/infra/ai-proxy.functions";
 import { buildSystemEvidenceDigest } from "@/shared/infra/system-evidence-digest";
 import { Btn, ConfidenceTag, Loading, Panel, Tag } from "@/shared/ui/primitives";
+import { ContractRow } from "@/shared/ui/contracts";
 import { useRelatedIntel, RelatedRail } from "@/shared/ui/intel-graph";
 
 const DOSSIER_SECTIONS = [
@@ -28,6 +31,7 @@ const DOSSIER_SECTIONS = [
   { id: "related", label: "Related intel" },
   { id: "rf", label: "RF spectrum" },
   { id: "supply", label: "Supply chain" },
+  { id: "contracts", label: "Procurement" },
   { id: "payloads", label: "Payloads" },
   { id: "sensors", label: "Sensors" },
   { id: "variants", label: "Variants" },
@@ -452,6 +456,7 @@ function DossierSummary({ drone, svc }: { drone: Drone; svc: ReturnType<typeof u
 
 export function DossierPage({ id }: { id: string }) {
   const drones = useDrones();
+  const procurements = useProcurements();
   const svc = useServices();
   const d = drones.find((x) => x.id === id);
   const relatedIntel = useRelatedIntel(id);
@@ -464,6 +469,7 @@ export function DossierPage({ id }: { id: string }) {
   // what a system carries, and the specs that measure it.
   const payloadFacts = d ? payloadSpecs(d) : [];
   const sensorFacts = d ? sensorSpecs(d) : [];
+  const contracts = d ? contractsForDrone(procurements, d) : [];
 
   if (!d)
     return svc.attached ? (
@@ -611,6 +617,37 @@ export function DossierPage({ id }: { id: string }) {
               <li className="text-muted-foreground">No components traced.</li>
             )}
           </ul>
+        </Panel>
+        <Panel
+          id="contracts"
+          title="Contracts & procurement"
+          className="md:scroll-mt-24"
+          right={
+            <Link
+              to="/procurement"
+              search={{ system: d.id }}
+              className="font-mono text-xs text-primary hover:underline"
+            >
+              All contracts →
+            </Link>
+          }
+        >
+          {contracts.length ? (
+            <ul className="space-y-3">
+              {contracts.map((contract) => (
+                <li
+                  key={contract.id}
+                  className="border-b border-border pb-3 last:border-0 last:pb-0"
+                >
+                  <ContractRow contract={contract} drones={drones} showNotes />
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              No contract or production-deal records linked to this system yet.
+            </p>
+          )}
         </Panel>
         <Panel id="payloads" title="Payload configurations" className="md:scroll-mt-24">
           <ul className="space-y-2 text-sm">

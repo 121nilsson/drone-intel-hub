@@ -28,6 +28,13 @@ export interface SpecClaim {
    * attribute. Undoing the move finds the copy through it.
    */
   movedFrom?: string;
+  /** Entry the claim was moved from, when it crossed systems rather than attributes. */
+  movedFromDroneId?: string;
+  /**
+   * The cross-system move that filed this copy. Unlike `movedFrom`, it survives a re-analysis
+   * that recreates the source claim with a new id, so undo still finds the copy.
+   */
+  movedFromMoveId?: string;
   /**
    * Set when the deep model was asked which report behind a contested spec this one supports
    * (features/intake/contradictions.ts). An "outlier" verdict never removes or rewrites the
@@ -88,6 +95,13 @@ export interface ClaimReview {
   issue?: ClaimIssue;
   /** The attribute the figure was filed under instead, when the analyst moved it. */
   movedTo?: string;
+  /** The entry the figure was filed under instead, when it was moved across systems. */
+  movedToDroneId?: string;
+  /**
+   * Identity of the cross-system move. The source claim's own id changes when a post is
+   * re-analysed; this does not, so the filed copy can still be found for undo.
+   */
+  moveId?: string;
   at: string;
   by: "analyst";
 }

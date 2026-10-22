@@ -1,7 +1,11 @@
 import type { Candidate, Drone, Extraction, ExtractedSpec } from "@/entities/drone/types";
 import { ProviderOutageError } from "@/shared/contracts/ai";
 import type { PipelineDeps } from "./pipeline-types";
-import { procurementsFrom, splitFinancialSpecs } from "@/entities/procurement/routing";
+import {
+  enrichProcurement,
+  procurementsFrom,
+  splitFinancialSpecs,
+} from "@/entities/procurement/routing";
 import { mergeLinks, normalizeExtraction, toRFLink } from "@/entities/normalization/apply";
 import { mergeSpecs } from "@/entities/drone/spec-engine";
 import { counterpartIdsFor, linkCounterparts } from "@/entities/drone/relations";
@@ -130,8 +134,35 @@ export async function runTwoTier(
     const routed = splitFinancialSpecs(extraction);
     extraction = routed.extraction;
     if (d.procurements && routed.financial.length) {
-      for (const p of procurementsFrom(routed.financial, extraction, source, context.url))
-        d.procurements.add(p);
+      // The post may name several systems while `extraction` is the primary slice. Keep every
+      // name/id available for linking, while the amount/company still come from the routed claims.
+      const procurementExtraction: Extraction = {
+        ...extraction,
+        ...(fullExtraction.systems ? { systems: fullExtraction.systems } : {}),
+        ...(fullExtraction.systemExtractions
+          ? { systemExtractions: fullExtraction.systemExtractions }
+          : {}),
+      };
+      let records = procurementsFrom(routed.financial, procurementExtraction, source, context.url, {
+        ...(context.dispatchId ? { sourceId: context.dispatchId } : {}),
+        ...(context.publishedAt ? { publishedAt: context.publishedAt } : {}),
+      });
+      if (d.procurementExtractor) {
+        try {
+          const extracted = await d.procurementExtractor(raw, source);
+          if (extracted) records = records.map((p) => enrichProcurement(p, extracted));
+        } catch (err) {
+          // A procurement record with the source figure is still useful when the metadata call
+          // fails; the deterministic fields are already complete.
+          console.error(
+            "[pipeline] procurement extraction failed, keeping routed record",
+            (err as Error).message,
+            "source:",
+            source,
+          );
+        }
+      }
+      for (const p of records) d.procurements.add(p);
     }
   }
   // Autonomy brake: a model-produced figure is only actionable if its evidence actually

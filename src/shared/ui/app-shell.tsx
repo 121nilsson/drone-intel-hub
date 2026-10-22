@@ -8,6 +8,7 @@ import { CountryBadge } from "@/shared/ui/country-badge";
 const NAV = [
   { to: "/", label: "Briefing" },
   { to: "/catalog", label: "Catalog" },
+  { to: "/procurement", label: "Procurement" },
   { to: "/counterparts", label: "Counterparts" },
   { to: "/spectrum", label: "Spectrum" },
   { to: "/intake", label: "Queue" },

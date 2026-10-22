@@ -19,16 +19,15 @@ interface Input {
 export type IntakeFetchResult = { ok: true; text: string } | { ok: false; error: string };
 
 const FETCH_TIMEOUT_MS = Number(process.env["FETCH_TIMEOUT_MS"] ?? 15_000);
-/** Guard against reading a huge page into memory; article extraction caps at 8k chars anyway. */
+/** Guard against reading a huge page into memory; article extraction caps its own output. */
 const MAX_BYTES = Number(process.env["FETCH_MAX_BYTES"] ?? 2_000_000);
 /**
- * Cap what is fed to the extractors for quick-paste articles. The reasoning model used at
- * tier 2 is slow on very long prompts (an 8k-char article can exceed the provider timeout,
- * especially while the auto-sync cron shares the key). The head of an article carries the
- * headline and the first regular paragraphs, which is where system names appear; the full
- * text is still stored on the candidate for the analyst. Raise for a self-hosted provider.
+ * How much of the article is returned to the analyst. This handler only fetches and extracts; the
+ * extraction call happens later in the normal intake flow, which has its own prompt budget
+ * (`EXTRACT_PROMPT_CHARS`). Capping here as well cut what was stored on the candidate at the
+ * opening of the article, so a link fetched by hand lost facts the same way a feed did.
  */
-const MAX_ARTICLE_CHARS = Number(process.env["FETCH_ARTICLE_MAX_CHARS"] ?? 4_000);
+const MAX_ARTICLE_CHARS = Number(process.env["FETCH_ARTICLE_MAX_CHARS"] ?? 50_000);
 
 export const fetchIntakeArticle = createServerFn({ method: "POST" })
   .validator((d: Input) => {
