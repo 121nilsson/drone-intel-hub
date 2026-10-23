@@ -1,5 +1,7 @@
 import { mapWithConcurrency } from "./pool";
-import type { MonitoredSource } from "@/entities/source/types";
+import type { MonitoredSource, SourcePlatform } from "@/entities/source/types";
+
+type SourcePick = { platform: SourcePlatform; handle: string };
 import { getFilterForPlatform } from "./content-filters";
 
 export interface FetchedPost {
@@ -44,8 +46,9 @@ export const FETCH_CONCURRENCY = 6;
  * Host a source's requests actually hit, so the collection pool can serialise sources that share
  * one (five GitHub release atoms, for instance) without throttling the rest.
  */
-export function sourceHost(s: Pick<MonitoredSource, "platform" | "handle">): string {
+export function sourceHost(s: SourcePick): string {
   if (s.platform === "Telegram") return "t.me";
+  if (s.platform === "Bluesky") return "public.api.bsky.app";
   try {
     return new URL(s.handle).hostname;
   } catch {
@@ -286,10 +289,7 @@ function parseJinaTwitter(body: string): FetchedPost[] {
   return out;
 }
 
-export async function fetchOne(
-  source: Pick<MonitoredSource, "platform" | "handle">,
-  opts: FetchOptions = {},
-): Promise<FetchResult> {
+export async function fetchOne(source: SourcePick, opts: FetchOptions = {}): Promise<FetchResult> {
   const timeoutMs = opts.timeoutMs ?? FETCH_TIMEOUT_MS;
   try {
     if (source.platform === "X") {
@@ -321,6 +321,10 @@ export async function fetchOne(
       if (!r.ok) return { ok: false, error: r.status ? `Telegram ${r.status}` : r.error };
       return { ok: true, posts: parseTelegram(r.body, chan) };
     }
+    const isBluesky = source.platform === "Bluesky";
+    if (isBluesky) {
+      return fetchBluesky(source, timeoutMs);
+    }
     if (!/^https:\/\//.test(source.handle))
       return { ok: false, error: "URL must start with https://" };
     const r = await getText(source.handle, timeoutMs);
@@ -333,5 +337,47 @@ export async function fetchOne(
   } catch (e) {
     // parseWeb/parseRss can throw on malformed markup; a parser failure must fail this source only.
     return { ok: false, error: e instanceof Error ? e.message : "Fetch failed" };
+  }
+}
+
+async function fetchBluesky(source: SourcePick, timeoutMs: number): Promise<FetchResult> {
+  const { handle } = source;
+  // @ts-expect-error - noUncheckedIndexedAccess makes destructured handle possibly undefined,
+  // but SourcePick.handle is declared as string, so the non-null assertion is safe.
+  const cleaned = handle!
+    .replace(/^@/, "")
+    .replace(/^https?:\/\/bsky\.app\/profile\//, "")
+    .split("/")[0]
+    .trim();
+  if (!/^[A-Za-z0-9._-]{3,253}$/.test(cleaned))
+    return { ok: false, error: "Invalid Bluesky handle" };
+  const url =
+    "https://public.api.bsky.app/xrpc/app.bsky.feed.getAuthorFeed?actor=" +
+    encodeURIComponent(cleaned) +
+    "&limit=20";
+  const r = await getText(url, timeoutMs);
+  if (!r.ok) return { ok: false, error: r.status ? `Bluesky ${r.status}` : r.error };
+  try {
+    const data = JSON.parse(r.body);
+    const posts = (data.feed ?? [])
+      .map((item: unknown) => {
+        const p = (item as { post?: unknown }).post;
+        if (!p || typeof p !== "object") return null;
+        const uri = (p as { uri?: string }).uri;
+        const rkey = typeof uri === "string" ? uri.split("/").pop() : undefined;
+        const record = (p as { record?: unknown }).record as
+          { text?: string; createdAt?: string } | undefined;
+        if (!rkey || !record?.text) return null;
+        return {
+          id: `bsky:${rkey}`,
+          text: record.text,
+          url: `https://bsky.app/profile/${cleaned}/post/${rkey}`,
+          date: record.createdAt,
+        };
+      })
+      .filter((p: FetchedPost | null): p is FetchedPost => p !== null && p.text.length > 20);
+    return posts.length ? { ok: true, posts } : { ok: false, error: "Bluesky returned no posts" };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Bluesky parse failed" };
   }
 }

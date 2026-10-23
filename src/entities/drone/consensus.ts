@@ -1,5 +1,6 @@
 import { canonicalUnitForSemantic, semanticKeyFor } from "@/entities/normalization/semantic";
 import { convert, normalizeQuantity, normalizeQuantityLoose } from "@/entities/normalization/units";
+import { parseMoney } from "@/entities/normalization/currency";
 import { claimCounts, correctedPoint } from "./claim-review";
 import type { SpecAttribute, SpecClaim } from "./types";
 
@@ -54,6 +55,7 @@ function measurement(
   claim: SpecClaim,
   claimIndex: number,
 ): Point | Bound | undefined {
+  const semantic = spec.semantic ?? semanticKeyFor(spec.key, spec.label);
   const parsed = claim.normalized;
   if (parsed) {
     const qual = parsed.range?.qualifier ?? "exact";
@@ -120,6 +122,15 @@ function measurement(
         ...(aligned.unit ? { unit: aligned.unit } : {}),
         claimIndex,
       };
+    }
+  }
+  // A unit_cost figure stored as a bare number keeps its currency in the source text
+  // ("$50,000 per unit" → value 50000, no unit on the claim). Read it from raw/evidence
+  // so the display carries the currency instead of a naked figure.
+  if (semantic === "cost.unit") {
+    const money = parseMoney(claim.raw ?? claim.evidence ?? "");
+    if (money) {
+      return { value: claim.value, unit: money.currency, claimIndex };
     }
   }
   return { value: claim.value, ...(spec.unit ? { unit: spec.unit } : {}), claimIndex };

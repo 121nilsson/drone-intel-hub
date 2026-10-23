@@ -2,9 +2,9 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ServicesProvider, useServices } from "@/shared/infra/services";
 
-const { getStoreStatus, storeLoad, storeSeed } = vi.hoisted(() => ({
+const { getStoreStatus, storeLoadPage, storeSeed } = vi.hoisted(() => ({
   getStoreStatus: vi.fn(),
-  storeLoad: vi.fn(),
+  storeLoadPage: vi.fn(),
   storeSeed: vi.fn(),
 }));
 
@@ -12,7 +12,7 @@ const { getStoreStatus, storeLoad, storeSeed } = vi.hoisted(() => ({
 // must exist even when this test never selects the server backend.
 vi.mock("@/shared/infra/storage/store.functions", () => ({
   getStoreStatus,
-  storeLoad,
+  storeLoadPage,
   storeSeed,
   storePut: vi.fn(),
   storeRemove: vi.fn(),
@@ -35,7 +35,7 @@ function Probe() {
 beforeEach(() => {
   localStorage.clear();
   getStoreStatus.mockReset();
-  storeLoad.mockReset();
+  storeLoadPage.mockReset();
   storeSeed.mockReset();
 });
 
@@ -78,10 +78,10 @@ describe("storage selection", () => {
   it("does not fall back to local data when only part of the server catalog opens", async () => {
     getStoreStatus.mockResolvedValue({ postgres: true, provider: null, providerError: null });
     storeSeed.mockResolvedValue({ ok: true });
-    storeLoad.mockImplementation(({ data }: { data: { c: string } }) =>
+    storeLoadPage.mockImplementation(({ data }: { data: { c: string } }) =>
       data.c === "sources"
         ? Promise.reject(new Error("sources table unavailable"))
-        : Promise.resolve(null),
+        : Promise.resolve(JSON.stringify({ initialized: false, items: [], hasMore: false })),
     );
 
     render(

@@ -308,6 +308,8 @@ export interface ExtractedSpec {
   normalized?: NormalizedQuantity;
   money?: Money;
   moneyRange?: MoneyRange;
+  /** Canonical measurement unit set by normalization (e.g. "USD" for cost.unit). */
+  canonicalUnit?: string;
   /** Verbatim clause supporting this observation. */
   evidence?: string;
   /**

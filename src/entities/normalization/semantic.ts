@@ -59,6 +59,10 @@ export function semanticKeyFor(key: string, label = ""): string {
     return "range.intercept_ballistic";
   if (k === "tbm_intercept_range" || /tbm intercept range/i.test(lab)) return "range.intercept_tbm";
   if (k === "max_range" || k === "maximum_range" || k === "range_max") return "range.max";
+  // The key normalizer strips a trailing "_min" (e.g. "range_min" → "range"), so catch it
+  // on the original key before it collides with a bare "range".
+  if (key === "range_min" || /range_min$/i.test(key)) return "range.min";
+  if (k === "min_range" || k === "minimum_range" || k === "range_min") return "range.min";
   if (k === "combat_radius" || /combat radius/i.test(lab)) return "range.combat_radius";
   if (
     k === "link_range" ||
@@ -93,7 +97,14 @@ export function semanticKeyFor(key: string, label = ""): string {
   // A bare "altitude" is the airframe's own ceiling; a stated minimum keeps its own key.
   if (k === "altitude" && !/min(?:imum)?\b/i.test(lab)) return "altitude.max";
 
-  if (k === "warhead" || (k === "payload" && /warhead/i.test(lab))) return "payload.warhead";
+  if (
+    k === "warhead" ||
+    k === "warhead_mass" ||
+    k === "warhead_max" ||
+    k === "max_warhead" ||
+    (k === "payload" && /warhead/i.test(lab))
+  )
+    return "payload.warhead";
   if (k === "payload_mass" || /payload mass/i.test(lab)) return "payload.mass";
   if (
     k === "max_payload" ||
@@ -159,5 +170,6 @@ export function canonicalUnitForSemantic(semantic: string): string | undefined {
   if (semantic.startsWith("endurance.")) return "min";
   if (semantic.startsWith("power.")) return "W";
   if (semantic === "capacity.fuel") return "l";
+  if (semantic === "cost.unit") return undefined;
   return undefined;
 }

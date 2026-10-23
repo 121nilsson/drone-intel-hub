@@ -77,4 +77,25 @@ describe("normalizeExtraction", () => {
     expect(video && effectiveNatoBands(video)).toEqual(["C"]);
     expect(video?.band).toBe("L");
   });
+
+  it("reads currency from evidence when unit_cost value is a bare number", () => {
+    // Clark's AI extraction: value 50000 (number), currency only in evidence/raw.
+    const { extraction: e } = normalizeExtraction(
+      extraction({
+        specs: [
+          {
+            key: "unit_cost",
+            label: "Unit Cost / Price",
+            value: 50000,
+            evidence: "VoltX expects Clark will cost approximately $50,000 per unit.",
+            raw: "VoltX expects Clark will cost approximately $50,000 per unit.",
+          },
+        ],
+      }),
+    );
+    const spec = e.specs[0]!;
+    expect(spec.semantic).toBe("cost.unit");
+    expect(spec.canonicalUnit).toBe("USD");
+    expect(spec.money).toMatchObject({ amount: 50000, currency: "USD" });
+  });
 });

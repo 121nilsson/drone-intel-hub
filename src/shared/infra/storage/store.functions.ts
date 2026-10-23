@@ -53,9 +53,41 @@ export const getStoreStatus = createServerFn({ method: "POST" }).handler(async (
   return { postgres, provider, providerError };
 });
 
-export const storeLoad = createServerFn({ method: "POST" })
-  .validator((d: { c: Collection }) => ({ c: checkCollection(d?.c) }))
-  .handler(async ({ data }) => JSON.stringify(await (await store()).load(data.c)));
+/**
+ * One bounded slice of a collection.
+ *
+ * The whole candidates collection is already over the server-function output ceiling, and the
+ * dispatches cap can grow past it too. Returning the catalog as one string made a large catalog
+ * look like a broken storage backend. The byte budget keeps the serialized string (including
+ * JSON escaping) well below the transport limit; the doc limit bounds the database read.
+ */
+const LOAD_PAGE_DOCS = 200;
+const LOAD_PAGE_BYTES = 4 * 1024 * 1024;
+
+export const storeLoadPage = createServerFn({ method: "POST" })
+  .validator((d: { c: Collection; offset?: unknown }) => {
+    const offset = Number(d?.offset ?? 0);
+    if (!Number.isSafeInteger(offset) || offset < 0) throw new Error("Invalid offset");
+    return { c: checkCollection(d?.c), offset };
+  })
+  .handler(async ({ data }) => {
+    const s = await store();
+    const page = await s.loadPage(data.c, { offset: data.offset, limit: LOAD_PAGE_DOCS });
+    if (!page) return JSON.stringify({ initialized: false, items: [], hasMore: false });
+    const items: unknown[] = [];
+    let bytes = 0;
+    for (const item of page.items) {
+      const size = JSON.stringify(item).length + 1;
+      if (items.length && bytes + size > LOAD_PAGE_BYTES) break;
+      items.push(item);
+      bytes += size;
+    }
+    return JSON.stringify({
+      initialized: true,
+      items,
+      hasMore: page.hasMore || items.length < page.items.length,
+    });
+  });
 
 export const storeSeed = createServerFn({ method: "POST" })
   .validator((d: { c: Collection; items: unknown[] }) => {

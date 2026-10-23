@@ -177,4 +177,25 @@ describe("consensus", () => {
     );
     expect(c.display).toBe("5");
   });
+
+  it("reads currency from evidence for a numeric unit_cost claim", () => {
+    // Clark's stored claim: value 50000, no unit, no normalized, but evidence contains "$50,000".
+    const c = consensus({
+      key: "unit_cost",
+      label: "Unit Cost / Price",
+      semantic: "cost.unit",
+      discoveredBy: "ai",
+      claims: [
+        {
+          value: 50000,
+          source: "Defense Express",
+          date: "2026-10-23T12:01:36.545Z",
+          raw: "VoltX expects Clark will cost approximately $50,000 per unit and will be capable of intercepting not only drones but also cruise missiles.",
+          evidence: "VoltX expects Clark will cost approximately $50,000 per unit.",
+        },
+      ],
+    });
+    expect(c.display).toBe("50000 USD");
+    expect(c.sources).toBe(1);
+  });
 });

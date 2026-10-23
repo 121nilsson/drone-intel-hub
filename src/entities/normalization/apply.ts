@@ -71,8 +71,13 @@ export function mergeLinks(existing: RFLink[], incoming: RFLink[]): RFLink[] {
 
 function normalizeSpec(spec: ExtractedSpec): ExtractedSpec {
   const semantic = semanticKeyFor(spec.key, spec.label);
-  const money =
-    semantic === "cost.unit" && typeof spec.value === "string" ? parseMoney(spec.value) : undefined;
+  const moneySource =
+    semantic === "cost.unit"
+      ? typeof spec.value === "string"
+        ? spec.value
+        : (spec.evidence ?? spec.raw ?? "")
+      : undefined;
+  const money = moneySource ? parseMoney(moneySource) : undefined;
   const moneyRange =
     semantic === "cost.unit" && typeof spec.value === "string"
       ? parseMoneyRange(spec.value)
@@ -94,7 +99,11 @@ function normalizeSpec(spec: ExtractedSpec): ExtractedSpec {
     ...spec,
     semantic,
     ...(day ? { value: day } : {}),
-    ...(targetUnit ? { canonicalUnit: targetUnit } : {}),
+    ...(targetUnit
+      ? { canonicalUnit: targetUnit }
+      : money?.currency
+        ? { canonicalUnit: money.currency }
+        : {}),
     ...(typeof spec.value === "string" ? { raw: spec.value } : {}),
     ...(measured ? { normalized: measured } : {}),
     ...(money ? { money } : {}),

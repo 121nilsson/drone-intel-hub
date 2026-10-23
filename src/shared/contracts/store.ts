@@ -67,6 +67,22 @@ export function documentsOf<T>(loaded: VersionedDoc<T>[] | null): T[] | null {
 }
 
 /**
+ * One read of a collection, used by the remote bridge so a large catalog never has to cross
+ * the server-function boundary in a single serialized response.
+ */
+export interface StorePage<T> {
+  items: VersionedDoc<T>[];
+  /** Another page exists after this one. */
+  hasMore: boolean;
+}
+
+export interface StorePageOptions {
+  offset: number;
+  /** Maximum documents to return; the store may return fewer when the collection is capped. */
+  limit: number;
+}
+
+/**
  * Async document persistence — the only seam between repositories and storage.
  * Implementations: browser localStorage, remote server-function bridge, PostgreSQL.
  *
@@ -79,6 +95,14 @@ export function documentsOf<T>(loaded: VersionedDoc<T>[] | null): T[] | null {
 export interface DocumentStore {
   /** Returns null when the collection has never been initialised. */
   load<C extends Collection>(c: C): Promise<VersionedDoc<CollectionMap[C]>[] | null>;
+  /**
+   * One page of `load`, for transports with a response-size ceiling. Optional so the browser
+   * store and server-local callers keep using the whole-collection read.
+   */
+  loadPage?<C extends Collection>(
+    c: C,
+    opts: StorePageOptions,
+  ): Promise<StorePage<CollectionMap[C]> | null>;
   /** Initialise an empty collection with seed data. */
   seed<C extends Collection>(c: C, items: CollectionMap[C][]): Promise<void>;
   /**

@@ -110,6 +110,7 @@ export function platformOf(source: string): string {
   if (host) {
     if (/^(?:t|telegram)\.me$/.test(host)) return "telegram";
     if (/^(?:x|twitter|mobile\.twitter)\.com$|^nitter\./.test(host)) return "x";
+    if (/^(?:www\.)?bsky\.app$/.test(host)) return "bluesky";
     if (/(?:^|\.)reddit\.com$/.test(host)) return "reddit";
     if (/(?:^|\.)youtube\.com$|^youtu\.be$/.test(host)) return "youtube";
     return "web";

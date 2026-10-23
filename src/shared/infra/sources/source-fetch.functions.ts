@@ -1,10 +1,11 @@
 import { createServerFn } from "@tanstack/react-start";
 import { fetchOne } from "./fetch-posts";
+import type { MonitoredSource } from "@/entities/source/types";
 
 export type { FetchedPost } from "./fetch-posts";
 
 interface Input {
-  platform: "X" | "Telegram" | "RSS" | "Web";
+  platform: "X" | "Telegram" | "RSS" | "Web" | "Bluesky";
   handle: string;
 }
 
@@ -23,13 +24,18 @@ export const fetchSourcePosts = createServerFn({ method: "POST" })
   })
   .handler(async ({ data }) => {
     const { extractArticleText } = await import("../article.server");
-    return fetchOne(
-      { platform: data.platform, handle: data.handle },
-      {
-        timeoutMs: Number(process.env["FETCH_TIMEOUT_MS"] ?? 15_000),
-        ...(process.env["X_BRIDGE_BASE"] ? { xBridgeBase: process.env["X_BRIDGE_BASE"] } : {}),
-        ...(process.env["X_JINA_READER"] === "1" ? { xJinaReader: true } : {}),
-        articleText: extractArticleText,
-      },
-    );
+    const source: MonitoredSource = {
+      id: `fetch-${data.handle}`,
+      name: data.handle,
+      platform: data.platform,
+      handle: data.handle,
+      domain: "Multi",
+      notes: "Ad-hoc manual fetch",
+    };
+    return fetchOne(source, {
+      timeoutMs: Number(process.env["FETCH_TIMEOUT_MS"] ?? 15_000),
+      ...(process.env["X_BRIDGE_BASE"] ? { xBridgeBase: process.env["X_BRIDGE_BASE"] } : {}),
+      ...(process.env["X_JINA_READER"] === "1" ? { xJinaReader: true } : {}),
+      articleText: extractArticleText,
+    });
   });

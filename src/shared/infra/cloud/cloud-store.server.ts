@@ -2,6 +2,8 @@ import type {
   Collection,
   CollectionMap,
   DocumentStore,
+  StorePage,
+  StorePageOptions,
   VersionedDoc,
 } from "@/shared/contracts/store";
 
@@ -19,11 +21,11 @@ async function client() {
   };
 }
 
-const ORDER: Record<Collection, { col: string; asc: boolean; limit?: number }> = {
+const ORDER: Record<Collection, { col: string; asc: boolean; cap?: number }> = {
   drones: { col: "name", asc: true },
   candidates: { col: "created_at", asc: false },
   sources: { col: "position", asc: false },
-  dispatches: { col: "created_at", asc: false, limit: 3000 },
+  dispatches: { col: "created_at", asc: false, cap: 3000 },
   procurements: { col: "created_at", asc: false },
   taxonomies: { col: "taxonomy", asc: true },
   taxonomy_candidates: { col: "last_seen", asc: false },
@@ -126,8 +128,13 @@ export class CloudStore implements DocumentStore {
   async load<C extends Collection>(c: C): Promise<VersionedDoc<CollectionMap[C]>[] | null> {
     const db = await client();
     const o = ORDER[c];
-    let q = db.from(c).select("data").order(o.col, { ascending: o.asc });
-    if (o.limit) q = q.limit(o.limit);
+    let q = db
+      .from(c)
+      .select("data")
+      .order(o.col, { ascending: o.asc })
+      // A total order keeps paged reads from repeating or skipping rows on ties.
+      .order("id", { ascending: true });
+    if (o.cap) q = q.limit(o.cap);
     const rows = check<{ data: CollectionMap[C] }[]>(await q);
     if (rows.length === 0) {
       const meta = check<unknown[]>(await db.from("collection_meta").select("name").eq("name", c));
@@ -138,6 +145,36 @@ export class CloudStore implements DocumentStore {
     // this one keeps the pre-existing last-write-wins behaviour rather than pretending to
     // have a revision it cannot check.
     return rows.map((r) => ({ doc: r.data, rev: 0 }));
+  }
+
+  async loadPage<C extends Collection>(
+    c: C,
+    opts: StorePageOptions,
+  ): Promise<StorePage<CollectionMap[C]> | null> {
+    const db = await client();
+    const o = ORDER[c];
+    const offset = Math.max(0, Math.floor(opts.offset));
+    const limit = Math.max(1, Math.floor(opts.limit));
+    if (o.cap !== undefined && offset >= o.cap) return { items: [], hasMore: false };
+    // Supabase's range is inclusive; end one past `limit` to learn whether another page exists.
+    const end =
+      o.cap === undefined ? offset + limit : Math.min(offset + limit, Math.max(offset, o.cap - 1));
+    const rows = check<{ data: CollectionMap[C] }[]>(
+      await db
+        .from(c)
+        .select("data")
+        .order(o.col, { ascending: o.asc })
+        .order("id", { ascending: true })
+        .range(offset, end),
+    );
+    if (rows.length === 0 && offset === 0) {
+      const meta = check<unknown[]>(await db.from("collection_meta").select("name").eq("name", c));
+      if (!meta.length) return null;
+    }
+    return {
+      items: rows.slice(0, limit).map((r) => ({ doc: r.data, rev: 0 })),
+      hasMore: rows.length > limit,
+    };
   }
 
   async seed<C extends Collection>(c: C, items: CollectionMap[C][]) {

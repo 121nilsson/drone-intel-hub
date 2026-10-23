@@ -45,7 +45,7 @@ function extractMoney(raw: string, add: AddSpec, scales: RuleSnapshot["scales"] 
   if (unit) {
     const money = parseMoney(unit.value, scales);
     if (money) {
-      add("unit_cost", "Unit Cost / Price", money.amount, undefined, unit.evidence);
+      add("unit_cost", "Unit Cost / Price", money.amount, money.currency, unit.evidence);
       return;
     }
   }

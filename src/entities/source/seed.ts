@@ -657,6 +657,17 @@ export const SEED_SOURCES: MonitoredSource[] = [
     domain: "Air",
     notes: "UAV tracking, FPV development and commercial drone militarisation.",
   },
+  // --- Bluesky Sources ---
+  {
+    id: "nordic-defence-sector",
+    name: "Nordic Defence Sector",
+    platform: "Bluesky",
+    handle: "nordicdefencesector.com",
+    domain: "Multi",
+    notes:
+      "Nordic defence industry and drone/defence tech reporting on Bluesky. Public API, no bridge required.",
+    autoSync: true,
+  },
   // --- Maritime, teardown & EW ---
   {
     id: "covert-shores",

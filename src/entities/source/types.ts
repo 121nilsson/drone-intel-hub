@@ -1,7 +1,7 @@
 import type { Domain } from "@/entities/drone/types";
 
-export type SourcePlatform = "X" | "Telegram" | "RSS" | "Web";
-export const PLATFORMS: SourcePlatform[] = ["X", "Telegram", "RSS", "Web"];
+export type SourcePlatform = "X" | "Telegram" | "RSS" | "Web" | "Bluesky";
+export const PLATFORMS: SourcePlatform[] = ["X", "Telegram", "RSS", "Web", "Bluesky"];
 
 export interface MonitoredSource {
   id: string;

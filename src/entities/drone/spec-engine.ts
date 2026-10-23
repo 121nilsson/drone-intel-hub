@@ -48,10 +48,18 @@ export function mergeSpecs(
 ): Drone {
   const date = new Date().toISOString();
   const next: SpecAttribute[] = drone.specs.map((s) => ({ ...s, claims: [...s.claims] }));
+  // Signatures of claims added in this batch, so two specs from the same extraction that
+  // restate the same figure in the same words are recorded once. Claims already on the drone
+  // from earlier sources are intentionally not part of the key - different sources stating the
+  // same figure are separate evidence.
+  const added = new Set<string>();
   for (const e of specs) {
     const semantic = attributeSemantic(e);
     const hit = next.find((s) => attributeSemantic(s) === semantic);
     const claim = claimFor(e, source, date, ref);
+    const sig = `${semantic}|${String(claim.value)}|${claim.evidence ?? ""}`;
+    if (added.has(sig)) continue;
+    added.add(sig);
     if (hit) {
       if (!hit.semantic) hit.semantic = semantic;
       if (!hit.canonicalUnit && e.normalized?.canonicalUnit)

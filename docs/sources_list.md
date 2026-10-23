@@ -6,7 +6,7 @@
 > **Reliability ratings** reflect how often a source's claims are independently confirmed —
 > not political alignment. All sources carry some bias; treat nothing here as ground truth.
 >
-> The app currently supports four platform types:
+> The app currently supports five platform types:
 >
 > - **Telegram** — scraped via `t.me/s/<handle>` (public web preview, ~20 latest posts)
 > - **RSS** — standard Atom/RSS feed URL; teaser items can be followed to full article bodies
@@ -15,6 +15,9 @@
 >   and link text only.
 > - **X** — @handle with optional `X_BRIDGE_BASE` (https RSS bridge). Without it, X sources error
 >   with a message that a bridge or paid API is needed.
+> - **Bluesky** — public `at://` handle via the `public.api.bsky.app` API. No bridge, no paid
+>   tier, no auth required. Handle can be a custom domain (e.g. `nordicdefencesector.com`) or a
+>   `bsky.app` profile URL.
 
 ---
 
@@ -195,6 +198,14 @@
 | `@200_zoka`        | 200 Zoka              | Multi  | Ukrainian OSINT. Documents new UGV and FPV types with geotagged imagery.                  |
 | `@Nrg8000`         | Nrg8000               | Air    | UAV tracking and identification. Strong on FPV and commercial drone militarisation.       |
 | `@bayraktar_1love` | Bayraktar 1love       | Air    | Already seeded. Primary account is X, not Telegram.                                       |
+
+---
+
+## Bluesky Sources
+
+| Handle / URL              | Name                  | Domain | Notes                                                                             |
+| ------------------------- | --------------------- | ------ | --------------------------------------------------------------------------------- |
+| `nordicdefencesector.com` | Nordic Defence Sector | Multi  | Nordic defence industry and drone/defence tech reporting on Bluesky. Auto-synced. |
 
 ---
 

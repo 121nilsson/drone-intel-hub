@@ -3,34 +3,66 @@ import {
   type Collection,
   type CollectionMap,
   type DocumentStore,
+  type StorePage,
+  type StorePageOptions,
   type VersionedDoc,
 } from "@/shared/contracts/store";
 import { db, type Sql } from "./db.server";
 import { sanitizeJson, sanitizeText } from "@/shared/infra/json-sanitize";
 
-const ORDER: Record<Collection, string> = {
-  drones: "name asc",
-  candidates: "created_at desc",
-  sources: "position desc",
+const ORDER: Record<Collection, { by: string; cap?: number }> = {
+  // `id` makes the order total: without it ties can come back in a different order between
+  // paged reads, which duplicates or skips rows even when the data has not changed.
+  drones: { by: "name asc, id asc" },
+  candidates: { by: "created_at desc, id asc" },
+  sources: { by: "position desc, id asc" },
   // Newest first; capped so the browser cache stays bounded as the archive grows.
-  dispatches: "created_at desc limit 3000",
-  procurements: "created_at desc",
-  taxonomies: "taxonomy asc, canonical_id asc",
-  taxonomy_candidates: "last_seen desc",
+  dispatches: { by: "created_at desc, id asc", cap: 3000 },
+  procurements: { by: "created_at desc, id asc" },
+  taxonomies: { by: "taxonomy asc, canonical_id asc, id asc" },
+  taxonomy_candidates: { by: "last_seen desc, id asc" },
 };
 
 /** PostgreSQL implementation. Schema lives in /migrations (plain SQL, portable). */
 export class PostgresStore implements DocumentStore {
   async load<C extends Collection>(c: C): Promise<VersionedDoc<CollectionMap[C]>[] | null> {
     const conn = db();
+    const o = ORDER[c];
     const rows = await conn.unsafe<{ data: CollectionMap[C]; rev: string | number }[]>(
-      `select data, rev from ${c} order by ${ORDER[c]}`,
+      `select data, rev from ${c} order by ${o.by}${o.cap ? ` limit ${o.cap}` : ""}`,
     );
     if (rows.length === 0) {
       const [meta] = await conn`select 1 from collection_meta where name = ${c}`;
       if (!meta) return null;
     }
     return rows.map((r) => ({ doc: r.data, rev: Number(r.rev) }));
+  }
+
+  async loadPage<C extends Collection>(
+    c: C,
+    opts: StorePageOptions,
+  ): Promise<StorePage<CollectionMap[C]> | null> {
+    const conn = db();
+    const o = ORDER[c];
+    const offset = Math.max(0, Math.floor(opts.offset));
+    const limit = Math.max(1, Math.floor(opts.limit));
+    if (o.cap !== undefined && offset >= o.cap) return { items: [], hasMore: false };
+    // Fetch one extra row: its presence is the only count this needs to know whether another
+    // page exists, without a second count(*) over a growing table.
+    const remaining = o.cap === undefined ? limit + 1 : Math.min(limit + 1, o.cap - offset);
+    const rows = await conn.unsafe<{ data: CollectionMap[C]; rev: string | number }[]>(
+      `select data, rev from ${c} order by ${o.by} limit $1 offset $2`,
+      [remaining, offset],
+    );
+    if (rows.length === 0 && offset === 0) {
+      const [meta] = await conn`select 1 from collection_meta where name = ${c}`;
+      if (!meta) return null;
+    }
+    const items = rows.slice(0, limit).map((r) => ({
+      doc: r.data,
+      rev: Number(r.rev),
+    }));
+    return { items, hasMore: rows.length > limit };
   }
 
   /**
