@@ -178,7 +178,12 @@ const UNITS: UnitDef[] = [
     toCanonical: 1000,
     pattern: /(?:metric\s+tons?|tonnes?|т)(?![\p{L}\p{N}])/iu,
   },
-  { token: "g", dimension: "mass", toCanonical: 0.001, pattern: /(?:grams?|гр)(?![\p{L}\p{N}])/iu },
+  { 
+    token: "g", 
+    dimension: "mass", 
+    toCanonical: 0.001, 
+    pattern: /(?:grams?|гр)(?![\p{L}\p{N}])/iu
+  },
   {
     token: "g",
     dimension: "mass",

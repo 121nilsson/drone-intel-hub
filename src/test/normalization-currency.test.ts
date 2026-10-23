@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseMoney, toUSD } from "@/entities/normalization/currency";
+import { extractPrice, extractPriceNumeric } from "@/shared/infra/heuristics/pricing";
 
 describe("parseMoney", () => {
   it("keeps the currency that was written", () => {
@@ -29,6 +30,18 @@ describe("parseMoney", () => {
     expect(parseMoney("$10 CAD")?.currency).toBe("CAD");
     expect(parseMoney("A$10")?.currency).toBe("AUD");
   });
+
+  it("parses a currency symbol written as a suffix", () => {
+    expect(parseMoney("1 900 000 ₽")).toMatchObject({ amount: 1_900_000, currency: "RUB" });
+    expect(parseMoney("50 $")).toMatchObject({ amount: 50, currency: "USD" });
+    expect(parseMoney("250000 ₴")).toMatchObject({ amount: 250_000, currency: "UAH" });
+    expect(parseMoney("1.5 mn $")).toMatchObject({ amount: 1.5e6, currency: "USD" });
+    // The full clause the user reported: suffix currency inside surrounding text.
+    expect(parseMoney("Matrice 4Т -4шт- 1 900 000 ₽")).toMatchObject({
+      amount: 1_900_000,
+      currency: "RUB",
+    });
+  });
 });
 
 describe("parseMoney reads magnitudes and currencies from the shared lexicons", () => {
@@ -51,5 +64,40 @@ describe("parseMoney reads magnitudes and currencies from the shared lexicons", 
     expect(parseMoney("$2 billion")).toMatchObject({ amount: 2e9, currency: "USD" });
     expect(parseMoney("$2.5m")).toMatchObject({ amount: 2.5e6, currency: "USD" });
     expect(parseMoney("10 million euros")).toMatchObject({ amount: 10e6, currency: "EUR" });
+  });
+});
+
+describe("currency symbol after the amount", () => {
+  it("parses suffix symbols with magnitudes and abbreviations", () => {
+    expect(parseMoney("1 900 000 ₽")).toMatchObject({ amount: 1_900_000, currency: "RUB" });
+    expect(parseMoney("1,5 млн ₽")).toMatchObject({ amount: 1.5e6, currency: "RUB" });
+    expect(parseMoney("45 тыс. ₽")).toMatchObject({ amount: 45e3, currency: "RUB" });
+    expect(parseMoney("500 ¥")).toMatchObject({ amount: 500, currency: "JPY" });
+    expect(parseMoney("1 900 000 ₽")).toMatchObject({ amount: 1_900_000 });
+  });
+
+  it("does not pair the symbol with a number that follows it", () => {
+    expect(parseMoney("1 900 000 ₽ 2 шт")).toMatchObject({ amount: 1_900_000, currency: "RUB" });
+    expect(parseMoney("Matrice 4 1 900 000 ₽")).toMatchObject({ amount: 1_900_000 });
+    expect(parseMoney("Matrice 4 $2000")).toMatchObject({ amount: 2000, currency: "USD" });
+  });
+
+  it("does not collapse a suffix-symbol range", () => {
+    expect(parseMoney("1 500 000 ₽ – 2 000 000 ₽")).toBeUndefined();
+    expect(parseMoney("1,5 млн – 2 млн ₽")).toBeUndefined();
+  });
+
+  it("extractPrice keeps magnitude, range and non-breaking spaces", () => {
+    expect(extractPrice("цена 1,5 млн ₽")).toBe("1,5 млн ₽");
+    expect(extractPriceNumeric("цена 1,5 млн ₽")).toMatchObject({ amount: 1.5e6, currency: "RUB" });
+    expect(extractPrice("50-60 $")).toBe("50 $ - 60 $");
+    expect(extractPriceNumeric("1 500 000 – 2 000 000 ₽")).toMatchObject({
+      min: 1_500_000,
+      max: 2_000_000,
+      currency: "RUB",
+    });
+    expect(extractPrice("1 900 000 ₽")).toBe("1 900 000 ₽");
+    expect(extractPrice("500 ¥")).toBe("500 ¥");
+    expect(extractPrice("1 900 000 ₽ 2 шт")).toBe("1 900 000 ₽");
   });
 });

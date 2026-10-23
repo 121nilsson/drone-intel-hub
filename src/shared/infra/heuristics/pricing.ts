@@ -1,4 +1,6 @@
 import {
+  NUM_STRICT,
+  SYMBOL_ALT,
   parseMoney,
   parseMoneyRange,
   type ExtraScales,
@@ -13,7 +15,7 @@ import { alt, compoundAlt, currencyAlt, magnitudeAlt } from "@/shared/lexicons";
  * word - "$2 miljard" would read as 2 million - the same silent drop that once put "$2" on a
  * dossier for a "$2 billion" arms deal.
  */
-const CUR = "[$€£₽₴]";
+const CUR = SYMBOL_ALT;
 const STATIC_MAG = magnitudeAlt();
 const CUR_WORD = currencyAlt();
 const COMPOUND = compoundAlt();
@@ -25,12 +27,24 @@ const END = "(?![\\p{L}])";
  */
 export function extractPrice(raw: string, extra: ExtraScales = []): string | undefined {
   const MAG = extra.length ? magnitudeAlt(extra.map((x) => x.pattern)) : STATIC_MAG;
+  raw = raw.replace(/[\p{Zs}]/gu, " ");
   const AMT = `(\\d[\\d,. ]*\\d|\\d)\\s*(${MAG})?`;
   const re = new RegExp(
-    `(${CUR})\\s?${AMT}${END}(?:\\s*(?:-|–|—|to)\\s*${CUR}?\\s?${AMT}${END})?`,
+    `(${CUR})\\s?${AMT}${END}(?:\\s*(?:-|–|—|to)\\s*(?:${CUR})?\\s?${AMT}${END})?`,
     "u",
   );
   const m = raw.match(re);
+  // Symbol after the amount ("1 900 000 ₽", "1,5 млн ₽", "50-60 $"). Whichever form starts first
+  // wins, so a trailing symbol is not paired with the number that follows it.
+  const AMT_S = `(${NUM_STRICT})\\s*(?:(${MAG})\\.?)?`;
+  const sm = raw.match(
+    new RegExp(`${AMT_S}(?:\\s*(?:-|–|—|to)\\s*${AMT_S})?\\s?(${CUR})(?![\\p{L}\\d])`, "u"),
+  );
+  if (sm && (!m || sm.index! < m.index!)) {
+    const mag = sm[2] ?? sm[4];
+    const part = (n: string) => `${n}${mag ? ` ${mag}` : ""} ${sm[5]}`;
+    return sm[3] ? `${part(sm[1]!)} - ${part(sm[3])}` : part(sm[1]!);
+  }
   if (m) {
     const fmt = (a: string, s?: string) =>
       `${m[1]}${a.trim()}${s ? (s.length > 2 ? ` ${s}` : s) : ""}`;
@@ -42,7 +56,9 @@ export function extractPrice(raw: string, extra: ExtraScales = []): string | und
   const w = raw.match(
     new RegExp(`(\\d[\\d,. ]*\\d|\\d)\\s*(${MAG})?\\s*(${CUR_WORD})${END}`, "iu"),
   );
-  return w ? `${w[1]}${w[2] ? ` ${w[2]}` : ""} ${w[3]!.toUpperCase()}` : undefined;
+  if (w) return `${w[1]}${w[2] ? ` ${w[2]}` : ""} ${w[3]!.toUpperCase()}`;
+
+  return undefined;
 }
 
 /** The figure extractPrice found, as a number in its written currency (range kept as a range). */

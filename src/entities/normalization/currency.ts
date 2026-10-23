@@ -43,6 +43,26 @@ const SYMBOL: Record<string, string> = {
 };
 
 const NUM = String.raw`[+-]?\d[\d.,\s]*\d|\d`;
+/**
+ * Currency symbols, longest first; the one list the prefix and suffix parsers and the heuristic
+ * price extractor share, so they cannot disagree on what counts as a currency.
+ */
+export const SYMBOL_ALT = String.raw`C\$|A\$|[$€£₽₴₺¥]`;
+/**
+ * A number that cannot swallow a neighbouring one: groups are exactly three digits, so the model
+ * number in "Matrice 4 1 900 000 ₽" stays out of the amount. Used where the number comes first.
+ */
+export const NUM_STRICT = String.raw`(?<![\d.,])(?:\d{1,3}(?:[ .,]\d{3})+(?:[.,]\d+)?|\d+(?:[.,]\d+)?)`;
+
+/** ISO code for a symbol; "$" is USD unless the same text says CAD or AUD. */
+function symbolCurrency(symbol: string, text: string): string | undefined {
+  if (symbol === "$") {
+    if (/\bCAD\b|C\$/.test(text)) return "CAD";
+    if (/\bAUD\b|A\$/.test(text)) return "AUD";
+  }
+  return SYMBOL[symbol.toUpperCase()] ?? SYMBOL[symbol];
+}
+
 const END = String.raw`(?![\p{L}])`;
 
 /**
@@ -50,7 +70,13 @@ const END = String.raw`(?![\p{L}])`;
  * vocabulary the heuristic extractor uses - so "50 miljoner kronor", "45,6 млн грн" and
  * "50 mkr" parse without code changes here. Compiled once, on first use.
  */
-type Patterns = { symbol: RegExp; compound: RegExp; word: RegExp };
+type Patterns = {
+  range: RegExp;
+  symbol: RegExp;
+  symbolSuffix: RegExp;
+  compound: RegExp;
+  word: RegExp;
+};
 /** Keyed by the extra words, so each distinct rule set compiles once. */
 const patterns = new Map<string, Patterns>();
 function re(extra: ExtraScales = []): Patterns {
@@ -59,7 +85,17 @@ function re(extra: ExtraScales = []): Patterns {
   if (hit) return hit;
   const mag = magnitudeAlt(extra.map((x) => x.pattern));
   const built: Patterns = {
-    symbol: new RegExp(`(C\\$|A\\$|[$€£₽₴₺¥])\\s*(${NUM})(?:\\s*(${mag})\\.?${END})?`, "iu"),
+    // A figure, optionally followed by a magnitude or currency, then a dash and another figure.
+    range: new RegExp(
+      `\\d\\s*(?:(?:${mag})\\.?|${SYMBOL_ALT}|[A-Z]{3})?\\s*(?:-|–|—|\\bto\\b)\\s*(?:${SYMBOL_ALT}|[A-Z]{3})?\\s*\\d`,
+      "iu",
+    ),
+    symbol: new RegExp(`(${SYMBOL_ALT})\\s*(${NUM})(?:\\s*(${mag})\\.?${END})?`, "iu"),
+    // Symbol after the amount, e.g. "1 900 000 ₽" or "45 тыс. ₽"; common in RU/UA sources.
+    symbolSuffix: new RegExp(
+      `(${NUM_STRICT})\\s*(?:(${mag})\\.?)?\\s*(${SYMBOL_ALT})(?![\\p{L}\\d])`,
+      "iu",
+    ),
     compound: new RegExp(`(${NUM})\\s*(${compoundAlt()})${END}`, "iu"),
     word: new RegExp(`(${NUM})\\s*(?:(${mag})\\.?\\s*)?(${currencyAlt()})${END}`, "iu"),
   };
@@ -91,15 +127,22 @@ function amountOf(
 export function parseMoney(raw: string, extra: ExtraScales = []): Money | undefined {
   const text = raw.trim().replace(/[\u00a0\u202f\u2009]/g, " ");
   if (!text) return undefined;
-  if (/\d\s*(?:-|–|—|\bto\b)\s*(?:[$€£₽₴₺¥]|[A-Z]{3})?\s*\d/i.test(text)) return undefined;
-  const { symbol, compound, word } = re(extra);
+  const { range, symbol, symbolSuffix, compound, word } = re(extra);
+  if (range.test(text)) return undefined;
 
-  const s = text.match(symbol);
-  if (s) {
-    let currency = SYMBOL[s[1]!.toUpperCase()] ?? SYMBOL[s[1]!];
-    if (s[1] === "$" && /\bCAD\b|C\$/.test(text)) currency = "CAD";
-    if (s[1] === "$" && /\bAUD\b|A\$/.test(text)) currency = "AUD";
-    const amount = amountOf(s[2]!, s[3], extra);
+  // Whichever form starts first wins: in "1 900 000 ₽ 2 шт" the prefix form would pair the
+  // trailing symbol with the "2" that follows it.
+  const pre = text.match(symbol);
+  const post = text.match(symbolSuffix);
+  const hit =
+    post && (!pre || post.index! < pre.index!)
+      ? { sym: post[3]!, num: post[1]!, mag: post[2] }
+      : pre
+        ? { sym: pre[1]!, num: pre[2]!, mag: pre[3] }
+        : undefined;
+  if (hit) {
+    const currency = symbolCurrency(hit.sym, text);
+    const amount = amountOf(hit.num, hit.mag, extra);
     return currency && amount !== undefined ? { amount, currency, raw } : undefined;
   }
 

@@ -6,3 +6,8 @@ pnpm-lock.yaml
 package-lock.json
 bun.lock
 routeTree.gen.ts
+
+# Lovable-generated integration glue, marked "automatically generated — do not edit".
+# The build regenerates it, so formatting it here is undone on the next run; the lint
+# config excludes the same area (see eslint.config.js).
+src/integrations

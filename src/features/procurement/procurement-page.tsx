@@ -94,7 +94,15 @@ function ContractTable({ rows }: { rows: Procurement[] }) {
   const drones = useDrones();
   return (
     <div className="hidden overflow-x-auto border border-border bg-card/80 md:block">
-      <table className="w-full min-w-[860px] text-sm" data-testid="procurement-table">
+      <table className="w-full min-w-[960px] table-fixed text-sm" data-testid="procurement-table">
+        <colgroup>
+          <col className="w-[24%]" />
+          <col className="w-[15%]" />
+          <col className="w-[13%]" />
+          <col className="w-[10%]" />
+          <col className="w-[22%]" />
+          <col className="w-[16%]" />
+        </colgroup>
         <thead>
           <tr className="border-b border-border text-left font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
             <th className="px-3 py-2">Company</th>
@@ -120,7 +128,10 @@ function ContractTable({ rows }: { rows: Procurement[] }) {
                     )}
                   </p>
                   {contract.notes && (
-                    <p className="mt-1 max-w-[22rem] break-words text-xs text-muted-foreground">
+                    <p
+                      className="mt-1 line-clamp-3 break-words text-xs text-muted-foreground"
+                      title={contract.notes}
+                    >
                       {contract.notes}
                     </p>
                   )}
@@ -133,7 +144,7 @@ function ContractTable({ rows }: { rows: Procurement[] }) {
                     </p>
                   )}
                 </td>
-                <td className="whitespace-nowrap px-3 py-3 font-mono text-primary">
+                <td className="px-3 py-3 font-mono text-primary">
                   {contract.amount ?? "—"}
                   {contract.currency && (
                     <Tag className="ml-1.5 align-middle">{contract.currency}</Tag>
@@ -159,7 +170,7 @@ function ContractTable({ rows }: { rows: Procurement[] }) {
                     )}
                   </div>
                 </td>
-                <td className="max-w-[16rem] px-3 py-3">
+                <td className="min-w-0 px-3 py-3">
                   <SourceRef
                     source={contract.source}
                     href={contract.sourceUrl}
