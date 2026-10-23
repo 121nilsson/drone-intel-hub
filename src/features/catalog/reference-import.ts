@@ -1,3 +1,4 @@
+import { systemSlug } from "@/entities/drone/name-key";
 import type { Drone, DroneReference, Extraction, ReferenceCard } from "@/entities/drone/types";
 import { normalizeExtraction } from "@/entities/normalization/apply";
 import { attributeSemantic, mergeSpecs } from "@/entities/drone/spec-engine";
@@ -293,12 +294,8 @@ function createDrone(card: ReferenceCard, id: string, now: string): Drone {
 }
 
 function freshId(card: ReferenceCard, catalog: readonly Drone[]): string {
-  const base = card.name
-    .normalize("NFKC")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-  const stem = base || card.wikidataId.toLowerCase();
+  const base = systemSlug(card.name);
+  const stem = base === "system" ? card.wikidataId.toLowerCase() : base;
   const taken = new Set(catalog.map((d) => d.id));
   if (!taken.has(stem)) return stem;
   const suffixed = `${stem}-${card.wikidataId.toLowerCase()}`;

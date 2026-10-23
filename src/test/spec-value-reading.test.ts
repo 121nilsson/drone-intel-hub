@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { systemSlug } from "@/entities/drone/name-key";
 import { semanticKeyFor } from "@/entities/normalization/semantic";
 import { mergeSpecs } from "@/entities/drone/spec-engine";
 import type { Drone } from "@/entities/drone/types";
@@ -74,5 +75,14 @@ describe("K3 Scout: one top speed, not three", () => {
     const out = mergeSpecs(drone, [], "t");
     expect(out.specs.map((s) => s.semantic)).toEqual(["speed.max", "speed.cruise"]);
     expect(out.specs[0]!.claims.map((c) => c.value)).toEqual([55, 102]);
+  });
+});
+
+describe("systemSlug", () => {
+  it("gives Cyrillic names a readable id stem", () => {
+    expect(systemSlug("СЁМАБОТ")).toBe("semabot");
+    expect(systemSlug("Калитка-КА")).toBe("kalitka-ka");
+    expect(systemSlug("Shahed-136")).toBe("shahed-136");
+    expect(systemSlug("无人机")).toBe("system");
   });
 });

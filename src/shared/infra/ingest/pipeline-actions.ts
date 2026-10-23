@@ -1,3 +1,4 @@
+import { systemSlug } from "@/entities/drone/name-key";
 import type { Candidate, Drone, Extraction } from "@/entities/drone/types";
 import type { PipelineDeps } from "./pipeline-types";
 import {
@@ -24,13 +25,7 @@ export function promote(
     `Uncataloged ${e.domain ?? "system"} ${c.id.slice(0, 4).toUpperCase()}`;
   const now = new Date().toISOString();
   const base: Drone = {
-    id:
-      name
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "-")
-        .replace(/^-|-$/g, "") +
-      "-" +
-      c.id.slice(0, 4),
+    id: `${systemSlug(name)}-${c.id.slice(0, 4)}`,
     name,
     aliases: e.aliases,
     domain: e.domain ?? "Multi",

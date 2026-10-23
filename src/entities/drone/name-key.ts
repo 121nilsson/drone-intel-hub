@@ -111,3 +111,20 @@ export function mentionsPhonetic(text: string, name: string): boolean {
   const escaped = stem.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   return new RegExp(` ${escaped}[a-z]{0,4} `).test(hay);
 }
+
+/**
+ * URL-safe id stem for a system name, readable in any script this catalogue meets:
+ * "СЁМАБОТ" is "semabot", "Калитка-КА" is "kalitka-ka". Names with no Latin or Cyrillic letters
+ * (a CJK name) fall back to "system", so an id never starts with a bare hyphen.
+ */
+export function systemSlug(name: string): string {
+  let t = "";
+  for (const ch of name.normalize("NFKC").toLowerCase()) t += CYRILLIC[ch] ?? ch;
+  return (
+    t
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 60)
+      .replace(/-+$/, "") || "system"
+  );
+}

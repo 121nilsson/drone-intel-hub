@@ -64,7 +64,7 @@ export type ContradictionAdjudicator = (input: ContradictionInput) => Promise<Co
  * week's reporting (features/briefing/briefing-data.ts), not from catalog edits.
  */
 export const BRIEFING_SUMMARY_SYSTEM =
-  "Write a terse 4-6 sentence executive intelligence summary of the past week's drone and counter-drone reporting, using only the context given. Cover the most reported systems and where they were reported from, systems seen for the first time, notable new specification or capability claims (say when a claim is disputed), and any trend across reports. Name systems; do not list counts for their own sake. No preamble.";
+  "Write a terse executive intelligence summary of the past week's drone and counter-drone reporting, using only the context given. Name systems; do not list counts for their own sake. No preamble.\n\nFormat: Markdown, exactly these sections in this order, each a '## ' heading followed by 1-3 short '- ' bullets (one sentence each). Bold a system name with **double asterisks** the first time it appears in a bullet. Leave out a section that has nothing to report.\nSections: 'Headline' (one bullet: the week in brief), 'Most reported' (the most reported systems and where they were reported from), 'First seen' (systems appearing for the first time, with notable specifications), 'Claims and disputes' (new specification or capability claims; say when a claim is disputed), 'Trends' (patterns across reports).";
 
 export interface BriefingSummarizer {
   summarize(context: string): Promise<string>;

@@ -18,6 +18,7 @@ import {
 } from "@/shared/infra/briefing.functions";
 import { Btn, Loading, Num, Panel, Tag, Card } from "@/shared/ui/primitives";
 import { useRelatedIntel, RelatedChips } from "@/shared/ui/intel-graph";
+import { SummaryText } from "@/shared/ui/summary-text";
 
 export function BriefingPage() {
   const [mounted, setMounted] = useState(false);
@@ -265,17 +266,7 @@ function Briefing() {
           <p className="text-sm text-destructive">{err}</p>
         ) : summary ? (
           <>
-            <div className="space-y-3 text-sm leading-relaxed text-foreground/90">
-              {summary
-                .split(/\n{2,}/)
-                .map((para, i) => para.trim())
-                .filter(Boolean)
-                .map((para, i) => (
-                  <p key={i} className="whitespace-pre-line">
-                    {para}
-                  </p>
-                ))}
-            </div>
+            <SummaryText text={summary} />
             {summaryAt && (
               <p className="mt-3 font-mono text-[11px] text-muted-foreground">
                 {summaryShared ? "Shared summary" : "Summary"} generated{" "}
