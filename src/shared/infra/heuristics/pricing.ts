@@ -38,12 +38,13 @@ export function extractPrice(raw: string, extra: ExtraScales = []): string | und
   // wins, so a trailing symbol is not paired with the number that follows it.
   const AMT_S = `(${NUM_STRICT})\\s*(?:(${MAG})\\.?)?`;
   const sm = raw.match(
-    new RegExp(`${AMT_S}(?:\\s*(?:-|–|—|to)\\s*${AMT_S})?\\s?(${CUR})(?![\\p{L}\\d])`, "u"),
+    new RegExp(`${AMT_S}(?:\\s*(?:-|–|—|to)\\s*${AMT_S})?\\s*(?:(${CUR})(?![\\p{L}\\d]))?`, "u"),
   );
-  if (sm && (!m || sm.index! < m.index!)) {
+  if (sm && sm[5] && (!m || sm.index! < m.index!)) {
     const mag = sm[2] ?? sm[4];
-    const part = (n: string) => `${n}${mag ? ` ${mag}` : ""} ${sm[5]}`;
-    return sm[3] ? `${part(sm[1]!)} - ${part(sm[3])}` : part(sm[1]!);
+    const sym = sm[5];
+    const part = (n: string) => `${n}${mag ? ` ${mag}` : ""} ${sym}`;
+    return sm[3] ? `${part(sm[1]!)} - ${part(sm[3]!)}` : part(sm[1]!);
   }
   if (m) {
     const fmt = (a: string, s?: string) =>

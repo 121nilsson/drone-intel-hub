@@ -1,4 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { semanticKeyFor } from "@/entities/normalization/semantic";
+import { mergeSpecs } from "@/entities/drone/spec-engine";
+import type { Drone } from "@/entities/drone/types";
 import { isFinancialSpecKey } from "@/entities/procurement/routing";
 import { normalizeExtraction } from "@/entities/normalization/apply";
 import { normalizeQuantity } from "@/entities/normalization/units";
@@ -36,5 +39,40 @@ describe("Ghost Shark report: values that read wrong", () => {
       rfBands: [],
     } as unknown as Extraction;
     expect(normalizeExtraction(e).extraction.specs.map((s) => s.key)).toEqual(["range"]);
+  });
+});
+
+describe("K3 Scout: one top speed, not three", () => {
+  const claim = (value: number) => ({ id: `c${value}`, value, source: "t", date: "d" });
+  const attr = (key: string, label: string, semantic: string, unit: string, value: number) => ({
+    key,
+    label,
+    semantic,
+    unit,
+    claims: [claim(value)],
+    discoveredBy: "ai" as const,
+  });
+
+  it("reads kt and kn as knots", () => {
+    expect(normalizeQuantity("55 kt")).toMatchObject({ unit: "kn", canonicalUnit: "km/h" });
+    expect(normalizeQuantity("55 kn")).toMatchObject({ unit: "kn" });
+  });
+
+  it("reads a camelCase key as the same attribute", () => {
+    expect(semanticKeyFor("maxSpeed", "Max Speed")).toBe("speed.max");
+    expect(semanticKeyFor("speed", "Cruise speed")).toBe("speed.cruise");
+  });
+
+  it("folds rows that already measure the same thing into one", () => {
+    const drone = {
+      specs: [
+        attr("maxSpeed", "Max Speed", "maxSpeed", "kt", 55),
+        attr("speed", "Maximum speed", "speed.max", "km/h", 102),
+        attr("speed", "Cruise speed", "speed.cruise", "km/h", 46),
+      ],
+    } as unknown as Drone;
+    const out = mergeSpecs(drone, [], "t");
+    expect(out.specs.map((s) => s.semantic)).toEqual(["speed.max", "speed.cruise"]);
+    expect(out.specs[0]!.claims.map((c) => c.value)).toEqual([55, 102]);
   });
 });

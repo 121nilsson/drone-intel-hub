@@ -778,8 +778,8 @@
         "semantic": "speed.cruise"
       },
       {
-        "unit": "kn",
-        "value": 15,
+        "unit": "km/h",
+        "value": 27.78,
         "semantic": "speed"
       },
       {

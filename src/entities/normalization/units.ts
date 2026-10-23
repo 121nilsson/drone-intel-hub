@@ -88,7 +88,7 @@ const UNITS: UnitDef[] = [
     token: "kn",
     dimension: "speed",
     toCanonical: NM_KM,
-    pattern: /(?:knots?|kts|вузл[а-яіїєґ]*|вузол|уз(?:л(?:ов|а)?)?)(?![\p{L}\p{N}])/iu,
+    pattern: /(?:knots?|kts?|(?<![\p{L}/])kn|вузл[а-яіїєґ]*|вузол|уз(?:л(?:ов|а)?)?)(?![\p{L}\p{N}])/iu,
   },
   {
     token: "Mach",
