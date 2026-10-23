@@ -69,6 +69,16 @@ export function mergeLinks(existing: RFLink[], incoming: RFLink[]): RFLink[] {
   return rf;
 }
 
+/**
+ * A measured attribute (range, endurance, weight...) whose value carries no figure at all -
+ * "несколько недель", "several hours" - has nothing for consensus to compare, and the unit the
+ * attribute is measured in would be shown next to words. The sentence stays in the post.
+ */
+function isUnmeasurable(spec: ExtractedSpec): boolean {
+  if (typeof spec.value !== "string" || /\d/.test(spec.value)) return false;
+  return canonicalUnitForSemantic(semanticKeyFor(spec.key, spec.label)) !== undefined;
+}
+
 function normalizeSpec(spec: ExtractedSpec): ExtractedSpec {
   const semantic = semanticKeyFor(spec.key, spec.label);
   const moneySource =
@@ -140,7 +150,7 @@ export function normalizeExtraction(
   return {
     extraction: {
       ...extraction,
-      specs: extraction.specs.map(normalizeSpec),
+      specs: extraction.specs.filter((s) => !isUnmeasurable(s)).map(normalizeSpec),
       rf,
       ...(propulsion.id ? { propulsionId: propulsion.id } : {}),
       ...(installation.id ? { installationId: installation.id } : {}),

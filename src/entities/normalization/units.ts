@@ -176,13 +176,13 @@ const UNITS: UnitDef[] = [
     token: "t",
     dimension: "mass",
     toCanonical: 1000,
-    pattern: /(?:metric\s+tons?|tonnes?|т)(?![\p{L}\p{N}])/iu,
+    pattern: /(?:metric\s+tons?|tonnes?|тонн[а-яіїєґ]*|т)(?![\p{L}\p{N}])/iu,
   },
-  { 
-    token: "g", 
-    dimension: "mass", 
-    toCanonical: 0.001, 
-    pattern: /(?:grams?|гр)(?![\p{L}\p{N}])/iu
+  {
+    token: "g",
+    dimension: "mass",
+    toCanonical: 0.001,
+    pattern: /(?:grams?|гр)(?![\p{L}\p{N}])/iu,
   },
   {
     token: "g",
@@ -214,6 +214,12 @@ const UNITS: UnitDef[] = [
     toCanonical: 1440,
     pattern:
       /(?:days?|dygn|діб|доб[а-яіїєґ]*|дн(?:ів|я|ю|і|ей)|сут(?:ок|к[а-яё]*))(?![\p{L}\p{N}])/iu,
+  },
+  {
+    token: "wk",
+    dimension: "duration",
+    toCanonical: 10_080,
+    pattern: /(?:weeks?|недел[а-яё]*|тижн[а-яіїєґ]*|тиждень)(?![\p{L}\p{N}])/iu,
   },
   {
     token: "s",

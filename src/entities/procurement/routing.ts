@@ -8,7 +8,7 @@ import { parseMoney } from "@/entities/normalization/currency";
  * procurement records, so consensus never treats "$2 billion" as a property of a drone.
  */
 const FINANCIAL_KEY =
-  /^(?:contract|order|package|deal|delivery|batch|advance|fast_track|total|development|operating|sustainment|programme|program|associated)_?(?:value|cost|funding|amount|commitment|investment|budget)|^(?:contract|order|package)value|funding|investment|production_(?:rate|volume)|_(?:funding|budget)$/i;
+  /(?:^|_)(?:contract|order|package|deal|delivery|batch|advance|fast_track|total|development|operating|sustainment|programme|program|associated)_?(?:value|cost|funding|amount|commitment|investment|budget)|^(?:contract|order|package)value|funding|investment|production_(?:rate|volume)|_(?:funding|budget)$/i;
 
 export function isFinancialSpecKey(key: string): boolean {
   const k = key
