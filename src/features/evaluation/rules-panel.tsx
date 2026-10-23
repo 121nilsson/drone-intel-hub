@@ -16,6 +16,7 @@ import {
 import type { AutonomyStatus, RuleView } from "@/shared/infra/evaluation/rule-sandbox.server";
 import type { RuleKind, RuleLanguage } from "@/shared/contracts/rules";
 import type { SandboxResult } from "@/shared/infra/evaluation/sandbox";
+import { ActionList } from "./action-list";
 
 const TONE: Record<string, "success" | "warning" | "danger" | "info" | "muted" | "primary"> = {
   active: "success",
@@ -26,6 +27,16 @@ const TONE: Record<string, "success" | "warning" | "danger" | "info" | "muted" |
   rejected: "muted",
   quarantined: "danger",
   superseded: "muted",
+};
+
+/** What a rule in each status is waiting for, in the words of the button that moves it on. */
+const NEXT: Record<string, string> = {
+  candidate: "run Full sandbox to test it against the corpus.",
+  evaluating: "the sandbox is running.",
+  candidate_passed:
+    "passed the sandbox. Shadow it to measure it on new reports first, or Activate it now.",
+  shadow: "being measured on new reports. Activate when the numbers convince you, or Reject it.",
+  active: "live in every pipeline. Quarantine it if it misreads.",
 };
 
 const EXAMPLES: Record<RuleKind, string> = {
@@ -181,70 +192,101 @@ export function RulesPanel() {
     });
 
   return (
-    <Panel title="Dynamic rules (sandbox)">
-      <p className="mb-3 text-xs text-muted-foreground">
-        Propose a rule as JSON, then sandbox it against the corpus. A rule only becomes activatable
-        when the sandbox reports zero regressions and a measurable F1 gain. Rules are never applied
-        automatically - an analyst must activate them.
-      </p>
+    <Panel title="Rules">
+      <div className="mb-3 space-y-2 text-xs text-muted-foreground">
+        <p>
+          A rule is a small change to what the heuristic reads: a word that is never a system name
+          (stopword), another name for a known system (alias), a cue word for an attribute, a
+          context that moves a figure to another attribute, or a money magnitude word.
+        </p>
+        <p>
+          Every rule goes <strong>sandbox → shadow → active</strong>. The sandbox replays the test
+          corpus and passes a rule only with zero regressions and an F1 gain. Shadow then measures
+          it on new reports without affecting them.{" "}
+          {autonomy?.autopromote
+            ? "Auto-activation is on: a shadow rule activates itself once it meets the bar shown below. You can still activate or reject any rule yourself."
+            : "Auto-activation is off: only an analyst can activate a rule."}
+        </p>
+      </div>
       {lastVerdict && (
         <div className="mb-3 border border-border bg-secondary/40 px-3 py-2 font-mono text-xs">
           Last sandbox: {lastVerdict}
         </div>
       )}
-      <p className="mb-2 text-xs text-muted-foreground">
-        Mining hypotheses can take 30–60 s on a large corpus. The button shows elapsed time while
-        running.
-      </p>
-      <div className="mb-3 flex flex-wrap gap-2">
-        <Btn
-          variant="ghost"
-          disabled={!!busy}
-          onClick={() =>
-            act("Hypotheses", async () => {
-              const r = await triggerMineRules();
-              if (!r.ran) throw new Error(r.reason);
-              return `${r.mined} hypotheses, ${r.proposed} new, ${r.passed}/${r.sandboxed} passed the sandbox · ${r.parserDefects} parser defects`;
-            })
-          }
-        >
-          {busy === "Hypoteser" && busyStartedAt
-            ? `Mining… ${Math.max(1, Math.round((now - busyStartedAt) / 1000))}s`
-            : busy === "Hypoteser"
-              ? "Mining…"
-              : "Generate rule hypotheses"}
-        </Btn>
-        <Btn
-          variant="ghost"
-          disabled={!!busy}
-          onClick={() =>
-            act("Shadow", async () => {
-              const r = await triggerRunShadow();
-              if (!r.ran) throw new Error(r.reason);
-              return `${r.rules} shadow rules, ${r.evaluated} new reports, promoted: ${r.promoted.length}`;
-            })
-          }
-        >
-          Run shadow now
-        </Btn>
-        <Btn
-          variant="ghost"
-          disabled={!!busy}
-          onClick={() =>
-            act("Supervise", async () => {
-              const r = await triggerSupervise();
-              if (!r.ran) throw new Error(r.reason);
-              return r.breaker.tripped
-                ? `Circuit breaker tripped: ${r.breaker.reasons.join("; ")}`
-                : `OK · ${r.audited} audited · ${r.quarantined.length} quarantined`;
-            })
-          }
-        >
-          Supervise active rules
-        </Btn>
-        <Btn variant="ghost" disabled={!!busy} onClick={reload}>
-          Refresh
-        </Btn>
+      <div className="mb-3">
+        <ActionList
+          items={[
+            {
+              button: (
+                <Btn
+                  variant="ghost"
+                  disabled={!!busy}
+                  onClick={() =>
+                    act("Hypotheses", async () => {
+                      const r = await triggerMineRules();
+                      if (!r.ran) throw new Error(r.reason);
+                      return `${r.mined} hypotheses, ${r.proposed} new, ${r.passed}/${r.sandboxed} passed the sandbox · ${r.parserDefects} parser defects`;
+                    })
+                  }
+                >
+                  {busy === "Hypotheses" && busyStartedAt
+                    ? `Mining… ${Math.max(1, Math.round((now - busyStartedAt) / 1000))}s`
+                    : busy === "Hypotheses"
+                      ? "Mining…"
+                      : "Generate rule hypotheses"}
+                </Btn>
+              ),
+              does: "Looks for misreadings that recur across the corpus and proposes a rule for each, already sandboxed. Takes 30-60 s.",
+            },
+            {
+              button: (
+                <Btn
+                  variant="ghost"
+                  disabled={!!busy}
+                  onClick={() =>
+                    act("Shadow", async () => {
+                      const r = await triggerRunShadow();
+                      if (!r.ran) throw new Error(r.reason);
+                      return `${r.rules} shadow rules, ${r.evaluated} new reports, promoted: ${r.promoted.length}`;
+                    })
+                  }
+                >
+                  Run shadow now
+                </Btn>
+              ),
+              does: autonomy?.autopromote
+                ? "Measures every shadow rule on the reports that arrived since the last run, then activates the ones that meet the bar."
+                : "Measures every shadow rule on the reports that arrived since the last run.",
+            },
+            {
+              button: (
+                <Btn
+                  variant="ghost"
+                  disabled={!!busy}
+                  onClick={() =>
+                    act("Supervise", async () => {
+                      const r = await triggerSupervise();
+                      if (!r.ran) throw new Error(r.reason);
+                      return r.breaker.tripped
+                        ? `Circuit breaker tripped: ${r.breaker.reasons.join("; ")}`
+                        : `OK · ${r.audited} audited · ${r.quarantined.length} quarantined`;
+                    })
+                  }
+                >
+                  Supervise active rules
+                </Btn>
+              ),
+              does: "Safety check: compares all active rules with the same set minus those activated in the last 24 h, and quarantines the recent ones if they made results worse.",
+            },
+          ]}
+        />
+        <p className="mt-2 text-xs text-muted-foreground">
+          None of these run on a schedule yet: shadow results only grow when someone presses{" "}
+          <strong>Run shadow now</strong>.{" "}
+          <button type="button" className="underline" disabled={!!busy} onClick={reload}>
+            Refresh the list
+          </button>
+        </p>
       </div>
       {autonomy && <Autonomy a={autonomy} />}
 
@@ -316,10 +358,10 @@ export function RulesPanel() {
                     disabled={!!busy}
                     title="Runs hidden against new reports without affecting production"
                     onClick={() =>
-                      act("Skugga", async () => {
+                      act("Shadow", async () => {
                         const s = await triggerShadowRule({ data: { id: r.id } });
                         if (!s.ok) throw new Error("could not be moved to shadow");
-                        return "In shadow — measured against new reports every hour";
+                        return "In shadow — measured on new reports each time shadow runs";
                       })
                     }
                   >
@@ -331,14 +373,14 @@ export function RulesPanel() {
                     disabled={!!busy || (r.status !== "candidate_passed" && r.status !== "shadow")}
                     title="Runs the sandbox again against active rules and activates only if approved"
                     onClick={() =>
-                      act("Aktivera", async () => {
+                      act("Activate", async () => {
                         const a = await triggerActivateRule({ data: { id: r.id } });
                         if (!a.ok) throw new Error(a.reason);
                         return "Active — takes effect in every pipeline within 30 s";
                       })
                     }
                   >
-                    Aktivera
+                    Activate
                   </Btn>
                 )}
                 {r.status !== "rejected" && r.status !== "quarantined" && (
@@ -346,7 +388,7 @@ export function RulesPanel() {
                     variant="danger"
                     disabled={!!busy}
                     onClick={() =>
-                      act("Avvisa", async () => {
+                      act("Reject", async () => {
                         await triggerRejectRule({ data: { id: r.id } });
                         return r.status === "active" ? "Moved to quarantine" : "Rejected";
                       })
@@ -358,6 +400,7 @@ export function RulesPanel() {
               </div>
             </div>
             {r.rationale && <p className="mt-1 text-xs text-muted-foreground">{r.rationale}</p>}
+            {NEXT[r.status] && <p className="mt-1 text-xs text-primary">Next: {NEXT[r.status]}</p>}
             {r.status === "shadow" && r.shadow && <Shadow m={r.shadow} />}
             {r.lastEvaluation && <Verdict r={r.lastEvaluation} />}
           </Card>

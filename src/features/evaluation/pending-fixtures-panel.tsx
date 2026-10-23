@@ -82,10 +82,12 @@ export function PendingFixturesPanel() {
           </>
         ) : (
           <>
-            Requires analyst approval. Test cases from AI adjudication wait here until approved; the
-            rule sandbox ignores them until then. Adjudication earns the right to approve its own
-            once {pct(TRUST_AGREEMENT)} of at least {TRUST_MIN_REVIEWS} decisions here approve it.
-            So far:{" "}
+            AI adjudication proposes the right answer for a report the heuristic and the stored
+            reading disagreed on. <strong>Approve</strong> if the report states exactly that: it
+            becomes a test case every rule and code change must keep passing.{" "}
+            <strong>Reject</strong> if it does not. Until you decide, the sandbox ignores it. Once{" "}
+            {pct(TRUST_AGREEMENT)} of at least {TRUST_MIN_REVIEWS} decisions here are approvals,
+            adjudication approves its own. So far:{" "}
             {n
               ? `${trust.agreed} approved, ${trust.disagreed} rejected (${pct(trust.agreed / n)})`
               : "no decisions"}
@@ -132,6 +134,7 @@ export function PendingFixturesPanel() {
               </div>
               <ReviewSource source={f.fixture.source} text={f.fixture.text} />
               <p className="font-mono text-primary">
+                <span className="text-muted-foreground">The heuristic should read: </span>
                 {f.fixture.expect.map(expectation).join(" · ") || "—"}
                 {f.fixture.forbid?.length
                   ? ` · must not: ${f.fixture.forbid.map((x) => expectation({ ...x, value: x.value ?? "*" })).join(" · ")}`

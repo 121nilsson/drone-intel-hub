@@ -57,6 +57,11 @@ export function CorrectionQueue({ drones }: { drones: readonly Drone[] }) {
         is applied automatically once {pct(TRUST_AGREEMENT)} of at least {TRUST_MIN_REVIEWS} answers
         agree with it, and stops being applied as soon as agreement falls.
       </p>
+      <p className="mt-2 text-xs text-muted-foreground">
+        For each figure below, read the source. If the corrector is right, press the left button; if
+        the report really states this figure for this system, press <strong>Figure is right</strong>
+        .{pending.length === 0 && " Nothing is waiting right now."}
+      </p>
       <ul className="mt-3 divide-y divide-border border-y border-border">
         {kinds.map((k) => {
           const t = trust.get(k);
