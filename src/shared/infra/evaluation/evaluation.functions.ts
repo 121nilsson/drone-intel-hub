@@ -23,13 +23,20 @@ import {
   superviseActiveRules,
   type ProposeInput,
 } from "./rule-sandbox.server";
+import {
+  healthOutcome,
+  listTaskStatus,
+  ranOutcome,
+  recordTaskRun,
+  shadowOutcome,
+} from "@/shared/infra/task-runs.server";
 
 export const triggerEvaluation = createServerFn({ method: "POST" }).handler(async () => {
-  return await runEvaluation();
+  return await recordTaskRun("evaluation:run", "manual", runEvaluation, ranOutcome);
 });
 
 export const triggerEvaluationHealth = createServerFn({ method: "POST" }).handler(async () => {
-  return await runEvaluationHealth();
+  return await recordTaskRun("evaluation:health", "manual", runEvaluationHealth, healthOutcome);
 });
 
 export const triggerGitImport = createServerFn({ method: "POST" }).handler(async () => {
@@ -108,7 +115,12 @@ export const triggerShadowRule = createServerFn({ method: "POST" })
   });
 
 export const triggerRunShadow = createServerFn({ method: "POST" }).handler(async () => {
-  return await runShadow();
+  return await recordTaskRun("evaluation:shadow", "manual", runShadow, shadowOutcome);
+});
+
+/** Last run, typical duration and next run of every scheduled job. */
+export const fetchTaskStatus = createServerFn({ method: "GET" }).handler(async () => {
+  return await listTaskStatus();
 });
 
 export const triggerSupervise = createServerFn({ method: "POST" }).handler(async () => {

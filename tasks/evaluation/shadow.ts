@@ -1,6 +1,7 @@
 import { defineTask } from "nitro/task";
 import { ensureMigrated } from "../../src/shared/infra/postgres/migrate.server";
 import { runShadow } from "../../src/shared/infra/evaluation/rule-sandbox.server";
+import { recordTaskRun, shadowOutcome } from "../../src/shared/infra/task-runs.server";
 
 export default defineTask({
   meta: {
@@ -9,7 +10,7 @@ export default defineTask({
   },
   async run() {
     await ensureMigrated();
-    const res = await runShadow();
+    const res = await recordTaskRun("evaluation:shadow", "schedule", runShadow, shadowOutcome);
     console.log(
       `[evaluation:shadow] ${res.ran ? "ran" : "skipped"} - ${res.reason}: ${res.rules} rule(s), ${res.evaluated} new report(s), promoted ${res.promoted.join(", ") || "none"}`,
     );

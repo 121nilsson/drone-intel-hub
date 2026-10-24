@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { readSyncState, type SyncState } from "../sync-state-read.server";
 import { runAutoSync } from "./source-sync.server";
+import { ranOutcome, recordTaskRun } from "../task-runs.server";
 
 export type { SyncState } from "../sync-state-read.server";
 
@@ -14,4 +15,6 @@ export const triggerAutoSync = createServerFn({ method: "POST" })
     ...(typeof d?.minIntervalMs === "number" ? { minIntervalMs: d.minIntervalMs } : {}),
     force: d?.force === true,
   }))
-  .handler(async ({ data }) => runAutoSync(data));
+  .handler(async ({ data }) =>
+    recordTaskRun("sources:sync", "manual", () => runAutoSync(data), ranOutcome),
+  );

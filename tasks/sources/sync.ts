@@ -1,5 +1,7 @@
 import { defineTask } from "nitro/task";
+import { ensureMigrated } from "../../src/shared/infra/postgres/migrate.server";
 import { runAutoSync } from "../../src/shared/infra/sources/source-sync.server";
+import { ranOutcome, recordTaskRun } from "../../src/shared/infra/task-runs.server";
 
 /**
  * Scheduled auto-ingest. Nitro drives this on the cron in vite.config.ts.
@@ -15,7 +17,13 @@ export default defineTask({
     description: "Poll monitored sources and ingest new drone reports",
   },
   async run() {
-    const res = await runAutoSync({ minIntervalMs: 9 * 60_000 });
+    await ensureMigrated();
+    const res = await recordTaskRun(
+      "sources:sync",
+      "schedule",
+      () => runAutoSync({ minIntervalMs: 9 * 60_000 }),
+      ranOutcome,
+    );
     console.log(`[sources:sync] ${res.ran ? "ran" : "skipped"} - ${res.reason}`);
     return { result: res.reason };
   },

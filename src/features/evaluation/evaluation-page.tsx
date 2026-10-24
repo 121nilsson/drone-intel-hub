@@ -33,6 +33,7 @@ import { AnalystReviewPanel } from "./analyst-review-panel";
 import { CorrectionQueue } from "./correction-queue";
 import { PendingFixturesPanel } from "./pending-fixtures-panel";
 import { ActionList, Stage } from "./action-list";
+import { JobStatusPanel } from "./job-status-panel";
 
 const pct = (n: number) => `${Math.round(n * 100)}%`;
 
@@ -164,6 +165,10 @@ export function EvaluationPage() {
           ))}
         </ol>
       </Panel>
+
+      <div id="automation" className="scroll-mt-20">
+        <JobStatusPanel />
+      </div>
 
       <Stage
         id="decide"

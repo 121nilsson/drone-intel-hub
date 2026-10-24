@@ -281,8 +281,12 @@ export function RulesPanel() {
           ]}
         />
         <p className="mt-2 text-xs text-muted-foreground">
-          None of these run on a schedule yet: shadow results only grow when someone presses{" "}
-          <strong>Run shadow now</strong>.{" "}
+          The server already runs all three on its own (shadow hourly, supervision and mining
+          nightly - see{" "}
+          <a href="#automation" className="underline">
+            Automation status
+          </a>
+          ). Press one only to get results sooner.{" "}
           <button type="button" className="underline" disabled={!!busy} onClick={reload}>
             Refresh the list
           </button>

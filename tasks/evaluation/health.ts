@@ -1,6 +1,7 @@
 import { defineTask } from "nitro/task";
 import { ensureMigrated } from "../../src/shared/infra/postgres/migrate.server";
 import { runEvaluationHealth } from "../../src/shared/infra/evaluation/evaluation.server";
+import { healthOutcome, recordTaskRun } from "../../src/shared/infra/task-runs.server";
 
 export default defineTask({
   meta: {
@@ -9,7 +10,12 @@ export default defineTask({
   },
   async run() {
     await ensureMigrated();
-    const res = await runEvaluationHealth();
+    const res = await recordTaskRun(
+      "evaluation:health",
+      "schedule",
+      runEvaluationHealth,
+      healthOutcome,
+    );
     if (res.regression) {
       console.warn(`[evaluation:health] REGRESSION: ${res.details.join("; ")}`);
     } else {

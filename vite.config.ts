@@ -6,6 +6,14 @@
 // You can pass additional config via defineConfig({ vite: { ... }, etc... }) if needed.
 import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 import { loadEnv } from "vite";
+import { SCHEDULED_TASKS } from "./src/shared/contracts/scheduled-tasks";
+
+/** Nitro's `scheduledTasks`: one entry per cron, listing every job that shares it. */
+function scheduleByCron(): Record<string, string[]> {
+  const out: Record<string, string[]> = {};
+  for (const t of SCHEDULED_TASKS) (out[t.cron] ??= []).push(t.name);
+  return out;
+}
 
 // Populate process.env with variables from .env and .env.local for server functions in dev mode
 const env = loadEnv(process.env["NODE_ENV"] || "development", process.cwd(), "");
@@ -29,18 +37,8 @@ export default defineConfig({
     // Nitro scans `tasks/` only within its scanDirs, which default to the serverDir rather
     // than the project root, so the root-level tasks/ directory has to be listed here.
     scanDirs: ["."],
-    scheduledTasks: {
-      // Auto-ingest every 10 minutes. The task enforces a 9 min floor via sync_state so ticks
-      // cannot overlap, and each run stops starting AI work after an 8 min window.
-      "*/10 * * * *": "sources:sync",
-      // Heuristic evaluation daily at 03:15 (after the nightly ingest window).
-      "15 3 * * *": "evaluation:run",
-      // Heuristic health check daily at 03:45.
-      "45 3 * * *": "evaluation:health",
-      // Rule supervision (circuit breaker + audit), then hypotheses: mine, propose, sandbox.
-      "15 4 * * *": "evaluation:rules",
-      // Shadow rules scored hourly on new reports; earned ones auto-promote (RULES_AUTOPROMOTE).
-      "35 * * * *": "evaluation:shadow",
-    },
+    // The schedule lives in shared/contracts/scheduled-tasks.ts, with what each job does; the
+    // evaluation page reads the same list to show each job's status and next run.
+    scheduledTasks: scheduleByCron(),
   } as never,
 });
