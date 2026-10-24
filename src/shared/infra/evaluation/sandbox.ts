@@ -1,6 +1,7 @@
 import type { Candidate, Drone, Extraction } from "@/entities/drone/types";
 import type { IntelExtractor } from "@/shared/contracts/ai";
 import { normalizeExtraction } from "@/entities/normalization/apply";
+import { mentionsPhonetic } from "@/entities/drone/name-key";
 import {
   checkFixture,
   comparableSpecs,
@@ -107,9 +108,15 @@ const memoized = new WeakSet<IntelExtractor>();
 
 const EPS = 1e-9;
 const fold = (s: string) => s.toLowerCase();
+/**
+ * Could a rule with these terms change this text's reading? Literal containment, or the term in
+ * another script, romanisation, spacing or case ending ("Ланцетом" for an alias "Lancet",
+ * "high  rise" for a cue "high rise") - the engine matches names that way, so a fixture the
+ * targeted gate skips must be one the rule cannot reach. Over-selecting only costs a read.
+ */
 const mentionsAny = (text: string, terms: readonly string[]) => {
   const t = fold(text);
-  return terms.some((x) => t.includes(x));
+  return terms.some((x) => t.includes(x) || mentionsPhonetic(text, x));
 };
 
 /** Every failing expectation, as stable strings, so before/after can be set-diffed. */

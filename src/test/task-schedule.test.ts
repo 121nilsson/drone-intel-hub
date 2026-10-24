@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { memoExtractor } from "@/shared/infra/evaluation/sandbox";
+import { memoExtractor, runSandbox } from "@/shared/infra/evaluation/sandbox";
 import type { Drone, Extraction } from "@/entities/drone/types";
 import { nextCronRun } from "@/shared/infra/cron";
 import { SCHEDULED_TASKS } from "@/shared/contracts/scheduled-tasks";
@@ -90,5 +90,60 @@ describe("memoExtractor", () => {
     await m.extract("t", []);
     expect(calls).toBe(2);
     expect(memoExtractor(m)).toBe(m);
+  });
+});
+
+describe("memoExtractor on failure", () => {
+  it("does not remember a failed read", async () => {
+    let calls = 0;
+    const m = memoExtractor({
+      tier: 1,
+      label: "x",
+      extract: async () => {
+        calls++;
+        if (calls === 1) throw new Error("boom");
+        return { specs: [] } as unknown as Extraction;
+      },
+    });
+    const catalog: Drone[] = [];
+    await expect(m.extract("t", catalog)).rejects.toThrow("boom");
+    await expect(m.extract("t", catalog)).resolves.toBeDefined();
+    expect(calls).toBe(2);
+  });
+});
+
+describe("targeted sandbox", () => {
+  it("checks a fixture that names the rule's term in another script", async () => {
+    const seen: string[] = [];
+    const x = {
+      tier: 1 as const,
+      label: "x",
+      extract: async (raw: string) => {
+        seen.push(raw);
+        return {
+          specs: [],
+          rfBands: [],
+          aliases: [],
+          operators: [],
+          confidence: 0,
+        } as unknown as Extraction;
+      },
+    };
+    const fx = (id: string, text: string) => ({ id, source: id, text, expect: [] });
+    await runSandbox({
+      fixtures: [
+        fx("cyr", "Удар Ланцетом по позиции"),
+        fx("other", "Nothing relevant here at all"),
+      ],
+      candidates: [],
+      catalog: [],
+      baseline: x,
+      proposed: { ...x },
+      terms: ["lancet"],
+      mode: "fast",
+      controlSize: 0,
+    });
+    expect(seen).toContain("Удар Ланцетом по позиции");
+    expect(seen).not.toContain("Nothing relevant here at all");
   });
 });
