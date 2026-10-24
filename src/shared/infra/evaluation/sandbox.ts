@@ -73,6 +73,38 @@ export interface SandboxResult {
   preview: ImpactPreview[];
 }
 
+/**
+ * The same extractor, reading each text at most once per catalog. extract() is pure for a given
+ * rule snapshot, and the sandbox reads the same text several times: an affected candidate for
+ * the preview and again for scoring, and - across a supervision run - every audit compares
+ * against the same all-active extractor. Callers get a copy, so nothing they do to a result
+ * reaches the cache. Only plain calls are cached; one with context or options goes through.
+ */
+export function memoExtractor(x: IntelExtractor): IntelExtractor {
+  if (memoized.has(x)) return x;
+  const byCatalog = new WeakMap<Drone[], Map<string, Promise<Extraction>>>();
+  const memo: IntelExtractor = {
+    tier: x.tier,
+    label: x.label,
+    extract(raw, catalog, context, options) {
+      if (context || options) return x.extract(raw, catalog, context, options);
+      let cache = byCatalog.get(catalog);
+      if (!cache) byCatalog.set(catalog, (cache = new Map()));
+      let hit = cache.get(raw);
+      if (!hit) {
+        hit = x.extract(raw, catalog);
+        cache.set(raw, hit);
+        // A failed read is not remembered, so a retry reads again.
+        hit.catch(() => cache.delete(raw));
+      }
+      return hit.then((e) => structuredClone(e));
+    },
+  };
+  memoized.add(memo);
+  return memo;
+}
+const memoized = new WeakSet<IntelExtractor>();
+
 const EPS = 1e-9;
 const fold = (s: string) => s.toLowerCase();
 const mentionsAny = (text: string, terms: readonly string[]) => {
@@ -115,6 +147,8 @@ export async function runSandbox(input: SandboxInput): Promise<SandboxResult> {
   const seed = input.seed ?? 1;
   const controlSize = input.controlSize ?? 100;
   const { catalog, terms } = input;
+  const baseline = memoExtractor(input.baseline);
+  const proposed = memoExtractor(input.proposed);
 
   // 1. Regression gate over the corpus.
   const touched = input.fixtures.filter((f) => mentionsAny(f.text, terms));
@@ -126,8 +160,8 @@ export async function runSandbox(input: SandboxInput): Promise<SandboxResult> {
   const regressions: FixtureBreak[] = [];
   const fixed: string[] = [];
   for (const fx of fixtures) {
-    const before = await failures(fx, input.baseline, catalog);
-    const after = await failures(fx, input.proposed, catalog);
+    const before = await failures(fx, baseline, catalog);
+    const after = await failures(fx, proposed, catalog);
     const broke = [...after].filter((f) => !before.has(f));
     if (broke.length) regressions.push({ id: fx.id, source: fx.source, failures: broke });
     else if (before.size > 0 && after.size === 0) fixed.push(fx.id);
@@ -151,12 +185,8 @@ export async function runSandbox(input: SandboxInput): Promise<SandboxResult> {
   const preview: ImpactPreview[] = [];
   let changed = 0;
   for (const c of affected) {
-    const b = summarize(
-      normalizeExtraction(await input.baseline.extract(c.raw, catalog)).extraction,
-    );
-    const a = summarize(
-      normalizeExtraction(await input.proposed.extract(c.raw, catalog)).extraction,
-    );
+    const b = summarize(normalizeExtraction(await baseline.extract(c.raw, catalog)).extraction);
+    const a = summarize(normalizeExtraction(await proposed.extract(c.raw, catalog)).extraction);
     const removed = b.filter((x) => !a.includes(x));
     const added = a.filter((x) => !b.includes(x));
     if (!removed.length && !added.length) continue;
@@ -166,8 +196,8 @@ export async function runSandbox(input: SandboxInput): Promise<SandboxResult> {
   }
 
   const opts = { sampleSize: scored.length, seed, includeDiscarded: false, maxMismatchesPerKey: 0 };
-  const rb = await evaluateHeuristic(scored, catalog, input.baseline, opts);
-  const ra = await evaluateHeuristic(scored, catalog, input.proposed, opts);
+  const rb = await evaluateHeuristic(scored, catalog, baseline, opts);
+  const ra = await evaluateHeuristic(scored, catalog, proposed, opts);
   const before = { spec: rb.summary, name: rb.identity.name, matchId: rb.identity.matchId };
   const after = { spec: ra.summary, name: ra.identity.name, matchId: ra.identity.matchId };
   const deltas = (["spec", "name", "matchId"] as const).map((k) => after[k].f1 - before[k].f1);

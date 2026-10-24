@@ -12,7 +12,7 @@ import {
   type RuleKind,
   type RuleLanguage,
 } from "@/shared/contracts/rules";
-import { runSandbox, type SandboxResult } from "@/shared/infra/evaluation/sandbox";
+import { memoExtractor, runSandbox, type SandboxResult } from "@/shared/infra/evaluation/sandbox";
 import {
   breakerTrips,
   newShadowMetrics,
@@ -605,8 +605,9 @@ const MAX_AUDIT_PER_RUN = 10;
 /**
  * Nightly supervision of live rules. 1) Circuit breaker: the full corpus and a fresh sample with
  * all active rules vs without those activated in the last 24 h - a drop beyond BREAKER_F1_DROP
- * or any broken fixture quarantines all of them. 2) Audit: each older rule is re-checked against
- * the full corpus without it; one that now breaks a fixture (the corpus grew) is quarantined.
+ * or any broken fixture quarantines all of them. 2) Audit: each older rule is re-checked without
+ * it on the fixtures that contain its words plus the control set; one that now breaks a fixture
+ * (the corpus grew) is quarantined.
  */
 export async function superviseActiveRules(): Promise<SuperviseResult> {
   const empty = {
@@ -626,7 +627,10 @@ export async function superviseActiveRules(): Promise<SuperviseResult> {
     const fixtures = await loadFixtures(drones);
     const control = await candidateSample(CONTROL_POOL);
     const version = await rulesVersion();
-    // "proposed" = everything live now; "baseline" = live minus the rules under suspicion.
+    // "proposed" = everything live now, the same for every run below, so each text is read
+    // with it once per supervision instead of once per audited rule.
+    const proposed = memoExtractor(new HeuristicExtractor(1, compileRuleSnapshot(all)));
+    // "baseline" = live minus the rules under suspicion.
     const run = async (suspects: DynamicRuleRow[], mode: "breaker" | "audit") => {
       const terms = [...new Set(suspects.flatMap(ruleTerms))];
       const result = await runSandbox({
@@ -637,9 +641,13 @@ export async function superviseActiveRules(): Promise<SuperviseResult> {
           1,
           compileRuleSnapshot(all.filter((r) => !suspects.includes(r))),
         ),
-        proposed: new HeuristicExtractor(1, compileRuleSnapshot(all)),
+        proposed,
         terms,
-        mode: "full",
+        // The breaker reads the whole corpus: it guards against rules that only break in
+        // combination, which their own words cannot point to. An audit asks whether one rule
+        // now breaks a fixture, and a rule of literal words can only change a text containing
+        // one of them, so it reads those fixtures plus the fixed control set, as activation does.
+        mode: mode === "breaker" ? "full" : "fast",
       });
       for (const r of suspects)
         await db()`

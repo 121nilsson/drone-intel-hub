@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { memoExtractor } from "@/shared/infra/evaluation/sandbox";
+import type { Drone, Extraction } from "@/entities/drone/types";
 import { nextCronRun } from "@/shared/infra/cron";
 import { SCHEDULED_TASKS } from "@/shared/contracts/scheduled-tasks";
 import { healthOutcome, ranOutcome, rulesOutcome } from "@/shared/infra/task-runs.server";
@@ -64,5 +66,29 @@ describe("task outcomes", () => {
         mine: { ran: true, reason: "ok", proposed: 2, passed: 1, sandboxed: 2 },
       }),
     ).toMatchObject({ status: "alert", summary: expect.stringContaining("TRIPPED") });
+  });
+});
+
+describe("memoExtractor", () => {
+  it("reads each text once per catalog and hands out copies", async () => {
+    let calls = 0;
+    const inner = {
+      tier: 1 as const,
+      label: "x",
+      extract: async (raw: string) => {
+        calls++;
+        return { name: raw, specs: [] } as unknown as Extraction;
+      },
+    };
+    const m = memoExtractor(inner);
+    const catalog: Drone[] = [];
+    const a = await m.extract("t", catalog);
+    (a as { name: string }).name = "changed";
+    const b = await m.extract("t", catalog);
+    expect(calls).toBe(1);
+    expect(b.name).toBe("t");
+    await m.extract("t", []);
+    expect(calls).toBe(2);
+    expect(memoExtractor(m)).toBe(m);
   });
 });
