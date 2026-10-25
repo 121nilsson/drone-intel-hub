@@ -17,6 +17,7 @@ import { effectiveIeeeBands, effectiveNatoBands, linkIsFiber } from "@/entities/
 import { type Drone, type SpecAttribute } from "@/entities/drone/types";
 import { CountryBadge } from "@/shared/ui/country-badge";
 import { ClaimChip, ProvenanceSheet, type ClaimSelection } from "./provenance-sheet";
+import { AddSpecForm } from "./add-spec-form";
 import { useDrones, useServices } from "@/shared/infra/services";
 import { useProcurements } from "@/shared/infra/use-procurements";
 import { translateText, generateSystemSummary } from "@/shared/infra/ai-proxy.functions";
@@ -546,6 +547,7 @@ export function DossierPage({ id }: { id: string }) {
           className="lg:col-span-2 md:scroll-mt-24"
         >
           <SpecTable drone={d} />
+          <AddSpecForm droneId={d.id} droneName={d.name} specs={d.specs} />
         </Panel>
         <Panel id="aliases" title="Alias registry" className="md:scroll-mt-24">
           <ul className="space-y-1 font-mono text-sm">
