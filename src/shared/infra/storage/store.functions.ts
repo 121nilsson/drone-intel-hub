@@ -127,6 +127,17 @@ export const storeRemove = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+/**
+ * Archive-truth counters for the intel feed header. The dispatches load cap is a browser-cache
+ * bound, not a count, and the page cannot see past it - the header otherwise shows "3000 of 3000"
+ * forever on an archive that grows by hundreds a day. Null when no server backend is configured,
+ * so the caller keeps its loaded-window numbers (exact whenever the archive fits the cap).
+ */
+export const fetchDispatchCounts = createServerFn({ method: "POST" }).handler(async () => {
+  const { dispatchCounts } = await import("./dispatch-counts.server");
+  return dispatchCounts();
+});
+
 const MAX_CLAIM = 200;
 
 /** Exclusive lease on pending documents. See DocumentStore.claim. */

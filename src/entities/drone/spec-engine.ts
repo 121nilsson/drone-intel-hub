@@ -1,4 +1,5 @@
 import type { Drone, ExtractedSpec, SpecAttribute, SpecClaim } from "@/entities/drone/types";
+import { consensus } from "@/entities/drone/consensus";
 import { canonicalUnitForSemantic, semanticKeyFor } from "@/entities/normalization/semantic";
 
 export interface SpecSourceRef {
@@ -110,20 +111,74 @@ export function mergeSpecs(
   return { ...drone, specs: next, updatedAt: date };
 }
 
-export function allSpecKeys(drones: Drone[]) {
+export interface SpecKeySummary {
+  key: string;
+  label: string;
+  count: number;
+  discoveredBy: SpecAttribute["discoveredBy"];
+  /** Consensus display of the value across every claim on every system carrying this key. */
+  value: string;
+  /** Distinct sources that stated a value for this attribute. */
+  sources: number;
+  /** Dominant source (most claims), for grouping/provenance. */
+  source: string;
+  disputed: boolean;
+}
+
+export function allSpecKeys(drones: Drone[]): SpecKeySummary[] {
+  // Aggregate claims across all systems so consensus can be computed per attribute, not per drone.
   const m = new Map<
     string,
-    { label: string; count: number; discoveredBy: SpecAttribute["discoveredBy"] }
+    {
+      label: string;
+      count: number;
+      discoveredBy: SpecAttribute["discoveredBy"];
+      claims: SpecClaim[];
+      unit?: string;
+      semantic?: string;
+    }
   >();
   drones.forEach((d) =>
     d.specs.forEach((s) => {
       const cur = m.get(s.key);
-      m.set(s.key, {
-        label: s.label,
-        count: (cur?.count ?? 0) + 1,
-        discoveredBy: cur?.discoveredBy === "seed" ? "seed" : s.discoveredBy,
-      });
+      if (cur) {
+        cur.count += 1;
+        cur.claims.push(...s.claims);
+        if (cur.discoveredBy !== "seed" && s.discoveredBy === "seed") cur.discoveredBy = "seed";
+      } else {
+        m.set(s.key, {
+          label: s.label,
+          count: 1,
+          discoveredBy: s.discoveredBy,
+          claims: [...s.claims],
+          ...(s.unit ? { unit: s.unit } : {}),
+          ...(s.semantic ? { semantic: s.semantic } : {}),
+        });
+      }
     }),
   );
-  return [...m.entries()].map(([key, v]) => ({ key, ...v }));
+  return [...m.entries()].map(([key, v]) => {
+    const spec: SpecAttribute = {
+      key,
+      label: v.label,
+      claims: v.claims,
+      discoveredBy: v.discoveredBy,
+      ...(v.unit ? { unit: v.unit } : {}),
+      ...(v.semantic ? { semantic: v.semantic } : {}),
+    };
+    const c = consensus(spec);
+    const srcCounts = new Map<string, number>();
+    for (const cl of v.claims) srcCounts.set(cl.source, (srcCounts.get(cl.source) ?? 0) + 1);
+    const dominant = [...srcCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? "—";
+    return {
+      key,
+      label: v.label,
+      count: v.count,
+      discoveredBy: v.discoveredBy,
+      value: c.display,
+      sources: c.sources,
+      source: dominant,
+      disputed: c.disputed,
+    };
+  });
 }

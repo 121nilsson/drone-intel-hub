@@ -80,7 +80,15 @@ export const en: Lexicon = {
       "defeat range",
     ],
     engagementRange: ["engagement range", "kill range", "intercept range", "engages targets at"],
-    detectionRange: ["detection range", "detects targets at", "detects drones at"],
+    // "can detect aerial targets at ranges of up to 600 kilometers" is a radar envelope, not a
+    // vehicle's own range. "etects?" (not "detects?") so the phrase still fits the 24-character
+    // notAfter window when words sit between the verb and the cue ("can detect … targets at").
+    detectionRange: [
+      "detection range",
+      "detects targets at",
+      "detects drones at",
+      "etects? (?:aerial |air )?targets? at (?:a |)ranges?",
+    ],
     targetAltitude: [
       "engagement altitude",
       "interception altitude",

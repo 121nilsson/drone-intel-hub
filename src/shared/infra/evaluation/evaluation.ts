@@ -191,7 +191,7 @@ function norm(s: ExtractedSpec): Norm {
   // ("$2 billion", parsed into money.amount). Currency is left out because the heuristic does
   // not keep it, and the same text rarely states one amount in two currencies.
   if (semantic === "cost.unit") {
-    const amount = s.money?.amount ?? (typeof s.value === "number" ? s.value : undefined);
+    const amount = typeof s.value === "number" ? s.value : s.money?.amount;
     if (amount !== undefined)
       return {
         semantic,

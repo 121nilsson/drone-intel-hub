@@ -101,7 +101,7 @@ export function PendingFixturesPanel() {
             Recently auto-approved ({autoApproved} total) — reject to revoke:
           </p>
           {autoApprovedRecent.map((f) => (
-            <Card key={`auto-${f.id}|${f.version}`} className="space-y-2 text-xs opacity-80">
+            <Card key={`auto-${f.id}|${f.version}`} className="p-3 space-y-2 text-xs opacity-80">
               <div className="flex min-w-0 flex-wrap items-center gap-2">
                 <Tag mono tone="success">
                   auto
@@ -128,7 +128,7 @@ export function PendingFixturesPanel() {
       ) : (
         <div className="mt-3 space-y-2">
           {items.map((f) => (
-            <Card key={`${f.id}|${f.version}`} className="space-y-2 text-xs">
+            <Card key={`${f.id}|${f.version}`} className="p-3 space-y-2 text-xs">
               <div className="flex min-w-0 flex-wrap items-center gap-2">
                 <Tag mono>{f.origin}</Tag>
               </div>

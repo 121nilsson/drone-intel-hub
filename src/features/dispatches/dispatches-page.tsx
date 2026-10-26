@@ -5,6 +5,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useDispatches, useServices, useSources } from "@/shared/infra/services";
 import type { DispatchStatus } from "@/entities/dispatch/types";
 import { getSyncState, type SyncState } from "@/shared/infra/sources/source-sync.functions";
+import { fetchDispatchCounts } from "@/shared/infra/storage/store.functions";
+import { savedPostsLine, type ArchiveCounts } from "@/features/dispatches/saved-posts-line";
 import { Btn, Loading, Panel, Tag, Card } from "@/shared/ui/primitives";
 import { formatProviderError, requeueFailed } from "@/shared/infra/ingest/auto-ingest";
 import { useRelatedIntel, RelatedInlineToast } from "@/shared/ui/intel-graph";
@@ -189,6 +191,7 @@ export function DispatchesPage({
   };
   const [limit, setLimit] = useState(20);
   const [syncState, setSyncState] = useState<SyncState | null>(null);
+  const [archive, setArchive] = useState<ArchiveCounts | null>(null);
 
   useEffect(() => {
     let stop = false;
@@ -203,6 +206,23 @@ export function DispatchesPage({
       clearInterval(id);
     };
   }, [stateFn]);
+
+  // Archive totals refresh slower than the sync poll: they are a database count, and their only
+  // honest changes come from ingestion or analysis. A failing count keeps the last numbers and
+  // is reported, never silently substituted with fibbed figures.
+  useEffect(() => {
+    let stop = false;
+    const load = () =>
+      fetchDispatchCounts()
+        .then((c) => !stop && setArchive(c))
+        .catch((e) => console.error("[dispatches] archive counts unavailable", e));
+    load();
+    const id = setInterval(load, 60_000);
+    return () => {
+      stop = true;
+      clearInterval(id);
+    };
+  }, []);
 
   const counts = useMemo(() => {
     const c: Record<DispatchStatus, number> = {
@@ -245,7 +265,7 @@ export function DispatchesPage({
         <div>
           <h1 className="font-mono text-lg font-bold uppercase tracking-widest">Intel feed</h1>
           <p className="text-sm text-muted-foreground">
-            {dispatches.length} saved posts · {counts.pending} waiting for analysis
+            {savedPostsLine(dispatches.length, archive, counts.pending)}
           </p>
         </div>
         <Link to="/sources" className="font-mono text-xs uppercase text-primary underline">

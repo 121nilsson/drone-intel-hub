@@ -98,7 +98,7 @@ export function CorrectionQueue({ drones }: { drones: readonly Drone[] }) {
             return (
               <Card
                 key={`${drone.id}|${spec.key}|${claimKey(claim)}`}
-                className="space-y-2 text-xs"
+                className="p-3 space-y-2 text-xs"
               >
                 <div className="flex min-w-0 flex-wrap items-center gap-2">
                   <SystemChip id={drone.id} name={drone.name} />

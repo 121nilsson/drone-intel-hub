@@ -32,10 +32,11 @@ interface AddSpecFormProps {
  * reviewed "confirmed" by the analyst, so it feeds consensus like any other source.
  */
 export function AddSpecForm({ droneId, droneName, specs }: AddSpecFormProps) {
+  const existingKeys = specs.map((s) => s.key);
   const svc = useServices();
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<"existing" | "new">("existing");
-  const [selectedKey, setSelectedKey] = useState("");
+  const [selectedKey, setSelectedKey] = useState(existingKeys[0] ?? "");
   const [newKey, setNewKey] = useState("");
   const [newLabel, setNewLabel] = useState("");
   const [unit, setUnit] = useState("");
@@ -45,7 +46,6 @@ export function AddSpecForm({ droneId, droneName, specs }: AddSpecFormProps) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
-  const existingKeys = specs.map((s) => s.key);
 
   const submit = useCallback(
     async (e: React.FormEvent<HTMLFormElement>) => {
