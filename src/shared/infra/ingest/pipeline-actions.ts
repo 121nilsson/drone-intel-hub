@@ -11,6 +11,7 @@ import { counterpartIdsFor, linkCounterparts } from "@/entities/drone/relations"
 import { linkVariant, mergeDroneIntelligence } from "@/entities/drone/merge-intelligence";
 import { mergeSpecs } from "@/entities/drone/spec-engine";
 import { organizationKey } from "@/entities/drone/types";
+import { cleanAliasList } from "@/entities/drone/alias-policy";
 import { toRFLink } from "@/entities/normalization/apply";
 
 export function promote(
@@ -24,10 +25,12 @@ export function promote(
     e.name ||
     `Uncataloged ${e.domain ?? "system"} ${c.id.slice(0, 4).toUpperCase()}`;
   const now = new Date().toISOString();
+  // Model-suggested aliases obey the intake policy: a bare generic phrase ("interceptor drones")
+  // would resolve every mention of the class onto this entry's dossier.
   const base: Drone = {
     id: `${systemSlug(name)}-${c.id.slice(0, 4)}`,
     name,
-    aliases: e.aliases,
+    aliases: cleanAliasList(e.aliases, name),
     domain: e.domain ?? "Multi",
     origin: e.origin ?? "??",
     ...(e.manufacturer

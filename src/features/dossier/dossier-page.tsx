@@ -23,6 +23,7 @@ import { useProcurements } from "@/shared/infra/use-procurements";
 import { translateText, generateSystemSummary } from "@/shared/infra/ai-proxy.functions";
 import { buildSystemEvidenceDigest } from "@/shared/infra/system-evidence-digest";
 import { Btn, ConfidenceTag, Loading, Panel, Tag } from "@/shared/ui/primitives";
+import { SummaryText } from "@/shared/ui/summary-text";
 import { ContractRow } from "@/shared/ui/contracts";
 import { useRelatedIntel, RelatedRail } from "@/shared/ui/intel-graph";
 
@@ -231,6 +232,67 @@ function DeleteSystem({ drone }: { drone: Drone }) {
   );
 }
 
+/**
+ * The structured AI dossier brief: the model's markdown overview plus the verified/caveat lists,
+ * each labelled. Used both while a translation is still pending and as the steady-state brief,
+ * so the two phases never disagree about the format.
+ */
+function SystemBrief({ brief }: { brief: NonNullable<Drone["llmBrief"]> }) {
+  return (
+    <div className="max-w-3xl space-y-3 text-sm leading-relaxed text-foreground/90">
+      <SummaryText text={brief.overview} />
+      {brief.verified.length ? (
+        <section>
+          <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">
+            Verified facts
+          </p>
+          <ul className="mt-1 list-disc space-y-1 pl-5">
+            {brief.verified.map((item, i) => (
+              <li key={i}>{item}</li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+      {brief.caveats.length ? (
+        <section>
+          <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">
+            Caveats and uncertainty
+          </p>
+          <ul className="mt-1 list-disc space-y-1 pl-5">
+            {brief.caveats.map((item, i) => (
+              <li key={i}>{item}</li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+      {brief.provenance.length ? (
+        <section>
+          <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">
+            Sources and provenance
+          </p>
+          <ul className="mt-1 list-disc space-y-1 pl-5">
+            {brief.provenance.map((item, i) => (
+              <li key={i}>{item}</li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+      {brief.nextChecks.length ? (
+        <section>
+          <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">
+            Suggested next checks
+          </p>
+          <ul className="mt-1 list-disc space-y-1 pl-5">
+            {brief.nextChecks.map((item, i) => (
+              <li key={i}>{item}</li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+    </div>
+  );
+}
+
 function DossierSummary({ drone, svc }: { drone: Drone; svc: ReturnType<typeof useServices> }) {
   const translateFn = useServerFn(translateText);
   const generateFn = useServerFn(generateSystemSummary);
@@ -249,10 +311,27 @@ function DossierSummary({ drone, svc }: { drone: Drone; svc: ReturnType<typeof u
   const briefStale =
     !drone.llmSummaryGeneratedAt ||
     Date.now() - Date.parse(drone.llmSummaryGeneratedAt) > 7 * 24 * 60 * 60 * 1000;
+  // A brief whose overview is a fenced or raw JSON blob is the earlier parser's failure, not a
+  // brief; detecting it makes opening the card regenerate through the fixed parser at once.
+  const briefIsBlob =
+    !!drone.llmBrief &&
+    !drone.llmBrief.verified.length &&
+    /^\s*(```|\{|\[)/.test(drone.llmBrief.overview);
   const briefNeedsWork =
-    !generatedSummary || drone.llmSummaryFingerprint !== briefFingerprint || briefStale;
+    !generatedSummary ||
+    drone.llmSummaryFingerprint !== briefFingerprint ||
+    briefStale ||
+    briefIsBlob;
 
   useEffect(() => {
+    // A generated brief is English and is the steady-state content; translating the scrape
+    // summary around it would make the panel rewrite itself twice on open.
+    if (drone.llmBrief) {
+      setTranslated(null);
+      setError(null);
+      setTranslating(false);
+      return;
+    }
     if (storageSummary) {
       setTranslated(generatedSummary ? null : storageSummary);
       setError(null);
@@ -352,7 +431,9 @@ function DossierSummary({ drone, svc }: { drone: Drone; svc: ReturnType<typeof u
     runBriefGeneration,
   ]);
 
-  if (translated) {
+  // A landed AI brief outranks a pending translation at any render, not only once the
+  // translation effect has caught up.
+  if (translated && !drone.llmBrief) {
     return (
       <div className="space-y-2">
         <p className="max-w-3xl text-base leading-relaxed">{translated}</p>
@@ -372,68 +453,14 @@ function DossierSummary({ drone, svc }: { drone: Drone; svc: ReturnType<typeof u
         <p className="max-w-3xl animate-pulse font-mono text-sm text-muted-foreground">
           Translating summary...
         </p>
-        {drone.llmBrief ? (
-          <div className="max-w-3xl space-y-3 text-sm leading-relaxed text-muted-foreground">
-            <p className="text-base leading-relaxed text-foreground">{drone.llmBrief.overview}</p>
-            {drone.llmBrief.verified.length ? (
-              <section>
-                <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">
-                  Verified facts
-                </p>
-                <ul className="mt-1 list-disc space-y-1 pl-5">
-                  {drone.llmBrief.verified.map((item, i) => (
-                    <li key={i}>{item}</li>
-                  ))}
-                </ul>
-              </section>
-            ) : null}
-            {drone.llmBrief.caveats.length ? (
-              <section>
-                <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">
-                  Caveats and uncertainty
-                </p>
-                <ul className="mt-1 list-disc space-y-1 pl-5">
-                  {drone.llmBrief.caveats.map((item, i) => (
-                    <li key={i}>{item}</li>
-                  ))}
-                </ul>
-              </section>
-            ) : null}
-            {drone.llmBrief.provenance.length ? (
-              <section>
-                <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">
-                  Sources and provenance
-                </p>
-                <ul className="mt-1 list-disc space-y-1 pl-5">
-                  {drone.llmBrief.provenance.map((item, i) => (
-                    <li key={i}>{item}</li>
-                  ))}
-                </ul>
-              </section>
-            ) : null}
-            {drone.llmBrief.nextChecks.length ? (
-              <section>
-                <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">
-                  Suggested next checks
-                </p>
-                <ul className="mt-1 list-disc space-y-1 pl-5">
-                  {drone.llmBrief.nextChecks.map((item, i) => (
-                    <li key={i}>{item}</li>
-                  ))}
-                </ul>
-              </section>
-            ) : null}
-          </div>
-        ) : (
-          <p className="max-w-3xl text-base leading-relaxed text-muted-foreground">{summary}</p>
-        )}
+        {drone.llmBrief ? <SystemBrief brief={drone.llmBrief} /> : <SummaryText text={summary} />}
       </div>
     );
   }
 
   return (
     <div className="space-y-2">
-      <p className="max-w-3xl text-base leading-relaxed text-muted-foreground">{summary}</p>
+      {drone.llmBrief ? <SystemBrief brief={drone.llmBrief} /> : <SummaryText text={summary} />}
       {briefGenerating && (
         <p className="font-mono text-xs text-muted-foreground">
           Generating intelligence summary...

@@ -117,4 +117,28 @@ describe("duplicateGroups", () => {
     ]);
     expect(groups[0]!.reasons).toEqual(["same Wikidata item (Q1)"]);
   });
+
+  it("groups the same name in bare singular and plural", () => {
+    const groups = duplicateGroups([
+      drone("patriot-97a5", { name: "Patriot" }),
+      drone("patriots-c7da", { name: "Patriots" }),
+    ]);
+    expect(ids(groups)).toEqual([["patriot-97a5", "patriots-c7da"]]);
+    expect(groups[0]!.reasons).toEqual(["same name differing only in plural"]);
+  });
+
+  it("matches an alias to a name once its category tail is set aside", () => {
+    const groups = duplicateGroups([
+      drone("patriot-97a5", { name: "Patriot" }),
+      drone("plural-card", { name: "Patriots", aliases: ["Patriot systems"] }),
+    ]);
+    expect(ids(groups)).toEqual([["patriot-97a5", "plural-card"]]);
+    expect(groups[0]!.reasons).toContain("same name differing only in plural");
+  });
+
+  it("does not group a generic alias with anything", () => {
+    expect(
+      duplicateGroups([drone("bars-b3ed", { name: "Bars", aliases: ["interceptor drones"] })]),
+    ).toEqual([]);
+  });
 });

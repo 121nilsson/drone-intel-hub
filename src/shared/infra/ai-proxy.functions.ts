@@ -4,6 +4,7 @@ import { DEFAULT_SETTINGS } from "./settings-defaults";
 import type { Drone } from "@/entities/drone/types";
 import { sanitizeText } from "@/shared/infra/json-sanitize";
 import { buildSystemEvidenceDigest } from "@/shared/infra/system-evidence-digest";
+import { parseModelJson } from "./model-json";
 
 export type { ChatInput, ChatResult } from "./ai-proxy.server";
 
@@ -83,32 +84,33 @@ export const generateSystemSummary = createServerFn({ method: "POST" })
       tier: "tier2",
     });
     if (!result.ok) return { ok: false as const, error: result.error };
-    let brief = undefined;
-    try {
-      const parsed = JSON.parse(result.content);
-      brief = {
-        overview: sanitizeText(String(parsed?.overview ?? "").trim()),
-        verified: Array.isArray(parsed?.verified)
-          ? parsed.verified.map((x: unknown) => sanitizeText(String(x)))
-          : [],
-        caveats: Array.isArray(parsed?.caveats)
-          ? parsed.caveats.map((x: unknown) => sanitizeText(String(x)))
-          : [],
-        provenance: Array.isArray(parsed?.provenance)
-          ? parsed.provenance.map((x: unknown) => sanitizeText(String(x)))
-          : [],
-        nextChecks: Array.isArray(parsed?.nextChecks)
-          ? parsed.nextChecks.map((x: unknown) => sanitizeText(String(x)))
-          : [],
-      };
-    } catch {
-      brief = {
-        overview: sanitizeText(result.content.trim()),
-        verified: [],
-        caveats: [],
-        provenance: [],
-        nextChecks: [],
-      };
-    }
+    // The raw-markdown brief a dossier used to settle on came from models that fenced (or
+    // thought-wrapped) their JSON: content fell through JSON.parse into the fallback path and
+    // the whole fenced blob was stored as the brief. The shared parser recovers the object;
+    // a structurally failed structure falls back to the model's prose.
+    const parsed = parseModelJson(result.content);
+    const brief = parsed
+      ? {
+          overview: sanitizeText(String(parsed["overview"] ?? "").trim()),
+          verified: Array.isArray(parsed["verified"])
+            ? parsed["verified"].map((x: unknown) => sanitizeText(String(x)))
+            : [],
+          caveats: Array.isArray(parsed["caveats"])
+            ? parsed["caveats"].map((x: unknown) => sanitizeText(String(x)))
+            : [],
+          provenance: Array.isArray(parsed["provenance"])
+            ? parsed["provenance"].map((x: unknown) => sanitizeText(String(x)))
+            : [],
+          nextChecks: Array.isArray(parsed["nextChecks"])
+            ? parsed["nextChecks"].map((x: unknown) => sanitizeText(String(x)))
+            : [],
+        }
+      : {
+          overview: sanitizeText(result.content.trim()),
+          verified: [],
+          caveats: [],
+          provenance: [],
+          nextChecks: [],
+        };
     return { ok: true as const, summary: brief.overview, brief };
   });

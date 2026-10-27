@@ -1,5 +1,6 @@
 import type { Drone } from "./types";
 import { phoneticKey } from "./name-key";
+import { aliasStem } from "./alias-policy";
 
 export interface DuplicateGroup {
   /** Stable for React keys and per-group UI state: the sorted member ids. */
@@ -23,6 +24,8 @@ const MIN_KEY = 3;
  * - one's name is another's alias ("Geran-2" on the Shahed-136 card). Alias-to-alias overlap
  *   does not count: a shared "Shahed" alias would otherwise group Shahed-136 with Shahed-238,
  *   the same rule the reference import follows;
+ * - the same word appears as bare singular and plural names ("Patriot" / "Patriots"), or an
+ *   alias matches a name once its trailing category tail is set aside ("Patriot systems");
  * - they point at the same Wikidata item.
  *
  * Groups are transitive (A~B and B~C puts all three together) and are only suggestions: merging
@@ -57,11 +60,51 @@ export function duplicateGroups(drones: readonly Drone[]): DuplicateGroup[] {
       else if (other !== i) union(other, i, `same Wikidata item (${id})`);
     }
   });
+
+  // The same name in bare singular and plural grew its own card once ("Patriots" sat next to
+  // "Patriot" and collected its own procurements). Bridged only after the map is complete, so
+  // either spelling can find the other; still analyst-confirmed, never an automatic merge.
+  // The t/s tail swap covers the fold itself: "Patriots" is stored as "patrios" ("ts"→"s"),
+  // so "patriot" cannot reach it by appending an "s" alone.
+  const pluralAlts = (key: string): string[] => {
+    const alts: string[] = [];
+    if (key.endsWith("s")) {
+      const base = key.slice(0, -1);
+      alts.push(base, `${base}t`);
+    } else {
+      alts.push(`${key}s`);
+      if (key.endsWith("t")) alts.push(`${key.slice(0, -1)}s`);
+    }
+    return alts;
+  };
+  for (const [key, i] of [...byNameKey]) {
+    for (const alt of pluralAlts(key)) {
+      if (alt.length < MIN_KEY) continue;
+      const other = byNameKey.get(alt);
+      if (other !== undefined && other !== i) union(other, i, "same name differing only in plural");
+    }
+  }
+
   drones.forEach((d, i) => {
     for (const alias of d.aliases) {
-      const other = byNameKey.get(phoneticKey(alias));
-      if (other !== undefined && other !== i)
-        union(other, i, `"${alias}" is an alias of one and the name of another`);
+      // Exact key, as before; plus the alias with its trailing category tail (and any plural
+      // "s") stripped: a card carrying "Patriot systems" matches the card named "Patriot".
+      const probes = new Set<string>();
+      const key = phoneticKey(alias);
+      if (key.length >= MIN_KEY) probes.add(key);
+      const stem = aliasStem(alias).trim();
+      if (stem && stem.toLowerCase() !== alias.trim().toLowerCase()) {
+        const stemKey = phoneticKey(stem);
+        if (stemKey.length >= MIN_KEY) {
+          probes.add(stemKey);
+          probes.add(stemKey.endsWith("s") ? stemKey.slice(0, -1) : `${stemKey}s`);
+        }
+      }
+      for (const probe of probes) {
+        const other = byNameKey.get(probe);
+        if (other !== undefined && other !== i)
+          union(other, i, `"${alias}" is an alias of one and the name of another`);
+      }
     }
   });
 

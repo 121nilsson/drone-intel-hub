@@ -3,6 +3,7 @@
  * variant numbers strict ("Geran-2" never matches "Geran-5"), phonetic keys bridge scripts.
  */
 import { mentionsPhonetic, phoneticKey } from "@/entities/drone/name-key";
+import { cleanAliasList } from "@/entities/drone/alias-policy";
 import type { DetectedSystem, Drone } from "@/entities/drone/types";
 import { getRe } from "./regex-cache";
 
@@ -119,8 +120,14 @@ function dropContained(names: string[], against: string[]) {
   );
 }
 
+/**
+ * Names a catalog entry may be resolved by. Aliases pass the intake policy at match time too, so
+ * a generic phrase already stored before the guard existed (or injected by a dynamic rule) never
+ * captures a mention: "interceptor drones" resolves nothing, "Bars interceptor drones" resolves
+ * the Bars entry.
+ */
 const catalogNames = (d: Drone) =>
-  [...d.name.split(/\s*\/\s*/), d.name, d.cyrillic ?? "", ...d.aliases].filter(
+  [...d.name.split(/\s*\/\s*/), d.name, d.cyrillic ?? "", ...cleanAliasList(d.aliases)].filter(
     (n) => n.length > 2 && !STOP.has(n.toLowerCase()),
   );
 const base = (n: string) => {

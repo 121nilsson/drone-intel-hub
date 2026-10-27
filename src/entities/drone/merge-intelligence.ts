@@ -7,6 +7,7 @@ import {
   type OrganizationLink,
   organizationKey,
 } from "./types";
+import { cleanAliasList } from "./alias-policy";
 
 const norm = (s: string) => s.trim().toLowerCase();
 
@@ -99,9 +100,9 @@ export function mergeDroneIntelligence(
   extraction: Extraction,
   sourceId?: string,
 ): Drone {
-  const aliases = [...new Set([...drone.aliases, ...extraction.aliases])].filter(
-    (a) => norm(a) !== norm(drone.name),
-  );
+  // Alias union under the intake policy: generic class phrases ("interceptor drones") never
+  // enter the identity, and ones that slipped in earlier are scrubbed on the next merge.
+  const aliases = cleanAliasList([...drone.aliases, ...extraction.aliases], drone.name);
   const operators = [...new Set([...drone.operators, ...extraction.operators])];
   const now = new Date().toISOString();
   const incomingLinks = extraction.manufacturer
