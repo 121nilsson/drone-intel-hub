@@ -1,5 +1,6 @@
 import { systemSlug } from "@/entities/drone/name-key";
 import type { Drone, DroneReference, Extraction, ReferenceCard } from "@/entities/drone/types";
+import { adoptAliasList, buildConflictMap, intakeAliasClaims } from "@/entities/drone/alias-claims";
 import { normalizeExtraction } from "@/entities/normalization/apply";
 import { attributeSemantic, mergeSpecs } from "@/entities/drone/spec-engine";
 import { isQid, referenceKey } from "@/shared/infra/wikipedia";
@@ -47,7 +48,11 @@ export function applyReference(
     }
     const hit = find(working, card);
     if (!hit) {
-      const drone = withReferenceSpecs(createDrone(card, freshId(card, working), now), card, now);
+      // A created entry owns its reference card: the card's alias list is its stored identity
+      // record (the class the seed lists were), so it materialises as verified claims - not as
+      // suggestions - and the flat view is re-derived from them.
+      const draft = createDrone(card, freshId(card, working), now);
+      const drone = withReferenceSpecs(adoptAliasList(draft, now), card, now);
       working.push(drone);
       changed.set(drone.id, drone);
       report.created++;
@@ -55,7 +60,19 @@ export function applyReference(
       continue;
     }
     const mode = attachMode(hit.drone, card);
-    const next = withReferenceSpecs(applyOne(hit.drone, card, now, mode), card, now);
+    // Aliases a card adds to an entry that already carries claims are suggestions, not truth:
+    // the intake path holds them as candidates - flagged when they collide with another entry's
+    // identity, and never overriding a verdict. The card's own label is a no-op there.
+    const captured = intakeAliasClaims(
+      hit.drone,
+      [card.name, card.cyrillic ?? "", ...card.aliases],
+      { at: now, source: card.url, conflicts: buildConflictMap(working, hit.drone.id) },
+    );
+    const next = withReferenceSpecs(
+      adoptAliasList(applyOne(captured, card, now, mode), now),
+      card,
+      now,
+    );
     if (sameIdentity(hit.drone, next)) {
       report.skipped++;
       continue;
@@ -198,6 +215,7 @@ function sameIdentity(prev: Drone, next: Drone): boolean {
   return (
     refSame &&
     claimCount(prev) === claimCount(next) &&
+    (prev.aliasClaims?.length ?? 0) === (next.aliasClaims?.length ?? 0) &&
     prev.summary === next.summary &&
     (prev.cyrillic ?? "") === (next.cyrillic ?? "") &&
     (prev.manufacturer ?? "") === (next.manufacturer ?? "") &&

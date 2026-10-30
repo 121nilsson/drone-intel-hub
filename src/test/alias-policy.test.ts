@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { aliasStem, cleanAliasList, isGenericAlias } from "@/entities/drone/alias-policy";
+import {
+  aliasFold,
+  aliasLemma,
+  aliasStem,
+  cleanAliasList,
+  isGenericAlias,
+  pluralIdentities,
+} from "@/entities/drone/alias-policy";
 import { mergeDroneIntelligence } from "@/entities/drone/merge-intelligence";
+import { migrateAliasList } from "@/entities/drone/alias-claims";
 import { promote } from "@/shared/infra/ingest/pipeline-actions";
 import { resolveSystems } from "@/shared/infra/heuristic-ai";
 import type { Candidate, Drone, Extraction } from "@/entities/drone/types";
@@ -93,16 +101,80 @@ describe("cleanAliasList", () => {
   });
 });
 
-describe("mergeDroneIntelligence alias union obeys the policy", () => {
-  it("does not accept a model-suggested generic alias", () => {
+describe("aliasLemma", () => {
+  it.each([
+    ["Шахедів", "Шахед"],
+    ["Шахедах", "Шахед"],
+    ["Шахедами", "Шахед"],
+    ["Шахедом", "Шахед"],
+    ["Шахеды", "Шахед"],
+    ["Шахеда", "Шахед"],
+    ["Ланцетів", "Ланцет"],
+    ["Ланцетом", "Ланцет"],
+    ["Мавика", "Мавик"],
+  ])("folds a declension to the stem: %s", (alias, lemma) => {
+    expect(aliasLemma(alias)).toBe(lemma);
+  });
+
+  it.each(["Герань", "Ланцет", "Мавик", "Patriots", "F7 Litavr", "БАРС"])(
+    "keeps a name that carries no case ending: %s",
+    (alias) => {
+      expect(aliasLemma(alias)).toBe(alias);
+    },
+  );
+
+  it("never strips a short name into its ending", () => {
+    expect(aliasLemma("Оса")).toBe("Оса");
+    expect(aliasLemma("Осы")).toBe("Осы");
+  });
+
+  it("reads the Latin look-alike letters of a mixed-script alias as the Cyrillic they were", () => {
+    // The live geran list carried "Шелахaх" (Latin a) beside the Cyrillic "Шелахах".
+    expect(aliasLemma("Шелахaх")).toBe(aliasLemma("Шелахах"));
+    expect(aliasFold("Шелахaх")).toBe(aliasFold("Шелахах"));
+  });
+
+  it("never strips the endings of an all-Latin alias through homoglyphs", () => {
+    expect(aliasLemma("Panorama")).toBe("Panorama");
+    expect(aliasLemma("Dream")).toBe("Dream");
+  });
+});
+
+describe("aliasFold", () => {
+  it("folds every declension of one name to one key", () => {
+    const forms = new Set(["Шахед", "Шахедів", "Шахедах", "Шахедами", "Шахеда"].map(aliasFold));
+    expect(forms.size).toBe(1);
+  });
+});
+
+describe("pluralIdentities", () => {
+  it("meets the folded plural from the bare singular and the reverse, through the t/s swap", () => {
+    // phoneticText turns "ts" into "s", so folded "Patriots" stores "patrios".
+    const plural = pluralIdentities("patrios");
+    const singular = pluralIdentities("patriot");
+    expect(plural).toContain("patriot");
+    expect(singular).toContain("patrios");
+  });
+});
+
+describe("mergeDroneIntelligence obeys the alias claim policy", () => {
+  it("captures a model-suggested distinctive alias as a candidate, not an alias", () => {
     const merged = mergeDroneIntelligence(
       drone("bars-b3ed", { name: "Bars", aliases: ["Ukrainian Bars"] }),
       extraction({ aliases: ["Bars interceptor drones", "interceptor drones"] }),
     );
-    expect(merged.aliases).toEqual(["Ukrainian Bars", "Bars interceptor drones"]);
+    // The legacy list migrated to claims on first merge; the new suggestion is unapproved.
+    expect(merged.aliases).toEqual(["Ukrainian Bars"]);
+    const candidate = merged.aliasClaims!.find((c) => c.alias === "Bars interceptor drones");
+    expect(candidate).toMatchObject({ status: "candidate" });
+    expect(candidate?.kind).toBeUndefined();
+    expect(
+      merged.aliasClaims!.find((c) => isGenericAlias(c.alias) && c.status !== "rejected"),
+    ).toBeUndefined();
+    expect(merged.aliasClaims!.some((c) => c.alias === "Ukrainian Bars")).toBe(true);
   });
 
-  it("scrubs a generic alias already stored on the entry", () => {
+  it("scrubs a generic alias already stored on the entry when it migrates", () => {
     const merged = mergeDroneIntelligence(
       drone("bars-b3ed", {
         name: "Bars",
@@ -111,11 +183,27 @@ describe("mergeDroneIntelligence alias union obeys the policy", () => {
       extraction({ aliases: [] }),
     );
     expect(merged.aliases).toEqual(["Ukrainian Bars"]);
+    expect(merged.aliasClaims!.map((c) => c.alias)).toEqual(["Ukrainian Bars"]);
+  });
+
+  it("records where a suggestion came from", () => {
+    const merged = mergeDroneIntelligence(
+      drone("bars-b3ed", { name: "Bars" }),
+      extraction({ aliases: ["F7 Litavr"] }),
+      "dispatch-42",
+      { source: "Defence Blog · https://defence-blog.com/x", sourceCandidateId: "cand-9" },
+    );
+    expect(merged.aliasClaims![0]).toMatchObject({
+      source: "Defence Blog · https://defence-blog.com/x",
+      sourceId: "dispatch-42",
+      sourceCandidateId: "cand-9",
+      status: "candidate",
+    });
   });
 });
 
-describe("promote stores cleaned aliases", () => {
-  it("leaves a generic model suggestion out of the new catalog entry", () => {
+describe("promote stores alias claims, awaiting approval", () => {
+  it("keeps a model suggestion out of the new entry's aliases but on record", () => {
     const stored: Drone[] = [];
     const deps = {
       drones: {
@@ -142,7 +230,40 @@ describe("promote stores cleaned aliases", () => {
       }),
     });
     const created = promote(c, deps);
-    expect(created.aliases).toEqual(["Bars interceptor drones"]);
+    expect(created.aliases).toEqual([]);
+    const claims = created.aliasClaims!;
+    expect(claims.map((x) => x.alias)).toEqual(["Bars interceptor drones"]);
+    expect(claims[0]).toMatchObject({
+      status: "candidate",
+      source: "Test · https://example.com/a",
+      sourceCandidateId: "cand-1234",
+    });
+  });
+
+  it("flags a suggested alias that is another entry's canonical identity", () => {
+    const stored: Drone[] = [drone("osа-x1", { name: "Osa", aliases: [] })];
+    const deps = {
+      drones: {
+        list: () => stored,
+        get: (id: string) => stored.find((c) => c.id === id),
+        search: () => stored,
+        remove: () => {},
+        upsert: (d: Drone) => {
+          const i = stored.findIndex((x) => x.id === d.id);
+          if (i >= 0) stored[i] = d;
+          else stored.push(d);
+        },
+      },
+      candidates: { list: () => [], add: () => {}, update: () => {} },
+    };
+    const c = candidate({
+      extraction: extraction({ name: "Puma", aliases: ["Osa", "Interceptor"] }),
+    });
+    const created = promote(c, deps);
+    const claim = created.aliasClaims!.find((x) => x.alias === "Osa");
+    expect(claim?.conflictWithDroneIds).toEqual(["osа-x1"]);
+    const generic = created.aliasClaims!.find((x) => x.alias === "Interceptor");
+    expect(generic).toBeUndefined();
   });
 });
 

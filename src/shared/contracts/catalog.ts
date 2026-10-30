@@ -94,6 +94,26 @@ export interface CatalogMutations {
    * Returns the updated source entry, or undefined when the source entry is gone.
    */
   undoMoveClaimToSystem(droneId: string, specKey: string, claim: SpecClaim): Drone | undefined;
+  /**
+   * Record an analyst verdict on an alias claim: approve it into the entry's identity, reject
+   * the suggestion, or null to take an earlier verdict back off. Returns the updated entry, or
+   * undefined when the entry or claim is gone.
+   */
+  reviewAlias(
+    droneId: string,
+    claimId: string,
+    verdict: "confirmed" | "rejected" | null,
+  ): Drone | undefined;
+  /** Register an alias by hand: it is verified immediately, the analyst being the reviewer. */
+  addAlias(droneId: string, alias: string): Drone | undefined;
+  /**
+   * File an alias under its real system: the source claim stays on record as rejected evidence
+   * pointing at the move, and the target entry answers to the alias from now on. Returns the
+   * updated source entry, or undefined when either entry or the claim is gone.
+   */
+  moveAlias(sourceDroneId: string, claimId: string, targetDroneId: string): Drone | undefined;
+  /** Take an alias move back out: the filed copy leaves the target, the source verdict clears. */
+  undoMoveAlias(sourceDroneId: string, claimId: string): Drone | undefined;
 }
 
 export type ClaimVerdict =

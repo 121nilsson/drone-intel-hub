@@ -269,6 +269,7 @@ export async function runTwoTier(
         ),
         extraction,
         context.dispatchId,
+        { source },
       );
     const merged = applyMerge(target);
     d.drones.upsert(merged, applyMerge);

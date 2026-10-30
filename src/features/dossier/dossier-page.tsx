@@ -18,6 +18,7 @@ import { type Drone, type SpecAttribute } from "@/entities/drone/types";
 import { CountryBadge } from "@/shared/ui/country-badge";
 import { ClaimChip, ProvenanceSheet, type ClaimSelection } from "./provenance-sheet";
 import { AddSpecForm } from "./add-spec-form";
+import { AliasRegistry } from "./alias-registry";
 import { useDrones, useServices } from "@/shared/infra/services";
 import { useProcurements } from "@/shared/infra/use-procurements";
 import { translateText, generateSystemSummary } from "@/shared/infra/ai-proxy.functions";
@@ -576,23 +577,7 @@ export function DossierPage({ id }: { id: string }) {
           <SpecTable drone={d} />
           <AddSpecForm droneId={d.id} droneName={d.name} specs={d.specs} />
         </Panel>
-        <Panel id="aliases" title="Alias registry" className="md:scroll-mt-24">
-          <ul className="space-y-1 font-mono text-sm">
-            <li>
-              <span className="text-muted-foreground">canonical</span> {d.name}
-            </li>
-            {d.cyrillic && (
-              <li>
-                <span className="text-muted-foreground">cyrillic</span> {d.cyrillic}
-              </li>
-            )}
-            {d.aliases.map((a) => (
-              <li key={a}>
-                <span className="text-muted-foreground">alias</span> {a}
-              </li>
-            ))}
-          </ul>
-        </Panel>
+        <AliasRegistry drone={d} catalog={drones} />
         <Panel id="related" title="Related Intelligence" className="md:scroll-mt-24">
           <RelatedRail edges={relatedIntel?.edges ?? []} maxItems={10} />
         </Panel>

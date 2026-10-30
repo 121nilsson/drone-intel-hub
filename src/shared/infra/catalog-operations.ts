@@ -16,6 +16,18 @@ import {
   removeMovedClaim,
   reviewClaim,
 } from "@/entities/drone/claim-review";
+import {
+  addManualAlias,
+  aliasClaimsFromList,
+  approveAlias,
+  claimsToAliases,
+  moveAliasTo,
+  removeFiledAlias,
+  rejectAlias,
+  unsetAliasVerdict,
+} from "@/entities/drone/alias-claims";
+import { aliasFold } from "@/entities/drone/alias-policy";
+import type { AliasClaim } from "@/entities/drone/types";
 
 /**
  * The repositories the catalog operations work on.
@@ -43,9 +55,8 @@ function mergeDronePair(keep: Drone, merge: Drone, reason?: string): Drone {
       ? merge.name
       : keep.name;
   const cyrillic = keep.cyrillic || merge.cyrillic;
-  const aliases = [
-    ...new Set([...keep.aliases, ...merge.aliases, ...(merge.name !== name ? [merge.name] : [])]),
-  ].filter((a) => a.toLowerCase() !== name.toLowerCase());
+  const aliasClaims = pairAliasClaims(keep, merge, name, cyrillic);
+  const aliases = claimsToAliases(aliasClaims, name, cyrillic);
   const domain = keep.domain && keep.domain !== "Multi" ? keep.domain : merge.domain || "Multi";
   const origin = keep.origin && keep.origin !== "??" ? keep.origin : merge.origin || "??";
   const manufacturer = keep.manufacturer || merge.manufacturer;
@@ -132,6 +143,7 @@ function mergeDronePair(keep: Drone, merge: Drone, reason?: string): Drone {
     name,
     ...(cyrillic ? { cyrillic } : {}),
     aliases,
+    aliasClaims,
     domain,
     origin,
     ...(manufacturer ? { manufacturer } : {}),
@@ -176,6 +188,36 @@ function mergeDronePair(keep: Drone, merge: Drone, reason?: string): Drone {
   };
 
   return result;
+}
+
+/**
+ * The alias claims the entry that remains answers to: its own claims (materialised from the
+ * flat lists of pre-claim entries), the merged-away entry's claims added on, and its canonical
+ * name as a legacy claim - what the flat union produced before, now carried per claim.
+ */
+function pairAliasClaims(keep: Drone, merge: Drone, name: string, cyrillic?: string): AliasClaim[] {
+  const claims = [
+    ...(keep.aliasClaims ?? aliasClaimsFromList(keep.aliases, keep.name, keep.cyrillic)),
+  ];
+  const held = new Set(claims.map((c) => c.id));
+  for (const c of merge.aliasClaims ?? aliasClaimsFromList(merge.aliases, name, cyrillic)) {
+    if (held.has(c.id)) continue;
+    held.add(c.id);
+    claims.push(c);
+  }
+  if (merge.name && merge.name.toLowerCase() !== name.toLowerCase()) {
+    const fold = aliasFold(merge.name);
+    if (fold && !held.has(`alias-${fold}`)) {
+      claims.push({
+        id: `alias-${fold}`,
+        alias: merge.name,
+        status: "verified",
+        kind: "legacy",
+        firstSeen: merge.createdAt,
+      });
+    }
+  }
+  return claims;
 }
 
 /** Rewrite another entry's links from a merged-away id to the entry that remains. */
@@ -471,6 +513,101 @@ export function undoSpecClaimToSystem(
   return next;
 }
 
+/** See CatalogMutations.reviewAlias. */
+export function reviewAliasClaim(
+  droneId: string,
+  claimId: string,
+  verdict: "confirmed" | "rejected" | null,
+  d: Pick<CatalogDeps, "drones">,
+  at = new Date().toISOString(),
+): Drone | undefined {
+  const drone = d.drones.get(droneId);
+  if (!drone) return undefined;
+  const apply = (base: Drone): Drone | undefined =>
+    verdict === "confirmed"
+      ? approveAlias(base, claimId, at)
+      : verdict === "rejected"
+        ? rejectAlias(base, claimId, at)
+        : unsetAliasVerdict(base, claimId, at);
+  const next = apply(drone);
+  if (next) d.drones.upsert(next, (fresh) => apply(fresh) ?? fresh);
+  return next;
+}
+
+/** See CatalogMutations.addAlias. */
+export function addAnalystAlias(
+  droneId: string,
+  alias: string,
+  d: Pick<CatalogDeps, "drones">,
+  at = new Date().toISOString(),
+): Drone | undefined {
+  const drone = d.drones.get(droneId);
+  if (!drone) return undefined;
+  const next = addManualAlias(drone, alias, at);
+  if (next) d.drones.upsert(next, (fresh) => addManualAlias(fresh, alias, at) ?? fresh);
+  return next;
+}
+
+/** See CatalogMutations.moveAlias. */
+export function moveAliasToSystem(
+  sourceDroneId: string,
+  claimId: string,
+  targetDroneId: string,
+  d: Pick<CatalogDeps, "drones">,
+  at = new Date().toISOString(),
+): Drone | undefined {
+  const source = d.drones.get(sourceDroneId);
+  const target = d.drones.get(targetDroneId);
+  if (!source || !target) return undefined;
+  const first = moveAliasTo(source, claimId, target, at);
+  if (!first) return undefined;
+  // Two documents cannot be written atomically. The copy lands first: if the source write then
+  // fails, the alias is briefly answered to twice, which a retry or undo repairs - the other
+  // order would reject the source claim and lose the alias entirely.
+  if (first.target !== target) {
+    d.drones.upsert(first.target, (fresh) => {
+      const result = moveAliasTo(d.drones.get(sourceDroneId) ?? source, claimId, fresh, at);
+      return result?.target ?? fresh;
+    });
+  }
+  if (first.source !== source) {
+    d.drones.upsert(
+      first.source,
+      (fresh) => moveAliasTo(fresh, claimId, target, at)?.source ?? fresh,
+    );
+  }
+  return first.source;
+}
+
+/** See CatalogMutations.undoMoveAlias. */
+export function undoAliasMoveFromSystem(
+  sourceDroneId: string,
+  claimId: string,
+  d: Pick<CatalogDeps, "drones">,
+  at = new Date().toISOString(),
+): Drone | undefined {
+  const source = d.drones.get(sourceDroneId);
+  if (!source) return undefined;
+  const claim = source.aliasClaims?.find((c) => c.id === claimId);
+  const moveId = claim?.review?.moveId;
+  if (!claim || !moveId) return undefined;
+  const targetDroneId = claim.review?.movedToDroneId;
+  const next = unsetAliasVerdict(source, claimId, at);
+  if (!next) return undefined;
+  // Clear the source verdict first: a failed target write leaves the filed copy in place -
+  // visible - rather than discarding the alias silently.
+  d.drones.upsert(next, (fresh) => unsetAliasVerdict(fresh, claimId, at) ?? fresh);
+  if (!targetDroneId) return next;
+  const target = d.drones.get(targetDroneId);
+  if (target) {
+    const removed = removeFiledAlias(target, sourceDroneId, moveId, at);
+    if (removed !== target) {
+      d.drones.upsert(removed, (fresh) => removeFiledAlias(fresh, sourceDroneId, moveId, at));
+    }
+  }
+  return next;
+}
+
 /**
  * Binds the catalog operations to a set of repositories, so a page asks for "merge these two
  * entries" instead of assembling the repositories the operation happens to need.
@@ -492,5 +629,10 @@ export function createCatalogMutations(d: CatalogDeps): CatalogMutations {
       moveSpecClaimToSystem(droneId, specKey, claim, targetDroneId, targetSpecKey, figure ?? "", d),
     undoMoveClaimToSystem: (droneId, specKey, claim) =>
       undoSpecClaimToSystem(droneId, specKey, claim, d),
+    reviewAlias: (droneId, claimId, verdict) => reviewAliasClaim(droneId, claimId, verdict, d),
+    addAlias: (droneId, alias) => addAnalystAlias(droneId, alias, d),
+    moveAlias: (sourceDroneId, claimId, targetDroneId) =>
+      moveAliasToSystem(sourceDroneId, claimId, targetDroneId, d),
+    undoMoveAlias: (sourceDroneId, claimId) => undoAliasMoveFromSystem(sourceDroneId, claimId, d),
   };
 }

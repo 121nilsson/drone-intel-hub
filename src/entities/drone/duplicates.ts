@@ -1,6 +1,6 @@
 import type { Drone } from "./types";
 import { phoneticKey } from "./name-key";
-import { aliasStem } from "./alias-policy";
+import { aliasStem, pluralIdentities } from "./alias-policy";
 
 export interface DuplicateGroup {
   /** Stable for React keys and per-group UI state: the sorted member ids. */
@@ -63,22 +63,10 @@ export function duplicateGroups(drones: readonly Drone[]): DuplicateGroup[] {
 
   // The same name in bare singular and plural grew its own card once ("Patriots" sat next to
   // "Patriot" and collected its own procurements). Bridged only after the map is complete, so
-  // either spelling can find the other; still analyst-confirmed, never an automatic merge.
-  // The t/s tail swap covers the fold itself: "Patriots" is stored as "patrios" ("ts"→"s"),
-  // so "patriot" cannot reach it by appending an "s" alone.
-  const pluralAlts = (key: string): string[] => {
-    const alts: string[] = [];
-    if (key.endsWith("s")) {
-      const base = key.slice(0, -1);
-      alts.push(base, `${base}t`);
-    } else {
-      alts.push(`${key}s`);
-      if (key.endsWith("t")) alts.push(`${key.slice(0, -1)}s`);
-    }
-    return alts;
-  };
+  // either spelling can find the other; still analyst-confirmed, never an automatic merge. The
+  // shared plural identities carry the fold's own t/s tail swap ("Patriots" stores "patrios").
   for (const [key, i] of [...byNameKey]) {
-    for (const alt of pluralAlts(key)) {
+    for (const alt of pluralIdentities(key)) {
       if (alt.length < MIN_KEY) continue;
       const other = byNameKey.get(alt);
       if (other !== undefined && other !== i) union(other, i, "same name differing only in plural");

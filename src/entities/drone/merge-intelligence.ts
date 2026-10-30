@@ -7,7 +7,7 @@ import {
   type OrganizationLink,
   organizationKey,
 } from "./types";
-import { cleanAliasList } from "./alias-policy";
+import { intakeAliasClaims, type AliasIntakeContext } from "./alias-claims";
 
 const norm = (s: string) => s.trim().toLowerCase();
 
@@ -94,15 +94,29 @@ function mergeOrganizationLinks(
   return out;
 }
 
+/** Where a merged post's suggestions came from, same convention as the other claim sources. */
+export interface MergeProvenance {
+  source?: string;
+  sourceCandidateId?: string;
+}
+
 /** Conservative enrichment: fill gaps and union observations; never replace established identity. */
 export function mergeDroneIntelligence(
   drone: Drone,
   extraction: Extraction,
   sourceId?: string,
+  provenance?: MergeProvenance,
 ): Drone {
-  // Alias union under the intake policy: generic class phrases ("interceptor drones") never
-  // enter the identity, and ones that slipped in earlier are scrubbed on the next merge.
-  const aliases = cleanAliasList([...drone.aliases, ...extraction.aliases], drone.name);
+  // Model-suggested aliases arrive as unapproved candidates behind the claim system; the flat
+  // list migrates on the entry's first merge, so every consumer keeps reading the same
+  // verified-only view through `aliases`.
+  const ctx: AliasIntakeContext = {
+    at: new Date().toISOString(),
+    ...(sourceId ? { sourceId } : {}),
+    ...(provenance?.source ? { source: provenance.source } : {}),
+    ...(provenance?.sourceCandidateId ? { sourceCandidateId: provenance.sourceCandidateId } : {}),
+  };
+  const withAliases = intakeAliasClaims(drone, extraction.aliases ?? [], ctx);
   const operators = [...new Set([...drone.operators, ...extraction.operators])];
   const now = new Date().toISOString();
   const incomingLinks = extraction.manufacturer
@@ -119,8 +133,7 @@ export function mergeDroneIntelligence(
     : [];
   const organizationLinks = mergeOrganizationLinks(drone.organizationLinks, incomingLinks, now);
   return {
-    ...drone,
-    aliases,
+    ...withAliases,
     operators,
     ...(drone.manufacturer || !extraction.manufacturer
       ? {}

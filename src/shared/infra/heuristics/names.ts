@@ -3,7 +3,7 @@
  * variant numbers strict ("Geran-2" never matches "Geran-5"), phonetic keys bridge scripts.
  */
 import { mentionsPhonetic, phoneticKey } from "@/entities/drone/name-key";
-import { cleanAliasList } from "@/entities/drone/alias-policy";
+import { cleanAliasList, isFamilyAlias } from "@/entities/drone/alias-policy";
 import type { DetectedSystem, Drone } from "@/entities/drone/types";
 import { getRe } from "./regex-cache";
 
@@ -70,12 +70,18 @@ export function detectNames(raw: string, extraStop?: ReadonlySet<string>): strin
     if (isTitleLine(raw, m.index)) continue;
     add(m[1]!);
   }
-  // Capitalised 1–2 word phrases not at sentence start: Baba Yaga, Bars, Magura V5
-  for (const m of raw.matchAll(/\b([A-Z][a-z]{2,}\s(?:[A-Z][a-z]{2,}|[A-Z]\d+))\b/g)) {
+  // Capitalised 1–2 word phrases not at sentence start: Baba Yaga, Bars, Magura V5. A Roman
+  // numeral stays with its name ("Lightning II", "Reaper III"): read without it, the name is
+  // a different one, and a report using only the nickname proposed an entry called "Lightning".
+  for (const m of raw.matchAll(
+    /\b([A-Z][a-z]{2,}\s(?:[A-Z][a-z]{2,}|[A-Z]\d+)(?:\s(?:II|III|IV)(?![\p{L}\p{N}]))?)\b/gu,
+  )) {
     if (isTitleLine(raw, m.index)) continue;
     add(m[1]!);
   }
-  for (const m of raw.matchAll(/(?<=[a-z0-9,;:()]\s)([A-Z][a-z]{2,})\b/g)) {
+  for (const m of raw.matchAll(
+    /(?<=[a-z0-9,;:()]\s)([A-Z][a-z]{2,}(?:\s(?:II|III|IV)(?![\p{L}\p{N}]))?)\b/gu,
+  )) {
     if (isTitleLine(raw, m.index)) continue;
     add(m[1]!);
   }
@@ -127,13 +133,38 @@ function dropContained(names: string[], against: string[]) {
  * the Bars entry.
  */
 const catalogNames = (d: Drone) =>
-  [...d.name.split(/\s*\/\s*/), d.name, d.cyrillic ?? "", ...cleanAliasList(d.aliases)].filter(
-    (n) => n.length > 2 && !STOP.has(n.toLowerCase()),
-  );
-const base = (n: string) => {
-  const m = n.toLowerCase().match(/^(.*?)-(\p{N}+\w*)$/u);
-  return m ? { stem: m[1]!, variant: m[2]! } : null;
+  [
+    ...d.name.split(/\s*\/\s*/),
+    d.name,
+    d.cyrillic ?? "",
+    // A family alias stored before the guard ("F-35" on F-35A) stays on the record for the
+    // analyst to clean up, but no longer files a sibling's report under this entry.
+    ...cleanAliasList(d.aliases).filter((a) => !isFamilyAlias(a, [d.name, d.cyrillic])),
+  ].filter((n) => n.length > 2 && !STOP.has(n.toLowerCase()));
+/**
+ * The ways a designation splits into a family stem and a variant, for "is this new name a
+ * variant of a catalog entry?". Two names are variants when any of their splits share a stem
+ * and differ in the variant.
+ * - "Orlan-30" → orlan / 30. The stem must carry identity: two letters at least, since a
+ *   one-letter mission prefix is not a family ("F" in F-16 and F-35, "B" in B-52).
+ * - "F-35B" → f-35 / b. A trailing letter after the number is the variant of that designation.
+ * - "F-35" → f-35 / (none). A bare designation is the family its lettered variants belong to.
+ */
+const bases = (n: string): { stem: string; variant: string }[] => {
+  const s = n.toLowerCase().trim();
+  const out: { stem: string; variant: string }[] = [];
+  const numbered = s.match(/^(.*?)-(\p{N}+\w*)$/u);
+  if (numbered && (numbered[1]!.match(/\p{L}/gu)?.length ?? 0) >= 2)
+    out.push({ stem: numbered[1]!, variant: numbered[2]! });
+  const lettered = s.match(/^(.*\p{L}.*\p{N})(\p{L}{1,2})$/u);
+  if (lettered) out.push({ stem: lettered[1]!, variant: lettered[2]! });
+  if (/\p{L}.*\p{N}$/u.test(s)) out.push({ stem: s, variant: "" });
+  return out;
 };
+const sameFamily = (a: string, b: string) =>
+  bases(a).some((x) =>
+    bases(b).some((y) => phoneticKey(x.stem) === phoneticKey(y.stem) && x.variant !== y.variant),
+  );
 
 export function resolveSystems(
   raw: string,
@@ -159,15 +190,7 @@ export function resolveSystems(
     const key = phoneticKey(n);
     if (systems.some((s) => phoneticKey(s.name) === key)) continue;
     if (catalog.some((d) => catalogNames(d).some((c) => phoneticKey(c) === key))) continue;
-    const b = base(n);
-    const parent = b
-      ? catalog.find((d) =>
-          catalogNames(d).some((c) => {
-            const cb = base(c);
-            return !!cb && phoneticKey(cb.stem) === phoneticKey(b.stem) && cb.variant !== b.variant;
-          }),
-        )
-      : undefined;
+    const parent = catalog.find((d) => catalogNames(d).some((c) => sameFamily(n, c)));
     systems.push({ name: n, ...(parent ? { variantOf: parent.id } : {}) });
   }
   return systems;

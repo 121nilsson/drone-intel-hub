@@ -89,6 +89,51 @@ export type ClaimIssue =
   /** The figure is right, but it describes another attribute of this system. */
   | "attribute";
 
+export type AliasKind =
+  | "designation"
+  | "reporting_name"
+  | "transliteration"
+  | "slang"
+  /** Migrated from the pre-claim flat list; treated as verified by the analyst sweep. */
+  | "legacy";
+
+export interface AliasReview {
+  verdict: "confirmed" | "rejected";
+  at: string;
+  by: "analyst";
+  /** On the source entry: the entry the alias was filed under instead. */
+  movedToDroneId?: string;
+  /** On the filed copy: the entry the alias came from. */
+  movedFromDroneId?: string;
+  /**
+   * Identity of the cross-system move, shared by both review marks, so a re-ingested claim and
+   * its undo still find each other across two independently written entries.
+   */
+  moveId?: string;
+}
+
+export interface AliasClaim {
+  /**
+   * Stable identity: `alias-${fold}`, the phonetic key of the declension-stripped alias. One
+   * claim per folded shape, so a verbatim verdict survives re-ingestion of any inflected or
+   * transliterated form of the same name.
+   */
+  id: string;
+  alias: string;
+  status: "verified" | "candidate" | "rejected";
+  kind?: AliasKind;
+  /** Provenance of the suggestion, same convention as SpecClaim.source ("Outlet · URL"). */
+  source?: string;
+  sourceId?: string;
+  /** The dispatch candidate this suggestion came from, so a panel can open the source post. */
+  sourceCandidateId?: string;
+  evidence?: string;
+  firstSeen: string;
+  /** Other catalog entries this alias collides with (it is their canonical identity). */
+  conflictWithDroneIds?: string[];
+  review?: AliasReview;
+}
+
 export interface ClaimReview {
   verdict: "confirmed" | "rejected";
   /** Set when rejected. */
@@ -255,7 +300,14 @@ export interface Drone {
   id: string;
   name: string;
   cyrillic?: string;
+  /** Flat verified aliases: the derived view every consumer reads, see `claimsToAliases`. */
   aliases: string[];
+  /**
+   * Alias lifecycle behind the view above: a model suggestion arrives as a candidate and the
+   * flat list stays verified-only until an analyst approves it. Absent on entries written
+   * before the claim system; those behave exactly as the flat list always did.
+   */
+  aliasClaims?: AliasClaim[];
   domain: Domain;
   origin: string; // country of origin code
   manufacturer?: string; // company that designed/produces the system

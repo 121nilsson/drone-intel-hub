@@ -234,26 +234,37 @@ export function CardGrid({
 }
 
 /**
- * Shared list row: title + optional subtitle on top, meta and actions below on phones;
- * one line on wider screens. Pages pass content, never their own row layout.
+ * Shared list row: title + optional subtitle on top, meta and actions below on phones; one line
+ * on wider screens. Pages pass content, never their own row layout.
+ *
+ * Two opt-ins for dense content: `stack` keeps the column layout at every width (a row whose
+ * tags and buttons would crowd the title off one line rather than squeeze it to characters),
+ * and `below` renders an inline panel inside the same row item - which implies stacking, since
+ * a panel does not share the line.
  */
 export function ListRow({
   title,
   subtitle,
   meta,
   actions,
+  below,
+  stack,
   className,
 }: {
   title: ReactNode;
   subtitle?: ReactNode;
   meta?: ReactNode;
   actions?: ReactNode;
+  below?: ReactNode;
+  stack?: boolean;
   className?: string;
 }) {
+  const stacked = Boolean(stack) || below !== undefined;
   return (
     <li
       className={cn(
-        "flex min-w-0 flex-col gap-2 py-3 sm:flex-row sm:items-center sm:gap-3",
+        "flex min-w-0 flex-col gap-2 py-3",
+        !stacked && "sm:flex-row sm:items-center sm:gap-3",
         className,
       )}
     >
@@ -262,11 +273,17 @@ export function ListRow({
         {subtitle && <div className="min-w-0 text-xs text-muted-foreground">{subtitle}</div>}
       </div>
       {(meta || actions) && (
-        <div className="flex min-w-0 flex-wrap items-center gap-2 sm:shrink-0 sm:justify-end">
+        <div
+          className={cn(
+            "flex min-w-0 flex-wrap items-center gap-2",
+            !stacked && "sm:shrink-0 sm:justify-end",
+          )}
+        >
           {meta}
           {actions}
         </div>
       )}
+      {below && <div className="min-w-0">{below}</div>}
     </li>
   );
 }

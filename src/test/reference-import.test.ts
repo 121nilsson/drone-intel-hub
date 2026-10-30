@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { SEED_DRONES } from "@/entities/drone/seed";
+import { aliasFold } from "@/entities/drone/alias-policy";
 import type { Drone, ReferenceCard } from "@/entities/drone/types";
 import { applyReference } from "@/features/catalog/reference-import";
 import {
@@ -162,6 +163,89 @@ describe("applyReference", () => {
     expect(second.changed).toEqual([]);
     expect(first.changed[0]!.updatedAt).toBe(NOW);
     expect(first.changed[0]!.reference?.revisionId).toBe(4);
+  });
+
+  it("materialises the reference aliases of a created entry as verified claims", () => {
+    const report = applyReference(
+      [],
+      [
+        card({
+          wikidataId: "Q333",
+          name: "Shahed-238",
+          aliases: ["Shahed", "interceptor drones"],
+          origin: "IR",
+        }),
+      ],
+      NOW,
+    );
+    const created = report.changed[0]!;
+    // The card is the created entry's stored identity record: its list joins the claim system
+    // as verified data, the generic class phrase falls to the policy.
+    expect(created.aliasClaims!.map((c) => c.alias)).toEqual(["Shahed"]);
+    expect(created.aliasClaims![0]).toMatchObject({
+      status: "verified",
+      kind: "legacy",
+      firstSeen: NOW,
+    });
+    expect(created.aliases).toEqual(["Shahed"]);
+  });
+
+  it("captures a reference alias an entry does not hold as a candidate and never resurrects a rejected fold", () => {
+    const governed: Drone = {
+      ...geran,
+      aliasClaims: [
+        {
+          id: `alias-${aliasFold("Moped")}`,
+          alias: "Moped",
+          status: "rejected",
+          firstSeen: NOW,
+          review: { verdict: "rejected", by: "analyst", at: NOW },
+        },
+      ],
+    };
+    const other = { ...geran, id: "shahed-136", name: "Shahed-136", aliases: [] };
+    const report = applyReference(
+      [governed, other],
+      [card({ wikidataId: "Q111", name: "Geran-2", aliases: ["Moped", "Shahed-136"] })],
+      NOW,
+    );
+    expect(report.enriched).toBe(1);
+    const claims = report.changed[0]!.aliasClaims!;
+    const moped = claims[0]!;
+    expect(moped).toMatchObject({ alias: "Moped", status: "rejected" });
+    // The rejected alias also leaves the flat view: the verdict, not the list, decides identity.
+    expect(report.changed[0]!.aliases).toEqual([]);
+    const candidate = claims[1]!;
+    expect(candidate).toMatchObject({ alias: "Shahed-136", status: "candidate" });
+    expect(candidate.conflictWithDroneIds).toEqual(["shahed-136"]);
+  });
+
+  it("re-importing the same card after a candidate-adding import changes nothing", () => {
+    const governed: Drone = {
+      ...geran,
+      aliasClaims: [
+        {
+          id: `alias-${aliasFold("Moped")}`,
+          alias: "Moped",
+          status: "rejected",
+          firstSeen: NOW,
+          review: { verdict: "rejected", by: "analyst", at: NOW },
+        },
+      ],
+    };
+    const other = { ...geran, id: "shahed-136", name: "Shahed-136", aliases: [] };
+    const source = card({
+      wikidataId: "Q111",
+      name: "Geran-2",
+      revisionId: 7,
+      aliases: ["Moped", "Shahed-136"],
+    });
+    const first = applyReference([governed, other], [source], NOW);
+    expect(first.enriched).toBe(1);
+    expect(first.changed[0]!.aliasClaims).toHaveLength(2);
+    const second = applyReference(first.changed, [source], LATER);
+    expect(second.skipped).toBe(1);
+    expect(second.changed).toEqual([]);
   });
 });
 

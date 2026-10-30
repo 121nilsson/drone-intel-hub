@@ -4,7 +4,7 @@ import { DEFAULT_SETTINGS } from "./settings-defaults";
 import type { Drone } from "@/entities/drone/types";
 import { sanitizeText } from "@/shared/infra/json-sanitize";
 import { buildSystemEvidenceDigest } from "@/shared/infra/system-evidence-digest";
-import { parseModelJson } from "./model-json";
+import { parseModelJson, humanizeBriefItem, stripPointerNotation } from "./model-json";
 
 export type { ChatInput, ChatResult } from "./ai-proxy.server";
 
@@ -55,15 +55,30 @@ export const translateText = createServerFn({ method: "POST" })
     },
   );
 
+/**
+ * The dossier brief. The digest is machine notation, and models of every size parrot it back as
+ * unreadable paths ("specifications.wingspan.claims[0].value") unless the prompt names that
+ * failure explicitly - so it does, and the parser still scrubs notation that slips through
+ * (model-json's humanizeBriefItem).
+ */
 const SYSTEM_SUMMARY_SYSTEM =
-  "You are a defense-system analyst." +
-  "Return ONLY a JSON object with these keys: overview (string), verified (string[]), caveats (string[]), " +
-  "provenance (string[]), nextChecks (string[]). " +
-  "overview: 2-4 sentences saying what the system appears to be and how it is documented here. " +
-  "verified: one short item per supported fact, each prefixed with the source/feed/excerpt it came from when you know it. " +
-  "caveats: disputed, low-confidence, ambiguous, or unverified items. Do not merge them into verified. " +
-  "provenance: which record fields or source passages each conclusion rested on. " +
-  "nextChecks: the most valuable missing verification. Keep every item short. Use only supplied data and do not invent facts.";
+  "You are a defense-system analyst writing the dossier brief of an entry in a systems " +
+  "catalogue. The user message is an internal evidence digest in JSON notation: its keys, field " +
+  "names and array indexes (system.id, specifications.range.claims[0].value, " +
+  "specifications[0].label ...) are machine references - never copy them, in parentheses or " +
+  "otherwise, into anything you write. " +
+  "Return ONLY one JSON object with the keys overview, verified, caveats, provenance, nextChecks. " +
+  "overview: 2-4 plain sentences on what the system appears to be and how this catalogue " +
+  "documents it. Prose, never a list. " +
+  "verified: one item per supported fact, each a complete readable sentence that states the fact " +
+  'and names its source naturally, like "Wikipedia infobox gives a 2.5 m wingspan" or ' +
+  '"Euromaidan Press (2026-10-11) reports a 10 kg warhead". The entry\'s own record - id, name, ' +
+  "domain, origin - is the dossier's header, not a fact; never list it as an item. " +
+  "caveats: what is disputed, single-sourced, low-confidence or unverified, in the same wording. " +
+  "provenance: one item per source you actually used: outlet or feed name, optionally with a " +
+  "date or URL. No field lists, no paths. " +
+  "nextChecks: 1-3 concrete verifications still missing. " +
+  "Keep every item short. Use only the supplied data; do not invent facts.";
 
 export const generateSystemSummary = createServerFn({ method: "POST" })
   .validator((d: { drone: Drone }) => {
@@ -89,21 +104,20 @@ export const generateSystemSummary = createServerFn({ method: "POST" })
     // the whole fenced blob was stored as the brief. The shared parser recovers the object;
     // a structurally failed structure falls back to the model's prose.
     const parsed = parseModelJson(result.content);
+    // List items an analyst reads; notation lines the model copied off the digest drop here.
+    const items = (v: unknown): string[] =>
+      Array.isArray(v)
+        ? v
+            .map((x) => humanizeBriefItem(sanitizeText(String(x))))
+            .filter((x): x is string => Boolean(x))
+        : [];
     const brief = parsed
       ? {
-          overview: sanitizeText(String(parsed["overview"] ?? "").trim()),
-          verified: Array.isArray(parsed["verified"])
-            ? parsed["verified"].map((x: unknown) => sanitizeText(String(x)))
-            : [],
-          caveats: Array.isArray(parsed["caveats"])
-            ? parsed["caveats"].map((x: unknown) => sanitizeText(String(x)))
-            : [],
-          provenance: Array.isArray(parsed["provenance"])
-            ? parsed["provenance"].map((x: unknown) => sanitizeText(String(x)))
-            : [],
-          nextChecks: Array.isArray(parsed["nextChecks"])
-            ? parsed["nextChecks"].map((x: unknown) => sanitizeText(String(x)))
-            : [],
+          overview: stripPointerNotation(sanitizeText(String(parsed["overview"] ?? "").trim())),
+          verified: items(parsed["verified"]),
+          caveats: items(parsed["caveats"]),
+          provenance: items(parsed["provenance"]),
+          nextChecks: items(parsed["nextChecks"]),
         }
       : {
           overview: sanitizeText(result.content.trim()),

@@ -103,6 +103,10 @@ export function mentionsPhonetic(text: string, name: string): boolean {
   }
   const hay = lastHay;
   if (hay.includes(` ${needle} `)) return true;
+  // A designation's variant letter is identity, not a case ending: "F-35A" must not match
+  // "F-35", "F-35B" or "F-35C", the way "Lancet-3" must not match "Lancet-3M" below. Only an
+  // English plural is allowed ("F-35As").
+  if (/\d[a-z]{1,2}$/.test(needle)) return hay.includes(` ${needle}s `);
   // Russian and Ukrainian inflect names ("Шахеды", "Ланцетом", "Герани"): allow a short case
   // ending after a name that ends in a letter. Not after a digit - "Lancet-3" must not match
   // "Lancet-3M", which is a different variant.

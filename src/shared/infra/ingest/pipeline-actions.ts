@@ -11,7 +11,7 @@ import { counterpartIdsFor, linkCounterparts } from "@/entities/drone/relations"
 import { linkVariant, mergeDroneIntelligence } from "@/entities/drone/merge-intelligence";
 import { mergeSpecs } from "@/entities/drone/spec-engine";
 import { organizationKey } from "@/entities/drone/types";
-import { cleanAliasList } from "@/entities/drone/alias-policy";
+import { buildConflictMap, intakeAliasClaims } from "@/entities/drone/alias-claims";
 import { toRFLink } from "@/entities/normalization/apply";
 
 export function promote(
@@ -25,12 +25,12 @@ export function promote(
     e.name ||
     `Uncataloged ${e.domain ?? "system"} ${c.id.slice(0, 4).toUpperCase()}`;
   const now = new Date().toISOString();
-  // Model-suggested aliases obey the intake policy: a bare generic phrase ("interceptor drones")
-  // would resolve every mention of the class onto this entry's dossier.
   const base: Drone = {
     id: `${systemSlug(name)}-${c.id.slice(0, 4)}`,
     name,
-    aliases: cleanAliasList(e.aliases, name),
+    // Alias suggestions from the promoted post land as candidates carrying their source and
+    // any collision with the current catalog: verified-only identity, nothing auto-approves.
+    aliases: [],
     domain: e.domain ?? "Multi",
     origin: e.origin ?? "??",
     ...(e.manufacturer
@@ -66,7 +66,13 @@ export function promote(
     createdAt: now,
     updatedAt: now,
   };
-  const drone = mergeSpecs(base, e.specs, c.source);
+  const withAliases = intakeAliasClaims(base, e.aliases ?? [], {
+    at: now,
+    ...(c.source ? { source: c.source } : {}),
+    sourceCandidateId: c.id,
+    conflicts: buildConflictMap(d.drones.list(), base.id),
+  });
+  const drone = mergeSpecs(withAliases, e.specs, c.source);
   d.drones.upsert(drone);
   // A promoted system often arrives alongside ones already catalogued ("Shahed-136 seen
   // with Geran-2"), so seed its relations from the same systems[] the auto-merge path uses.
@@ -113,6 +119,8 @@ export function mergeInto(
         extracted,
       ),
       extracted,
+      undefined,
+      { source: c.source, sourceCandidateId: c.id },
     );
     merged.evolution = [
       ...merged.evolution,
