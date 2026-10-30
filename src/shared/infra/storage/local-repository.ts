@@ -379,6 +379,10 @@ export class LocalCandidateRepository
     const doc = this.items.find((c) => c.id === id);
     if (doc) this.save(doc, (fresh) => ({ ...fresh, ...patch }));
   }
+  remove(id: string) {
+    this.items = this.items.filter((c) => c.id !== id);
+    this.drop(id);
+  }
 }
 
 export class LocalSourceRepository extends CachedRepository<"sources"> implements SourceRepository {
@@ -737,5 +741,10 @@ export class LocalProcurementRepository extends CachedRepository<"procurements">
       return;
     this.items = [p, ...this.items];
     this.save(p);
+  }
+  update(p: Procurement, replay?: (fresh: Procurement) => Procurement) {
+    if (!this.items.some((x) => x.id === p.id)) return;
+    this.items = this.items.map((x) => (x.id === p.id ? p : x));
+    this.save(p, replay);
   }
 }

@@ -4,75 +4,10 @@ import { Menu, Plus, Search, X, Radar } from "lucide-react";
 import { useDrones, useServices } from "@/shared/infra/services";
 import { droneHaystack } from "@/shared/infra/storage/local-repository";
 import { CountryBadge } from "@/shared/ui/country-badge";
-
-const NAV = [
-  { to: "/", label: "Briefing" },
-  { to: "/catalog", label: "Catalog" },
-  { to: "/procurement", label: "Procurement" },
-  { to: "/counterparts", label: "Counterparts" },
-  { to: "/spectrum", label: "Spectrum" },
-  { to: "/intake", label: "Queue" },
-  { to: "/dispatches", label: "Feed" },
-  { to: "/sources", label: "Sources" },
-  { to: "/specs", label: "Spec Engine" },
-  { to: "/taxonomy", label: "Taxonomy" },
-  { to: "/evaluation", label: "Evaluation" },
-  { to: "/settings", label: "Settings" },
-] as const;
-
-function CommandSearch({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const drones = useDrones();
-  const { attached } = useServices();
-  const [q, setQ] = useState("");
-  const nav = useNavigate();
-  if (!open || !attached) return null;
-  const hits = drones.filter((d) => droneHaystack(d).includes(q.toLowerCase())).slice(0, 8);
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-start justify-center bg-background/80 p-4 pt-24"
-      onClick={onClose}
-    >
-      <div
-        className="w-full max-w-xl border border-primary/40 bg-card"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center gap-2 border-b border-border px-3">
-          <Search className="h-4 w-4 text-muted-foreground" />
-          <input
-            autoFocus
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Name, Cyrillic, alias, manufacturer…"
-            className="w-full bg-transparent py-3 font-mono text-sm outline-none"
-          />
-          <kbd className="text-[10px] text-muted-foreground">ESC</kbd>
-        </div>
-        <ul className="max-h-80 overflow-auto">
-          {hits.map((d) => (
-            <li key={d.id}>
-              <button
-                className="flex w-full items-center justify-between px-3 py-2 text-left hover:bg-secondary"
-                onClick={() => {
-                  onClose();
-                  nav({ to: "/systems/$id", params: { id: d.id } });
-                }}
-              >
-                <span>
-                  <span className="font-medium">{d.name}</span>{" "}
-                  <span className="text-muted-foreground">{d.cyrillic}</span>
-                </span>
-                <span className="flex items-center gap-1.5 font-mono text-xs text-muted-foreground">
-                  {d.domain} · <CountryBadge code={d.origin} />
-                </span>
-              </button>
-            </li>
-          ))}
-          {!hits.length && <li className="px-3 py-4 text-sm text-muted-foreground">No matches.</li>}
-        </ul>
-      </div>
-    </div>
-  );
-}
+import { buttonClass } from "@/shared/ui/button-class";
+import { CommandSearch } from "@/shared/ui/command-search";
+import { DesktopNav, MobileNav } from "@/shared/ui/main-nav";
+import { Btn } from "@/shared/ui/primitives";
 
 export function AppShell({ children }: { children: ReactNode }) {
   const svc = useServices();
@@ -89,9 +24,6 @@ export function AppShell({ children }: { children: ReactNode }) {
     window.addEventListener("keydown", h);
     return () => window.removeEventListener("keydown", h);
   }, []);
-  const linkCls =
-    "font-mono text-xs uppercase tracking-wider text-muted-foreground hover:text-foreground";
-  const active = { className: "font-mono text-xs uppercase tracking-wider text-primary" };
   return (
     <div className="min-h-screen">
       <header className="sticky top-0 z-40 border-b border-border bg-background/95 backdrop-blur">
@@ -102,19 +34,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           >
             <Radar className="h-5 w-5" /> DRONE//INT
           </Link>
-          <nav className="hidden flex-1 items-center gap-4 lg:flex">
-            {NAV.map((n) => (
-              <Link
-                key={n.to}
-                to={n.to}
-                className={linkCls}
-                activeProps={active}
-                activeOptions={{ exact: n.to === "/" }}
-              >
-                {n.label}
-              </Link>
-            ))}
-          </nav>
+          <DesktopNav />
           <div className="ml-auto flex items-center gap-2">
             <button
               onClick={() => setCmd(true)}
@@ -122,12 +42,18 @@ export function AppShell({ children }: { children: ReactNode }) {
             >
               <Search className="h-3.5 w-3.5" /> Search <kbd className="text-[10px]">⌘K</kbd>
             </button>
-            <Link
-              to="/intake"
-              className="inline-flex items-center gap-1 bg-primary px-3 py-1.5 font-mono text-xs uppercase text-primary-foreground hover:bg-primary/85"
-            >
+            <Link to="/intake" className={buttonClass()}>
               <Plus className="h-3.5 w-3.5" /> Ingest
             </Link>
+            <Btn
+              size="icon"
+              variant="quiet"
+              className="lg:hidden"
+              onClick={() => setCmd(true)}
+              aria-label="Search"
+            >
+              <Search className="size-4" />
+            </Btn>
             <button className="lg:hidden" onClick={() => setDrawer(true)} aria-label="Open menu">
               <Menu className="h-5 w-5" />
             </button>
@@ -155,7 +81,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           onClick={() => setDrawer(false)}
         >
           <aside
-            className="ml-auto flex h-full w-64 flex-col gap-4 border-l border-border bg-card p-5"
+            className="ml-auto flex h-full w-72 max-w-[85vw] flex-col gap-4 overflow-y-auto border-l border-border bg-card p-5"
             onClick={(e) => e.stopPropagation()}
           >
             <button className="self-end" onClick={() => setDrawer(false)} aria-label="Close menu">
@@ -170,18 +96,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             >
               <Search className="h-4 w-4" /> Search
             </button>
-            {NAV.map((n) => (
-              <Link
-                key={n.to}
-                to={n.to}
-                onClick={() => setDrawer(false)}
-                className={linkCls}
-                activeProps={active}
-                activeOptions={{ exact: n.to === "/" }}
-              >
-                {n.label}
-              </Link>
-            ))}
+            <MobileNav onNavigate={() => setDrawer(false)} />
           </aside>
         </div>
       )}
@@ -194,18 +109,12 @@ export function AppShell({ children }: { children: ReactNode }) {
             </h1>
             <p className="mt-3 text-sm text-muted-foreground">{svc.storageError}</p>
             <div className="mt-5 flex flex-wrap gap-2">
-              <button
-                onClick={() => window.location.reload()}
-                className="border border-border px-3 py-1.5 font-mono text-xs uppercase text-muted-foreground hover:text-foreground"
-              >
+              <Btn variant="ghost" onClick={() => window.location.reload()}>
                 Reload
-              </button>
-              <button
-                onClick={() => void svc.continueInBrowser()}
-                className="border border-destructive/40 px-3 py-1.5 font-mono text-xs uppercase text-destructive hover:bg-destructive/10"
-              >
+              </Btn>
+              <Btn variant="danger" onClick={() => void svc.continueInBrowser()}>
                 Continue in this browser
-              </button>
+              </Btn>
             </div>
           </div>
         </section>

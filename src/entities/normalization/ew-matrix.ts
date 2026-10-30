@@ -154,7 +154,10 @@ export function isKineticDefender(d: Drone): boolean {
 export function kineticEnvelope(target: Drone, defender: Drone): KineticCheck[] {
   if (!isKineticDefender(defender)) return [];
   const out: KineticCheck[] = [];
-  const speed = specValue(target, "speed.max") ?? specValue(target, "speed.cruise");
+  const speed =
+    specValue(target, "speed.max") ??
+    specValue(target, "speed.cruise") ??
+    specValue(target, "speed.stated");
   const maxSpeed = specValue(defender, "speed.target_max");
   if (maxSpeed !== undefined)
     out.push(

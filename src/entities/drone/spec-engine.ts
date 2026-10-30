@@ -19,15 +19,33 @@ export function attributeSemantic(spec: { key: string; label: string; semantic?:
 }
 
 /**
+ * Whether two attributes are one. Sharing a semantic is required but not enough when both got
+ * it from their labels alone: a label rule is a guess, and two guesses agreeing once folded
+ * "antenna elements (current)", "(planned)" and "(2027)" into one disputed figure. A merge
+ * needs the same key, or a key that names the semantic by itself ("max_speed" is speed.max with
+ * no label at all), so a row the label explains ("speed", "Maximum speed") still joins it.
+ */
+export function sameAttribute(
+  a: { key: string; label: string; semantic?: string },
+  b: { key: string; label: string; semantic?: string },
+): boolean {
+  const semantic = attributeSemantic(a);
+  if (semantic !== attributeSemantic(b)) return false;
+  return (
+    a.key === b.key || semanticKeyFor(a.key) === semantic || semanticKeyFor(b.key) === semantic
+  );
+}
+
+/**
  * Attributes that measure the same thing become one, keeping the first row's key, label and
  * unit and every claim from all of them. Heals records that grew a second row before their
  * keys were understood as the same attribute.
  */
-function regroup(specs: SpecAttribute[]): SpecAttribute[] {
+export function regroup(specs: SpecAttribute[]): SpecAttribute[] {
   const out: SpecAttribute[] = [];
   for (const s of specs) {
     const semantic = attributeSemantic(s);
-    const hit = out.find((o) => attributeSemantic(o) === semantic);
+    const hit = out.find((o) => sameAttribute(o, s));
     if (hit) {
       hit.claims.push(...s.claims);
       continue;
@@ -85,7 +103,7 @@ export function mergeSpecs(
   const added = new Set<string>();
   for (const e of specs) {
     const semantic = attributeSemantic(e);
-    const hit = next.find((s) => attributeSemantic(s) === semantic);
+    const hit = next.find((s) => sameAttribute(s, e));
     const claim = claimFor(e, source, date, ref);
     const sig = `${semantic}|${String(claim.value)}|${claim.evidence ?? ""}`;
     if (added.has(sig)) continue;

@@ -1,15 +1,21 @@
 import { Link } from "@tanstack/react-router";
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo } from "react";
 import type { Procurement } from "@/entities/procurement/types";
 import { byNewestContract } from "@/entities/procurement/match";
-import { procurementDay, procurementSystemRefs } from "@/entities/procurement/presentation";
+import { procurementSystemRefs } from "@/entities/procurement/presentation";
+import { groupSameDeal, isUnknown } from "@/entities/procurement/same-deal";
+import type { Drone } from "@/entities/drone/types";
 import { useDrones, useServices } from "@/shared/infra/services";
 import { useProcurements } from "@/shared/infra/use-procurements";
 import { ContractRow } from "@/shared/ui/contracts";
 import { CountryBadge } from "@/shared/ui/country-badge";
+import { DataTable, type Column } from "@/shared/ui/data-table";
+import { SearchInput } from "@/shared/ui/fields";
+import { ActiveFilters, FacetGroup, FilterLayout, type ActiveFilter } from "@/shared/ui/filters";
 import { SourceRef, SystemChip } from "@/shared/ui/links";
-import { Btn, Card, Loading, PageTitle, Tag } from "@/shared/ui/primitives";
-import { cn } from "@/lib/utils";
+import { useRememberedSearch } from "@/shared/ui/remembered";
+import { TimeAgo } from "@/shared/ui/time-ago";
+import { Btn, EmptyState, Loading, PageTitle, Tag } from "@/shared/ui/primitives";
 import {
   filterProcurements,
   fromProcurementSearchParams,
@@ -18,172 +24,104 @@ import {
   type ProcurementState,
 } from "./procurement-state";
 
-function Facet({
-  label,
-  options,
-  value,
-  onToggle,
-  render,
-}: {
-  label: string;
-  options: string[];
-  value: string[];
-  onToggle: (value: string) => void;
-  render?: (option: string) => ReactNode;
-}) {
-  if (!options.length) return null;
-  return (
-    <div>
-      <p className="mb-2 font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
-        {label}
-      </p>
-      <div className="flex flex-wrap gap-1.5">
-        {options.map((option) => {
-          const on = value.includes(option);
-          return (
-            <button
-              key={option}
-              type="button"
-              aria-pressed={on}
-              onClick={() => onToggle(option)}
-              className={cn(
-                "min-w-0 max-w-full border px-2 py-0.5 text-left font-mono text-xs",
-                on
-                  ? "border-primary bg-primary/15 text-primary"
-                  : "border-border text-muted-foreground hover:text-foreground",
-              )}
+/** A field the report did not state, shown quietly so the stated ones stand out. */
+const Unstated = ({ children }: { children: string }) => (
+  <span className="italic text-muted-foreground/70">{children}</span>
+);
+
+function columns(drones: Drone[], reports: ReadonlyMap<string, number>): Column<Procurement>[] {
+  return [
+    {
+      id: "company",
+      header: "Company",
+      width: "24%",
+      cell: (c) => (
+        <>
+          <p className="break-words font-medium">
+            {isUnknown(c.company) ? <Unstated>Company not stated</Unstated> : c.company}
+          </p>
+          <p className="mt-0.5 font-mono text-xs text-muted-foreground">
+            {c.country ? <CountryBadge code={c.country} /> : <Unstated>Country unknown</Unstated>}
+          </p>
+          {(reports.get(c.id) ?? 1) > 1 && (
+            <Tag className="mt-1" title="The same report and figure were read more than once">
+              {reports.get(c.id)} reads
+            </Tag>
+          )}
+          {c.notes && (
+            <p
+              className="mt-1 line-clamp-3 break-words text-xs text-muted-foreground"
+              title={c.notes}
             >
-              <span className="block truncate">{render ? render(option) : option}</span>
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-function SearchBox({ value, onChange }: { value: string; onChange: (value: string) => void }) {
-  return (
-    <div className="flex min-w-0 items-center gap-2 border border-border bg-card px-3 py-2">
-      <label htmlFor="procurement-search" className="sr-only">
-        Search contracts
-      </label>
-      <input
-        id="procurement-search"
-        type="search"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder="Company, buyer, programme, system, amount…"
-        className="min-w-0 flex-1 bg-transparent font-mono text-sm outline-none placeholder:text-muted-foreground"
-      />
-      {value && (
-        <button
-          type="button"
-          onClick={() => onChange("")}
-          className="shrink-0 font-mono text-xs text-muted-foreground hover:text-foreground"
-          aria-label="Clear contract search"
-        >
-          ✕
-        </button>
-      )}
-    </div>
-  );
-}
-
-function ContractTable({ rows }: { rows: Procurement[] }) {
-  const drones = useDrones();
-  return (
-    <div className="hidden overflow-x-auto border border-border bg-card/80 md:block">
-      <table className="w-full min-w-[960px] table-fixed text-sm" data-testid="procurement-table">
-        <colgroup>
-          <col className="w-[24%]" />
-          <col className="w-[15%]" />
-          <col className="w-[13%]" />
-          <col className="w-[10%]" />
-          <col className="w-[22%]" />
-          <col className="w-[16%]" />
-        </colgroup>
-        <thead>
-          <tr className="border-b border-border text-left font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
-            <th className="px-3 py-2">Company</th>
-            <th className="px-3 py-2">Buyer / programme</th>
-            <th className="px-3 py-2">Amount</th>
-            <th className="px-3 py-2">Announced</th>
-            <th className="px-3 py-2">Systems</th>
-            <th className="px-3 py-2">Source</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-border">
-          {rows.map((contract) => {
-            const systems = procurementSystemRefs(contract, drones);
-            return (
-              <tr key={contract.id} className="align-top">
-                <td className="min-w-0 px-3 py-3">
-                  <p className="break-words font-medium">{contract.company}</p>
-                  <p className="mt-0.5 flex flex-wrap items-center gap-1 font-mono text-xs text-muted-foreground">
-                    {contract.country ? (
-                      <CountryBadge code={contract.country} />
-                    ) : (
-                      "Country unknown"
-                    )}
-                  </p>
-                  {contract.notes && (
-                    <p
-                      className="mt-1 line-clamp-3 break-words text-xs text-muted-foreground"
-                      title={contract.notes}
-                    >
-                      {contract.notes}
-                    </p>
-                  )}
-                </td>
-                <td className="min-w-0 px-3 py-3">
-                  <p className="break-words">{contract.customer ?? "Buyer unknown"}</p>
-                  {contract.program && (
-                    <p className="mt-0.5 break-words text-xs text-muted-foreground">
-                      {contract.program}
-                    </p>
-                  )}
-                </td>
-                <td className="px-3 py-3 font-mono text-primary">
-                  {contract.amount ?? "—"}
-                  {contract.currency && (
-                    <Tag className="ml-1.5 align-middle">{contract.currency}</Tag>
-                  )}
-                </td>
-                <td className="whitespace-nowrap px-3 py-3 font-mono text-xs text-muted-foreground">
-                  {procurementDay(contract)}
-                </td>
-                <td className="min-w-0 px-3 py-3">
-                  <div className="flex min-w-0 flex-wrap gap-1">
-                    {systems.length ? (
-                      systems.map((system, i) =>
-                        system.id ? (
-                          <SystemChip key={`${system.id}-${i}`} id={system.id} name={system.name} />
-                        ) : (
-                          <Tag key={`${system.name}-${i}`} caps={false} mono={false}>
-                            {system.name}
-                          </Tag>
-                        ),
-                      )
-                    ) : (
-                      <span className="text-muted-foreground">—</span>
-                    )}
-                  </div>
-                </td>
-                <td className="min-w-0 px-3 py-3">
-                  <SourceRef
-                    source={contract.source}
-                    href={contract.sourceUrl}
-                    className="max-w-full"
-                  />
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
-  );
+              {c.notes}
+            </p>
+          )}
+        </>
+      ),
+    },
+    {
+      id: "buyer",
+      header: "Buyer / programme",
+      width: "15%",
+      cell: (c) => (
+        <>
+          <p className="break-words">
+            {isUnknown(c.customer) ? <Unstated>Buyer not stated</Unstated> : c.customer}
+          </p>
+          {c.program && (
+            <p className="mt-0.5 break-words text-xs text-muted-foreground">{c.program}</p>
+          )}
+        </>
+      ),
+    },
+    {
+      id: "amount",
+      header: "Amount",
+      width: "13%",
+      className: "font-mono text-primary",
+      cell: (c) => (
+        <>
+          {c.amount ?? "—"}
+          {c.currency && <Tag className="ml-1.5 align-middle">{c.currency}</Tag>}
+        </>
+      ),
+    },
+    {
+      id: "announced",
+      header: "Announced",
+      width: "10%",
+      className: "whitespace-nowrap font-mono text-xs text-muted-foreground",
+      cell: (c) => <TimeAgo iso={c.announcedAt ?? c.createdAt} />,
+    },
+    {
+      id: "systems",
+      header: "Systems",
+      width: "22%",
+      cell: (c) => {
+        const systems = procurementSystemRefs(c, drones);
+        if (!systems.length) return <span className="text-muted-foreground">—</span>;
+        return (
+          <div className="flex min-w-0 flex-wrap gap-1">
+            {systems.map((system, i) =>
+              system.id ? (
+                <SystemChip key={`${system.id}-${i}`} id={system.id} name={system.name} />
+              ) : (
+                <Tag key={`${system.name}-${i}`} caps={false} mono={false}>
+                  {system.name}
+                </Tag>
+              ),
+            )}
+          </div>
+        );
+      },
+    },
+    {
+      id: "source",
+      header: "Source",
+      width: "16%",
+      cell: (c) => <SourceRef source={c.source} href={c.sourceUrl} className="max-w-full" />,
+    },
+  ];
 }
 
 export function ProcurementPage({
@@ -196,13 +134,17 @@ export function ProcurementPage({
   const procurements = useProcurements();
   const drones = useDrones();
   const svc = useServices();
+  useRememberedSearch("procurement", url, setUrl);
   const state = useMemo(() => fromProcurementSearchParams(url), [url]);
   const facets = useMemo(() => procurementFacets(procurements), [procurements]);
   const rows = useMemo(
     () => filterProcurements(procurements, state).sort(byNewestContract),
     [procurements, state],
   );
-  const [showFilters, setShowFilters] = useState(false);
+  // One row per deal: the same report and figure read twice is one contract, counted.
+  const deals = useMemo(() => groupSameDeal(rows), [rows]);
+  const reads = useMemo(() => new Map(deals.map((d) => [d.contract.id, d.reports])), [deals]);
+  const cols = useMemo(() => columns(drones, reads), [drones, reads]);
 
   const setState = (next: ProcurementState) => setUrl(toProcurementSearchParams(next));
   const toggle = (key: "countries" | "currencies" | "buyers", value: string) => {
@@ -212,15 +154,42 @@ export function ProcurementPage({
       [key]: values.includes(value) ? values.filter((v) => v !== value) : [...values, value],
     });
   };
-  const activeFilters =
-    state.countries.length + state.currencies.length + state.buyers.length + (state.system ? 1 : 0);
-  const clearFilters = () => {
-    setState({ q: "", countries: [], currencies: [], buyers: [], system: "" });
-    setShowFilters(false);
-  };
+  // Clearing filters keeps the search text: the box shows it, and it is cleared from there.
+  const clearFilters = () =>
+    setState({ q: state.q, countries: [], currencies: [], buyers: [], system: "" });
   const systemName = state.system
     ? (drones.find((d) => d.id === state.system)?.name ?? state.system)
     : "";
+  const active: ActiveFilter[] = [
+    ...(state.system
+      ? [
+          {
+            id: "system",
+            label: `System: ${systemName}`,
+            text: `system ${systemName}`,
+            clear: () => setState({ ...state, system: "" }),
+          },
+        ]
+      : []),
+    ...state.countries.map((v) => ({
+      id: `country-${v}`,
+      label: <CountryBadge code={v} />,
+      text: v,
+      clear: () => toggle("countries", v),
+    })),
+    ...state.currencies.map((v) => ({
+      id: `currency-${v}`,
+      label: v,
+      text: v,
+      clear: () => toggle("currencies", v),
+    })),
+    ...state.buyers.map((v) => ({
+      id: `buyer-${v}`,
+      label: v,
+      text: v,
+      clear: () => toggle("buyers", v),
+    })),
+  ];
 
   if (!svc.attached) return <Loading label="Loading contracts…" />;
   return (
@@ -228,130 +197,88 @@ export function ProcurementPage({
       <PageTitle subtitle="Contracts, grants and production deals routed out of system specs.">
         Procurement
       </PageTitle>
-      <div className="grid gap-4 lg:grid-cols-[15rem_minmax(0,1fr)]">
-        <aside
-          className={cn(
-            "space-y-4 border border-border bg-card/60 p-3 lg:block",
-            showFilters ? "block" : "hidden lg:block",
-          )}
-          aria-label="Procurement filters"
-        >
-          <div className="flex items-center justify-between gap-2">
-            <p className="font-mono text-xs uppercase tracking-wider text-muted-foreground">
-              Filters
-            </p>
-            {activeFilters > 0 && (
-              <button
-                type="button"
-                onClick={clearFilters}
-                className="font-mono text-xs text-primary hover:underline"
-              >
-                Clear
-              </button>
-            )}
-          </div>
-          {state.system && (
-            <div>
-              <p className="mb-2 font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
-                System
-              </p>
-              <div className="flex items-start gap-1.5">
-                <Tag tone="primary" className="min-w-0">
-                  <span className="truncate">{systemName}</span>
-                </Tag>
-                <button
-                  type="button"
-                  onClick={() => setState({ ...state, system: "" })}
-                  className="shrink-0 font-mono text-xs text-muted-foreground hover:text-foreground"
-                  aria-label="Clear system filter"
+      <FilterLayout
+        activeCount={active.length}
+        onClear={clearFilters}
+        resultLabel={`Show ${deals.length} deal${deals.length === 1 ? "" : "s"}`}
+        filters={
+          <>
+            <FacetGroup
+              label="Supplier country"
+              options={facets.countries}
+              value={state.countries}
+              onToggle={(v) => toggle("countries", v)}
+              render={(v) => <CountryBadge code={v} />}
+            />
+            <FacetGroup
+              label="Currency"
+              options={facets.currencies}
+              value={state.currencies}
+              onToggle={(v) => toggle("currencies", v)}
+            />
+            <FacetGroup
+              label="Buyer"
+              options={facets.buyers}
+              value={state.buyers}
+              onToggle={(v) => toggle("buyers", v)}
+              limit={8}
+            />
+          </>
+        }
+      >
+        <SearchInput
+          label="Search contracts"
+          value={state.q}
+          onChange={(q) => setState({ ...state, q })}
+          placeholder="Company, buyer, programme, system, amount…"
+        />
+        <ActiveFilters filters={active} onClearAll={clearFilters} />
+        <p className="font-mono text-xs text-muted-foreground" role="status">
+          {deals.length} deal{deals.length === 1 ? "" : "s"}
+          {deals.length !== rows.length && ` from ${rows.length} records`}
+          {rows.length !== procurements.length && ` · ${procurements.length} in total`}
+        </p>
+        {!rows.length ? (
+          procurements.length ? (
+            <EmptyState
+              action={
+                <Btn
+                  variant="link"
+                  onClick={() =>
+                    setState({ q: "", countries: [], currencies: [], buyers: [], system: "" })
+                  }
                 >
-                  ✕
-                </button>
-              </div>
-            </div>
-          )}
-          <Facet
-            label="Supplier country"
-            options={facets.countries}
-            value={state.countries}
-            onToggle={(value) => toggle("countries", value)}
-            render={(option) => <CountryBadge code={option} />}
-          />
-          <Facet
-            label="Currency"
-            options={facets.currencies}
-            value={state.currencies}
-            onToggle={(value) => toggle("currencies", value)}
-          />
-          <Facet
-            label="Buyer"
-            options={facets.buyers}
-            value={state.buyers}
-            onToggle={(value) => toggle("buyers", value)}
-          />
-        </aside>
-        <section className="min-w-0 space-y-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="min-w-0 flex-1">
-              <SearchBox value={state.q} onChange={(q) => setState({ ...state, q })} />
-            </div>
-            <Btn
-              variant="ghost"
-              className="lg:hidden"
-              onClick={() => setShowFilters((open) => !open)}
-              aria-expanded={showFilters}
+                  Clear search and filters
+                </Btn>
+              }
             >
-              Filters{activeFilters ? ` (${activeFilters})` : ""}
-            </Btn>
-          </div>
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="font-mono text-xs text-muted-foreground" role="status">
-              {rows.length} of {procurements.length} contract
-              {procurements.length === 1 ? "" : "s"}
-            </p>
-            {activeFilters > 0 && (
-              <p className="font-mono text-xs text-muted-foreground">
-                {activeFilters} active filter{activeFilters === 1 ? "" : "s"}
-              </p>
-            )}
-          </div>
-          {!rows.length ? (
-            <div className="border border-dashed border-border p-6 text-sm text-muted-foreground">
-              {procurements.length ? (
-                <p>
-                  No contracts match this view.{" "}
-                  <button
-                    type="button"
-                    onClick={clearFilters}
-                    className="text-primary hover:underline"
-                  >
-                    Clear filters
-                  </button>
-                </p>
-              ) : (
-                <p>
-                  No procurement records yet. Contracts are extracted when a post carries a
-                  contract, grant or production deal; run a source sync to populate them.{" "}
-                  <Link to="/sources" className="text-primary hover:underline">
-                    Go to sources
-                  </Link>
-                </p>
-              )}
-            </div>
+              No contracts match this view.
+            </EmptyState>
           ) : (
-            <>
-              <ul className="space-y-2 md:hidden" data-testid="procurement-cards">
-                {rows.map((contract) => (
-                  <Card as="li" key={contract.id} className="p-3">
-                    <ContractRow contract={contract} drones={drones} showNotes />
-                  </Card>
-                ))}
-              </ul>
-              <ContractTable rows={rows} />
-            </>
-          )}
-        </section>
-      </div>
+            <EmptyState
+              action={
+                <Link to="/sources" className="text-primary hover:underline">
+                  Go to sources
+                </Link>
+              }
+            >
+              No procurement records yet. Contracts are extracted when a post carries a contract,
+              grant or production deal; run a source sync to populate them.
+            </EmptyState>
+          )
+        ) : (
+          <DataTable
+            label="Contracts"
+            columns={cols}
+            rows={deals.map((d) => d.contract)}
+            rowKey={(c) => c.id}
+            minWidth="960px"
+            testId="procurement-table"
+            cardTestId="procurement-cards"
+            card={(c) => <ContractRow contract={c} drones={drones} showNotes />}
+          />
+        )}
+      </FilterLayout>
     </div>
   );
 }

@@ -229,7 +229,7 @@ describe("HeuristicExtractor number parsing", () => {
   // parsed as 1.234 and a 1,000 km range was stored as 1 km.
   it("reads a thousands-separated speed", async () => {
     const e = await t1.extract("Cruise 1,234 km/h reported", CATALOG);
-    expect(specOf(e.specs, "speed")).toBe(1234);
+    expect(specOf(e.specs, "cruise_speed")).toBe(1234);
   });
 
   it("reads a thousands-separated range", async () => {
@@ -238,23 +238,23 @@ describe("HeuristicExtractor number parsing", () => {
   });
   it("still reads a plain integer", async () => {
     const e = await t1.extract("Cruise 600 km/h", CATALOG);
-    expect(specOf(e.specs, "speed")).toBe(600);
+    expect(specOf(e.specs, "cruise_speed")).toBe(600);
   });
 
   it("reads a decimal comma as a decimal point", async () => {
     const e = await t1.extract("Cruise 1,5 km/h", CATALOG);
-    expect(specOf(e.specs, "speed")).toBe(1.5);
+    expect(specOf(e.specs, "cruise_speed")).toBe(1.5);
   });
 
   it("reads a decimal point", async () => {
     const e = await t1.extract("Cruise 2.35 km/h", CATALOG);
-    expect(specOf(e.specs, "speed")).toBe(2.35);
+    expect(specOf(e.specs, "cruise_speed")).toBe(2.35);
   });
 
   it("does not mistake a leading-zero decimal for grouping", async () => {
     // "0,500" is European decimal 0.5; a grouped number never starts with a zero.
     const e = await t1.extract("Cruise 0,500 km/h", CATALOG);
-    expect(specOf(e.specs, "speed")).toBe(0.5);
+    expect(specOf(e.specs, "cruise_speed")).toBe(0.5);
   });
 });
 

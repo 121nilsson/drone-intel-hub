@@ -7,7 +7,50 @@ import {
   type TaxonomyTerm,
 } from "@/entities/normalization/taxonomy";
 import { useServices, useTaxonomies, useTaxonomyCandidates } from "@/shared/infra/services";
-import { Btn, Loading, PageTitle, Panel, Tag } from "@/shared/ui/primitives";
+import { Input, SearchInput, Select } from "@/shared/ui/fields";
+import { SourceRef } from "@/shared/ui/links";
+import { splitSourceLabel } from "@/shared/ui/source-label";
+import { Btn, EmptyState, Loading, PageTitle, Panel } from "@/shared/ui/primitives";
+
+const taxonomyLabel = (taxonomy: string) =>
+  TAXONOMY_GUIDANCE[taxonomy as keyof typeof TAXONOMY_GUIDANCE]?.label ?? taxonomy;
+
+/** A candidate's sources as name + link, one per outlet. */
+function uniqueSources(sources: TaxonomyCandidate["sources"]) {
+  const seen = new Set<string>();
+  const out: { key: string; name: string; url?: string }[] = [];
+  for (const { source } of sources) {
+    const { name, url } = splitSourceLabel(source);
+    // One entry per outlet: the same outlet under ten article URLs is one source to the reader.
+    const key = name.toLowerCase();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push({ key, name, ...(url ? { url } : {}) });
+  }
+  return out;
+}
+
+/** The first few sources, then a count: a term seen in 57 posts listed all 57. */
+function SourceList({ sources }: { sources: ReturnType<typeof uniqueSources> }) {
+  const shown = sources.slice(0, 4);
+  return (
+    <>
+      {shown.map((s) => (
+        <SourceRef key={s.key} source={s.name} href={s.url} className="max-w-64" />
+      ))}
+      {sources.length > shown.length && (
+        <span
+          title={sources
+            .slice(shown.length)
+            .map((s) => s.name)
+            .join(", ")}
+        >
+          +{sources.length - shown.length} more
+        </span>
+      )}
+    </>
+  );
+}
 
 function slug(raw: string) {
   return (
@@ -211,30 +254,29 @@ export function TaxonomyPage() {
       </Panel>
       <Panel title={`Candidates (${open.length})`}>
         <div className="mb-3 flex flex-wrap items-center gap-2">
-          <input
+          <SearchInput
+            label="Filter candidates"
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={setQuery}
             placeholder="Filter candidates…"
-            aria-label="Filter candidates"
-            className="min-w-40 flex-1 border border-border bg-background px-2 py-1.5 font-mono text-xs"
+            className="min-w-40 flex-1"
           />
-          <select
+          <Select
             value={sortBy}
             onChange={(e) => setSortBy(e.target.value as "score" | "occurrences" | "term")}
             aria-label="Sort candidates"
-            className="border border-border bg-background px-2 py-1.5 font-mono text-xs"
           >
             <option value="score">Sort: review score</option>
             <option value="occurrences">Sort: occurrences</option>
             <option value="term">Sort: term</option>
-          </select>
+          </Select>
         </div>
         {open.length === 0 && (
-          <p className="text-sm text-muted-foreground">
+          <EmptyState>
             {openAll.length ? "No candidates match the filter." : "No unresolved terms."}
-          </p>
+          </EmptyState>
         )}
-        <ul className="space-y-4">
+        <ul className="divide-y divide-border">
           {open.map((c) => {
             const taxonomyHint = recommendTaxonomy(c, terms);
             const chosenTaxonomy = targetTaxonomy[c.id] || taxonomyHint?.taxonomy || c.taxonomy;
@@ -249,69 +291,76 @@ export function TaxonomyPage() {
               options[0]?.canonicalId ||
               "";
             return (
-              <li key={c.id} className="border border-border p-3">
-                <div className="flex flex-wrap items-center gap-2">
-                  <Tag tone="accent">
-                    {TAXONOMY_GUIDANCE[c.taxonomy as keyof typeof TAXONOMY_GUIDANCE]?.label ??
-                      c.taxonomy}
-                  </Tag>
+              <li key={c.id} className="space-y-2 py-3 first:pt-0 last:pb-0">
+                <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
                   <span className="font-medium">{c.rawTerm}</span>
-                  <span className="font-mono text-xs text-muted-foreground">
-                    {c.occurrences} seen
+                  <span className="font-mono text-2xs text-muted-foreground">
+                    {c.occurrences} seen · score{" "}
+                    <span title="Higher is more likely to be a real trait">
+                      {candidateReviewScore(c, terms)}
+                    </span>{" "}
+                    · found as {taxonomyLabel(c.taxonomy)}
                   </span>
-                  <Tag tone="default" title="Higher is more likely to be a real trait">
-                    score {candidateReviewScore(c, terms)}
-                  </Tag>
                 </div>
-                <p className="mt-1 font-mono text-xs text-muted-foreground">
-                  {c.sources.map((s) => s.source).join(" · ") || "No source recorded"}
-                </p>
                 {taxonomyHint && (
-                  <p className="mt-1 font-mono text-xs text-accent">
-                    Suggested:{" "}
-                    {TAXONOMY_GUIDANCE[taxonomyHint.taxonomy as keyof typeof TAXONOMY_GUIDANCE]
-                      ?.label ?? taxonomyHint.taxonomy}{" "}
-                    / {taxonomyHint.label} ({Math.round(taxonomyHint.confidence * 100)}%)
+                  <p className="font-mono text-xs text-accent">
+                    Suggested: {taxonomyLabel(taxonomyHint.taxonomy)} / {taxonomyHint.label} (
+                    {Math.round(taxonomyHint.confidence * 100)}%)
                   </p>
                 )}
-                <div className="mt-3 flex flex-wrap items-center gap-2">
-                  <select
+                <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                  {c.sources.length ? (
+                    <SourceList sources={uniqueSources(c.sources)} />
+                  ) : (
+                    <span>No source recorded</span>
+                  )}
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Select
+                    size="sm"
                     value={chosenTaxonomy}
                     onChange={(e) => {
                       setTargetTaxonomy((prev) => ({ ...prev, [c.id]: e.target.value }));
                       setTarget((prev) => ({ ...prev, [c.id]: "" }));
                     }}
-                    className="border border-border bg-transparent px-2 py-1 font-mono text-xs"
-                    aria-label="Taxonomy"
+                    aria-label={`Taxonomy for ${c.rawTerm}`}
                   >
                     {["propulsion", "installation", "protocol"].map((taxonomy) => (
-                      <option key={taxonomy} value={taxonomy} className="bg-card">
-                        {TAXONOMY_GUIDANCE[taxonomy as keyof typeof TAXONOMY_GUIDANCE]?.label ??
-                          taxonomy}
+                      <option key={taxonomy} value={taxonomy}>
+                        {taxonomyLabel(taxonomy)}
                       </option>
                     ))}
-                  </select>
-                  <select
+                  </Select>
+                  <Select
+                    size="sm"
                     value={chosen}
                     onChange={(e) => setTarget((prev) => ({ ...prev, [c.id]: e.target.value }))}
-                    className="border border-border bg-transparent px-2 py-1 font-mono text-xs"
-                    aria-label="Canonical term"
+                    aria-label={`Canonical term for ${c.rawTerm}`}
                   >
                     {options.map((t) => (
-                      <option key={t.id} value={t.canonicalId} className="bg-card">
+                      <option key={t.id} value={t.canonicalId}>
                         {t.label}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                   <Btn
+                    size="sm"
                     variant="ghost"
                     disabled={!chosen}
+                    title="Resolve this phrase to the chosen canonical term from now on"
                     onClick={() => mapTo(c.id, chosenTaxonomy, c.rawTerm, chosen)}
                   >
-                    Map to selected taxonomy
+                    Map
                   </Btn>
-                  <Btn onClick={() => promote(c.id, chosenTaxonomy, c.rawTerm)}>Promote</Btn>
                   <Btn
+                    size="sm"
+                    title="Add this phrase as a new canonical term - only when nothing above fits"
+                    onClick={() => promote(c.id, chosenTaxonomy, c.rawTerm)}
+                  >
+                    Promote as new
+                  </Btn>
+                  <Btn
+                    size="sm"
                     variant="danger"
                     onClick={() => {
                       taxonomyCandidates.resolve(c.id, "rejected");
@@ -361,26 +410,25 @@ export function TaxonomyPage() {
             setAlias("");
           }}
         >
-          <select
+          <Select
             value={aliasFor || ""}
             onChange={(e) => setAliasFor(e.target.value)}
             aria-label="Attach alias to term"
-            className="border border-border bg-transparent px-2 py-1 font-mono text-xs"
           >
             {!activeTerms.length && <option value="">No active terms yet</option>}
             {activeTerms.map((t) => (
-              <option key={t.id} value={t.id} className="bg-card">
+              <option key={t.id} value={t.id}>
                 {t.taxonomy}: {t.label}
               </option>
             ))}
-          </select>
-          <input
+          </Select>
+          <Input
             value={alias}
             onChange={(e) => setAlias(e.target.value)}
             placeholder="New alias"
             aria-label="New alias"
             disabled={!activeTerms.length}
-            className="border border-border bg-transparent px-2 py-1 text-sm"
+            className="w-auto flex-1 sm:max-w-xs"
           />
           <Btn type="submit" disabled={!alias.trim() || !aliasFor || duplicateAlias}>
             Add alias

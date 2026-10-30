@@ -37,6 +37,7 @@ export default tseslint.config(
       "@repo/no-lower-layer-feature-import": "error",
       "@repo/no-server-import-from-client": "error",
       "@repo/no-nordic-ui-copy": "error",
+      "@repo/no-raw-controls": "error",
       "no-restricted-imports": [
         "error",
         {

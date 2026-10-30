@@ -7,6 +7,8 @@ import type { Procurement } from "@/entities/procurement/types";
 export interface ProcurementRepository {
   list(): Procurement[];
   add(p: Procurement): void;
+  /** Replace a stored record; `replay` reapplies the edit to the stored copy on a conflict. */
+  update(p: Procurement, replay?: (fresh: Procurement) => Procurement): void;
 }
 
 export interface CatalogFacets {
@@ -43,6 +45,7 @@ export interface CandidateRepository {
   list(): Candidate[];
   add(c: Candidate): void;
   update(id: string, patch: Partial<Candidate>): void;
+  remove(id: string): void;
 }
 
 export interface Subscribable {

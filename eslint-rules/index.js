@@ -21,6 +21,10 @@
  *    A literal that genuinely has to carry a Nordic name gets an inline `eslint-disable-next-line`
  *    stating why.
  *
+ * 5. `no-raw-controls` - in every feature slice, buttons, inputs, selects,
+ *    textareas and tables come from src/shared/ui, so the look and the mobile behaviour are
+ *    defined once instead of re-styled per page.
+ *
  * The layer map these rules enforce:
  *
  *   src/entities/        pure domain. Imports nothing outside src/entities.
@@ -217,8 +221,55 @@ const noNordicUiCopy = {
   },
 };
 
+/** Elements a migrated slice takes from src/shared/ui instead of styling by hand. */
+const RAW_CONTROLS = {
+  button: "Btn, Callout, FilterChip or Segmented",
+  input: "Input or SearchInput",
+  select: "Select",
+  textarea: "Textarea",
+  table: "DataTable",
+};
+
+const NON_TEXT_INPUT = new Set(["checkbox", "radio", "range", "file", "hidden", "color"]);
+
+/** The literal `type` of a JSX element, or undefined when it is absent or computed. */
+function staticType(node) {
+  const attr = node.attributes.find((a) => a.type === "JSXAttribute" && a.name.name === "type");
+  return attr?.value?.type === "Literal" ? attr.value.value : undefined;
+}
+
+const noRawControls = {
+  meta: {
+    type: "problem",
+    docs: "https://eslint.org/docs/latest/use/configure/rules",
+    schema: [
+      { type: "object", properties: { slices: { type: "array", items: { type: "string" } } } },
+    ],
+    messages: {
+      raw: "Use {{instead}} from src/shared/ui instead of a hand-styled <{{tag}}>: the shared component owns the look, the touch size and the mobile layout, so a fix lands once.",
+    },
+  },
+  create(context) {
+    // Every slice by default; `slices` narrows it, for adopting the rule one slice at a time.
+    const slices = context.options[0]?.slices;
+    const slice = sliceOf(context.filename);
+    if (!slice || (slices && !slices.includes(slice))) return {};
+    return {
+      JSXOpeningElement(node) {
+        if (node.name.type !== "JSXIdentifier") return;
+        const instead = RAW_CONTROLS[node.name.name];
+        // A checkbox, radio, slider or file picker is not a text field; Input does not style them.
+        if (node.name.name === "input" && NON_TEXT_INPUT.has(staticType(node))) return;
+        if (instead)
+          context.report({ node, messageId: "raw", data: { tag: node.name.name, instead } });
+      },
+    };
+  },
+};
+
 export default {
   rules: {
+    "no-raw-controls": noRawControls,
     "no-cross-feature-import": noCrossFeatureImport,
     "no-lower-layer-feature-import": noLowerLayerFeatureImport,
     "no-server-import-from-client": noServerImportFromClient,

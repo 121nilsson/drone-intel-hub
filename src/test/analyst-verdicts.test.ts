@@ -261,7 +261,7 @@ describe("queueFixtures", () => {
       id: "queue-c1",
       text: TEXT,
       status: "approved",
-      expect: [{ semantic: "speed", value: 300, unit: "km/h" }],
+      expect: [{ semantic: "speed.stated", value: 300, unit: "km/h" }],
     });
   });
 

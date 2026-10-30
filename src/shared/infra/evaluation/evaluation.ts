@@ -1,3 +1,4 @@
+import { postKey, systemKey } from "@/entities/drone/candidate-repeats";
 import type {
   Candidate,
   ClaimIssue,
@@ -11,7 +12,7 @@ import type { IntelExtractor } from "@/shared/contracts/ai";
 import { normalizeExtraction } from "@/entities/normalization/apply";
 import { semanticKeyFor } from "@/entities/normalization/semantic";
 import { phoneticKey } from "@/entities/drone/name-key";
-import { isFinancialSpecKey } from "@/entities/procurement/routing";
+import { isFinancialSpec } from "@/entities/procurement/routing";
 
 /**
  * Heuristic evaluation mode. READ-ONLY INVARIANT: this module only calls
@@ -70,6 +71,8 @@ export interface EvalReport {
   topIssues: string[];
   /** Agreements usable as regression fixtures. */
   fixtures: EvalFixture[];
+  /** Reference figures with no canonical meaning, left out of the scores (see `scorable`). */
+  unscoredMisses?: number;
 }
 
 export interface EvalFixture {
@@ -425,7 +428,7 @@ export function queueFixtures(
 
 /** Usable specs only: financial/procurement keys are routed out of drone specs, so ignore them. */
 export function comparableSpecs(e: Extraction): Norm[] {
-  return e.specs.filter((s) => !isFinancialSpecKey(s.key)).map(norm);
+  return e.specs.filter((s) => !isFinancialSpec(s)).map(norm);
 }
 
 export interface SpecComparison {
@@ -517,6 +520,66 @@ function setCounts(h: string[], r: string[]) {
   return { tp, fp: h.length - tp, fn: r.length - tp };
 }
 
+/** A post as the evaluation reads it: the heuristic's unit is the whole text. */
+export interface EvalPost {
+  /** Stands for the post in stratification, mismatches and fixtures. */
+  post: Candidate;
+  /** One candidate per system the AI read in the post, its latest analysis (or the analyst's). */
+  systems: Candidate[];
+}
+
+/**
+ * Candidates grouped into posts. A post naming five systems is five candidates, and a post
+ * analysed again is a new set with the same text - 12,947 candidates held 3,269 posts. Scoring
+ * each candidate counted a figure the heuristic read from the post once per system and once per
+ * re-analysis: one "12 antennas" became forty false positives, and its own corroboration. The
+ * heuristic reads the whole post, so it is scored once against everything the AI read in it.
+ */
+export function evalPosts(candidates: readonly Candidate[]): EvalPost[] {
+  const rank = (c: Candidate) => `${c.resolvedBy === "analyst" ? 1 : 0}|${c.createdAt ?? ""}`;
+  const posts = new Map<string, Map<string, Candidate>>();
+  for (const c of candidates) {
+    const key = postKey(c);
+    const systems = posts.get(key) ?? new Map<string, Candidate>();
+    const prev = systems.get(systemKey(c));
+    if (!prev || rank(c) > rank(prev)) systems.set(systemKey(c), c);
+    posts.set(key, systems);
+  }
+  return [...posts.values()].map((m) => {
+    const systems = [...m.values()];
+    // The analyst's call if there is one, else the run's first candidate - its primary.
+    const post =
+      systems.find((c) => c.resolvedBy === "analyst") ??
+      [...systems].sort((a, b) => (a.createdAt ?? "").localeCompare(b.createdAt ?? ""))[0]!;
+    return { post, systems };
+  });
+}
+
+/** Everything the AI read in the post, each figure once. */
+function postReferences(p: EvalPost, verdicts: AnalystVerdicts): Norm[] {
+  const seen = new Set<string>();
+  return p.systems
+    .flatMap((c) => referenceSpecs(c, verdicts))
+    .filter((n) => {
+      const k = `${n.semantic}|${n.canonical ?? n.value}|${n.canonicalUnit ?? n.unit ?? ""}`;
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
+}
+
+const postExtraction = (p: EvalPost): Extraction => ({
+  ...p.post.extraction,
+  systems: p.systems.flatMap((c) => c.extraction.systems ?? []),
+});
+
+/**
+ * A reference figure the heuristic can be scored on: one with a canonical meaning. An attribute
+ * no rule understands ("role", "keel", "container dimensions") is never asked of the heuristic,
+ * and counting it as a miss buried the figures it does read under ones it never tries to.
+ */
+const scorable = (r: Norm) => r.semantic.includes(".");
+
 export async function evaluateHeuristic(
   candidates: readonly Candidate[],
   catalog: Drone[],
@@ -526,11 +589,19 @@ export async function evaluateHeuristic(
   const sampleSize = opts.sampleSize ?? 100;
   const minRaw = opts.minRawLength ?? MIN_RAW;
   const cap = opts.maxMismatchesPerKey ?? 5;
-  const eligible = candidates.filter(
-    (c) =>
-      (c.raw?.trim().length ?? 0) >= minRaw && (opts.includeDiscarded || c.status !== "discarded"),
+  const posts = evalPosts(
+    candidates.filter(
+      (c) =>
+        (c.raw?.trim().length ?? 0) >= minRaw &&
+        (opts.includeDiscarded || c.status !== "discarded"),
+    ),
   );
-  const sample = stratifiedSample(eligible, sampleSize, opts.seed ?? 1);
+  const byPost = new Map(posts.map((p) => [p.post.id, p]));
+  const sample = stratifiedSample(
+    posts.map((p) => p.post),
+    sampleSize,
+    opts.seed ?? 1,
+  );
   const verdicts = analystVerdicts(catalog);
 
   const strat: EvalReport["stratification"] = { platform: {}, outcome: {}, epoch: {} };
@@ -544,15 +615,21 @@ export async function evaluateHeuristic(
   const mismatches: EvalMismatch[] = [];
   const perKeyMis = new Map<string, number>();
   const fixtures: EvalFixture[] = [];
+  let unscoredMisses = 0;
 
   // Count how many reference (AI) specs share the same semantic+canonical value, for
   // the corroboration trust-filter (>=2 candidates).
   const refCounts = new Map<string, number>();
-  for (const c of eligible) {
-    for (const s of comparableSpecs(c.extraction)) {
-      const key = `${s.semantic}|${s.canonical ?? s.value}|${s.canonicalUnit ?? s.unit ?? ""}`;
-      refCounts.set(key, (refCounts.get(key) ?? 0) + 1);
-    }
+  // Per post: two systems in one post carrying the same figure are one report saying it.
+  for (const p of posts) {
+    const keys = new Set(
+      p.systems.flatMap((c) =>
+        comparableSpecs(c.extraction).map(
+          (s) => `${s.semantic}|${s.canonical ?? s.value}|${s.canonicalUnit ?? s.unit ?? ""}`,
+        ),
+      ),
+    );
+    for (const key of keys) refCounts.set(key, (refCounts.get(key) ?? 0) + 1);
   }
 
   const pushMis = (c: Candidate, type: MatchType, h: Norm | null, r: Norm | null) => {
@@ -583,6 +660,8 @@ export async function evaluateHeuristic(
   const total = sample.length;
   for (let i = 0; i < sample.length; i++) {
     const c = sample[i]!;
+    const post = byPost.get(c.id)!;
+    const reference = postExtraction(post);
     // Yield to the event loop so the UI can paint progress and stay responsive.
     await new Promise((resolve) => setTimeout(resolve, 0));
     opts.onProgress?.(i + 1, total);
@@ -597,7 +676,7 @@ export async function evaluateHeuristic(
     } catch {
       continue;
     }
-    const cmp = compareSpecs(comparableSpecs(heur), referenceSpecs(c, verdicts));
+    const cmp = compareSpecs(comparableSpecs(heur), postReferences(post, verdicts));
     for (const p of cmp.pairs) {
       bump(p.h.semantic, "tp");
       if (p.type === "differentReading") pushMis(c, "differentReading", p.h, p.r);
@@ -616,17 +695,21 @@ export async function evaluateHeuristic(
       pushMis(c, "rejected", x.h, x.r);
     }
     for (const r of cmp.misses) {
+      if (!scorable(r)) {
+        unscoredMisses++;
+        continue;
+      }
       bump(r.semantic, "fn");
       pushMis(c, "miss", null, r);
     }
 
     const hn = namesOf(heur);
-    const rn = namesOf(c.extraction);
+    const rn = namesOf(reference);
     const nc = setCounts(hn, rn);
     id.name.tp += nc.tp;
     id.name.fp += nc.fp;
     id.name.fn += nc.fn;
-    const mc = setCounts(matchIdsOf(heur), matchIdsOf(c.extraction));
+    const mc = setCounts(matchIdsOf(heur), matchIdsOf(reference));
     id.matchId.tp += mc.tp;
     id.matchId.fp += mc.fp;
     id.matchId.fn += mc.fn;
@@ -635,7 +718,7 @@ export async function evaluateHeuristic(
     if (agreed.length) {
       // Trust filter: evidence must occur in raw, raw > 50 chars, candidate not discarded,
       // and at least one agreed spec must be corroborated by >=2 candidates.
-      const fold = (s: string) => s.replace(/\\s+/g, " ").trim().toLowerCase();
+      const fold = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase();
       const rawFolded = fold(c.raw);
       const hasEvidence = agreed.some((p) => {
         const proof = p.h.evidence || "";
@@ -648,10 +731,7 @@ export async function evaluateHeuristic(
           return (refCounts.get(key) ?? 0) >= 2;
         });
         if (corroborated.length === 0) continue;
-        const refNames = [
-          c.extraction.name,
-          ...(c.extraction.systems ?? []).map((s) => s.name),
-        ].filter(
+        const refNames = [reference.name, ...(reference.systems ?? []).map((s) => s.name)].filter(
           (n): n is string => !!n && rn.includes(phoneticKey(n)) && hn.includes(phoneticKey(n)),
         );
         fixtures.push({
@@ -699,6 +779,7 @@ export async function evaluateHeuristic(
       matchId: prf(id.matchId.tp, id.matchId.fp, id.matchId.fn),
     },
     perKey,
+    unscoredMisses,
     mismatches,
     topIssues,
     fixtures,

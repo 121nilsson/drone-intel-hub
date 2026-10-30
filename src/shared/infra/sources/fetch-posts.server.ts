@@ -19,6 +19,8 @@ import { openAIProcurementExtractor } from "../procurement-extractor";
 import { outletWeights } from "@/entities/source/outlet-record";
 import { adjudicateContradictions } from "@/shared/infra/ingest/contradictions";
 import { autoCorrect } from "@/shared/infra/ingest/auto-correct";
+import { pruneRepeatedCandidates } from "@/shared/infra/ingest/prune-candidates";
+import { repairCatalog } from "@/shared/infra/ingest/repair-catalog";
 import { dbConfigured } from "../postgres/db.server";
 import { PostgresStore } from "../postgres/postgres-store.server";
 import { DEFAULT_SETTINGS } from "../settings-defaults";
@@ -298,6 +300,26 @@ export async function fetchAllSources(
     console.log(
       `[sources:sync] triage: ${triage.corroborated} corroborated, ${triage.adjudicatedMerged} merged and ${triage.adjudicatedReleased} released by adjudication, ${triage.agedOut} aged out${triage.stopReason ? ` (adjudication stopped: ${triage.stopReason})` : ""}`,
     );
+  // Stored records brought up to today's reading rules (narrowed semantics, deal figures out of
+  // the specs, country spellings, deal links), so a rule fixed at ingest heals old data too.
+  // CATALOG_REPAIR=on writes it; anything else only logs what it would change, so a new rule's
+  // effect on the stored catalog is read before it is applied.
+  {
+    const mode = process.env["CATALOG_REPAIR"]?.toLowerCase();
+    if (mode !== "off") {
+      const repaired = repairCatalog(drones, procurements, { apply: mode === "on" });
+      if (repaired.entries.length)
+        console.log(
+          `[sources:sync] catalog repair${mode === "on" ? "" : " (preview, CATALOG_REPAIR=on applies)"}: ${repaired.drones} entr${repaired.drones === 1 ? "y" : "ies"}, ${repaired.procurementsAdded} procurement(s) filed, ${repaired.linksNarrowed} deal link set(s) narrowed`,
+        );
+      // Candidates an earlier reading of the same post left behind.
+      const pruned = pruneRepeatedCandidates(candidates, dispatches, { apply: mode === "on" });
+      if (pruned.removed)
+        console.log(
+          `[sources:sync] ${mode === "on" ? "removed" : "would remove (preview)"} ${pruned.removed} repeated candidate(s)`,
+        );
+    }
+  }
   // Unit slips and impossible figures, found without a model. First, so a slip it settles is no
   // longer a dispute to spend a contradiction check on. AUTOCORRECT=off keeps every finding a
   // proposal, the way RULES_AUTOPROMOTE=off keeps rules in shadow.

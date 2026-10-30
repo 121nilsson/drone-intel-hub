@@ -1,6 +1,7 @@
 import type { Drone } from "@/entities/drone/types";
 import type { Procurement } from "@/entities/procurement/types";
 import { procurementDay, procurementSystemRefs } from "@/entities/procurement/presentation";
+import { isUnknown } from "@/entities/procurement/same-deal";
 import { CountryBadge } from "@/shared/ui/country-badge";
 import { SourceRef, SystemChip } from "@/shared/ui/links";
 import { Tag } from "@/shared/ui/primitives";
@@ -28,7 +29,13 @@ export function ContractRow({
     <article className={cn("min-w-0 space-y-2", className)} data-testid="contract-row">
       <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
         <div className="min-w-0">
-          <p className="break-words font-medium">{contract.company}</p>
+          <p className="break-words font-medium">
+            {isUnknown(contract.company) ? (
+              <span className="italic text-muted-foreground/70">Company not stated</span>
+            ) : (
+              contract.company
+            )}
+          </p>
           <p className="flex flex-wrap items-center gap-1.5 font-mono text-xs text-muted-foreground">
             {contract.country ? <CountryBadge code={contract.country} /> : "Country unknown"}
             <span>· {procurementDay(contract)}</span>

@@ -28,6 +28,8 @@ import {
 import { getStoreStatus } from "@/shared/infra/storage/store.functions";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Input, Select, Textarea } from "@/shared/ui/fields";
+import { TimeAgo } from "@/shared/ui/time-ago";
 import { Btn, Loading, Panel, Tag } from "@/shared/ui/primitives";
 import {
   collectSource,
@@ -42,8 +44,6 @@ import {
   type WorkProgress,
 } from "@/shared/infra/ingest/auto-ingest";
 
-const field =
-  "w-full min-w-0 max-w-full border border-border bg-background px-2 py-1.5 font-mono text-xs focus:border-primary";
 /** Matches the cron in vite.config.ts. */
 const AUTO_MIN = 10;
 
@@ -375,13 +375,9 @@ export function SourcesPage() {
           {sources.length === 0 ? (
             <p>
               No sources monitored yet.{" "}
-              <button
-                type="button"
-                onClick={() => setTab("add")}
-                className="text-primary underline"
-              >
+              <Btn variant="link" onClick={() => setTab("add")}>
                 Add your first source
-              </button>
+              </Btn>
             </p>
           ) : (
             <p>No watched source matches the search.</p>
@@ -431,7 +427,7 @@ export function SourcesPage() {
               {s.notes && <p className="mt-1 text-sm text-muted-foreground">{s.notes}</p>}
               {s.lastFetched && (
                 <p className="mt-1 font-mono text-[11px] text-muted-foreground">
-                  Last synced {new Date(s.lastFetched).toLocaleString()} ·{" "}
+                  Last synced <TimeAgo iso={s.lastFetched} /> ·{" "}
                   {(() => {
                     const y = yieldBySource.get(s.id);
                     if (!y) return "0 posts stored";
@@ -484,7 +480,11 @@ export function SourcesPage() {
                 />
                 Auto
               </label>
+              {/* Ninety rows of solid green Sync buttons drowned the page; the actions are
+                  quiet and the source name carries the row. */}
               <Btn
+                size="sm"
+                variant="ghost"
                 disabled={!!busy}
                 onClick={async () => {
                   setBusy(s.id);
@@ -497,11 +497,13 @@ export function SourcesPage() {
               >
                 {busy === s.id ? "Syncing…" : "Sync"}
               </Btn>
-              <Btn variant="ghost" onClick={() => sample(s)}>
+              <Btn size="sm" variant="quiet" onClick={() => sample(s)}>
                 Sample
               </Btn>
               <Btn
-                variant="danger"
+                size="sm"
+                variant="quiet"
+                className="hover:text-destructive"
                 onClick={() => {
                   // Undo restores the exact pre-removal snapshot; nothing else depended on the
                   // source between remove and undo in normal analyst reaction time.
@@ -523,16 +525,14 @@ export function SourcesPage() {
 
   const addForm = (
     <div className="min-w-0 space-y-3">
-      <input
-        className={field}
+      <Input
         placeholder="Name"
         value={f.name}
         onChange={(e) => setF({ ...f, name: e.target.value })}
         aria-label="Source name"
       />
       <div className="grid grid-cols-2 gap-2">
-        <select
-          className={field}
+        <Select
           value={f.platform}
           onChange={(e) => setF({ ...f, platform: e.target.value as SourcePlatform })}
           aria-label="Platform"
@@ -540,9 +540,8 @@ export function SourcesPage() {
           {PLATFORMS.map((p) => (
             <option key={p}>{p}</option>
           ))}
-        </select>
-        <select
-          className={field}
+        </Select>
+        <Select
           value={f.domain}
           onChange={(e) => setF({ ...f, domain: e.target.value as Domain })}
           aria-label="Domain"
@@ -550,17 +549,15 @@ export function SourcesPage() {
           {DOMAINS.map((d) => (
             <option key={d}>{d}</option>
           ))}
-        </select>
+        </Select>
       </div>
-      <input
-        className={field}
+      <Input
         placeholder="URL or @handle"
         value={f.handle}
         onChange={(e) => setF({ ...f, handle: e.target.value })}
         aria-label="URL or @handle"
       />
-      <textarea
-        className={field}
+      <Textarea
         rows={3}
         placeholder="Notes"
         value={f.notes}
@@ -614,8 +611,9 @@ export function SourcesPage() {
                 sources produced drone-related posts
               </p>
             )}
-            <input
-              className={field + " mb-2 py-2 text-sm"}
+            <Input
+              className="mb-2"
+              aria-label="Filter sources"
               placeholder={`Filter ${sources.length} sources…`}
               value={query}
               onChange={(e) => setQuery(e.target.value)}

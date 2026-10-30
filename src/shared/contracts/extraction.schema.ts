@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { countryCode } from "@/entities/normalization/country";
 import extractionPrompt from "./extraction-prompt.json";
 
 const confidence = z.coerce.number().finite().min(0).max(1);
@@ -33,6 +34,17 @@ const lenientArray = <T extends z.ZodTypeAny>(item: T) =>
     );
 
 const textList = (max: number) => lenientArray(z.string().trim().min(1).max(max));
+
+/** "Japan", "UK" and "Russian Federation" become JP, GB and RU before the length check drops them. */
+const toCountry = (v: unknown) => (typeof v === "string" ? countryCode(v) : v);
+const country = (fallback: string) =>
+  z
+    .preprocess((v) => toCountry(blank(v)), z.string().trim().max(8).default(fallback))
+    .catch(fallback);
+const optionalCountry = lenient(z.preprocess(toCountry, z.string().trim().max(8)));
+const countryList = lenientArray(
+  z.preprocess(toCountry, z.string().trim().min(1).max(8)),
+).transform((codes) => [...new Set(codes)]);
 
 const DOMAINS = ["Air", "Land", "Sea", "Multi"] as const;
 const domain = z
@@ -84,7 +96,7 @@ export const ExtractedSpecSchema = z.preprocess(
 export const SupplyComponentSchema = z.object({
   part: z.string().trim().min(1).max(200),
   manufacturer: z.preprocess(blank, z.string().trim().max(200).default("Unknown")),
-  origin: z.preprocess(blank, z.string().trim().max(8).default("??")).catch("??"),
+  origin: country("??"),
   category: optionalText,
   model: optionalText,
   evidence: lenient(z.string().trim().min(1).max(1_000)),
@@ -132,9 +144,9 @@ const detectedSystem = z.preprocess(
 export const SystemExtractionSchema = DetectedSystemSchema.extend({
   aliases: textList(200),
   domain,
-  origin: lenient(z.string().trim().max(8)),
+  origin: optionalCountry,
   manufacturer: lenient(z.string().trim().max(200)),
-  operators: textList(8),
+  operators: countryList,
   propulsion: lenient(z.string().trim().max(200)),
   installation: lenient(z.string().trim().max(200)),
   guidance: textList(120),
@@ -151,9 +163,9 @@ export const AIExtractionSchema = z.object({
   name: lenient(z.string().trim().min(1).max(200)),
   aliases: textList(200),
   domain,
-  origin: lenient(z.string().trim().max(8)),
+  origin: optionalCountry,
   manufacturer: lenient(z.string().trim().max(200)),
-  operators: textList(8),
+  operators: countryList,
   propulsion: lenient(z.string().trim().max(200)),
   installation: lenient(z.string().trim().max(200)),
   guidance: textList(120),
@@ -174,7 +186,7 @@ export const EXTRACTION_PROMPT_VERSION = extractionPrompt.version;
 
 export const ProcurementExtractionSchema = z.object({
   company: z.string().trim().min(1).max(200),
-  country: z.preprocess(blank, z.string().trim().max(8).default("")).catch(""),
+  country: country(""),
   amount: optionalText,
   currency: optionalText,
   program: optionalText,

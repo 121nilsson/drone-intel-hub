@@ -228,6 +228,7 @@ function deps(drones: Drone[], candidates: Candidate[]) {
         const i = cs.findIndex((c) => c.id === id);
         if (i >= 0) cs[i] = { ...cs[i]!, ...patch };
       },
+      remove: () => {},
     },
   };
 }

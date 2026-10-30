@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
+import { buttonClass, type BtnSize, type BtnVariant } from "./button-class";
 
 export function Panel({
   id,
@@ -160,28 +161,196 @@ export function Sparkline({
 
 /** Shared loading affordance: repositories are async after SSR (see Services.attached). */
 export function Loading({ label = "Loading…" }: { label?: string }) {
-  return <p className="animate-pulse font-mono text-sm text-muted-foreground">{label}</p>;
+  // Placeholder rows in the shape of a page, so the content arrives in place instead of
+  // pushing a one-line message off the screen.
+  return (
+    <div role="status" className="space-y-4">
+      <p className="font-mono text-xs text-muted-foreground">{label}</p>
+      <div className="h-7 w-1/3 animate-pulse bg-secondary" />
+      <div className="space-y-2">
+        {[92, 78, 85, 64, 88, 72].map((w, i) => (
+          <div key={i} className="h-10 animate-pulse bg-secondary/70" style={{ width: `${w}%` }} />
+        ))}
+      </div>
+    </div>
+  );
 }
 
 export function Btn({
   className,
   variant = "primary",
+  size = "md",
+  type = "button",
   ...p
-}: React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: "primary" | "ghost" | "danger" }) {
-  const v = {
-    primary: "bg-primary text-primary-foreground hover:bg-primary/85",
-    ghost: "border border-border text-foreground hover:bg-secondary",
-    danger: "border border-destructive/60 text-destructive hover:bg-destructive/10",
+}: React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: BtnVariant; size?: BtnSize }) {
+  return <button {...p} type={type} className={buttonClass({ variant, size, className })} />;
+}
+
+/**
+ * A one-of-N switch ("Compact | Cards"): buttons share one border and the chosen one is
+ * pressed, so the control reads as a single choice rather than a row of actions.
+ */
+export function Segmented<T extends string>({
+  value,
+  options,
+  onChange,
+  label,
+}: {
+  value: T;
+  options: readonly { value: T; label: ReactNode }[];
+  onChange: (value: T) => void;
+  label: string;
+}) {
+  return (
+    <div className="inline-flex shrink-0 border border-border" role="group" aria-label={label}>
+      {options.map((o, i) => (
+        <button
+          key={o.value}
+          type="button"
+          aria-pressed={value === o.value}
+          onClick={() => onChange(o.value)}
+          className={cn(
+            "px-2 py-1 font-mono text-2xs transition-colors pointer-coarse:min-h-9",
+            i > 0 && "border-l border-border",
+            value === o.value
+              ? "bg-primary/15 text-primary"
+              : "text-muted-foreground hover:text-foreground",
+          )}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** What a list shows when it has nothing: one sentence and, usually, the way out. */
+export function EmptyState({
+  children,
+  action,
+  className,
+}: {
+  children: ReactNode;
+  action?: ReactNode;
+  className?: string;
+}) {
+  return (
+    <div
+      className={cn(
+        "flex flex-col items-start gap-3 border border-dashed border-border p-6 text-sm text-muted-foreground",
+        className,
+      )}
+    >
+      <div>{children}</div>
+      {action}
+    </div>
+  );
+}
+
+/**
+ * A small tappable chip that opens detail ("Defence Industry Europe · 10-22"). A soft fill, not
+ * a border: a bordered box under a label reads as an input field.
+ */
+export function ChipButton({
+  onClick,
+  children,
+  title,
+  dim,
+  disabled,
+}: {
+  onClick: () => void;
+  children: ReactNode;
+  title?: string;
+  dim?: boolean;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={title}
+      disabled={disabled}
+      className={cn(
+        "inline-flex min-w-0 max-w-full items-center gap-1 bg-secondary/60 px-1.5 py-0.5 font-mono text-2xs text-muted-foreground transition-colors hover:bg-primary/15 hover:text-primary disabled:cursor-default disabled:hover:bg-secondary/60 disabled:hover:text-muted-foreground pointer-coarse:min-h-8",
+        dim && "opacity-60",
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
+/**
+ * A notice that is also the way in: "7 possible duplicate groups - Review". The whole bar is the
+ * button, so it is easy to hit on a phone, and it reports whether what it opens is open.
+ */
+export function Callout({
+  title,
+  children,
+  action,
+  onClick,
+  expanded,
+  tone = "accent",
+}: {
+  title: ReactNode;
+  children?: ReactNode;
+  action: ReactNode;
+  onClick: () => void;
+  expanded?: boolean;
+  tone?: "accent" | "danger" | "primary";
+}) {
+  const tones = {
+    accent: "border-accent/50 bg-accent/10 hover:border-accent text-accent",
+    danger: "border-destructive/50 bg-destructive/10 hover:border-destructive text-destructive",
+    primary: "border-primary/50 bg-primary/10 hover:border-primary text-primary",
   };
   return (
     <button
-      {...p}
+      type="button"
+      onClick={onClick}
+      aria-expanded={expanded}
       className={cn(
-        "inline-flex cursor-pointer items-center gap-1.5 px-3 py-1.5 font-mono text-xs uppercase tracking-wider transition-colors disabled:cursor-not-allowed disabled:opacity-50",
-        v[variant],
+        "flex w-full items-center justify-between gap-3 border px-3 py-2.5 text-left text-sm transition-colors",
+        tones[tone],
+      )}
+    >
+      <span className="min-w-0">
+        <span className="font-semibold">{title}</span>
+        {children && <span className="block text-muted-foreground">{children}</span>}
+      </span>
+      <span className="shrink-0 font-mono text-2xs uppercase tracking-wider">{action}</span>
+    </button>
+  );
+}
+
+/**
+ * "Nothing here" inside a panel: one quiet line, so an empty section reads as checked-and-empty
+ * rather than broken. Page-level emptiness, with a way out, is EmptyState.
+ */
+export function EmptyNote({ children, className }: { children: ReactNode; className?: string }) {
+  return <p className={cn("text-sm italic text-muted-foreground/80", className)}>{children}</p>;
+}
+
+/** Small uppercase label over a group of controls or values ("Domain", "Supplier country"). */
+export function Eyebrow({
+  children,
+  className,
+  tone = "muted",
+}: {
+  children: ReactNode;
+  className?: string;
+  tone?: "muted" | "accent";
+}) {
+  return (
+    <p
+      className={cn(
+        "font-mono text-2xs uppercase tracking-widest",
+        tone === "accent" ? "text-accent" : "text-muted-foreground",
         className,
       )}
-    />
+    >
+      {children}
+    </p>
   );
 }
 

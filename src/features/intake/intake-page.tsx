@@ -5,7 +5,8 @@ import { toast } from "sonner";
 import { useCandidates, useDispatches, useDrones, useServices } from "@/shared/infra/services";
 import { translateText } from "@/shared/infra/ai-proxy.functions";
 import { fetchIntakeArticle, isBareUrl } from "@/shared/infra/sources/intake-fetch.functions";
-import { Btn, Loading, Panel, Tag } from "@/shared/ui/primitives";
+import { Input, Select, Textarea } from "@/shared/ui/fields";
+import { Btn, ChipButton, Loading, Panel, Tag } from "@/shared/ui/primitives";
 import { mergeInto, promote, runTwoTier, recordMention } from "@/shared/infra/ingest/pipeline";
 import type { Candidate } from "@/entities/drone/types";
 
@@ -18,13 +19,14 @@ function ExpandableText({ text, className = "" }: { text: string; className?: st
         {text}
       </p>
       {isLong && (
-        <button
-          type="button"
+        <Btn
+          size="sm"
+          variant="quiet"
+          className="-ml-2 mt-1"
           onClick={() => setExpanded(!expanded)}
-          className="mt-1 font-mono text-[11px] text-muted-foreground hover:text-primary"
         >
           {expanded ? "Show less" : "Show more"}
-        </button>
+        </Btn>
       )}
     </div>
   );
@@ -115,15 +117,14 @@ function CandidateRow({ c }: { c: Candidate }) {
         <div className="mt-1 flex flex-wrap items-center gap-1.5">
           <span className="font-mono text-[11px] uppercase text-muted-foreground">Detected:</span>
           {systems.map((s) => (
-            <button
+            <ChipButton
               key={s.name}
-              type="button"
               disabled={c.status !== "pending"}
+              title="Use this name, and its catalog match as the merge target"
               onClick={() => {
                 setName(s.name);
                 if (s.matchId) setTarget(s.matchId);
               }}
-              className="max-w-full break-words border border-border px-2 py-0.5 font-mono text-xs hover:border-primary"
             >
               {s.name}
               {s.matchId
@@ -131,7 +132,7 @@ function CandidateRow({ c }: { c: Candidate }) {
                 : s.variantOf
                   ? ` · new variant of ${s.variantOf}`
                   : " · new"}
-            </button>
+            </ChipButton>
           ))}
         </div>
       )}
@@ -192,36 +193,48 @@ function CandidateRow({ c }: { c: Candidate }) {
           ))}
         </div>
       )}
-      {e.metadata?.escalationReasons?.length ? (
-        <p className="mt-2 font-mono text-xs text-muted-foreground">
-          Escalated: {e.metadata.escalationReasons.join(", ")}
-          {e.metadata.model ? ` · ${e.metadata.model}` : ""}
-        </p>
-      ) : null}
-      {c.quality && (
-        <div className="mt-2 space-y-1 font-mono text-[11px] text-muted-foreground">
-          <p>
-            Candidate quality: conf {Math.round(c.quality.confidence * 100)}%, specs{" "}
-            {c.quality.evidenceSpecCount}/{c.quality.specCount} with evidence
-            {c.quality.systemNames.length ? " - " + c.quality.systemNames.join(", ") : ""}
-          </p>
-          {c.quality.risks.length > 0 && (
-            <ul className="list-inside list-disc">
-              {c.quality.risks.map((risk) => (
-                <li key={risk}>{risk}</li>
-              ))}
-            </ul>
-          )}
-        </div>
-      )}
-      <p className="mt-2 break-words font-mono text-xs text-muted-foreground">{e.rationale}</p>
+      <p className="mt-2 break-words text-sm text-foreground/80">{e.rationale}</p>
+      {(() => {
+        // The escalation gates and the quality risks name mostly the same problems; one list,
+        // folded, keeps the card about the system rather than about the pipeline.
+        const reasons = [
+          ...new Set([...(e.metadata?.escalationReasons ?? []), ...(c.quality?.risks ?? [])]),
+        ];
+        if (!reasons.length && !c.quality) return null;
+        return (
+          <details className="mt-2 font-mono text-2xs text-muted-foreground">
+            <summary className="cursor-pointer select-none hover:text-foreground">
+              Why it needs review{reasons.length ? ` (${reasons.length})` : ""}
+            </summary>
+            <div className="mt-1.5 space-y-1.5 border-l-2 border-border pl-3">
+              {reasons.length > 0 && (
+                <div className="flex flex-wrap gap-1">
+                  {reasons.map((r) => (
+                    <Tag key={r} caps={false}>
+                      {r}
+                    </Tag>
+                  ))}
+                </div>
+              )}
+              {c.quality && (
+                <p>
+                  Confidence {Math.round(c.quality.confidence * 100)}% ·{" "}
+                  {c.quality.evidenceSpecCount}/{c.quality.specCount} specs with evidence
+                  {c.quality.systemNames.length ? ` · ${c.quality.systemNames.join(", ")}` : ""}
+                </p>
+              )}
+              {e.metadata?.model && <p>Model: {e.metadata.model}</p>}
+            </div>
+          </details>
+        );
+      })()}
       {c.status === "pending" ? (
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          <input
+          <Input
             value={name}
             onChange={(ev) => setName(ev.target.value)}
             placeholder="System name"
-            className="w-full min-w-0 max-w-full border border-border bg-card px-2 py-2 font-mono text-xs focus:border-primary sm:w-48"
+            className="text-xs sm:w-48"
             aria-label="Candidate name"
           />
           <Btn
@@ -237,10 +250,10 @@ function CandidateRow({ c }: { c: Candidate }) {
           >
             Promote
           </Btn>
-          <select
+          <Select
             value={target}
             onChange={(ev) => setTarget(ev.target.value)}
-            className="max-w-full flex-1 border border-border bg-card px-2 py-2 font-mono text-xs sm:flex-none"
+            className="max-w-full flex-1 text-xs sm:flex-none"
             aria-label="Merge target"
           >
             <option value="">-- Select system to merge into --</option>
@@ -249,7 +262,7 @@ function CandidateRow({ c }: { c: Candidate }) {
                 {d.name}
               </option>
             ))}
-          </select>
+          </Select>
           <Btn
             variant="ghost"
             disabled={!target}
@@ -490,12 +503,13 @@ export function IntakePage({
           }}
           className={`border ${dragOver ? "border-primary bg-primary/5" : "border-border"} bg-background`}
         >
-          <textarea
+          <Textarea
             value={raw}
             onChange={(e) => setRaw(e.target.value)}
             rows={9}
             placeholder="Paste a dispatch, link, or raw text… (or drop a file)"
-            className="w-full bg-transparent p-3 font-mono text-sm focus:outline-none"
+            aria-label="Dispatch text"
+            className="border-0 bg-transparent p-3 hover:border-0"
           />
         </div>
         <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -505,11 +519,12 @@ export function IntakePage({
           {dragOver && <Tag tone="primary">Drop to load</Tag>}
         </div>
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          <input
+          <Input
             value={source}
             onChange={(e) => setSource(e.target.value)}
-            className="min-w-40 flex-1 border border-border bg-background px-2 py-2 font-mono text-xs"
+            className="w-auto min-w-40 flex-1 text-xs"
             placeholder="Source"
+            aria-label="Source"
           />
           <Btn variant="ghost" onClick={() => setRaw(SAMPLE)}>
             Sample

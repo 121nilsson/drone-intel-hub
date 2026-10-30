@@ -52,6 +52,7 @@ function harness(e: Extraction, extracted: Procurement | null = null) {
       const i = candidates.findIndex((c) => c.id === id);
       if (i >= 0) candidates[i] = { ...candidates[i]!, ...patch };
     },
+    remove: () => {},
   };
   const enrich = vi.fn(async (): Promise<Procurement | null> => extracted);
   const deps: PipelineDeps = {
@@ -62,6 +63,7 @@ function harness(e: Extraction, extracted: Procurement | null = null) {
       add: (p) => {
         procurements.push(p);
       },
+      update: () => {},
     },
     procurementExtractor: enrich,
     tier1: extractor(e),

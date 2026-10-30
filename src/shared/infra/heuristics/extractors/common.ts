@@ -100,7 +100,12 @@ export function extractCountedNouns(
   const nounAlt = nouns.join("|");
   // String.raw: in a plain template literal \p and \d lose their backslashes, which would
   // leave the lookbehind matching the letters p, L and N instead of any letter or digit.
-  const re = getRe(String.raw`(?<![-\p{L}\p{N}])(\d+(?:[ \u00a0]\d{3})*)\s+(${nounAlt})`, "giu");
+  // Not the tail of "10,000" ("000 cameras" read as zero), and not a part count: "16 antenna
+  // elements" is one array of sixteen elements, not sixteen antennas.
+  const re = getRe(
+    String.raw`(?<![-\p{L}\p{N}])(?<!\d[.,])(\d+(?:[ \u00a0]\d{3})*)\s+(${nounAlt})(?![\p{L}]|\s+elements?\b|-element)`,
+    "giu",
+  );
   for (const m of raw.matchAll(re)) {
     // Attack tallies ("launched 167 missiles overnight") are not system specs.
     const before = raw.slice(Math.max(0, m.index! - 40), m.index!);

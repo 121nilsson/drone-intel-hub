@@ -1,6 +1,8 @@
-import type { Extraction, ExtractedSpec } from "@/entities/drone/types";
+import type { Drone, Extraction, ExtractedSpec, SpecAttribute } from "@/entities/drone/types";
 import type { Procurement } from "@/entities/procurement/types";
 import { parseMoney } from "@/entities/normalization/currency";
+import { countryCode } from "@/entities/normalization/country";
+import { namedIn, type SystemRef } from "./linking";
 
 /**
  * Financial / programme keys are deal facts, not hardware specs. They are moved out of
@@ -8,7 +10,14 @@ import { parseMoney } from "@/entities/normalization/currency";
  * procurement records, so consensus never treats "$2 billion" as a property of a drone.
  */
 const FINANCIAL_KEY =
-  /(?:^|_)(?:contract|order|package|deal|delivery|batch|advance|fast_track|total|development|operating|sustainment|programme|program|associated)_?(?:value|cost|funding|amount|commitment|investment|budget)|^(?:contract|order|package)value|funding|investment|production_(?:rate|volume)|_(?:funding|budget)$/i;
+  /(?:^|_)(?:contract|order|package|deal|delivery|batch|advance|fast_track|total|development|operating|sustainment|programme|program|associated)_?(?:value|cost|funding|amount|commitment|investment|budget|ceiling|price)|^(?:contract|order|package)value|^price_total$|funding|investment|production_(?:rate|volume)|_(?:funding|budget)$/i;
+
+/**
+ * A deal figure the model filed under a price key: "Funding amount", "Sales value" and
+ * "Contract value" all arrived as `unit_price`, and would have read as what one unit costs.
+ */
+const FINANCIAL_LABEL =
+  /\b(?:contract|order|deal|sales|programme|program|package)\s+(?:value|ceiling|amount|total)\b|\bfunding\b|\bbudget\b|\btotal\s+(?:price|cost|value)\b|\bgrant\b/i;
 
 export function isFinancialSpecKey(key: string): boolean {
   const k = key
@@ -17,6 +26,11 @@ export function isFinancialSpecKey(key: string): boolean {
     .toLowerCase();
   if (k === "unit_cost") return false;
   return FINANCIAL_KEY.test(k);
+}
+
+/** A deal figure by its key or by what its label says it is. */
+export function isFinancialSpec(spec: { key: string; label?: string }): boolean {
+  return isFinancialSpecKey(spec.key) || FINANCIAL_LABEL.test(spec.label ?? "");
 }
 
 export interface RoutedExtraction {
@@ -29,7 +43,7 @@ export function splitFinancialSpecs(extraction: Extraction): RoutedExtraction {
   const financial: ExtractedSpec[] = [];
   const keep = (specs: ExtractedSpec[]) =>
     specs.filter((s) => {
-      if (!isFinancialSpecKey(s.key)) return true;
+      if (!isFinancialSpec(s)) return true;
       financial.push(s);
       return false;
     });
@@ -69,7 +83,7 @@ const isoDate = (value: string | undefined): string | undefined => {
 
 /** The supplier country should be an ISO2 code; a model's longer answer is not a country badge. */
 const isoCountry = (value: string | undefined): string | undefined => {
-  const code = value?.trim().toUpperCase();
+  const code = value ? countryCode(value) : undefined;
   return code && /^[A-Z]{2}$/.test(code) ? code : undefined;
 };
 
@@ -96,18 +110,33 @@ export function procurementsFrom(
 ): Procurement[] {
   const now = new Date().toISOString();
   const announcedAt = isoDate(context.publishedAt);
-  const systemNames = unique([
-    ...(extraction.systems?.map((x) => x.name) ?? []),
-    ...(extraction.systemExtractions?.map((x) => x.name) ?? []),
-    extraction.name,
-  ]);
-  const systemIds = unique([
-    extraction.matchId,
-    ...(extraction.systems?.map((x) => x.matchId) ?? []),
-    ...(extraction.systemExtractions?.map((x) => x.matchId) ?? []),
-  ]);
-  const product = systemNames.join(", ");
+  // The post's own subject first: it is what a deal links to when its sentence names nothing.
+  const systems: SystemRef[] = [
+    ...(extraction.name
+      ? [
+          {
+            name: extraction.name,
+            aliases: extraction.aliases,
+            ...(extraction.matchId ? { id: extraction.matchId } : {}),
+          },
+        ]
+      : []),
+    ...(extraction.systemExtractions ?? []).map((x) => ({
+      name: x.name,
+      aliases: x.aliases,
+      ...(x.matchId ? { id: x.matchId } : {}),
+    })),
+    ...(extraction.systems ?? []).map((x) => ({
+      name: x.name,
+      ...(x.matchId ? { id: x.matchId } : {}),
+    })),
+  ];
   return financial.map((s) => {
+    const named = s.evidence ? namedIn(s.evidence, systems) : [];
+    const linked = named.length ? named : systems.slice(0, 1);
+    const systemNames = unique(linked.map((x) => x.name));
+    const systemIds = unique(linked.map((x) => x.id));
+    const product = systemNames.join(", ");
     const amount = String(s.value) + (s.unit ? ` ${s.unit}` : "");
     const money = parseMoney(amount);
     const notes = `${s.label}${s.evidence ? `: ${s.evidence}` : ""}`.slice(0, 1000);
@@ -163,4 +192,38 @@ export function enrichProcurement(record: Procurement, extracted: Procurement): 
   }
   if (!next.notes && extracted.notes) next.notes = extracted.notes.trim();
   return next;
+}
+
+/**
+ * Procurement records for a deal figure that was stored as a spec before routing existed (or
+ * before its label was understood as one). Each claim is one record, built the way ingestion
+ * builds them, so a claim the pipeline already routed has the same dedupe key and is skipped.
+ */
+export function procurementsFromStoredSpec(
+  drone: Pick<Drone, "id" | "name" | "manufacturer" | "origin">,
+  spec: SpecAttribute,
+  now = new Date().toISOString(),
+): Procurement[] {
+  return spec.claims.map((c) => {
+    const amount = String(c.value) + (spec.unit ? ` ${spec.unit}` : "");
+    const money = parseMoney(amount);
+    const base = {
+      company: drone.manufacturer ?? "Unknown",
+      country: isoCountry(drone.origin) ?? "",
+      amount,
+      source: c.source,
+      notes: `${spec.label}${c.evidence ? `: ${c.evidence}` : ""}`.slice(0, 1000),
+      ...(c.sourceId ? { sourceId: c.sourceId } : {}),
+    };
+    return {
+      id: crypto.randomUUID(),
+      ...base,
+      ...(money ? { currency: money.currency } : {}),
+      product: drone.name,
+      systemIds: [drone.id],
+      systemNames: [drone.name],
+      dedupeKey: procurementDedupeKey(base),
+      createdAt: now,
+    };
+  });
 }

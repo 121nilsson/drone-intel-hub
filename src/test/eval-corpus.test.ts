@@ -16,6 +16,8 @@ describe("eval corpus regressions", () => {
       const r = await checkFixture(fx, heuristic, drones);
       expect(r.missing).toEqual([]);
       expect(r.missingNames).toEqual([]);
+      // A reading once locked in by mistake ("1,000 missiles" as zero) must stay gone.
+      expect(r.forbidden).toEqual([]);
     });
   }
 });

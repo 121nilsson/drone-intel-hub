@@ -62,10 +62,15 @@ describe("procurement routing", () => {
     expect(known?.country).toBe("SE");
   });
 
-  it("carries the post identity, publication date and every named system", () => {
+  it("carries the post identity, publication date and every system the deal's sentence names", () => {
     const multi: Extraction = {
       ...base,
       matchId: "akash",
+      specs: base.specs.map((s) =>
+        s.key === "contract_value"
+          ? { ...s, evidence: "contracts for Akash and Akash-NG worth nearly $2 billion" }
+          : s,
+      ),
       systems: [
         { name: "Akash", matchId: "akash" },
         { name: "Akash-NG", matchId: "akash-ng" },

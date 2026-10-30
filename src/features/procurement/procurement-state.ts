@@ -1,5 +1,6 @@
 import type { Procurement } from "@/entities/procurement/types";
 import { procurementHaystack } from "@/entities/procurement/presentation";
+import { byFrequency } from "@/shared/ui/facets";
 
 /**
  * Procurement search is URL state for the same reason the catalog's is: a buyer/currency view is
@@ -69,14 +70,10 @@ export function toProcurementSearchParams(state: ProcurementState): Record<strin
 }
 
 export function procurementFacets(procurements: readonly Procurement[]): ProcurementFacets {
-  const unique = (values: (string | undefined)[]) =>
-    [...new Set(values.map((v) => v?.trim()).filter((v): v is string => Boolean(v)))].sort((a, b) =>
-      a.localeCompare(b),
-    );
   return {
-    countries: unique(procurements.map((p) => p.country)),
-    currencies: unique(procurements.map((p) => p.currency)),
-    buyers: unique(procurements.map((p) => p.customer)),
+    countries: byFrequency(procurements.map((p) => p.country)),
+    currencies: byFrequency(procurements.map((p) => p.currency)),
+    buyers: byFrequency(procurements.map((p) => p.customer)),
   };
 }
 

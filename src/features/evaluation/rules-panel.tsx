@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
+import { Select, Textarea } from "@/shared/ui/fields";
+import { SourceRef } from "@/shared/ui/links";
 import { Btn, Card, Panel, Tag } from "@/shared/ui/primitives";
+import { splitSourceLabel } from "@/shared/ui/source-label";
 import {
   fetchAutonomy,
   fetchRules,
@@ -72,18 +75,47 @@ function Verdict({ r }: { r: SandboxResult & { evaluatedAt: string } }) {
       ))}
       {r.preview.length > 0 && (
         <ul className="space-y-1">
-          {r.preview.slice(0, 5).map((p) => (
-            <li key={p.candidateId} className="break-words">
-              <span className="text-muted-foreground">{p.source}: </span>
-              {p.before.length > 0 && <span className="line-through">{p.before.join(", ")}</span>}
-              {p.before.length > 0 && p.after.length > 0 && " → "}
-              {p.after.length > 0 && <span className="text-success">{p.after.join(", ")}</span>}
-            </li>
-          ))}
+          {previewLines(r.preview).map(({ p, count }) => {
+            const src = splitSourceLabel(p.source);
+            return (
+              <li key={p.candidateId} className="flex min-w-0 flex-wrap items-baseline gap-x-2">
+                <SourceRef
+                  source={src.name}
+                  href={src.url}
+                  className="max-w-72 text-muted-foreground"
+                />
+                <span>
+                  {p.before.length > 0 && (
+                    <span className="line-through">{p.before.join(", ")}</span>
+                  )}
+                  {p.before.length > 0 && p.after.length > 0 && " → "}
+                  {p.after.length > 0 && <span className="text-success">{p.after.join(", ")}</span>}
+                  {count > 1 && <span className="text-muted-foreground"> ×{count}</span>}
+                </span>
+              </li>
+            );
+          })}
         </ul>
       )}
     </div>
   );
+}
+
+/**
+ * The first five distinct changes, each with how often it occurred: one report read five times
+ * printed the same line five times.
+ */
+function previewLines<P extends { source: string; before: string[]; after: string[] }>(
+  preview: readonly P[],
+): { p: P; count: number }[] {
+  const out = new Map<string, { p: P; count: number }>();
+  for (const p of preview) {
+    const k = `${p.source}|${p.before.join(",")}|${p.after.join(",")}`;
+    const hit = out.get(k);
+    if (hit) hit.count++;
+    else out.set(k, { p, count: 1 });
+  }
+  return [...out.values()].slice(0, 5);
 }
 
 function Shadow({ m }: { m: NonNullable<RuleView["shadow"]> }) {
@@ -287,9 +319,9 @@ export function RulesPanel() {
             Automation status
           </a>
           ). Press one only to get results sooner.{" "}
-          <button type="button" className="underline" disabled={!!busy} onClick={reload}>
+          <Btn variant="link" disabled={!!busy} onClick={reload}>
             Refresh the list
-          </button>
+          </Btn>
         </p>
       </div>
       {autonomy && <Autonomy a={autonomy} />}
@@ -297,8 +329,8 @@ export function RulesPanel() {
       <details className="mb-3 border border-border p-3">
         <summary className="cursor-pointer text-sm">New rule (analyst)</summary>
         <div className="mt-2 flex flex-wrap gap-2">
-          <select
-            className="border border-border bg-background px-2 py-1 text-sm"
+          <Select
+            aria-label="Rule kind"
             value={kind}
             onChange={(e) => {
               const k = e.target.value as RuleKind;
@@ -309,19 +341,20 @@ export function RulesPanel() {
             {(Object.keys(EXAMPLES) as RuleKind[]).map((k) => (
               <option key={k}>{k}</option>
             ))}
-          </select>
-          <select
-            className="border border-border bg-background px-2 py-1 text-sm"
+          </Select>
+          <Select
+            aria-label="Rule language"
             value={language}
             onChange={(e) => setLanguage(e.target.value as RuleLanguage)}
           >
             {["all", "en", "uk", "ru", "sv"].map((l) => (
               <option key={l}>{l}</option>
             ))}
-          </select>
+          </Select>
         </div>
-        <textarea
-          className="mt-2 w-full border border-border bg-background p-2 font-mono text-xs"
+        <Textarea
+          aria-label="Rule payload"
+          className="my-2 text-xs"
           rows={3}
           value={payload}
           onChange={(e) => setPayload(e.target.value)}

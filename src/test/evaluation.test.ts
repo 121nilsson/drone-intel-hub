@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { Candidate, Extraction } from "@/entities/drone/types";
 import type { IntelExtractor } from "@/shared/contracts/ai";
-import { evaluateHeuristic, numbersClose, platformOf } from "@/shared/infra/evaluation/evaluation";
+import {
+  evaluateHeuristic,
+  numbersClose,
+  evalPosts,
+  platformOf,
+} from "@/shared/infra/evaluation/evaluation";
 
 const ext = (specs: Extraction["specs"], name?: string): Extraction => ({
   ...(name ? { name } : {}),
@@ -66,9 +71,9 @@ describe("evaluation", () => {
   it("turns agreements into regression fixtures and skips short texts", async () => {
     const spec = { key: "range", label: "Range", value: 40, unit: "km" };
     const short = { ...cand("s", ext([spec])), raw: "short" };
-    // Two eligible candidates with the same spec satisfy the corroboration filter (>=2).
+    // Two outlets with the same spec satisfy the corroboration filter (>=2).
     const r = await evaluateHeuristic(
-      [cand("a", ext([spec])), cand("b", ext([spec])), short],
+      [cand("a", ext([spec]), "tg:one"), cand("b", ext([spec]), "tg:two"), short],
       [],
       fake(ext([spec])),
     );
@@ -76,5 +81,36 @@ describe("evaluation", () => {
     expect(r.totalItems).toBe(2);
     expect(r.fixtures.length).toBeGreaterThanOrEqual(1);
     expect(r.fixtures[0]?.expect[0]?.value).toBe(40);
+  });
+
+  it("scores a post once however often it was analysed", async () => {
+    const spec = { key: "range", label: "Range", value: 40, unit: "km" };
+    const copies = [1, 2, 3].map((n) => ({
+      ...cand(`a${n}`, ext([])),
+      createdAt: `2026-01-0${n}`,
+    }));
+    const r = await evaluateHeuristic(copies, [], fake(ext([spec])));
+    expect(r.totalItems).toBe(1);
+    expect(r.summary.fp).toBe(1);
+    // The latest analysis is the reference.
+    expect(evalPosts(copies).map((p) => p.systems.map((c) => c.id))).toEqual([["a3"]]);
+  });
+
+  it("scores a post naming two systems against both systems' figures", async () => {
+    // The heuristic reads both figures from the whole post; the AI filed one under each system.
+    const range = { key: "range", label: "Range", value: 40, unit: "km" };
+    const antennas = { key: "antennas", label: "Number of antennas", value: 12 };
+    const akinci = cand("akinci", { ...ext([range], "Akinci"), matchId: "akinci" });
+    const ilter = { ...cand("ilter", { ...ext([antennas], "Ilter"), matchId: "ilter" }) };
+    const r = await evaluateHeuristic([akinci, ilter], [], fake(ext([range, antennas])));
+    expect(r.totalItems).toBe(1);
+    expect(r.summary).toMatchObject({ tp: 2, fp: 0, fn: 0 });
+  });
+
+  it("does not score figures with no canonical meaning", async () => {
+    const ref = ext([{ key: "keel", label: "Keel", value: "deep V" }]);
+    const r = await evaluateHeuristic([cand("a", ref)], [], fake(ext([])));
+    expect(r.summary.fn).toBe(0);
+    expect(r.unscoredMisses).toBe(1);
   });
 });

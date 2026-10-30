@@ -47,7 +47,7 @@
       {
         "unit": "km/h",
         "value": 450,
-        "semantic": "speed.cruise"
+        "semantic": "speed.stated"
       }
     ],
     "source": "Kyiv Post · https://www.kyivpost.com/post/87169",
@@ -60,7 +60,7 @@
       {
         "unit": "km/h",
         "value": 150,
-        "semantic": "speed.cruise"
+        "semantic": "speed.stated"
       },
       {
         "unit": "km",
@@ -83,7 +83,7 @@
       {
         "unit": "km/h",
         "value": 161,
-        "semantic": "speed.cruise"
+        "semantic": "speed.stated"
       }
     ],
     "source": "Kyiv Post · https://www.kyivpost.com/post/87379",
@@ -109,7 +109,7 @@
       {
         "unit": "km/h",
         "value": 15,
-        "semantic": "speed.cruise"
+        "semantic": "speed.max"
       }
     ],
     "source": "Militarnyi (UA RSS) · https://militarnyi.com/uk/news/u-kanadi-vyroblyatymut-nrk-termit/?utm_source=rss&#038;utm_medium=rss&#038;utm_campaign=u-kanadi-vyroblyatymut-nrk-termit",
@@ -173,7 +173,7 @@
       {
         "unit": "km/h",
         "value": 161,
-        "semantic": "speed.cruise"
+        "semantic": "speed.stated"
       }
     ],
     "source": "Militarnyi (UA RSS) · https://militarnyi.com/uk/news/starlink-obmezhyv-perehoplennya-geran/?utm_source=rss&#038;utm_medium=rss&#038;utm_campaign=starlink-obmezhyv-perehoplennya-geran",
@@ -185,8 +185,8 @@
     "expect": [
       {
         "unit": "km/h",
-        "value": 100,
-        "semantic": "speed.cruise"
+        "value": 101.86,
+        "semantic": "speed.max"
       },
       {
         "unit": "km/h",
@@ -204,7 +204,7 @@
       {
         "unit": "km/h",
         "value": 450,
-        "semantic": "speed.cruise"
+        "semantic": "speed.stated"
       }
     ],
     "source": "Kyiv Post · https://www.kyivpost.com/post/87169",
@@ -222,7 +222,7 @@
       {
         "unit": "km/h",
         "value": 100,
-        "semantic": "speed.cruise"
+        "semantic": "speed.stated"
       },
       {
         "unit": "min",
@@ -245,7 +245,7 @@
       {
         "unit": "km/h",
         "value": 800,
-        "semantic": "speed.cruise"
+        "semantic": "speed.stated"
       }
     ],
     "source": "Defense Express · https://en.defence-ua.com/weapon_and_tech/ukraines_defense_minister_confirms_russia_developing_800kmh_jet_kamikaze_drones_1990s_tu_300_korshun_shows_the_precedent-20074.html",
@@ -343,7 +343,7 @@
       {
         "unit": "km/h",
         "value": 161,
-        "semantic": "speed.cruise"
+        "semantic": "speed.stated"
       }
     ],
     "source": "Kyiv Post · https://www.kyivpost.com/post/87379",
@@ -356,12 +356,12 @@
       {
         "unit": "km/h",
         "value": 430,
-        "semantic": "speed.cruise"
+        "semantic": "speed.stated"
       },
       {
         "unit": "km/h",
         "value": 430,
-        "semantic": "speed.cruise"
+        "semantic": "speed.stated"
       }
     ],
     "source": "Militarnyi (UA RSS) · https://militarnyi.com/uk/news/perehoplyuvach-zbyv-geran-5-na-430-km-god/?utm_source=rss&#038;utm_medium=rss&#038;utm_campaign=perehoplyuvach-zbyv-geran-5-na-430-km-god",
@@ -404,7 +404,7 @@
       {
         "unit": "km/h",
         "value": 241.4,
-        "semantic": "speed.cruise"
+        "semantic": "speed.max"
       }
     ],
     "source": "Analyst paste",
@@ -417,7 +417,7 @@
       {
         "unit": "km/h",
         "value": 105,
-        "semantic": "speed.cruise"
+        "semantic": "speed.stated"
       }
     ],
     "source": "Militarnyi (UA RSS) · https://militarnyi.com/uk/news/ukrayini-vyprobovuyut-bezpilotnyk-stargate/?utm_source=rss&#038;utm_medium=rss&#038;utm_campaign=ukrayini-vyprobovuyut-bezpilotnyk-stargate",
@@ -430,7 +430,7 @@
       {
         "unit": "km/h",
         "value": 161,
-        "semantic": "speed.cruise"
+        "semantic": "speed.stated"
       }
     ],
     "source": "Ukrinform (War) · https://www.ukrinform.net/rubric-ato/4174375-ukraines-mod-in-contact-with-us-spacex-nato-partners-over-starshield-restrictions-source.html",
@@ -471,7 +471,7 @@
       {
         "unit": "km/h",
         "value": 161,
-        "semantic": "speed.cruise"
+        "semantic": "speed.stated"
       }
     ],
     "source": "Militarnyi (UA RSS) · https://militarnyi.com/uk/news/starlink-obmezhyv-perehoplennya-geran/?utm_source=rss&#038;utm_medium=rss&#038;utm_campaign=starlink-obmezhyv-perehoplennya-geran",
@@ -546,7 +546,7 @@
       {
         "unit": "km/h",
         "value": 161,
-        "semantic": "speed.cruise"
+        "semantic": "speed.stated"
       }
     ],
     "source": "Kyiv Post · https://www.kyivpost.com/post/87379",
@@ -559,7 +559,7 @@
       {
         "unit": "km/h",
         "value": 100,
-        "semantic": "speed.cruise"
+        "semantic": "speed.stated"
       },
       {
         "unit": "km",
@@ -577,7 +577,7 @@
       {
         "unit": "km/h",
         "value": 15,
-        "semantic": "speed.cruise"
+        "semantic": "speed.max"
       }
     ],
     "source": "Militarnyi (UA RSS) · https://militarnyi.com/uk/news/u-kanadi-vyroblyatymut-nrk-termit/?utm_source=rss&#038;utm_medium=rss&#038;utm_campaign=u-kanadi-vyroblyatymut-nrk-termit",
@@ -603,7 +603,7 @@
       {
         "unit": "km/h",
         "value": 850,
-        "semantic": "speed.cruise"
+        "semantic": "speed.max"
       },
       {
         "unit": "km",
@@ -653,14 +653,14 @@
   {
     "id": "98f21b6b-e384-404c-9db2-041bb6dac9c7",
     "text": "Ukraine and Japan plan prefabricated backup crossings for Kyiv’s bridges: 720 meters of structures already delivered\n\nUkrainian and Japanese officials discussed establishing backup bridge crossings in the event of Russian strikes, preparing municipal infrastructure for winter, and Japan's continued assistance with Ukraine's recovery, Ukraine's Minister for Restoration, Infrastructure and Transport, Mykola Kalashnyk, reported on 14 October.\n\nRussia is targeting Kyiv's bridges to paralyze the city and break civilian morale, defense analyst Hamish de Bretton-Gordon wrote in The Telegraph. On 1 and 2 October, Russia attacked Kyiv's Southern Bridge, then struck the Northern Bridge on 3 and 4 October. Ukraine is now working with international partners to establish backup bridge crossings that could maintain connectivity even if major routes are damaged.\n\nThe discussions took place during a meeting between Minister Kalashnyk, Japan's Ambassador to Ukraine Yo Osumi, and Osamu Hattori, head of the Japan International Cooperation Agency (JICA) office in Ukraine, according to the statement.\n\nKyiv's Southern Bridge, for example, plays a critical role in logistics because freight traffic uses it, transport planning expert Dmytro Bespalov noted in an article for Ukrainska Pravda. At the same time, installing additional metal structures to reinforce bridges could be dangerous given their technical condition and existing load levels, he said.\n\nOne potential solution is to establish backup bridge crossings.\n\nUkraine and JICA have agreed to continue working together on engineering solutions for setting up these crossings. Japan has already delivered 720 meters of prefabricated bridge structures to Ukraine, which are expected to be used to create alternative routes if Russia's attacks damage major bridges, Kalashnyk said.\n\nThe initiative is intended to help maintain transportation links, ensure the delivery of critical supplies, and preserve evacuation routes for civilians.\n\nDuring the meeting, Ukraine and JICA discussed equipping water utilities with backup power supplies, addressing the need for modular boiler plants, and obtaining equipment to ensure uninterrupted heating and water services. Ukraine has already submitted lists of the necessary equipment to JICA for consideration as part of a new emergency assistance project, Kalashnyk said.\n\nAn intercepted document outlining an alleged Russian plan for strikes against Ukraine this winter reportedly describes attacks on 60 critical infrastructure facilities using up to 1,000 missiles, drones, and aerial bombs. Potential targets include electrical substations, hydroelectric power plants, thermal power plants, boiler facilities, and infrastructure related to water supply and wastewater management.\n\nThe document also describes potential strikes on facilities in Kyiv, Kharkiv, Odesa, and several other cities. Such attacks could disrupt electricity, heating, water supply, and wastewater services.",
-    "expect": [
+    "expect": [],
+    "source": "Euromaidan Press · https://euromaidanpress.com/2026/10/15/ukraine-prepares-backup-plans-for-bridges-water-utilities-and-boiler-plants-with-japans-support-amid-threat-of-russian-strikes-japan-has-already-delivered-720-meters-of-prefabricated-bridge/",
+    "expectNames": ["Freyja"],
+    "forbid": [
       {
-        "value": 0,
         "semantic": "payload.missile.count"
       }
-    ],
-    "source": "Euromaidan Press · https://euromaidanpress.com/2026/10/15/ukraine-prepares-backup-plans-for-bridges-water-utilities-and-boiler-plants-with-japans-support-amid-threat-of-russian-strikes-japan-has-already-delivered-720-meters-of-prefabricated-bridge/",
-    "expectNames": ["Freyja"]
+    ]
   },
   {
     "id": "9eb11bf8-46e5-45d7-ad5e-b874a2ab665e",
@@ -669,7 +669,7 @@
       {
         "unit": "km/h",
         "value": 450,
-        "semantic": "speed.cruise"
+        "semantic": "speed.stated"
       }
     ],
     "source": "Kyiv Post · https://www.kyivpost.com/post/87169",
@@ -682,7 +682,7 @@
       {
         "unit": "km/h",
         "value": 161,
-        "semantic": "speed.cruise"
+        "semantic": "speed.stated"
       }
     ],
     "source": "Militarnyi (UA RSS) · https://militarnyi.com/uk/news/starlink-obmezhyv-perehoplennya-geran/?utm_source=rss&#038;utm_medium=rss&#038;utm_campaign=starlink-obmezhyv-perehoplennya-geran",
@@ -695,7 +695,7 @@
       {
         "unit": "km/h",
         "value": 450,
-        "semantic": "speed.cruise"
+        "semantic": "speed.stated"
       }
     ],
     "source": "Kyiv Post · https://www.kyivpost.com/post/87169",
@@ -734,12 +734,12 @@
       {
         "unit": "km/h",
         "value": 50,
-        "semantic": "speed.cruise"
+        "semantic": "speed.stated"
       },
       {
         "unit": "km/h",
         "value": 20,
-        "semantic": "speed.cruise"
+        "semantic": "speed.stated"
       }
     ],
     "source": "Militarnyi (UA RSS) · https://militarnyi.com/uk/news/btr-82a-otrymav-zavodskyj-mangal-vid-droniv/?utm_source=rss&#038;utm_medium=rss&#038;utm_campaign=btr-82a-otrymav-zavodskyj-mangal-vid-droniv",
@@ -752,7 +752,7 @@
       {
         "unit": "km/h",
         "value": 80,
-        "semantic": "speed.cruise"
+        "semantic": "speed.max"
       },
       {
         "unit": "km",
@@ -780,7 +780,7 @@
       {
         "unit": "km/h",
         "value": 27.78,
-        "semantic": "speed"
+        "semantic": "speed.cruise"
       },
       {
         "unit": "km",
@@ -860,8 +860,8 @@
     "expect": [
       {
         "unit": "km/h",
-        "value": 600,
-        "semantic": "speed.cruise"
+        "value": 600.29,
+        "semantic": "speed.max"
       }
     ],
     "source": "Defense News · https://www.defensenews.com/global/2026/10/14/ukraine-races-to-field-faster-interceptors-as-russia-hammers-its-energy-grid/",
@@ -994,7 +994,7 @@
       {
         "unit": "km/h",
         "value": 500,
-        "semantic": "speed.cruise"
+        "semantic": "speed.max"
       },
       {
         "unit": "km",
@@ -1053,7 +1053,7 @@
       {
         "unit": "km/h",
         "value": 600,
-        "semantic": "speed.cruise"
+        "semantic": "speed.max"
       }
     ],
     "source": "Militarnyi (UA RSS) · https://militarnyi.com/uk/news/povernys-zhyvym-peredav-perehoplyuvachi-novogo-pokolinnya/?utm_source=rss&#038;utm_medium=rss&#038;utm_campaign=povernys-zhyvym-peredav-perehoplyuvachi-novogo-pokolinnya",

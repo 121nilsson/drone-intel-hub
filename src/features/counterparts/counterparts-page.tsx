@@ -10,7 +10,9 @@ import {
 import { type Drone } from "@/entities/drone/types";
 import { CountryBadge } from "@/shared/ui/country-badge";
 import { useDrones, useServices } from "@/shared/infra/services";
-import { Loading, Panel, Tag } from "@/shared/ui/primitives";
+import { DataTable } from "@/shared/ui/data-table";
+import { Select } from "@/shared/ui/fields";
+import { Loading, Panel, Tag, EmptyNote } from "@/shared/ui/primitives";
 
 function overlap(a: Drone, b: Drone) {
   const shared: string[] = [];
@@ -42,7 +44,7 @@ function EwColumn({ target, attacker }: { target: Drone; attacker: Drone }) {
         {m.antiJam && <span className="ml-2 text-accent">· anti-jam fitted</span>}
       </p>
       {!m.rows.length ? (
-        <p className="text-sm text-muted-foreground">No jammer recorded on {attacker.name}.</p>
+        <EmptyNote>No jammer recorded on {attacker.name}.</EmptyNote>
       ) : (
         <ul className="space-y-2">
           {m.rows.map((r, i) => (
@@ -127,11 +129,12 @@ export function CounterpartsPage({ a, b }: { a?: string | undefined; b?: string 
   const Card = ({ d, k }: { d: Drone; k: "a" | "b" }) => (
     <Panel
       title={
-        <select
+        <Select
           value={d.id}
           onChange={(e) => set(k, e.target.value)}
           aria-label={k === "a" ? "First system to compare" : "Second system to compare"}
-          className="bg-transparent font-mono text-xs uppercase"
+          size="sm"
+          className="max-w-full"
         >
           {drones
             .filter((x) => x.id !== (k === "a" ? B.id : A.id))
@@ -140,7 +143,7 @@ export function CounterpartsPage({ a, b }: { a?: string | undefined; b?: string 
                 {x.name}
               </option>
             ))}
-        </select>
+        </Select>
       }
     >
       <h2 className="text-2xl font-semibold">{d.name}</h2>
@@ -203,41 +206,40 @@ export function CounterpartsPage({ a, b }: { a?: string | undefined; b?: string 
       </Panel>
       <Panel title="Specification delta">
         {/* Long attribute names squeeze three live columns on phones without this. */}
-        <div className="-mx-0 overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="font-mono text-[11px] uppercase text-muted-foreground">
-                <th className="pb-2 text-left">Attribute</th>
-                <th className="pb-2 text-right">{A.name}</th>
-                <th className="pb-2 text-right">{B.name}</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {keys.map((k) => {
-                const sa = A.specs.find((s) => s.key === k),
-                  sb = B.specs.find((s) => s.key === k);
+        <DataTable
+          bare
+          label="Specification delta"
+          rows={keys}
+          rowKey={(k) => k}
+          columns={[
+            {
+              id: "attribute",
+              header: "Attribute",
+              cell: (k) =>
+                (A.specs.find((s) => s.key === k) ?? B.specs.find((s) => s.key === k))!.label,
+            },
+            ...[A, B].map((d) => ({
+              id: d.id,
+              header: d.name,
+              align: "right" as const,
+              className: "font-mono",
+              cell: (k: string) => {
+                const s = d.specs.find((x) => x.key === k);
+                const c = s ? consensus(s) : null;
                 return (
-                  <tr key={k}>
-                    <td className="py-2">{(sa ?? sb)!.label}</td>
-                    {[sa, sb].map((s, i) => {
-                      const c = s ? consensus(s) : null;
-                      return (
-                        <td key={i} className="py-2 text-right font-mono">
-                          {c ? c.display : "—"}
-                          {c?.disputed && (
-                            <Tag tone="danger" className="ml-1">
-                              Disputed
-                            </Tag>
-                          )}
-                        </td>
-                      );
-                    })}
-                  </tr>
+                  <>
+                    {c ? c.display : "—"}
+                    {c?.disputed && (
+                      <Tag tone="danger" className="ml-1">
+                        Disputed
+                      </Tag>
+                    )}
+                  </>
                 );
-              })}
-            </tbody>
-          </table>
-        </div>
+              },
+            })),
+          ]}
+        />
       </Panel>
     </div>
   );

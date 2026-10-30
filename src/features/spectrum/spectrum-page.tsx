@@ -9,7 +9,8 @@ import {
   type SegmentStatus,
 } from "@/entities/normalization/spectrum-bands";
 import { useDrones, useServices } from "@/shared/infra/services";
-import { Loading, Panel, Card } from "@/shared/ui/primitives";
+import { Select } from "@/shared/ui/fields";
+import { Loading, PageTitle, Panel, Card } from "@/shared/ui/primitives";
 import { useRelatedIntel, RelatedRail } from "@/shared/ui/intel-graph";
 
 const EXPOSURE: Record<Exposure, { label: string; cls: string }> = {
@@ -109,21 +110,17 @@ export function SpectrumPage() {
   return (
     <div className="space-y-6">
       <header>
-        <h1 className="font-mono text-xl font-bold tracking-widest text-primary">
-          SPECTRUM CAT &amp; MOUSE
-        </h1>
-        <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-          Where drones transmit, where jammers blanket, and where C-UAS radars watch. Radars detect
-          airframes even when a drone is radio-silent or fiber-tethered.
-        </p>
+        <PageTitle subtitle="Where drones transmit, where jammers blanket, and where C-UAS radars watch. Radars detect airframes even when a drone is radio-silent or fiber-tethered.">
+          Spectrum: cat and mouse
+        </PageTitle>
       </header>
 
       <Panel title="Inspect a system">
-        <select
+        <Select
           value={focus ?? ""}
           onChange={(e) => setFocus(e.target.value || undefined)}
           aria-label="Inspect system"
-          className="w-full border border-border bg-background px-3 py-2 font-mono text-sm sm:w-80"
+          className="w-full sm:w-80"
         >
           <option value="">-- All systems --</option>
           {linkSystems.map((d) => (
@@ -131,7 +128,7 @@ export function SpectrumPage() {
               {d.name}
             </option>
           ))}
-        </select>
+        </Select>
         {focused && (
           <div className="mt-4 space-y-2">
             {!exposure.length && (

@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { Input, Select } from "@/shared/ui/fields";
 import { Btn, ListRow, Panel, Tag } from "@/shared/ui/primitives";
 import { SourceRef } from "@/shared/ui/links";
 import { useServices } from "@/shared/infra/services";
@@ -57,34 +58,34 @@ function AliasRow({
   const actions =
     candidate && !claim.review ? (
       <>
-        <Btn variant="primary" onClick={() => onSetVerdict(claim.id, "confirmed")}>
+        <Btn size="sm" variant="primary" onClick={() => onSetVerdict(claim.id, "confirmed")}>
           Approve
         </Btn>
-        <Btn variant="ghost" onClick={() => onSetVerdict(claim.id, "rejected")}>
+        <Btn size="sm" variant="ghost" onClick={() => onSetVerdict(claim.id, "rejected")}>
           Reject
         </Btn>
       </>
     ) : verified ? (
       <>
-        <Btn variant="ghost" onClick={() => setBelow(below === "move" ? "none" : "move")}>
+        <Btn size="sm" variant="ghost" onClick={() => setBelow(below === "move" ? "none" : "move")}>
           File under…
         </Btn>
         {undoable && (
-          <Btn variant="ghost" onClick={() => onSetVerdict(claim.id, null)}>
+          <Btn size="sm" variant="ghost" onClick={() => onSetVerdict(claim.id, null)}>
             Undo
           </Btn>
         )}
-        <Btn variant="ghost" onClick={() => onSetVerdict(claim.id, "rejected")}>
+        <Btn size="sm" variant="ghost" onClick={() => onSetVerdict(claim.id, "rejected")}>
           Reject
         </Btn>
       </>
     ) : claim.review ? (
       claim.review.movedToDroneId ? (
-        <Btn variant="ghost" onClick={() => onUndoMove(claim.id)}>
+        <Btn size="sm" variant="ghost" onClick={() => onUndoMove(claim.id)}>
           Return
         </Btn>
       ) : (
-        <Btn variant="ghost" onClick={() => onSetVerdict(claim.id, null)}>
+        <Btn size="sm" variant="ghost" onClick={() => onSetVerdict(claim.id, null)}>
           Undo
         </Btn>
       )
@@ -152,10 +153,12 @@ function AliasRow({
       below={
         below === "move" ? (
           <div className="flex min-w-0 flex-wrap items-center gap-2 border border-border bg-secondary/40 p-2">
-            <select
+            <Select
+              size="sm"
               value={target}
               onChange={(e) => setTarget(e.target.value)}
-              className="min-w-0 flex-1 rounded-md border border-input bg-transparent px-2 py-1 font-mono text-xs"
+              aria-label={`System to file ${claim.alias} under`}
+              className="flex-1"
             >
               <option value="">File under another system…</option>
               {targets.map((t) => (
@@ -163,7 +166,7 @@ function AliasRow({
                   {t.name}
                 </option>
               ))}
-            </select>
+            </Select>
             <Btn
               variant="primary"
               disabled={!target}
@@ -175,7 +178,7 @@ function AliasRow({
             >
               File
             </Btn>
-            <Btn variant="ghost" onClick={() => setBelow("none")}>
+            <Btn size="sm" variant="ghost" onClick={() => setBelow("none")}>
               Cancel
             </Btn>
           </div>
@@ -242,7 +245,7 @@ export function AliasRegistry({ drone, catalog }: { drone: Drone; catalog: Drone
   };
 
   return (
-    <Panel id="aliases" title="Alias registry" className="md:scroll-mt-24">
+    <Panel id="aliases" title="Alias registry" className="scroll-mt-28">
       <div className="space-y-3">
         <ul className="font-mono text-sm">
           <ListRow title={<span>{drone.name}</span>} meta={<Tag tone="primary">canonical</Tag>} />
@@ -285,13 +288,15 @@ export function AliasRegistry({ drone, catalog }: { drone: Drone; catalog: Drone
             </ul>
             {rejected.length > 0 && (
               <div>
-                <button
-                  type="button"
+                <Btn
+                  size="sm"
+                  variant="quiet"
+                  className="-ml-2"
+                  aria-expanded={showRejected}
                   onClick={() => setShowRejected((v) => !v)}
-                  className="cursor-pointer font-mono text-[11px] uppercase tracking-widest text-muted-foreground hover:text-foreground"
                 >
                   {showRejected ? "Hide" : "Show"} rejected ({rejected.length})
-                </button>
+                </Btn>
                 {showRejected && (
                   <ul className="mt-2 divide-y divide-border font-mono text-sm">
                     {rejected.map((claim) => (
@@ -333,8 +338,9 @@ export function AliasRegistry({ drone, catalog }: { drone: Drone; catalog: Drone
               </p>
             )}
             <div className="flex min-w-0 flex-wrap gap-2">
-              <input
+              <Input
                 autoFocus
+                aria-label="New alias"
                 value={text}
                 onChange={(e) => setText(e.target.value)}
                 onKeyDown={(e) => {
@@ -349,18 +355,18 @@ export function AliasRegistry({ drone, catalog }: { drone: Drone; catalog: Drone
                   }
                 }}
                 placeholder="Official designation, reporting name…"
-                className="min-w-0 flex-1 rounded-md border border-input bg-transparent px-2 py-1 font-mono text-sm [overflow-wrap:anywhere]"
+                className="w-auto flex-1 px-2 py-1 [overflow-wrap:anywhere]"
               />
-              <Btn variant="primary" disabled={!text.trim() || blocked} onClick={add}>
+              <Btn size="sm" variant="primary" disabled={!text.trim() || blocked} onClick={add}>
                 Register
               </Btn>
-              <Btn variant="ghost" onClick={() => setAdding(false)}>
+              <Btn size="sm" variant="ghost" onClick={() => setAdding(false)}>
                 Cancel
               </Btn>
             </div>
           </div>
         ) : (
-          <Btn variant="ghost" onClick={() => setAdding(true)}>
+          <Btn size="sm" variant="ghost" onClick={() => setAdding(true)}>
             Add alias
           </Btn>
         )}

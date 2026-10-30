@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { DEFAULT_SETTINGS, useServices } from "@/shared/infra/services";
+import { DataTable, type Column } from "@/shared/ui/data-table";
+import { Input } from "@/shared/ui/fields";
 import { Btn, PageTitle, Panel, Tag } from "@/shared/ui/primitives";
 import { DensityToggle } from "@/shared/ui/density";
 import { ThemeToggle } from "@/shared/ui/theme";
@@ -13,28 +15,48 @@ function isNamespaced(model: string): boolean {
   return /^[a-z0-9_-]+\//i.test(model.trim());
 }
 
-function ProviderRow({ p, live }: { p: ProviderStatus; live: boolean }) {
-  return (
-    <tr className="border-t border-border/60 align-top">
-      <td className="py-2 pr-3 font-mono text-xs">
-        <span className={live ? "text-foreground" : "text-muted-foreground"}>{p.name}</span>
-        <div className="text-[11px] text-muted-foreground">priority {p.priority}</div>
-      </td>
-      <td className="py-2 pr-3 font-mono text-[11px] break-all text-muted-foreground">
-        {p.baseUrl}
-      </td>
-      <td className="py-2 pr-3 font-mono text-[11px] break-all">{p.defaultModel}</td>
-      <td className="py-2">
-        {p.hasKey ? (
+function providerColumns(available: readonly string[]): Column<ProviderStatus>[] {
+  return [
+    {
+      id: "provider",
+      header: "Provider",
+      className: "font-mono text-xs",
+      cell: (p) => (
+        <>
+          <span
+            className={available.includes(p.name) ? "text-foreground" : "text-muted-foreground"}
+          >
+            {p.name}
+          </span>
+          <div className="text-2xs text-muted-foreground">priority {p.priority}</div>
+        </>
+      ),
+    },
+    {
+      id: "url",
+      header: "Base URL",
+      className: "break-all font-mono text-2xs text-muted-foreground",
+      cell: (p) => p.baseUrl,
+    },
+    {
+      id: "model",
+      header: "Default model",
+      className: "break-all font-mono text-2xs",
+      cell: (p) => p.defaultModel,
+    },
+    {
+      id: "key",
+      header: "Credential",
+      cell: (p) =>
+        p.hasKey ? (
           <Tag tone="accent" title={`Key present in ${p.keyEnv}`}>
             {p.keyEnv} set
           </Tag>
         ) : (
           <Tag title={`Set ${p.keyEnv} on the server to enable`}>no key</Tag>
-        )}
-      </td>
-    </tr>
-  );
+        ),
+    },
+  ];
 }
 
 /**
@@ -84,23 +106,13 @@ function ProviderRouting({ env }: { env: ProviderEnvConfig }) {
       }
     >
       <div className="space-y-4">
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse">
-            <thead>
-              <tr className="text-left font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
-                <th className="pb-1 pr-3 font-normal">provider</th>
-                <th className="pb-1 pr-3 font-normal">base URL</th>
-                <th className="pb-1 pr-3 font-normal">default model</th>
-                <th className="pb-1 font-normal">credential</th>
-              </tr>
-            </thead>
-            <tbody>
-              {r.providers.map((p) => (
-                <ProviderRow key={p.name} p={p} live={r.available.includes(p.name)} />
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <DataTable
+          bare
+          label="Providers"
+          columns={providerColumns(r.available)}
+          rows={r.providers}
+          rowKey={(p) => p.name}
+        />
 
         <div className="space-y-2 font-mono text-[11px] text-muted-foreground">
           {requested.map((x) => {
@@ -169,14 +181,14 @@ export function SettingsPage() {
       <span className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
         {label}
       </span>
-      <input
+      <Input
         type={type}
         step="0.05"
         value={String(s[k])}
         onChange={(e) =>
           setS({ ...s, [k]: type === "number" ? Number(e.target.value) : e.target.value })
         }
-        className="mt-1 w-full border border-border bg-background px-3 py-2 font-mono text-sm outline-none focus:border-primary"
+        className="mt-1"
       />
     </label>
   );

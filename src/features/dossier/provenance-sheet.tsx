@@ -10,7 +10,8 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { Btn, Tag } from "@/shared/ui/primitives";
+import { Input, Select } from "@/shared/ui/fields";
+import { Btn, ChipButton, Tag } from "@/shared/ui/primitives";
 import { TranslateButton } from "@/shared/ui/translate-button";
 import { claimKey } from "@/entities/drone/claim-review";
 import { correctionMark, describeCorrection } from "@/shared/ui/correction";
@@ -44,11 +45,7 @@ export function ClaimChip({ claim, onOpen }: { claim: SpecClaim; onOpen: () => v
   const verdict = claim.review || fix?.applied ? undefined : claim.adjudication;
   const rejected = claim.review?.verdict === "rejected";
   return (
-    <button
-      type="button"
-      onClick={onOpen}
-      className={`inline-flex max-w-full items-center gap-1 border border-border px-1.5 py-1 font-mono text-[11px] text-muted-foreground hover:border-primary hover:text-primary ${rejected ? "opacity-60" : ""}`}
-    >
+    <ChipButton onClick={onOpen} dim={rejected} title={`Open provenance: ${claim.source}`}>
       {/* min-w-0: a flex item's default min-width is its content size, so without this the
           source string refuses to shrink and the ellipsis never appears. */}
       <span className="min-w-0 truncate">{claim.source}</span>
@@ -85,7 +82,7 @@ export function ClaimChip({ claim, onOpen }: { claim: SpecClaim; onOpen: () => v
           {rejected ? "✕ rejected" : "✓ confirmed"}
         </span>
       )}
-    </button>
+    </ChipButton>
   );
 }
 
@@ -169,14 +166,14 @@ function ClaimReviewPanel({
           </p>
           <div className="flex flex-wrap gap-2">
             <Btn
-              className="px-2 py-1 text-xs"
+              size="sm"
               onClick={() => svc.catalog.reviewCorrection(droneId, spec.key, claim, true)}
             >
               {fix.kind === "unit" ? "Accept correction" : "Reject figure"}
             </Btn>
             <Btn
               variant="ghost"
-              className="px-2 py-1 text-xs"
+              size="sm"
               onClick={() => svc.catalog.reviewCorrection(droneId, spec.key, claim, false)}
             >
               Figure is right
@@ -206,7 +203,7 @@ function ClaimReviewPanel({
           {filedCopy && <Tag mono>filed copy</Tag>}
           <span className="font-mono text-xs text-muted-foreground">{review.at.slice(0, 10)}</span>
           {!filedCopy && (
-            <Btn variant="ghost" className="px-2 py-1 text-xs" onClick={undo}>
+            <Btn variant="ghost" size="sm" onClick={undo}>
               Undo
             </Btn>
           )}
@@ -221,14 +218,14 @@ function ClaimReviewPanel({
         >
           <label className="block text-xs text-muted-foreground">
             Belongs to system
-            <select
+            <Select
               autoFocus
               value={targetDroneId}
               onChange={(e) => {
                 setTargetDroneId(e.target.value);
                 setTarget("");
               }}
-              className="mt-1 w-full border border-border bg-card px-3 py-2 font-mono text-sm focus:border-primary"
+              className="mt-1 w-full"
             >
               <option value="">Choose a system…</option>
               {drones
@@ -238,15 +235,15 @@ function ClaimReviewPanel({
                     {d.name}
                   </option>
                 ))}
-            </select>
+            </Select>
           </label>
           {targetDroneId && (
             <label className="block text-xs text-muted-foreground">
               Attribute
-              <select
+              <Select
                 value={target}
                 onChange={(e) => setTarget(e.target.value)}
-                className="mt-1 w-full border border-border bg-card px-3 py-2 font-mono text-sm focus:border-primary"
+                className="mt-1 w-full"
               >
                 <option value="">Choose an attribute…</option>
                 {targetSpecs.map((s) => (
@@ -254,28 +251,23 @@ function ClaimReviewPanel({
                     {s.label}
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
           )}
           <label className="block text-xs text-muted-foreground">
             Figure as it reads there (optional
             {targetUnit ? `, e.g. "600 ${targetUnit}"` : ""})
-            <input
+            <Input
               value={correct}
               onChange={(e) => setCorrect(e.target.value)}
-              className="mt-1 w-full border border-border bg-card px-3 py-2 font-mono text-sm focus:border-primary"
+              className="mt-1 w-full"
             />
           </label>
           <div className="flex flex-wrap gap-2">
-            <Btn
-              type="submit"
-              variant="danger"
-              className="px-2 py-1 text-xs"
-              disabled={!targetDroneId || !target}
-            >
+            <Btn type="submit" variant="danger" size="sm" disabled={!targetDroneId || !target}>
               Move claim
             </Btn>
-            <Btn type="button" variant="ghost" className="px-2 py-1 text-xs" onClick={reset}>
+            <Btn type="button" variant="ghost" size="sm" onClick={reset}>
               Cancel
             </Btn>
           </div>
@@ -290,11 +282,11 @@ function ClaimReviewPanel({
         >
           <label className="block text-xs text-muted-foreground">
             Belongs to
-            <select
+            <Select
               autoFocus
               value={target}
               onChange={(e) => setTarget(e.target.value)}
-              className="mt-1 w-full border border-border bg-card px-3 py-2 font-mono text-sm focus:border-primary"
+              className="mt-1 w-full"
             >
               <option value="">Choose an attribute…</option>
               {specs
@@ -304,7 +296,7 @@ function ClaimReviewPanel({
                     {s.label}
                   </option>
                 ))}
-            </select>
+            </Select>
           </label>
           <label className="block text-xs text-muted-foreground">
             Figure as it reads there (optional
@@ -312,17 +304,17 @@ function ClaimReviewPanel({
               ? `, e.g. "600 ${specs.find((s) => s.key === target)!.unit}"`
               : ""}
             )
-            <input
+            <Input
               value={correct}
               onChange={(e) => setCorrect(e.target.value)}
-              className="mt-1 w-full border border-border bg-card px-3 py-2 font-mono text-sm focus:border-primary"
+              className="mt-1 w-full"
             />
           </label>
           <div className="flex flex-wrap gap-2">
-            <Btn type="submit" variant="danger" className="px-2 py-1 text-xs" disabled={!target}>
+            <Btn type="submit" variant="danger" size="sm" disabled={!target}>
               Move claim
             </Btn>
-            <Btn type="button" variant="ghost" className="px-2 py-1 text-xs" onClick={reset}>
+            <Btn type="button" variant="ghost" size="sm" onClick={reset}>
               Cancel
             </Btn>
           </div>
@@ -341,41 +333,32 @@ function ClaimReviewPanel({
         >
           <label className="block text-xs text-muted-foreground">
             Correct figure (optional{spec.unit ? `, e.g. "20 ${spec.unit}"` : ""})
-            <input
+            <Input
               autoFocus
               value={correct}
               onChange={(e) => setCorrect(e.target.value)}
-              className="mt-1 w-full border border-border bg-card px-3 py-2 font-mono text-sm focus:border-primary"
+              className="mt-1 w-full"
             />
           </label>
           <div className="flex flex-wrap gap-2">
-            <Btn type="submit" variant="danger" className="px-2 py-1 text-xs">
+            <Btn type="submit" variant="danger" size="sm">
               Reject claim
             </Btn>
-            <Btn
-              type="button"
-              variant="ghost"
-              className="px-2 py-1 text-xs"
-              onClick={() => setIssue(null)}
-            >
+            <Btn type="button" variant="ghost" size="sm" onClick={() => setIssue(null)}>
               Cancel
             </Btn>
           </div>
         </form>
       ) : (
         <div className="flex flex-wrap gap-2">
-          <Btn
-            variant="ghost"
-            className="px-2 py-1 text-xs"
-            onClick={() => apply({ verdict: "confirmed" })}
-          >
+          <Btn variant="ghost" size="sm" onClick={() => apply({ verdict: "confirmed" })}>
             ✓ Correct
           </Btn>
           {(Object.keys(ISSUE_BUTTON) as ClaimIssue[]).map((k) => (
             <Btn
               key={k}
               variant="danger"
-              className="px-2 py-1 text-xs"
+              size="sm"
               onClick={() => {
                 // Moving asks for the destination; the plain rejections only need a reading.
                 setIssue(k);

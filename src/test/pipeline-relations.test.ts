@@ -63,7 +63,12 @@ function deps(
   const cands: Candidate[] = [];
   return {
     drones: d,
-    candidates: { list: () => cands, add: (c) => cands.push(c), update: () => {} },
+    candidates: {
+      list: () => cands,
+      add: (c) => cands.push(c),
+      update: () => {},
+      remove: () => {},
+    },
     tier1: extractor(extraction),
     tier2: extractor(extraction),
     escalationThreshold: 0.6,

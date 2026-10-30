@@ -7,7 +7,9 @@ import type { DispatchStatus } from "@/entities/dispatch/types";
 import { getSyncState, type SyncState } from "@/shared/infra/sources/source-sync.functions";
 import { fetchDispatchCounts } from "@/shared/infra/storage/store.functions";
 import { savedPostsLine, type ArchiveCounts } from "@/features/dispatches/saved-posts-line";
-import { Btn, Loading, Panel, Tag, Card } from "@/shared/ui/primitives";
+import { Input, Select } from "@/shared/ui/fields";
+import { FilterChip } from "@/shared/ui/filters";
+import { Btn, Loading, PageTitle, Panel, Tag, Card } from "@/shared/ui/primitives";
 import { formatProviderError, requeueFailed } from "@/shared/infra/ingest/auto-ingest";
 import { useRelatedIntel, RelatedInlineToast } from "@/shared/ui/intel-graph";
 import { TranslateButton } from "@/shared/ui/translate-button";
@@ -19,8 +21,6 @@ import {
 } from "@/features/dispatches/filters";
 
 const STATUSES = DISPATCH_FILTERS;
-const field =
-  "w-full min-w-0 border border-border bg-background px-3 py-2 font-mono text-sm focus:border-primary";
 
 function ExpandableText({ text }: { text: string }) {
   const [expanded, setExpanded] = useState(false);
@@ -33,13 +33,14 @@ function ExpandableText({ text }: { text: string }) {
         {text}
       </p>
       {isLong && (
-        <button
-          type="button"
+        <Btn
+          size="sm"
+          variant="quiet"
+          className="-ml-2 mt-1"
           onClick={() => setExpanded(!expanded)}
-          className="mt-1 py-1 font-mono text-xs text-muted-foreground hover:text-primary"
         >
           {expanded ? "Show less" : "Show more"}
-        </button>
+        </Btn>
       )}
     </div>
   );
@@ -67,13 +68,15 @@ function AnalysisDetail({ d }: { d: RawDispatch }) {
   if (items.length === 0) return null;
   return (
     <div className="mt-2 min-w-0">
-      <button
-        type="button"
+      <Btn
+        size="sm"
+        variant="quiet"
+        className="-ml-2"
+        aria-expanded={open}
         onClick={() => setOpen(!open)}
-        className="py-1 font-mono text-xs text-muted-foreground hover:text-primary"
       >
         {open ? "Hide analysis" : "Show analysis"}
-      </button>
+      </Btn>
       {open && (
         <div className="mt-1 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 border-l-2 border-primary/30 pl-3 font-mono text-[11px] text-muted-foreground">
           {items.map((it) => (
@@ -262,34 +265,25 @@ export function DispatchesPage({
   return (
     <div className="mx-auto max-w-3xl space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="font-mono text-lg font-bold uppercase tracking-widest">Intel feed</h1>
-          <p className="text-sm text-muted-foreground">
-            {savedPostsLine(dispatches.length, archive, counts.pending)}
-          </p>
-        </div>
+        <PageTitle subtitle={savedPostsLine(dispatches.length, archive, counts.pending)}>
+          Intel feed
+        </PageTitle>
         <Link to="/sources" className="font-mono text-xs uppercase text-primary underline">
           Manage sources →
         </Link>
       </div>
 
       <div className="sticky top-14 z-30 -mx-4 space-y-2 border-b border-border bg-background/95 px-4 py-3 backdrop-blur">
-        <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 font-mono text-xs">
+        <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1">
           {STATUSES.map((k) => (
-            <button
-              key={k}
-              type="button"
-              aria-pressed={status === k}
-              onClick={() => setFilter(k)}
-              className={`shrink-0 border px-3 py-2 uppercase ${status === k ? "border-primary text-primary" : "border-border text-muted-foreground"}`}
-            >
+            <FilterChip key={k} pressed={status === k} onClick={() => setFilter(k)}>
               {k} {k === "all" ? dispatches.length : counts[k]}
-            </button>
+            </FilterChip>
           ))}
         </div>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-          <input
-            className={field}
+          <Input
+            aria-label="Search feed text"
             placeholder="Search text…"
             value={q}
             onChange={(e) => {
@@ -297,8 +291,7 @@ export function DispatchesPage({
               setLimit(20);
             }}
           />
-          <select
-            className={field}
+          <Select
             value={sourceId}
             onChange={(e) => setSourceId(e.target.value)}
             aria-label="Filter by source"
@@ -309,7 +302,7 @@ export function DispatchesPage({
                 {s.name}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
       </div>
 

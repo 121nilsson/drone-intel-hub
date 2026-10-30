@@ -58,7 +58,12 @@ function makeDeps(over: {
   const cands: Candidate[] = [];
   const deps: PipelineDeps & { cands: Candidate[] } = {
     drones: d,
-    candidates: { list: () => cands, add: (c) => cands.push(c), update: () => {} },
+    candidates: {
+      list: () => cands,
+      add: (c) => cands.push(c),
+      update: () => {},
+      remove: () => {},
+    },
     tier1: over.tier1,
     tier2: over.tier2,
     ...(over.fallback ? { fallback: over.fallback } : {}),

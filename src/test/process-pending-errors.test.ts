@@ -60,7 +60,12 @@ const deps = (tier1: IntelExtractor): PipelineDeps =>
       remove: () => {},
       search: () => [] as Drone[],
     },
-    candidates: { list: () => [] as Candidate[], add: () => {}, update: () => {} },
+    candidates: {
+      list: () => [] as Candidate[],
+      add: () => {},
+      update: () => {},
+      remove: () => {},
+    },
     tier1,
     tier2: tier1,
     escalationThreshold: 0.6,

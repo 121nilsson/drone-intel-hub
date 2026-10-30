@@ -25,7 +25,7 @@ const TARGETS: Record<CueTarget, () => Target> = {
   range: () => ({ key: "range", label: "Range", units: km(), notAfter: ENVELOPE }),
   speed: () => ({
     key: "speed",
-    label: "Cruise speed",
+    label: "Speed",
     units: [[unit("kmh"), "km/h"]],
     gap: 16,
     notAfter: new RegExp(cue("targetSpeed"), "iu"),

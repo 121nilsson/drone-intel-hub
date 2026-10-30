@@ -36,12 +36,23 @@ export interface Lexicon {
     knots: string[];
     /** Distance in nautical miles. */
     nmi: string[];
+    /** Speed in miles per hour. */
+    mph: string[];
+    /** Speed as a Mach number ("2.5 Mach", "2,5 Махов"). */
+    mach: string[];
     /** Endurance in days ("3 days", "3 діб"). */
     days: string[];
   };
   /** Spec cue phrases, by spec. Each list is matched shortly before the number. */
   cues: {
     speed: string[];
+    /**
+     * Stated top speed ("maximum speed", "can fly up to"). Read apart from `speed`, which is filed
+     * as cruise: a top speed read as cruise was a wrong figure on the right system.
+     */
+    maxSpeed: string[];
+    /** Stated cruise speed ("cruises at", "крейсерська швидкість"). */
+    cruiseSpeed: string[];
     range: string[];
     endurance: string[];
     altitude: string[];

@@ -23,7 +23,7 @@ const post = (over: Partial<RawDispatch> = {}): RawDispatch => ({
   text: "Lancet-3 strike: range 40 km, 3 kg warhead.",
   createdAt: "2026-10-09T10:00:00Z",
   status: "processed",
-  candidateIds: ["old-pending", "old-merged"],
+  candidateIds: ["old-pending", "old-merged", "old-analyst"],
   droneIds: ["lancet-3"],
   ...over,
 });
@@ -94,6 +94,24 @@ function setup(rows: RawDispatch[], extractor: IntelExtractor) {
       status: "merged",
       resolvedInto: "lancet-3",
     },
+    {
+      id: "old-analyst",
+      raw: "x",
+      source: SOURCE,
+      createdAt: "",
+      tier: 1,
+      extraction: {
+        aliases: [],
+        operators: [],
+        specs: [],
+        rfBands: [],
+        confidence: 0.9,
+        rationale: "",
+      },
+      status: "merged",
+      resolvedBy: "analyst",
+      resolvedInto: "lancet-3",
+    },
   ];
   const dispatches = {
     list: () => rows,
@@ -122,6 +140,10 @@ function setup(rows: RawDispatch[], extractor: IntelExtractor) {
       update: (id: string, patch: Partial<Candidate>) => {
         const i = candidates.findIndex((c) => c.id === id);
         if (i >= 0) candidates[i] = { ...candidates[i]!, ...patch };
+      },
+      remove: (id: string) => {
+        const i = candidates.findIndex((c) => c.id === id);
+        if (i >= 0) candidates.splice(i, 1);
       },
     },
     tier1: extractor,
@@ -171,7 +193,7 @@ describe("isStale / requeueStale", () => {
 });
 
 describe("processPending with a re-analysis", () => {
-  it("replaces the post's earlier claims and pending candidates instead of adding to them", async () => {
+  it("replaces the post's earlier claims and candidates instead of adding to them", async () => {
     const rows = [post()];
     const { dispatches, deps, drones, candidates } = setup(rows, matched);
     requeueStale(dispatches, 10);
@@ -183,12 +205,11 @@ describe("processPending with a re-analysis", () => {
     expect(range.claims.map((c) => c.source).sort()).toEqual(
       ["Militarnyi · https://m.example", SOURCE].sort(),
     );
-    expect(candidates.find((c) => c.id === "old-pending")).toMatchObject({
-      status: "discarded",
-      resolvedBy: "auto",
-    });
-    // Already-resolved history is left alone.
-    expect(candidates.find((c) => c.id === "old-merged")!.status).toBe("merged");
+    // The earlier run's candidates go: its contribution was retracted, the new run replaces it.
+    expect(candidates.find((c) => c.id === "old-pending")).toBeUndefined();
+    expect(candidates.find((c) => c.id === "old-merged")).toBeUndefined();
+    // An analyst's decision stays: it is what the evaluation is scored on.
+    expect(candidates.find((c) => c.id === "old-analyst")!.status).toBe("merged");
     expect(rows[0]).toMatchObject({ pipelineVersion: PIPELINE_VERSION, reanalyze: false });
   });
 

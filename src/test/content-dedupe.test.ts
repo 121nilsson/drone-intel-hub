@@ -255,7 +255,12 @@ describe("what deduplication saves", () => {
         },
         search: () => items,
       },
-      candidates: { list: () => cands, add: (c) => cands.push(c), update: () => {} },
+      candidates: {
+        list: () => cands,
+        add: (c) => cands.push(c),
+        update: () => {},
+        remove: () => {},
+      },
       escalationThreshold: 0.6,
       autoMergeThreshold: 0.85,
     };

@@ -221,6 +221,7 @@ describe("promote stores alias claims, awaiting approval", () => {
         list: () => [],
         add: () => {},
         update: () => {},
+        remove: () => {},
       },
     };
     const c = candidate({
@@ -254,7 +255,7 @@ describe("promote stores alias claims, awaiting approval", () => {
           else stored.push(d);
         },
       },
-      candidates: { list: () => [], add: () => {}, update: () => {} },
+      candidates: { list: () => [], add: () => {}, update: () => {}, remove: () => {} },
     };
     const c = candidate({
       extraction: extraction({ name: "Puma", aliases: ["Osa", "Interceptor"] }),

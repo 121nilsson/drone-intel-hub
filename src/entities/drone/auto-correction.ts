@@ -75,6 +75,7 @@ export const PLAUSIBLE: Readonly<Record<string, Bounds>> = {
   "range.ferry": RANGE,
   "speed.max": SPEED,
   "speed.cruise": SPEED,
+  "speed.stated": SPEED,
   "speed.dive": SPEED,
   "altitude.max": ALTITUDE,
   "altitude.service_ceiling": ALTITUDE,

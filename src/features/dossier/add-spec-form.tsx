@@ -12,6 +12,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Select } from "@/shared/ui/fields";
 import { Btn } from "@/shared/ui/primitives";
 import { useServices } from "@/shared/infra/services";
 import type { Drone, SpecAttribute, SpecClaim } from "@/entities/drone/types";
@@ -45,7 +46,6 @@ export function AddSpecForm({ droneId, droneName, specs }: AddSpecFormProps) {
   const [source, setSource] = useState(ANALYST_SOURCE);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
-
 
   const submit = useCallback(
     async (e: React.FormEvent<HTMLFormElement>) => {
@@ -163,17 +163,18 @@ export function AddSpecForm({ droneId, droneName, specs }: AddSpecFormProps) {
 
   const attributeOptions =
     mode === "existing" ? (
-      <select
+      <Select
         value={selectedKey}
         onChange={(e) => setSelectedKey(e.target.value)}
-        className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm"
+        aria-label="Existing attribute"
+        className="w-full"
       >
         {existingKeys.map((k) => (
           <option key={k} value={k}>
             {k}
           </option>
         ))}
-      </select>
+      </Select>
     ) : (
       <>
         <div className="space-y-2">
@@ -264,7 +265,7 @@ export function AddSpecForm({ droneId, droneName, specs }: AddSpecFormProps) {
               <Btn variant="ghost" onClick={() => setOpen(false)}>
                 Cancel
               </Btn>
-              <Btn variant="primary" disabled={submitting}>
+              <Btn type="submit" variant="primary" disabled={submitting}>
                 {submitting ? "Saving…" : "Add claim"}
               </Btn>
             </div>

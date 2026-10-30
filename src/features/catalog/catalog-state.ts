@@ -12,9 +12,9 @@ import type { CatalogFacets } from "@/shared/contracts/repository";
  * URL reads well: /catalog?dom=Air&q=shahed. Values come from corpora (band names, protocol
  * ids) and are not chosen to collide with commas, which is why no escaping layer is added.
  */
-export type CatalogSort = "name" | "updated" | "domain";
+export type CatalogSort = "name" | "updated" | "reported" | "domain";
 
-const SORTS: CatalogSort[] = ["name", "updated", "domain"];
+const SORTS: CatalogSort[] = ["name", "updated", "reported", "domain"];
 
 /**
  * The view an analyst sees with no params in the URL. "updated" leads because the catalog's value

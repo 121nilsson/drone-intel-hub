@@ -16,7 +16,8 @@ import {
   fetchBriefingExecutiveSummary,
   storeBriefingExecutiveSummary,
 } from "@/shared/infra/briefing.functions";
-import { Btn, Loading, Num, Panel, Tag, Card } from "@/shared/ui/primitives";
+import { Btn, Loading, Num, Panel, Tag, Card, EmptyNote } from "@/shared/ui/primitives";
+import { TimeAgo } from "@/shared/ui/time-ago";
 import { useRelatedIntel, RelatedChips } from "@/shared/ui/intel-graph";
 import { SummaryText } from "@/shared/ui/summary-text";
 
@@ -306,9 +307,7 @@ function Briefing() {
                   <ExternalSourceLink href={h.url} className="font-mono text-xs">
                     {h.outlet}
                   </ExternalSourceLink>
-                  <span className="font-mono text-xs text-muted-foreground">
-                    {h.date.slice(5, 10)}
-                  </span>
+                  <TimeAgo iso={h.date} className="font-mono text-xs text-muted-foreground" />
                 </div>
                 <p className="mt-1.5 text-sm leading-relaxed text-foreground/90">{h.excerpt}</p>
                 <div className="mt-1.5 flex flex-wrap gap-1">
@@ -319,7 +318,9 @@ function Briefing() {
               </Card>
             ))}
             {!brief.headlines.length && (
-              <li className="text-sm text-muted-foreground">No reports this week.</li>
+              <li>
+                <EmptyNote>No reports this week.</EmptyNote>
+              </li>
             )}
           </ul>
         </Panel>
@@ -329,7 +330,9 @@ function Briefing() {
               <NewSpecClaimItem key={i} n={n} i={i} />
             ))}
             {!brief.newClaims.length && (
-              <li className="text-sm text-muted-foreground">No new claims this week.</li>
+              <li>
+                <EmptyNote>No new claims this week.</EmptyNote>
+              </li>
             )}
           </ul>
         </Panel>
@@ -414,7 +417,9 @@ function Briefing() {
             );
           })}
           {!brief.drift.length && (
-            <li className="text-sm text-muted-foreground">No changes from reporting this week.</li>
+            <li>
+              <EmptyNote>No changes from reporting this week.</EmptyNote>
+            </li>
           )}
         </ul>
       </Panel>

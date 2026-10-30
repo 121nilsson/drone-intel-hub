@@ -1,8 +1,14 @@
 import { cue, unit } from "@/shared/lexicons";
 import { ENVELOPE, type AddSpec, measureCue } from "./common";
 
-/** SHORAD target-speed cue; the same guard the UAV speed matcher uses for km/h. */
-const TARGET_SPEED = new RegExp(cue("targetSpeed"), "iu");
+/**
+ * The guard the UAV speed matcher uses for km/h: a SHORAD target speed is not the vessel's, and a
+ * stated top or cruise speed in knots is read by the UAV matchers, not again as a plain speed.
+ */
+const NOT_PLAIN_SPEED = new RegExp(
+  `${cue("targetSpeed")}|${cue("maxSpeed")}|${cue("cruiseSpeed")}`,
+  "iu",
+);
 
 /**
  * Surface vessels: the sea figures the airframe extractors cannot read - speed in knots,
@@ -17,7 +23,7 @@ export function extractUsv(raw: string, add: AddSpec) {
     key: "speed",
     label: "Speed",
     gap: 16,
-    notAfter: TARGET_SPEED,
+    notAfter: NOT_PLAIN_SPEED,
   });
   measureCue(raw, add, {
     cue: cue("range"),

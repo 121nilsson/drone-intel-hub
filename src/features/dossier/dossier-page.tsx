@@ -9,6 +9,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { consensus } from "@/entities/drone/consensus";
+import { groupSpecs } from "@/entities/drone/spec-groups";
 import { claimKey } from "@/entities/drone/claim-review";
 import { payloadSpecs, sensorSpecs } from "@/entities/drone/observations";
 import { contractsForDrone } from "@/entities/procurement/match";
@@ -23,7 +24,10 @@ import { useDrones, useServices } from "@/shared/infra/services";
 import { useProcurements } from "@/shared/infra/use-procurements";
 import { translateText, generateSystemSummary } from "@/shared/infra/ai-proxy.functions";
 import { buildSystemEvidenceDigest } from "@/shared/infra/system-evidence-digest";
-import { Btn, ConfidenceTag, Loading, Panel, Tag } from "@/shared/ui/primitives";
+import { Btn, ConfidenceTag, Loading, Panel, Tag, EmptyNote } from "@/shared/ui/primitives";
+import { DataTable, type Column } from "@/shared/ui/data-table";
+import { SectionNav } from "@/shared/ui/section-nav";
+import { KeyFigures } from "./key-figures";
 import { SummaryText } from "@/shared/ui/summary-text";
 import { ContractRow } from "@/shared/ui/contracts";
 import { useRelatedIntel, RelatedRail } from "@/shared/ui/intel-graph";
@@ -43,25 +47,9 @@ const DOSSIER_SECTIONS = [
   { id: "claims", label: "Claim timeline" },
 ] as const;
 
-function DossierSectionNav() {
-  return (
-    <nav
-      aria-label="Dossier sections"
-      className="sticky top-14 z-20 hidden border-y border-border bg-background/95 py-2 backdrop-blur md:block"
-    >
-      <div className="flex flex-wrap gap-x-3 gap-y-1">
-        {DOSSIER_SECTIONS.map((s) => (
-          <a
-            key={s.id}
-            href={`#${s.id}`}
-            className="font-mono text-[11px] text-muted-foreground hover:text-primary"
-          >
-            {s.label}
-          </a>
-        ))}
-      </div>
-    </nav>
-  );
+/** "min–max" when the claims disagree on the figure, else empty. */
+function spread(c: ReturnType<typeof consensus>): string {
+  return c.min !== undefined && c.max !== undefined && c.min !== c.max ? `${c.min}–${c.max}` : "";
 }
 
 function liveSelection(drone: Drone, sel: ClaimSelection): ClaimSelection | null {
@@ -83,18 +71,78 @@ export function SpecTable({ drone }: { drone: Drone }) {
       ))}
     </div>
   );
+  // Fixed widths: a source URL is a long unbroken string, and under auto layout it took every
+  // pixel and crammed the value columns together.
+  const columns: Column<SpecAttribute>[] = [
+    {
+      id: "attribute",
+      header: "Attribute",
+      width: "52%",
+      cell: (s) => (
+        <>
+          {s.label}{" "}
+          {s.discoveredBy === "ai" && (
+            <Tag tone="accent" className="ml-1">
+              AI-discovered
+            </Tag>
+          )}
+          {chips(s)}
+        </>
+      ),
+    },
+    {
+      id: "consensus",
+      header: "Consensus",
+      width: "18%",
+      className: "font-mono text-primary",
+      cell: (s) => {
+        const c = consensus(s);
+        return (
+          <>
+            {c.display}{" "}
+            {c.disputed && (
+              <Tag tone="danger" className="ml-1">
+                Disputed
+              </Tag>
+            )}
+          </>
+        );
+      },
+    },
+    {
+      id: "spread",
+      header: "Spread",
+      width: "12%",
+      className: "font-mono text-xs text-muted-foreground",
+      cell: (s) => spread(consensus(s)) || "—",
+    },
+    {
+      id: "sources",
+      header: "Sources",
+      width: "9%",
+      className: "font-mono text-xs",
+      cell: (s) => consensus(s).sources,
+    },
+    {
+      id: "confidence",
+      header: "Conf.",
+      width: "9%",
+      cell: (s) => <ConfidenceTag level={consensus(s).confidence} />,
+    },
+  ];
   return (
     <>
-      {/* Phone: one card per attribute */}
-      <ul className="space-y-2 sm:hidden">
-        {drone.specs.map((s) => {
+      <DataTable
+        bare
+        label="Specifications"
+        columns={columns}
+        rows={drone.specs}
+        sections={groupSpecs(drone.specs).map((g) => ({ id: g.id, label: g.label, rows: g.specs }))}
+        rowKey={(s) => s.key}
+        card={(s) => {
           const c = consensus(s);
           return (
-            <li
-              key={s.key}
-              className="border border-border bg-background/40 p-3"
-              data-testid={`spec-${s.key}`}
-            >
+            <div data-testid={`spec-${s.key}`}>
               <div className="flex items-start justify-between gap-2">
                 <p className="text-sm">
                   {s.label}
@@ -115,67 +163,14 @@ export function SpecTable({ drone }: { drone: Drone }) {
                 )}
               </p>
               <p className="font-mono text-xs text-muted-foreground">
-                {c.min !== undefined && c.max !== undefined && c.min !== c.max
-                  ? `${c.min}–${c.max} · `
-                  : ""}
+                {spread(c) ? `${spread(c)} · ` : ""}
                 {c.sources} source{c.sources === 1 ? "" : "s"}
               </p>
               {chips(s)}
-            </li>
+            </div>
           );
-        })}
-      </ul>
-      {/* table-fixed, and the widths are declared rather than negotiated. Under the default
-          auto layout the browser hands the Attribute column whatever it wants, and a source URL
-          is a long unbroken string, so it took every pixel and left the value columns crammed
-          against each other with the row overflowing the panel. A fixed layout takes the widths
-          from this header row instead, so no cell content can widen the table. */}
-      <table className="hidden w-full table-fixed text-sm sm:table">
-        <thead>
-          <tr className="text-left font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
-            <th className="w-[52%] pb-2">Attribute</th>
-            <th className="w-[18%] pb-2">Consensus</th>
-            <th className="w-[12%] pb-2">Spread</th>
-            <th className="w-[9%] pb-2">Sources</th>
-            <th className="w-[9%] pb-2">Conf.</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-border">
-          {drone.specs.map((s) => {
-            const c = consensus(s);
-            return (
-              <tr key={s.key} className="align-top">
-                <td className="py-2">
-                  {s.label}{" "}
-                  {s.discoveredBy === "ai" && (
-                    <Tag tone="accent" className="ml-1">
-                      AI-discovered
-                    </Tag>
-                  )}
-                  {chips(s)}
-                </td>
-                <td className="py-2 font-mono text-primary">
-                  {c.display}{" "}
-                  {c.disputed && (
-                    <Tag tone="danger" className="ml-1">
-                      Disputed
-                    </Tag>
-                  )}
-                </td>
-                <td className="py-2 font-mono text-xs text-muted-foreground">
-                  {c.min !== undefined && c.max !== undefined && c.min !== c.max
-                    ? `${c.min}–${c.max}`
-                    : "—"}
-                </td>
-                <td className="py-2 font-mono text-xs">{c.sources}</td>
-                <td className="py-2">
-                  <ConfidenceTag level={c.confidence} />
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+        }}
+      />
       <ProvenanceSheet
         selection={live}
         droneId={drone.id}
@@ -546,6 +541,9 @@ export function DossierPage({ id }: { id: string }) {
           </h1>
           <DeleteSystem key={d.id} drone={d} />
         </div>
+        <div className="mt-4">
+          <KeyFigures drone={d} />
+        </div>
         <DossierSummary drone={d} svc={svc} />
         {d.reference && (
           <p className="mt-2 font-mono text-xs text-muted-foreground">
@@ -556,32 +554,19 @@ export function DossierPage({ id }: { id: string }) {
             </span>
           </p>
         )}
-        {(() => {
-          const cost = d.specs.find((s) => s.key === "unit_cost");
-          return cost ? (
-            <p className="mt-3 inline-flex items-center gap-2 border border-accent/40 px-3 py-1.5 font-mono text-sm">
-              <span className="text-xs uppercase text-muted-foreground">Unit cost</span>
-              <span className="text-accent">{consensus(cost).display}</span>
-              <span className="text-xs text-muted-foreground">({cost.claims.length} src)</span>
-            </p>
-          ) : null;
-        })()}
       </div>
-      <DossierSectionNav />
-      <div className="grid gap-6 lg:grid-cols-3">
-        <Panel
-          id="specs"
-          title="Consensus specifications"
-          className="lg:col-span-2 md:scroll-mt-24"
-        >
+      <SectionNav label="Dossier sections" sections={DOSSIER_SECTIONS} />
+      <div className="grid items-start gap-6 lg:grid-cols-3">
+        <Panel id="specs" title="Consensus specifications" className="lg:col-span-2 scroll-mt-28">
           <SpecTable drone={d} />
           <AddSpecForm droneId={d.id} droneName={d.name} specs={d.specs} />
         </Panel>
         <AliasRegistry drone={d} catalog={drones} />
-        <Panel id="related" title="Related Intelligence" className="md:scroll-mt-24">
+        <Panel id="related" title="Related Intelligence" className="scroll-mt-28">
           <RelatedRail edges={relatedIntel?.edges ?? []} maxItems={10} />
         </Panel>
-        <Panel id="rf" title="RF spectrum" className="md:scroll-mt-24">
+        <Panel id="rf" title="RF spectrum" className="scroll-mt-28">
+          {!d.rf.length && <EmptyNote>No RF links recorded.</EmptyNote>}
           <ul className="space-y-2">
             {d.rf.map((r, i) => {
               const ieee = effectiveIeeeBands(r).map(ieeeLabel);
@@ -617,7 +602,7 @@ export function DossierPage({ id }: { id: string }) {
             })}
           </ul>
         </Panel>
-        <Panel id="supply" title="Supply chain" className="md:scroll-mt-24">
+        <Panel id="supply" title="Supply chain" className="scroll-mt-28">
           <ul className="space-y-2 text-sm">
             {d.components.map((c, i) => (
               <li key={i}>
@@ -628,14 +613,16 @@ export function DossierPage({ id }: { id: string }) {
               </li>
             ))}
             {!d.components.length && (
-              <li className="text-muted-foreground">No components traced.</li>
+              <li>
+                <EmptyNote>No components traced.</EmptyNote>
+              </li>
             )}
           </ul>
         </Panel>
         <Panel
           id="contracts"
           title="Contracts & procurement"
-          className="md:scroll-mt-24"
+          className="scroll-mt-28"
           right={
             <Link
               to="/procurement"
@@ -663,7 +650,7 @@ export function DossierPage({ id }: { id: string }) {
             </p>
           )}
         </Panel>
-        <Panel id="payloads" title="Payload configurations" className="md:scroll-mt-24">
+        <Panel id="payloads" title="Payload configurations" className="scroll-mt-28">
           <ul className="space-y-2 text-sm">
             {(d.payloads ?? []).map((p, i) => (
               <li key={`${p.name}-${i}`}>
@@ -682,7 +669,9 @@ export function DossierPage({ id }: { id: string }) {
               </li>
             ))}
             {!d.payloads?.length && !payloadFacts.length && (
-              <li className="text-muted-foreground">No payloads traced.</li>
+              <li>
+                <EmptyNote>No payloads traced.</EmptyNote>
+              </li>
             )}
           </ul>
           {payloadFacts.length > 0 && (
@@ -704,7 +693,7 @@ export function DossierPage({ id }: { id: string }) {
             </>
           )}
         </Panel>
-        <Panel id="sensors" title="Sensors & cameras" className="md:scroll-mt-24">
+        <Panel id="sensors" title="Sensors & cameras" className="scroll-mt-28">
           <ul className="space-y-2 text-sm">
             {(d.sensors ?? []).map((s, i) => (
               <li key={`${s.name}-${i}`}>
@@ -718,7 +707,9 @@ export function DossierPage({ id }: { id: string }) {
               </li>
             ))}
             {!d.sensors?.length && !sensorFacts.length && (
-              <li className="text-muted-foreground">No sensors traced.</li>
+              <li>
+                <EmptyNote>No sensors traced.</EmptyNote>
+              </li>
             )}
           </ul>
           {sensorFacts.length > 0 && (
@@ -740,7 +731,7 @@ export function DossierPage({ id }: { id: string }) {
             </>
           )}
         </Panel>
-        <Panel id="variants" title="Variant family" className="md:scroll-mt-24">
+        <Panel id="variants" title="Variant family" className="scroll-mt-28">
           {parent && (
             <Link
               data-testid={`parent-link-${parent.id}`}
@@ -762,11 +753,9 @@ export function DossierPage({ id }: { id: string }) {
               Variant: {variant.name} →
             </Link>
           ))}
-          {!parent && !variants.length && (
-            <p className="text-sm text-muted-foreground">No family relationship recorded.</p>
-          )}
+          {!parent && !variants.length && <EmptyNote>No family relationship recorded.</EmptyNote>}
         </Panel>
-        <Panel id="counterparts" title="Counterparts" className="md:scroll-mt-24">
+        <Panel id="counterparts" title="Counterparts" className="scroll-mt-28">
           {counterparts.map((c) => (
             <Link
               data-testid={`counterpart-link-${c.id}`}
@@ -785,7 +774,7 @@ export function DossierPage({ id }: { id: string }) {
           {!counterparts.length && <p className="text-sm text-muted-foreground">None linked.</p>}
         </Panel>
       </div>
-      <Panel id="timeline" title="Spec evolution timeline" className="md:scroll-mt-24">
+      <Panel id="timeline" title="Spec evolution timeline" className="scroll-mt-28">
         <ol className="relative ml-2 border-l border-border">
           {[...d.evolution]
             .sort((a, b) => b.date.localeCompare(a.date))
@@ -805,7 +794,7 @@ export function DossierPage({ id }: { id: string }) {
             ))}
         </ol>
       </Panel>
-      <Panel id="claims" title="Spec claim timeline" className="md:scroll-mt-24">
+      <Panel id="claims" title="Spec claim timeline" className="scroll-mt-28">
         <ol className="relative ml-2 border-l border-border">
           {d.specs
             .flatMap((s) => s.claims.map((claim, i) => ({ spec: s, claim, index: i })))
@@ -829,9 +818,7 @@ export function DossierPage({ id }: { id: string }) {
                 </p>
               </li>
             ))}
-          {!d.specs.some((s) => s.claims.length) && (
-            <p className="text-sm text-muted-foreground">No dated claims.</p>
-          )}
+          {!d.specs.some((s) => s.claims.length) && <EmptyNote>No dated claims.</EmptyNote>}
         </ol>
       </Panel>
       <div className="h-14 sm:hidden" />

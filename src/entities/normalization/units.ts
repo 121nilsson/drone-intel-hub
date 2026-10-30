@@ -94,7 +94,7 @@ const UNITS: UnitDef[] = [
     token: "Mach",
     dimension: "speed",
     toCanonical: 1225,
-    pattern: /(?:mach|мах(?:ів|а)?)(?![\p{L}\p{N}])/iu,
+    pattern: /(?:mach|мах(?:ів|ов|а)?)(?![\p{L}\p{N}])/iu,
   },
   { token: "mi", dimension: "distance", toCanonical: MILE_KM, pattern: /miles?(?![\p{L}\p{N}])/iu },
   {

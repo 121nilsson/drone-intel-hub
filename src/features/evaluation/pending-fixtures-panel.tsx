@@ -73,9 +73,9 @@ export function PendingFixturesPanel() {
             {autoApproved > 0 && (
               <>
                 {autoApproved} auto-approved fixture{autoApproved !== 1 && "s"} can be{" "}
-                <button type="button" className="underline" onClick={() => setShowAuto((v) => !v)}>
+                <Btn variant="link" onClick={() => setShowAuto((v) => !v)}>
                   reviewed and revoked
-                </button>
+                </Btn>
                 .
               </>
             )}

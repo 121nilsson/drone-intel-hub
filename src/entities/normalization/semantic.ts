@@ -1,3 +1,36 @@
+/**
+ * Counts of carried equipment. Only count wording resolves here - "cameras", "number of
+ * engines", "onboard jammers" - because a label that merely mentions the noun is another
+ * attribute: "camera type", "engine thrust", "antenna elements", "missiles received in 90 days".
+ * Filing those under a count merged them into one disputed figure.
+ */
+const COUNTED: readonly [noun: string, semantic: string][] = [
+  ["camera", "sensor.camera.count"],
+  ["jammer", "ew.jammer.count"],
+  ["missile", "payload.missile.count"],
+  ["engine", "propulsion.engine.count"],
+  ["launcher", "launcher.count"],
+  ["rotor", "propulsion.rotor.count"],
+  ["antenna", "sensor.antenna.count"],
+  ["bomb", "payload.bomb.count"],
+];
+
+function countSemantic(k: string, lab: string): string | undefined {
+  for (const [noun, semantic] of COUNTED) {
+    if ([`${noun}s`, `${noun}_count`, `number_of_${noun}s`, `num_${noun}s`].includes(k))
+      return semantic;
+    // "net_launchers_quantity": a stated quantity of the noun, whatever qualifies it.
+    if (new RegExp(`(?:^|_)${noun}s?_(?:count|quantity)$`).test(k)) return semantic;
+    // "Number of (net) launchers", or the plural on its own with at most one qualifier.
+    if (
+      new RegExp(`^(?:number|no\\.?) of\\s+(?:[\\w-]+\\s+)?${noun}s?\\b`, "i").test(lab) ||
+      new RegExp(`^(?:[\\w-]+\\s+)?${noun}s$`, "i").test(lab)
+    )
+      return semantic;
+  }
+  return undefined;
+}
+
 /** Canonical measurement id, or the original key when nothing in the seed table matches. */
 export function semanticKeyFor(key: string, label = ""): string {
   const k = key
@@ -69,13 +102,17 @@ export function semanticKeyFor(key: string, label = ""): string {
     k === "control_range" ||
     k === "communication_range" ||
     k === "control_link_range" ||
-    /link range|communication range|control link/i.test(lab)
+    /link range|communication range|control link|line[- ]of[- ]sight|transmission range/i.test(lab)
   )
     return "range.link";
+  if (k === "range" && /\bradius\b/i.test(lab)) return "range.combat_radius";
+  // A bare "range" is how far the system reaches - "Дальность", "Flight range", "Range (one way)"
+  // - unless the label says it is something narrower: a distance seen once ("observed range to
+  // Lviv"), a round trip, or a minimum.
   if (
     k === "max_range" ||
     k === "maximum_range" ||
-    (k === "range" && (lab === "" || /^range$/i.test(lab) || /max(?:imum)? range/i.test(lab)))
+    (k === "range" && !/observed|round[- ]trip|\bmin(?:imum)?\b/i.test(lab))
   )
     return "range.max";
 
@@ -84,14 +121,33 @@ export function semanticKeyFor(key: string, label = ""): string {
     k === "max_speed" ||
     k === "speed_max" ||
     k === "top_speed" ||
-    (k === "speed" && /\bmax(?:imum)?\b/i.test(lab))
+    (k === "speed" && /\b(?:max(?:imum)?|top)\b/i.test(lab))
   )
     return "speed.max";
-  if (k === "cruise_speed" || k === "speed_cruise" || (k === "speed" && /\bcruise\b/i.test(lab)))
+  if (
+    k === "cruise_speed" ||
+    k === "speed_cruise" ||
+    k === "cruising_speed" ||
+    /cruis(?:e|ing) speed/i.test(lab) ||
+    (k === "speed" && /\bcruis(?:e|ing)\b/i.test(lab))
+  )
     return "speed.cruise";
+  // A speed the report gave without saying top or cruise ("Speed", "Flight speed"). Its own
+  // attribute: filed as cruise it was wrong far more often than right. "High-speed loitering
+  // missile" is a description, not a speed.
+  if (
+    (k === "speed" || k === "flight_speed" || k === "average_speed") &&
+    !/high[- ]speed|\bmin(?:imum)?\b/i.test(lab)
+  )
+    return "speed.stated";
 
   if (k === "service_ceiling" || /service ceiling/i.test(lab)) return "altitude.service_ceiling";
-  if (k === "max_altitude" || (k === "altitude" && /\bmax(?:imum)?\b/i.test(lab)))
+  if (
+    k === "max_altitude" ||
+    k === "altitude_max" ||
+    k === "max_operating_altitude" ||
+    (k === "altitude" && /\bmax(?:imum)?\b/i.test(lab))
+  )
     return "altitude.max";
   if (k === "altitude" && /recommended/i.test(lab)) return "altitude.recommended";
   // A bare "altitude" is the airframe's own ceiling; a stated minimum keeps its own key.
@@ -111,7 +167,9 @@ export function semanticKeyFor(key: string, label = ""): string {
     k === "payload_weight" ||
     k === "payload_weight_kg" ||
     ((k === "payload" || k === "payload_capacity") &&
-      (/^payload$/i.test(lab) || /capacity/i.test(lab) || /max payload|payload weight/i.test(lab)))
+      (/^payload$/i.test(lab) ||
+        /capacity/i.test(lab) ||
+        /max(?:imum)? payload|payload weight/i.test(lab)))
   )
     return "payload.capacity";
   if (k === "weight_mtow" || k === "mtow" || /maximum takeoff|mtow/i.test(lab))
@@ -130,18 +188,16 @@ export function semanticKeyFor(key: string, label = ""): string {
   )
     return "weight.total";
 
-  if (k === "unit_cost" || k === "cost" || /unit cost|price/i.test(lab)) return "cost.unit";
+  if (k === "unit_cost" || k === "unit_price" || k === "cost" || /unit cost|price/i.test(lab))
+    return "cost.unit";
   if (k === "endurance" || k === "flight_time" || /endurance|flight time/i.test(lab))
     return "endurance.flight";
-  if (k === "guidance" || /guidance|navigation/i.test(lab)) return "guidance.system";
-  if (k === "cameras" || /camera/i.test(lab)) return "sensor.camera.count";
-  if (k === "jammers" || /jammer/i.test(lab)) return "ew.jammer.count";
-  if (k === "missiles" || /missile/i.test(lab)) return "payload.missile.count";
-  if (k === "engines" || /engine/i.test(lab)) return "propulsion.engine.count";
-  if (k === "launchers" || /launcher/i.test(lab)) return "launcher.count";
-  if (k === "rotors" || /rotor/i.test(lab)) return "propulsion.rotor.count";
-  if (k === "antennas" || /antenna/i.test(lab)) return "sensor.antenna.count";
-  if (k === "bombs" || /bomb/i.test(lab)) return "payload.bomb.count";
+  // How the system is guided, not anything that mentions navigation ("navigation capability"
+  // was a GPS-jamming observation, not a guidance system).
+  if (k === "guidance" || k.startsWith("guidance_") || /^guidance\b/i.test(lab))
+    return "guidance.system";
+  const counted = countSemantic(k, lab);
+  if (counted) return counted;
 
   if (k === "length" || k === "loa" || /^length$/i.test(lab) || /overall length/i.test(lab))
     return "dimension.length";

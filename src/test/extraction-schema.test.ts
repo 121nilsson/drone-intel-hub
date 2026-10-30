@@ -54,7 +54,8 @@ describe("AI extraction schema", () => {
   it("drops a malformed item or field instead of failing the whole extraction", () => {
     const result = AIExtractionSchema.safeParse({
       name: "Lancet-3",
-      origin: "Russian Federation",
+      // A country name is read as its code (country.ts); text that names no country is dropped.
+      origin: "Eastern front",
       systems: ["Lancet-3", { matchId: "no-name" }],
       specs: [
         { key: "range", value: 40, unit: "km" },

@@ -118,6 +118,7 @@ describe("mergeDrones", () => {
         const item = candidates.find((c) => c.id === id);
         if (item) Object.assign(item, patch);
       },
+      remove: () => {},
     };
 
     const merged = mergeDrones("geran-2", "geran-2-dup", {
@@ -162,7 +163,7 @@ describe("mergeDrones", () => {
   it("returns undefined if keepId and mergeId are identical or not found", () => {
     const drone = makeDrone("drone-1");
     const repo = createMockRepo([drone]);
-    const candRepo = { list: () => [], add: () => {}, update: () => {} };
+    const candRepo = { list: () => [], add: () => {}, update: () => {}, remove: () => {} };
 
     expect(
       mergeDrones("drone-1", "drone-1", { drones: repo, candidates: candRepo }),

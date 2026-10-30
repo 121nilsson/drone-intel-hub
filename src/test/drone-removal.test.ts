@@ -50,6 +50,7 @@ function deps(drones: Drone[], candidates: Candidate[], posts: RawDispatch[] = [
         const i = cands.findIndex((c) => c.id === id);
         if (i >= 0) cands[i] = { ...cands[i]!, ...patch };
       },
+      remove: () => {},
     },
     dispatches: {
       list: () => posts,

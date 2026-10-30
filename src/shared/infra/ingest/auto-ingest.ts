@@ -1,3 +1,4 @@
+import { keepsItsPlace } from "@/entities/drone/candidate-repeats";
 import type { MonitoredSource } from "@/entities/source/types";
 import { MAX_ATTEMPTS, type RawDispatch } from "@/entities/dispatch/types";
 import { MIN_CHARS_FOR_DEDUPE, simHash64 } from "@/entities/dispatch/simhash";
@@ -551,7 +552,12 @@ export async function processPending(
           url: d.url,
           ...(d.publishedAt ? { publishedAt: d.publishedAt } : {}),
         });
-        if (d.reanalyze) supersedeCandidates(d, r.candidate.id, deps);
+        if (d.reanalyze)
+          supersedeCandidates(
+            d,
+            [r.candidate.id, ...(r.relatedCandidates ?? []).map((c) => c.id)],
+            deps,
+          );
         retracted?.restoreReviews();
         dispatches.update(d.id, {
           status: "processed",
@@ -777,20 +783,19 @@ function retractContribution(
   };
 }
 
-/** The earlier run's candidates still awaiting triage are replaced by the new run's. */
-function supersedeCandidates(d: RawDispatch, replacement: string, deps: PipelineDeps) {
-  const pending = new Set(
-    deps.candidates
-      .list()
-      .filter((c) => c.status === "pending")
-      .map((c) => c.id),
-  );
+/**
+ * The earlier run's candidates are replaced by the new run's. Only marking the pending ones as
+ * superseded left every merged and discarded candidate of every earlier run in place - 5,665 of
+ * 12,947 stored candidates repeated a later reading of the same post and system. The earlier
+ * run's contribution was retracted before the post was read again, so its candidates go too,
+ * except the ones that keep their place (candidate-repeats.ts): an analyst's decision, or a
+ * candidate that created a catalog entry.
+ */
+function supersedeCandidates(d: RawDispatch, replacements: readonly string[], deps: PipelineDeps) {
+  const current = new Set(replacements);
+  const byId = new Map(deps.candidates.list().map((c) => [c.id, c]));
   for (const id of d.candidateIds ?? []) {
-    if (!pending.has(id) || id === replacement) continue;
-    deps.candidates.update(id, {
-      status: "discarded",
-      resolvedBy: "auto",
-      supersededBy: replacement,
-    });
+    const c = byId.get(id);
+    if (c && !keepsItsPlace(c, current)) deps.candidates.remove(id);
   }
 }

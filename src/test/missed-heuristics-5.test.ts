@@ -9,13 +9,14 @@ function specs(raw: string) {
 
 describe("USV extractor", () => {
   it("reads speed in knots, including Ukrainian", () => {
+    // "Up to" states a ceiling, so both are read as the boat's top speed.
     expect(specs("The unmanned boat reaches a speed of up to 42 knots")).toContainEqual({
-      key: "speed",
+      key: "max_speed",
       value: 42,
       unit: "kn",
     });
     expect(specs("розвиває швидкість до 45 вузлів")).toContainEqual({
-      key: "speed",
+      key: "max_speed",
       value: 45,
       unit: "kn",
     });
