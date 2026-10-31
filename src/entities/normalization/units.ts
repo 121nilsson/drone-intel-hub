@@ -76,7 +76,12 @@ const UNITS: UnitDef[] = [
     toCanonical: NM_KM,
     pattern: /(?:nm|nmi)(?![\p{L}\p{N}])/iu,
   },
-  { token: "km/h", dimension: "speed", toCanonical: 1, pattern: /(?:km\/h|kmh|км\/ч|км\/год)/iu },
+  {
+    token: "km/h",
+    dimension: "speed",
+    toCanonical: 1,
+    pattern: /(?:km\/h|kmh|kph|kilomet(?:er|re)s?\s+(?:per|an)\s+hour|км\/ч|км\/год)/iu,
+  },
   {
     token: "mph",
     dimension: "speed",

@@ -53,7 +53,7 @@ export const en: Lexicon = {
     kg: ["kg", "lb", "lbs?"],
     hours: ["hours?", "hrs?", "h"],
     minutes: ["minutes?", "mins?", "min"],
-    kmh: ["km\\/h", "kph"],
+    kmh: ["km\\/h", "kph", "kilomet(?:er|re)s? (?:per|an) hour"],
     watt: ["W", "watts?"],
     kilowatt: ["kW", "kilowatts?"],
     liters: ["(?<![\\p{L}])l(?:it(?:er|re)s?)?"],
@@ -65,12 +65,13 @@ export const en: Lexicon = {
   },
   cues: {
     speed: ["speed", "flies at"],
-    cruiseSpeed: ["cruis(?:e|es|ed|ing)(?: speed)?(?: at| of)?"],
+    // Not "cruise missile": a weapon class, not a speed.
+    cruiseSpeed: ["cruis(?:e|es|ed|ing)(?! missiles?)(?: speed)?(?: at| of)?"],
     maxSpeed: [
       "max(?:imum)? speed",
       "top speed",
-      "speeds? (?:of )?up to",
-      "(?:can )?fl(?:y|ies|ying)(?: at speeds?)? (?:of )?up to",
+      "speeds?:? (?:of )?up to",
+      "(?:can )?fl(?:y|ies|ying)(?: at)?(?: speeds?)? (?:of )?up to",
     ],
     range: ["max(?:imum)? range", "operational range", "combat range", "range"],
     endurance: ["endurance", "flight time", "airborne for"],

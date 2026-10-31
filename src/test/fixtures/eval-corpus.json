@@ -60,7 +60,7 @@
       {
         "unit": "km/h",
         "value": 150,
-        "semantic": "speed.stated"
+        "semantic": "speed.max"
       },
       {
         "unit": "km",

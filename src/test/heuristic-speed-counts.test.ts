@@ -35,6 +35,21 @@ describe("cruise and plain speed", () => {
     expect(await bySemantic("крейсерська швидкість 150 км/год", "speed.cruise")).toEqual([150]);
   });
 
+  it("reads the phrasings the evaluation found missing", async () => {
+    expect(await bySemantic("а крейсерской в 150 км/ч", "speed.cruise")).toEqual([150]);
+    expect(await bySemantic("• Швидкість: до 13 км/год", "speed.max")).toEqual([13]);
+    expect(await bySemantic("The drone flies at up to 280 km/h.", "speed.max")).toEqual([280]);
+    expect(
+      await bySemantic("The Geran-5 cruises at 450 kilometres per hour.", "speed.cruise"),
+    ).toEqual([450]);
+  });
+
+  it("does not read a cruise missile as a cruise speed", async () => {
+    expect(
+      await bySemantic("The cruise missile at 900 km/h hit the plant.", "speed.cruise"),
+    ).toEqual([]);
+  });
+
   it("files a speed the report does not qualify as a stated speed, not as cruise", async () => {
     const text = "The Geran-2 reached 185 km/h over the city.";
     expect(await bySemantic(text, "speed.stated")).toEqual([185]);
