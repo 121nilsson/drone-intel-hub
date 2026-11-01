@@ -15,6 +15,52 @@ const spec = (claims: Array<[number | string, string]>, unit?: string): SpecAttr
 });
 
 describe("consensus", () => {
+  const price = (...values: string[]): SpecAttribute => ({
+    ...spec(values.map((v, i): [string, string] => [v, `s${i}`])),
+    key: "unit_cost",
+    label: "Unit cost",
+    semantic: "cost.unit",
+  });
+
+  it("reads a price written in words, with its currency", () => {
+    expect(consensus(price("5–7 тисяч доларів", "7000 доларів")).display).toBe("7000 USD");
+    expect(consensus(price("5–7 тисяч доларів")).display).toBe("5000–7000 USD");
+    expect(consensus(price("more than $50 million")).display).toBe("≥50000000 USD");
+  });
+
+  it("does not take a median across currencies, or past a price it cannot read", () => {
+    // The row keeps a source's own wording rather than an aggregate in one of the currencies.
+    expect(consensus(price("$2.1 billion", "€100 million")).display).not.toMatch(/ (USD|EUR)$/);
+    expect(consensus(price("40 million Swedish krona", "$2.1 billion")).display).toBe(
+      "40 million Swedish krona",
+    );
+  });
+
+  it("reads thrust stated in kilogram-force", () => {
+    expect(consensus({ ...spec([["8–10 кгс", "s"]]), key: "engine_thrust" }).display).toBe(
+      "78.45–98.07 N",
+    );
+  });
+
+  // A claim stored as raw text before its wording could be read showed that text untranslated.
+  it("reads a stored text bound in the catalogue's unit", () => {
+    expect(consensus(spec([["не менше ніж 500 м", "Militarnyi"]], "km")).display).toBe("≥0.5 km");
+    expect(
+      consensus({ ...spec([["щонайменше 3,5 години", "Militarnyi"]], "min"), key: "endurance" })
+        .display,
+    ).toBe("≥3.5 h");
+  });
+
+  // Durations are stored in minutes; "1440 min" had to be worked out by the reader.
+  it("shows a long duration in hours or days, and keeps the stored minutes", () => {
+    const endurance = (value: number) => ({ ...spec([[value, "s"]], "min"), key: "endurance" });
+    expect(consensus(endurance(90)).display).toBe("90 min");
+    expect(consensus(endurance(210)).display).toBe("3.5 h");
+    expect(consensus(endurance(1440)).display).toBe("24 h");
+    expect(consensus(endurance(4320)).display).toBe("3 d");
+    expect(consensus(endurance(210)).median).toBe(210);
+  });
+
   // The original ternary was `min === max ? display : display` - both branches identical, so
   // disagreement was invisible however extreme it got.
   it("distinguishes agreement from disagreement", () => {

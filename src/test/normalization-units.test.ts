@@ -25,6 +25,10 @@ describe("normalizeQuantity", () => {
     expect(normalizeQuantity("700 nautical miles")?.canonicalValue).toBe(1296.4);
 
     expect(normalizeQuantity("2 hours")?.canonicalValue).toBe(120);
+    // Ukrainian hours ("3,5 години") read as nothing; a bare "год" stays out, as Russian for year.
+    expect(normalizeQuantity("3,5 години")?.canonicalValue).toBe(210);
+    expect(normalizeQuantity("2 годин")?.canonicalValue).toBe(120);
+    expect(normalizeQuantity("1 год")).toBeUndefined();
     expect(normalizeQuantity("5400 seconds")?.canonicalValue).toBe(90);
     // Days endurance: USV sources state autonomy in діб/суток, which had no unit at all.
     expect(normalizeQuantity("3 days")?.canonicalValue).toBe(4320);
@@ -64,5 +68,17 @@ describe("normalizeQuantity", () => {
   it("keeps converted ranges free of float noise", () => {
     // Live Red Wolf claim: 200 × 1.852 must not carry IEEE754 noise into the dossier.
     expect(normalizeQuantity("exceeding 200 nautical miles")?.range?.min).toBe(370.4);
+  });
+
+  it("reads thrust in newtons, from kgf, кгс, kN and lbf", () => {
+    expect(normalizeQuantity("8 кгс")?.canonicalValue).toBe(78.4532);
+    expect(normalizeQuantity("12 kgf")?.canonicalUnit).toBe("N");
+    expect(normalizeQuantity("50 kN")?.canonicalValue).toBe(50_000);
+    expect(normalizeQuantity("3 кН")?.canonicalValue).toBe(3000);
+    expect(normalizeQuantity("200 Newtons")?.canonicalValue).toBe(200);
+    expect(normalizeQuantity("1,000 lbf")?.canonicalValue).toBeCloseTo(4448.22, 2);
+    // "8 кгс" is not 8 kg, and a lowercase "kn" is still knots.
+    expect(normalizeQuantity("8 кг")?.canonicalUnit).toBe("kg");
+    expect(normalizeQuantity("50 kn")?.canonicalUnit).toBe("km/h");
   });
 });

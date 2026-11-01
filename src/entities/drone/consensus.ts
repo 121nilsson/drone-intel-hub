@@ -1,6 +1,7 @@
 import { canonicalUnitForSemantic, semanticKeyFor } from "@/entities/normalization/semantic";
 import { convert, normalizeQuantity, normalizeQuantityLoose } from "@/entities/normalization/units";
-import { parseMoney } from "@/entities/normalization/currency";
+import { parseMoney, parseMoneyRange } from "@/entities/normalization/currency";
+import { leadingQualifier, parseRange } from "@/entities/normalization/numeric";
 import { claimCounts, correctedPoint } from "./claim-review";
 import type { SpecAttribute, SpecClaim } from "./types";
 
@@ -56,7 +57,34 @@ function measurement(
   claimIndex: number,
 ): Point | Bound | undefined {
   const semantic = spec.semantic ?? semanticKeyFor(spec.key, spec.label);
-  const parsed = claim.normalized;
+  // A price stated in words ("7000 доларів", "5–7 тисяч доларів") is money, not a measurement:
+  // read it with its currency, or the row shows the source's wording.
+  if (semantic === "cost.unit" && typeof claim.value === "string") {
+    const span = parseMoneyRange(claim.value);
+    if (span) return { min: span.min, max: span.max, unit: span.currency };
+    const money = parseMoney(claim.value);
+    if (money) {
+      // "more than $50 million" is a floor, not a price.
+      const { qualifier } = leadingQualifier(claim.value);
+      if (qualifier === "at_least" || qualifier === "greater_than")
+        return { min: money.amount, unit: money.currency };
+      if (qualifier === "up_to" || qualifier === "less_than")
+        return { max: money.amount, unit: money.currency };
+      return { value: money.amount, unit: money.currency, claimIndex };
+    }
+  }
+  // A claim stored before its wording could be read ("щонайменше 3,5 години") is read again
+  // here, so a reader fix reaches stored claims too - bounds as well as points.
+  const parsed =
+    claim.normalized ??
+    (typeof claim.value === "string"
+      ? (normalizeQuantityLoose(claim.value) ??
+        // The spec's unit is lent only to a bare figure or bound ("до 300"): appended to prose
+        // ("12 drones + 12 mines") it would read a count as a mass.
+        (spec.unit && parseRange(claim.value)
+          ? normalizeQuantityLoose(`${claim.value} ${spec.unit}`)
+          : undefined))
+      : undefined);
   if (parsed) {
     const qual = parsed.range?.qualifier ?? "exact";
     if ((qual === "exact" || qual === "approximate") && parsed.canonicalValue !== undefined) {
@@ -166,6 +194,17 @@ function round(n: number) {
   return fixed;
 }
 
+/**
+ * The unit a figure is shown in. Durations are stored in minutes, but "210 min" or "1440 min"
+ * has to be worked out by the reader, so from two hours a duration reads in hours, and from
+ * three days in days. Only the display changes; min, max and median stay in the stored unit.
+ */
+function displayScale(unit: string | undefined, magnitude: number) {
+  if (unit === "min" && Math.abs(magnitude) >= 4320) return { factor: 1440, suffix: " d" };
+  if (unit === "min" && Math.abs(magnitude) >= 120) return { factor: 60, suffix: " h" };
+  return { factor: 1, suffix: unit ? ` ${unit}` : "" };
+}
+
 export function consensus(spec: SpecAttribute): Consensus {
   // An adjudicated "outlier" or an analyst-rejected claim stays on the record (the report said
   // what it said) but no longer feeds the aggregate: one rejected figure must not drag the
@@ -180,8 +219,16 @@ export function consensus(spec: SpecAttribute): Consensus {
     const m = measurement(spec, claim, i);
     return m ? [m] : [];
   });
-  const points = measured.filter(isPoint).sort((a, b) => a.value - b.value);
-  const bounds = measured.filter((m): m is Bound => !isPoint(m));
+  // Prices in two currencies have no common scale without an exchange rate: a median of SEK and
+  // USD is neither. A price that cannot be read ("40 million Swedish krona") may be just such a
+  // second currency, so it does not drop out silently either. Such a row keeps the sources'
+  // own wording.
+  const unreadablePrices =
+    (spec.semantic ?? semanticKeyFor(spec.key, spec.label)) === "cost.unit" &&
+    (measured.length < kept.length || new Set(measured.map((m) => m.unit ?? "")).size > 1);
+  const readable = unreadablePrices ? [] : measured;
+  const points = readable.filter(isPoint).sort((a, b) => a.value - b.value);
+  const bounds = readable.filter((m): m is Bound => !isPoint(m));
 
   if (points.length === 0 && bounds.length === 0) {
     const counts = new Map<string, number>();
@@ -202,16 +249,17 @@ export function consensus(spec: SpecAttribute): Consensus {
     const mins = bounds.flatMap((b) => (b.min !== undefined ? [b.min] : []));
     const maxs = bounds.flatMap((b) => (b.max !== undefined ? [b.max] : []));
     const unit = bounds.find((b) => b.unit)?.unit;
-    const suffix = unit ? ` ${unit}` : "";
     const min = mins.length ? Math.min(...mins) : undefined;
     const max = maxs.length ? Math.max(...maxs) : undefined;
+    const { factor, suffix } = displayScale(unit, max ?? min ?? 0);
+    const show = (n: number) => round(n / factor);
     const display =
       min !== undefined && max !== undefined
-        ? `${round(min)}–${round(max)}${suffix}`
+        ? `${show(min)}–${show(max)}${suffix}`
         : max !== undefined
-          ? `≤${round(max)}${suffix}`
+          ? `≤${show(max)}${suffix}`
           : min !== undefined
-            ? `≥${round(min)}${suffix}`
+            ? `≥${show(min)}${suffix}`
             : "—";
     return {
       display,
@@ -239,13 +287,14 @@ export function consensus(spec: SpecAttribute): Consensus {
   const confidence =
     sources >= 3 && spread < 0.25 ? "high" : sources >= 2 && spread < 0.6 ? "medium" : "low";
   const unit = targetUnit(spec) ?? points.find((p) => p.unit)?.unit ?? spec.unit;
-  const u = unit ? ` ${unit}` : "";
   const disputed = spread >= 0.6 && sources >= 2;
+  const { factor, suffix: u } = displayScale(unit, disputed ? envelopeMax : median);
+  const show = (n: number) => round(n / factor);
   const outliers = points
     .filter((p) => median !== 0 && Math.abs(p.value - median) / Math.abs(median) >= 0.6)
     .map((p) => p.claimIndex);
   return {
-    display: disputed ? `${round(envelopeMin)}–${round(envelopeMax)}${u}` : `${round(median)}${u}`,
+    display: disputed ? `${show(envelopeMin)}–${show(envelopeMax)}${u}` : `${show(median)}${u}`,
     min: envelopeMin,
     max: envelopeMax,
     median,

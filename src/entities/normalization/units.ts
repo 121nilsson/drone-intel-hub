@@ -7,6 +7,7 @@ export const CANONICAL_UNIT = {
   duration: "min",
   power: "W",
   volume: "l",
+  force: "N",
 } as const;
 
 /** 200 × 1.852 is 370.40000000000003 in IEEE754; 12 significant digits strip the arithmetic
@@ -50,6 +51,33 @@ interface UnitDef {
 // Longer spellings first so "nautical miles" wins over "m" and "km/h" wins over "km".
 // `(?![\p{L}\p{N}])` is a Unicode-aware word end. ASCII `\b` does not treat Cyrillic as a letter.
 const UNITS: UnitDef[] = [
+  // Thrust. First, so "kN" is force and not knots on a tie; lowercase "kn" stays knots.
+  // "кгс" ends in a letter, so the "кг" mass unit never takes it.
+  {
+    token: "kgf",
+    dimension: "force",
+    toCanonical: 9.80665,
+    pattern: /(?:kgf|kg-force|kilograms?[-\s]force|кгс)(?![\p{L}\p{N}])/iu,
+  },
+  {
+    token: "lbf",
+    dimension: "force",
+    toCanonical: 4.4482216152605,
+    pattern: /(?:lbf|pounds?[-\s]force)(?![\p{L}\p{N}])/iu,
+  },
+  {
+    token: "kN",
+    dimension: "force",
+    toCanonical: 1000,
+    pattern:
+      /(?:(?<![\p{L}/])(?:kN|KN|кН)|[Kk]ilonewtons?|кілоньютон[а-яіїєґ]*|килоньютон[а-яё]*)(?![\p{L}\p{N}])/u,
+  },
+  {
+    token: "N",
+    dimension: "force",
+    toCanonical: 1,
+    pattern: /(?:[Nn]ewtons?|ньютон[а-яіїєґё]*|(?<![\p{L}/])N)(?![\p{L}\p{N}])/u,
+  },
   // Volume: fuel capacity ("15 л", "150 gallons"). Imperial gallons excluded - different factor.
   {
     token: "gal",
@@ -199,7 +227,8 @@ const UNITS: UnitDef[] = [
     token: "h",
     dimension: "duration",
     toCanonical: 60,
-    pattern: /(?:hours?|hrs?|час(?:ов|а)?)(?![\p{L}\p{N}])/iu,
+    // Ukrainian "годин(а|и)" only: a bare "год" is Russian for year.
+    pattern: /(?:hours?|hrs?|час(?:ов|а)?|годин[а-яіїєґ]*)(?![\p{L}\p{N}])/iu,
   },
   {
     token: "h",

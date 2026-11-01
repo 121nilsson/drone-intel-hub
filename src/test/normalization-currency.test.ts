@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseMoney, toUSD } from "@/entities/normalization/currency";
+import { parseMoney, parseMoneyRange, toUSD } from "@/entities/normalization/currency";
 import { extractPrice, extractPriceNumeric } from "@/shared/infra/heuristics/pricing";
 
 describe("parseMoney", () => {
@@ -99,5 +99,16 @@ describe("currency symbol after the amount", () => {
     expect(extractPrice("1 900 000 ₽")).toBe("1 900 000 ₽");
     expect(extractPrice("500 ¥")).toBe("500 ¥");
     expect(extractPrice("1 900 000 ₽ 2 шт")).toBe("1 900 000 ₽");
+  });
+});
+
+describe("parseMoneyRange", () => {
+  it("lends the right figure's magnitude and currency to a bare left one", () => {
+    expect(parseMoneyRange("5–7 тисяч доларів")).toMatchObject({
+      min: 5000,
+      max: 7000,
+      currency: "USD",
+    });
+    expect(parseMoneyRange("$5,000–7,000")).toMatchObject({ min: 5000, max: 7000 });
   });
 });

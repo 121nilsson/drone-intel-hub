@@ -165,8 +165,12 @@ export function parseMoney(raw: string, extra: ExtraScales = []): Money | undefi
 export function parseMoneyRange(raw: string, extra: ExtraScales = []): MoneyRange | undefined {
   const parts = raw.split(/\s*(?:-|–|—|\bto\b)\s*/i);
   if (parts.length !== 2) return undefined;
-  const left = parseMoney(parts[0]!, extra);
   const rightRaw = parts[1]!;
+  // A bare left figure shares the right one's magnitude and currency: "5–7 тисяч доларів".
+  const sharedSuffix = /^[\d\s.,]+$/.test(parts[0]!) ? rightRaw.replace(/^[\d\s.,]+/, "") : "";
+  const left =
+    parseMoney(parts[0]!, extra) ??
+    (sharedSuffix ? parseMoney(`${parts[0]!} ${sharedSuffix}`, extra) : undefined);
   const right =
     parseMoney(rightRaw, extra) ??
     parseMoney(left ? `${rightRaw} ${left.currency}` : rightRaw, extra);

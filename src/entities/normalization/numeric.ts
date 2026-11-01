@@ -86,31 +86,40 @@ export function parseMagnitude(s: string): number | undefined {
 }
 
 const QUALIFIER_PREFIX: Array<[RegExp, QuantityQualifier]> = [
-  [/^(?:up\s*to|не\s+более|не\s+більше|до)\s+/i, "up_to"],
-  [/^(?:at\s+least|не\s+менее|не\s+менше)\s+/i, "at_least"],
+  // The comparative's "than" belongs to the bound: "не менше ніж 500 м", "не более чем 40 км".
+  [
+    /^(?:up\s*to|no\s+more\s+than|не\s+(?:более|больше|більше)(?:\s+(?:чем|ніж|чим))?|до)\s+/i,
+    "up_to",
+  ],
+  [
+    /^(?:at\s+least|no\s+less\s+than|не\s+(?:менее|меньше|менше)(?:\s+(?:чем|ніж|чим))?|щонайменше|принаймні|(?:как\s+)?минимум|мінімум)\s+/i,
+    "at_least",
+  ],
   [/^(?:less\s+than|under|меньше|менше)\s+/i, "less_than"],
   [/^(?:more\s+than|greater\s+than|over|exceeding|понад|більше|свыше|более)\s+/i, "greater_than"],
   [/^(?:~|≈|approx(?:imately)?|about|roughly|около|примерно|близько|приблизно)\s*/i, "approximate"],
 ];
 
 /**
+ * The bound or approximation a figure opens with ("up to", "не менше ніж", "~"), and the text
+ * after it. Exported so a reader of other figures - money - bounds them with the same words.
+ */
+export function leadingQualifier(raw: string): { qualifier: QuantityQualifier; rest: string } {
+  const text = raw.trim().replace(THIN_SPACE, " ");
+  for (const [re, qualifier] of QUALIFIER_PREFIX) {
+    const m = text.match(re);
+    if (m) return { qualifier, rest: text.slice(m[0].length).trim() };
+  }
+  return { qualifier: "exact", rest: text };
+}
+
+/**
  * Parse a qualifier and one number or a span. Units must already have been removed.
  * "up to 120" stays an upper bound and does not become an exact 120.
  */
 export function parseRange(raw: string): QuantityRange | undefined {
-  const text = raw.trim().replace(THIN_SPACE, " ");
-  if (!text) return undefined;
-
-  let rest = text;
-  let qualifier: QuantityQualifier = "exact";
-  for (const [re, q] of QUALIFIER_PREFIX) {
-    const m = rest.match(re);
-    if (m) {
-      qualifier = q;
-      rest = rest.slice(m[0].length).trim();
-      break;
-    }
-  }
+  if (!raw.trim()) return undefined;
+  const { qualifier, rest } = leadingQualifier(raw);
   if (!rest) return undefined;
 
   const parts = rest.split(/\s*(?:–|—|-|to)\s*/i).filter((p) => p.length > 0);

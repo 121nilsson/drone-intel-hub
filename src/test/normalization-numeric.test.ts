@@ -40,6 +40,14 @@ describe("parseRange", () => {
     expect(parseRange("at least 50")).toEqual({ min: 50, qualifier: "at_least" });
     expect(parseRange("less than 50")).toEqual({ max: 50, qualifier: "less_than" });
   });
+
+  it("reads Ukrainian and Russian bounds, with or without their 'than'", () => {
+    expect(parseRange("щонайменше 3,5")).toEqual({ min: 3.5, qualifier: "at_least" });
+    expect(parseRange("не менше ніж 500")).toEqual({ min: 500, qualifier: "at_least" });
+    expect(parseRange("не меньше чем 500")).toEqual({ min: 500, qualifier: "at_least" });
+    expect(parseRange("не более чем 40")).toEqual({ max: 40, qualifier: "up_to" });
+    expect(parseRange("не більше ніж 40")).toEqual({ max: 40, qualifier: "up_to" });
+  });
 });
 
 describe("parseMagnitude uses lexicon magnitudes", () => {
