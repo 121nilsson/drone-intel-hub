@@ -12,6 +12,7 @@ import {
   collisionKey,
   linkVariantReplay,
   withNormalizedRf,
+  readBy,
 } from "./pipeline-internal";
 import { claimIdsOf, promote } from "./pipeline-actions";
 import { verifyNewClaims } from "@/entities/drone/verification";
@@ -163,6 +164,7 @@ export function applyRelatedSystems(
                 mergeSpecs(base, extraction.specs, source, {
                   ...(context.dispatchId ? { sourceId: context.dispatchId } : {}),
                   extractionConfidence: extraction.confidence,
+                  ...readBy(extraction),
                 }),
                 extraction,
               ),

@@ -654,6 +654,22 @@ describe("queue items keep their post", () => {
     expect(claims.every((c) => c.sourceId === "p1")).toBe(true);
   });
 
+  it("stamps the engine and model that read the post, so a second reader can differ", () => {
+    const r = repos([drone("x", "X", [])]);
+    const read = queued();
+    read.extraction.metadata = {
+      schemaVersion: 1,
+      engine: "ai",
+      model: "ministral-14b-2512",
+      analyzedAt: AT,
+    };
+    mergeInto(read, "x", r);
+    const claims = r.written.flatMap((d) => d.specs.flatMap((s) => s.claims));
+    expect(
+      claims.every((c) => c.model === "ministral-14b-2512" && c.extractionEngine === "ai"),
+    ).toBe(true);
+  });
+
   it("writes no post id for pasted text, which has none", () => {
     const r = repos([drone("x", "X", [])]);
     const pasted = queued({ source: "Analyst paste" });

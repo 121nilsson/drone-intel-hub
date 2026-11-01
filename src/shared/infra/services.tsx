@@ -35,7 +35,11 @@ import { openAIProcurementExtractor } from "./procurement-extractor";
 import { createCatalogMutations } from "./catalog-operations";
 import { backfillCatalogue } from "./verification/backfill";
 import { runCatalogueVerification } from "./verification/run";
-import { triggerServerVerification } from "./verification/verification.functions";
+import {
+  fetchTokenUsage,
+  triggerEntailment,
+  triggerServerVerification,
+} from "./verification/verification.functions";
 import { recordVerificationRun } from "./autonomy/autonomy.functions";
 import type { VerificationRunner } from "@/shared/contracts/verification";
 
@@ -297,6 +301,17 @@ export function ServicesProvider({ children }: { children: ReactNode }) {
         await drones.reload();
         return report;
       },
+      // Server-only, so there is no browser branch; the same flush-reload guard as above.
+      runSecondReader: async () => {
+        if (!verificationOnServer)
+          throw new Error("The second reader runs on the server and needs its database.");
+        await drones.flush();
+        const result = await triggerEntailment();
+        await drones.flush();
+        await drones.reload();
+        return result;
+      },
+      tokenUsageToday: async () => (verificationOnServer ? await fetchTokenUsage() : null),
     }),
     [verificationOnServer, drones, dispatches],
   );

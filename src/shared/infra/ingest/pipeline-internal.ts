@@ -9,6 +9,16 @@ import { mergeLinks, normalizeExtraction, toRFLink } from "@/entities/normalizat
  * The same goes for script and romanisation: "Ланцет-3" collides with "Lancet-3". */
 export const collisionKey = (s: string) => phoneticKey(s);
 
+/**
+ * The engine and model that read a post, for every claim taken from it: a second reader has to be
+ * a different model, and only a claim that names its extractor lets that be checked. Every merge
+ * path stamps them through here, so a new field reaches all of them.
+ */
+export const readBy = (extraction: Pick<Extraction, "metadata">) => ({
+  ...(extraction.metadata?.engine ? { extractionEngine: extraction.metadata.engine } : {}),
+  ...(extraction.metadata?.model ? { model: extraction.metadata.model } : {}),
+});
+
 /** Mark an extraction with why it came from a degraded tier, visible to the analyst in triage. */
 export function annotate(extraction: Extraction, note: string): Extraction {
   return extraction.rationale

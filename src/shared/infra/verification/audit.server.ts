@@ -15,7 +15,8 @@ import {
 } from "@/entities/drone/audit";
 import { ANALYST_SOURCE } from "@/entities/drone/claim-review";
 import { attributeSemantic } from "@/entities/drone/spec-engine";
-import type { Drone, SpecAttribute, SpecClaim } from "@/entities/drone/types";
+import type { Drone, EntailmentVerdict, SpecAttribute, SpecClaim } from "@/entities/drone/types";
+import { entailmentAgreement } from "@/entities/drone/entailment";
 import type {
   AuditAnswer,
   AuditItem,
@@ -285,6 +286,10 @@ interface AuditRow {
   /** Selected only for the claim on screen; the status read would otherwise carry every post. */
   post_text?: string | null;
   answer: AuditAnswer | null;
+  /** The second reader's current verdict on this claim, joined in from the catalogue. */
+  reader?: EntailmentVerdict | null;
+  /** Whether that reader is known to differ from the claim's extractor. */
+  reader_independence?: "checked" | "unknown" | null;
   obviously_wrong: boolean;
   read_via: "original" | "translation" | null;
   drawn_at: Date;
@@ -345,6 +350,18 @@ export function summarizeAudit(rows: AuditRow[], undrawn?: number): AuditStatus 
     return [...by.entries()];
   };
   const seed = rows.filter((r) => r.in_seed);
+  // The reader is measured on every claim a person answered in a counted batch - verified ones
+  // and seed negatives alike, never a control, which tests the person rather than the claim.
+  const pairs = rows.flatMap((r) =>
+    r.role !== "control" &&
+    !failed.has(r.batch_id) &&
+    (r.answer === "yes" || r.answer === "no") &&
+    r.reader
+      ? [{ human: r.answer, reader: r.reader, unknown: r.reader_independence === "unknown" }]
+      : [],
+  );
+  const agreement = entailmentAgreement(pairs);
+  const said = agreement.supported.yes + agreement.supported.no;
   return {
     available: true,
     decision,
@@ -367,6 +384,16 @@ export function summarizeAudit(rows: AuditRow[], undrawn?: number): AuditStatus 
       answered: seed.filter((r) => r.answer).length,
       frozen: seed.length > 0,
     },
+    ...(pairs.length
+      ? {
+          reader: {
+            agreement,
+            measured: pairs.length,
+            independenceUnknown: pairs.filter((p) => p.unknown).length,
+            supportedErrorBound: errorRateUpperBound(said, agreement.supported.no),
+          },
+        }
+      : {}),
     ...(undrawn !== undefined ? { undrawn } : {}),
   };
 }
@@ -396,6 +423,34 @@ export async function auditStatus(opts: { countUndrawn?: boolean } = {}): Promis
       drone_name, spec_label, claim_id, language, family, value, evidence, source, source_id,
       answer, obviously_wrong, read_via, drawn_at
     from verification_audit`;
+  // Only the entries the audit drew from are unnested: this runs after every answer, and a scan
+  // of the whole catalogue there is what the status read is kept small to avoid.
+  const ids = [...new Set(rows.map((r) => r.claim_id))];
+  const droneIds = [...new Set(rows.map((r) => r.drone_id))];
+  const readings = new Map(
+    ids.length
+      ? (
+          await sql<
+            {
+              id: string;
+              verdict: EntailmentVerdict | null;
+              independence: "checked" | "unknown" | null;
+            }[]
+          >`
+            select c->>'id' as id, c->'entailment'->>'verdict' as verdict,
+                   c->'entailment'->>'independence' as independence
+              from drones d,
+                   jsonb_array_elements(d.data->'specs') s,
+                   jsonb_array_elements(s->'claims') c
+             where d.id = any(${droneIds}) and c->>'id' = any(${ids}) and c ? 'entailment'`
+        ).map((r) => [r.id, r] as const)
+      : [],
+  );
+  for (const r of rows) {
+    const reading = readings.get(r.claim_id);
+    r.reader = reading?.verdict ?? null;
+    r.reader_independence = reading?.independence ?? null;
+  }
   const status = summarizeAudit(rows, opts.countUndrawn ? await countUndrawn() : undefined);
   if (status.next) {
     const [post] = await sql<{ post_text: string | null }[]>`select post_text

@@ -65,6 +65,39 @@ export interface SpecClaim {
    * hold, so the autonomy loops can be measured before any human gate is removed.
    */
   verification?: ClaimVerification;
+  /**
+   * A second reader's answer: a different model from the one that extracted the claim was asked
+   * whether the post states it (entailment.ts). Kept apart from `verification` because in Phase 2
+   * it is measured against the human seed set before it may change any claim's state; until then
+   * nothing reads it but the measurement.
+   */
+  entailment?: ClaimEntailment;
+}
+
+/** supported: the post states it. unsupported: it does not. uncertain: the reader cannot say. */
+export type EntailmentVerdict = "supported" | "unsupported" | "uncertain";
+
+export interface ClaimEntailment {
+  verdict: EntailmentVerdict;
+  /**
+   * The passage the reader gave as its reason, only when it was found in the post. A passage
+   * the post does not contain makes the verdict `uncertain`, whatever the reader said.
+   */
+  span?: string;
+  /** Why a verdict was downgraded or could not be given, in the verifier's own words. */
+  note?: string;
+  provider: string;
+  model: string;
+  /**
+   * checked: the claim names the model that extracted it, and the reader is a different one.
+   * unknown: the claim names none (written before that was recorded), so the reader may be the
+   * extractor. Reported apart, because a model grading its own reading is not a second reader.
+   */
+  independence: "checked" | "unknown";
+  /** The post text this verdict was given on, hashed: a changed post is judged again. */
+  textHash: string;
+  version: string;
+  at: string;
 }
 
 export type VerificationVerdict = "pass" | "fail" | "uncertain";

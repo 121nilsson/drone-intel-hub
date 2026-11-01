@@ -41,7 +41,8 @@ export const VERIFIER_VERSION = "deterministic-4";
 
 export type ClaimTextResolver = (claim: SpecClaim) => string | undefined;
 
-const fold = (s: string) => s.normalize("NFKC").toLowerCase().replace(/\s+/g, " ").trim();
+/** How evidence is compared with a post: NFKC, case and whitespace folded. One definition for every reader. */
+export const fold = (s: string) => s.normalize("NFKC").toLowerCase().replace(/\s+/g, " ").trim();
 
 /** A name distinctive enough to contradict this claim when it, and not the drone, is named. */
 const distinctive = (name: string) => name.trim().length >= 4 || /\d/.test(name);

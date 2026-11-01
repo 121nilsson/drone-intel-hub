@@ -1,5 +1,6 @@
 import { db, dbConfigured } from "@/shared/infra/postgres/db.server";
 import { SCHEDULED_TASKS } from "@/shared/contracts/scheduled-tasks";
+import type { SecondReaderRun } from "@/shared/contracts/verification";
 import { nextCronRun } from "@/shared/infra/cron";
 
 export type TaskTrigger = "schedule" | "manual";
@@ -94,6 +95,14 @@ export const shadowOutcome = (r: {
   status: r.ran ? "ok" : "skipped",
   summary: r.ran
     ? `${r.rules} rule(s) on ${r.evaluated} new report(s), activated ${r.promoted.join(", ") || "none"}`
+    : r.reason,
+});
+
+/** The second reader: how much it read, what it said, and what it spent. */
+export const entailmentOutcome = (r: SecondReaderRun): TaskOutcome => ({
+  status: r.ran ? "ok" : "skipped",
+  summary: r.ran
+    ? `${r.posts} post(s), ${r.claims} claim(s): ${r.supported} supported, ${r.unsupported} unsupported, ${r.uncertain} uncertain; ${r.deferred} post(s) deferred (${r.reason}); ${r.tokens.input} in / ${r.tokens.output} out tokens`
     : r.reason,
 });
 

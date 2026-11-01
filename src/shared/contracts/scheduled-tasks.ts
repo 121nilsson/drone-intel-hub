@@ -36,6 +36,13 @@ export const SCHEDULED_TASKS: readonly ScheduledTask[] = [
     does: "Checks claims against their posts over the whole archive: new claims, claims a verifier upgrade has to re-check, and claims linked back to a post. Rewrites only what changed.",
   },
   {
+    name: "verification:ai",
+    cron: "55 * * * *",
+    label: "Second reader",
+    every: "hourly at :55",
+    does: "An independent model checks the claims the deterministic checks left uncertain, and every audited claim, within the daily token ceiling. Measured only: no claim changes state.",
+  },
+  {
     name: "evaluation:run",
     cron: "15 3 * * *",
     label: "Heuristic evaluation",

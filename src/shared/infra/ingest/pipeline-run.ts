@@ -22,6 +22,7 @@ import {
   linkVariantReplay,
   withCounterparts,
   withNormalizedRf,
+  readBy,
 } from "./pipeline-internal";
 import { collidesWithCatalog, learnedNegativeKeys, notASystemName } from "./pipeline-triage";
 import { applyRelatedSystems, extractionForSystem } from "./pipeline-slice";
@@ -267,10 +268,7 @@ export async function runTwoTier(
             mergeSpecs(base, extraction.specs, source, {
               ...(context.dispatchId ? { sourceId: context.dispatchId } : {}),
               extractionConfidence: extraction.confidence,
-              ...(extraction.metadata?.engine
-                ? { extractionEngine: extraction.metadata.engine }
-                : {}),
-              ...(extraction.metadata?.model ? { model: extraction.metadata.model } : {}),
+              ...readBy(extraction),
             }),
             extraction,
           ),

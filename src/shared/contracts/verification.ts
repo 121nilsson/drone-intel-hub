@@ -1,3 +1,4 @@
+import type { EntailmentAgreement } from "@/entities/drone/entailment";
 import type { VerificationCoverage } from "@/entities/drone/verification";
 import type { VerificationKind, VerificationState } from "@/entities/drone/types";
 
@@ -191,6 +192,22 @@ export interface AuditStatus {
   /** How many claims are waiting. */
   openCount: number;
   seed: { size: number; answered: number; frozen: boolean };
+  /**
+   * The second reader measured against the person: on every answered claim it has also read,
+   * how its verdicts line up. Absent until the two overlap.
+   */
+  reader?: {
+    agreement: EntailmentAgreement;
+    /** Claims both answered (yes/no) and read by the reader. */
+    measured: number;
+    /**
+     * Of those, claims that name no extractor model, so the reader may have graded its own
+     * reading. Shown, so the measurement says how independent it was.
+     */
+    independenceUnknown: number;
+    /** Upper 95% bound on how often the reader's "supported" is a claim the post does not state. */
+    supportedErrorBound: number;
+  };
   /** Verified claims with a post never drawn; counted only when asked for (a catalogue scan). */
   undrawn?: number;
 }
@@ -202,4 +219,32 @@ export interface AuditStatus {
  */
 export interface VerificationRunner {
   run(): Promise<VerificationRunReport>;
+  /**
+   * Run the second reader now rather than at the next hourly run. Needs the server database;
+   * throws without one.
+   */
+  runSecondReader(): Promise<SecondReaderRun>;
+  /** Today's spend against the daily ceiling; null where the reader cannot run. */
+  tokenUsageToday(): Promise<TokenUsageToday | null>;
+}
+
+/** What one run of the second reader did (shared/infra/verification/entailment.server.ts). */
+export interface SecondReaderRun {
+  ran: boolean;
+  reason: string;
+  posts: number;
+  claims: number;
+  supported: number;
+  unsupported: number;
+  uncertain: number;
+  /** Posts left for a later run: the per-run cap, the ceiling, or no independent reader. */
+  deferred: number;
+  tokens: { input: number; output: number };
+}
+
+/** Tokens the verifier and its judges used today, against the daily ceiling (plan §14). */
+export interface TokenUsageToday {
+  input: number;
+  output: number;
+  ceiling: { input: number; output: number };
 }

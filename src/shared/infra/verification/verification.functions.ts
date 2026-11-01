@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import type {
+  TokenUsageToday,
   AuditAnswer,
   AuditStatus,
   VerificationRunReport,
@@ -61,3 +62,16 @@ export const answerAuditItem = createServerFn({ method: "POST" })
     await answerAudit(data);
     return { ok: true };
   });
+
+export const triggerEntailment = createServerFn({ method: "POST" }).handler(async () => {
+  const { runEntailment } = await import("./entailment.server");
+  const { recordTaskRun, entailmentOutcome } = await import("@/shared/infra/task-runs.server");
+  return await recordTaskRun("verification:ai", "manual", runEntailment, entailmentOutcome);
+});
+
+export const fetchTokenUsage = createServerFn({ method: "GET" }).handler(
+  async (): Promise<TokenUsageToday> => {
+    const { tokenUsageToday } = await import("./entailment.server");
+    return await tokenUsageToday();
+  },
+);

@@ -6,6 +6,7 @@ import {
   linkVariantReplay,
   withCounterparts,
   withNormalizedRf,
+  readBy,
 } from "./pipeline-internal";
 import { counterpartIdsFor, linkCounterparts } from "@/entities/drone/relations";
 import { linkVariant, mergeDroneIntelligence } from "@/entities/drone/merge-intelligence";
@@ -21,6 +22,16 @@ const NO_CLAIMS: ReadonlySet<string> = new Set();
 /** Claim ids already on an entry, so a merge verifies only what it added. */
 export const claimIdsOf = (drone: Drone): Set<string> =>
   new Set(drone.specs.flatMap((s) => s.claims.flatMap((c) => (c.id ? [c.id] : []))));
+
+/**
+ * Where a queued item's claims came from: the post, and the engine and model that read it. Promote
+ * and merge used to drop all three, so a claim from the queue could not be checked against its
+ * post, nor read by a second model guaranteed to be a different one.
+ */
+const provenanceOf = (c: Candidate) => ({
+  ...(c.dispatchId ? { sourceId: c.dispatchId } : {}),
+  ...readBy(c.extraction),
+});
 
 export function promote(
   c: Candidate,
@@ -83,12 +94,10 @@ export function promote(
   });
   // The post id goes on every claim, so a later verifier run can find the post again.
   const drone = verifyNewClaims(
-    mergeSpecs(
-      withAliases,
-      e.specs,
-      c.source,
-      c.dispatchId ? { sourceId: c.dispatchId } : undefined,
-    ),
+    mergeSpecs(withAliases, e.specs, c.source, {
+      ...provenanceOf(c),
+      extractionConfidence: e.confidence,
+    }),
     NO_CLAIMS,
     c.raw,
     d.drones.list(),
@@ -138,7 +147,7 @@ export function mergeInto(
     const merged = mergeDroneIntelligence(
       withNormalizedRf(
         mergeSpecs(base, extracted.specs, c.source, {
-          ...(c.dispatchId ? { sourceId: c.dispatchId } : {}),
+          ...provenanceOf(c),
           extractionConfidence: extracted.confidence,
         }),
         extracted,

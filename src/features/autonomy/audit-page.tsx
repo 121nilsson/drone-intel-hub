@@ -9,7 +9,8 @@ import {
   fetchAuditStatus,
 } from "@/shared/infra/verification/verification.functions";
 import type { AuditAnswer, AuditItem, AuditStatus } from "@/shared/contracts/verification";
-import { Btn, Card, CardGrid, EmptyNote, PageTitle, Panel, Tag } from "@/shared/ui/primitives";
+import { Btn, CardGrid, EmptyNote, PageTitle, Panel, Tag } from "@/shared/ui/primitives";
+import { Stat } from "./stat";
 import { SourceRef, SystemChip } from "@/shared/ui/links";
 import { TranslateButton } from "@/shared/ui/translate-button";
 
@@ -211,17 +212,11 @@ function Tally({
   t: { answered: number; errors: number; cannotTell: number; upperBound: number };
 }) {
   return (
-    <Card className="gap-1 p-3">
-      <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-        {label}
-      </span>
-      <span className="font-mono text-xl tabular-nums">
-        {t.errors} / {t.answered}
-      </span>
-      <span className="text-xs text-muted-foreground">
-        errors · error rate ≤ {t.answered ? pct(t.upperBound) : "—"} · {t.cannotTell} can't tell
-      </span>
-    </Card>
+    <Stat
+      label={label}
+      value={`${t.errors} / ${t.answered}`}
+      hint={`errors · error rate ≤ ${t.answered ? pct(t.upperBound) : "—"} · ${t.cannotTell} can't tell`}
+    />
   );
 }
 
@@ -312,26 +307,16 @@ export function AuditPage() {
             </p>
             <CardGrid>
               <Tally label="Verified claims audited" t={status.overall} />
-              <Card className="gap-1 p-3">
-                <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-                  Seed set
-                </span>
-                <span className="font-mono text-xl tabular-nums">
-                  {status.seed.answered} / {status.seed.size}
-                </span>
-                <span className="text-xs text-muted-foreground">
-                  {status.seed.frozen ? "frozen; no learner reads it" : "not drawn yet"}
-                </span>
-              </Card>
-              <Card className="gap-1 p-3">
-                <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-                  Reported apart
-                </span>
-                <span className="text-xs">
-                  {status.viaTranslation} read through a translation · {status.obviouslyWrong}{" "}
-                  stated but plainly wrong · {status.undrawn ?? "?"} verified claims never drawn
-                </span>
-              </Card>
+              <Stat
+                label="Seed set"
+                value={`${status.seed.answered} / ${status.seed.size}`}
+                hint={status.seed.frozen ? "frozen; no learner reads it" : "not drawn yet"}
+              />
+              <Stat
+                label="Reported apart"
+                value={`${status.viaTranslation} · ${status.obviouslyWrong}`}
+                hint={`read through a translation · stated but plainly wrong · ${status.undrawn ?? "?"} verified claims never drawn`}
+              />
             </CardGrid>
             {status.failedControlBatches.length > 0 && (
               <p className="mt-3 text-sm text-destructive">
@@ -376,6 +361,41 @@ export function AuditPage() {
               </EmptyNote>
             )}
           </Panel>
+
+          {status.reader && (
+            <Panel
+              title="Second reader against your answers"
+              right={
+                <Tag tone="muted" mono>
+                  {status.reader.measured} measured
+                </Tag>
+              }
+            >
+              <p className="mb-3 text-xs text-muted-foreground">
+                On the claims you answered that the independent model also read. It changes no claim
+                until this shows its &quot;supported&quot; can be trusted.
+                {status.reader.independenceUnknown > 0 &&
+                  ` ${status.reader.independenceUnknown} of these claims do not record the model that extracted them, so the reader may have been that model.`}
+              </p>
+              <CardGrid>
+                <Stat
+                  label="It said supported"
+                  value={`${status.reader.agreement.supported.no} / ${
+                    status.reader.agreement.supported.yes + status.reader.agreement.supported.no
+                  }`}
+                  hint={`you said the post does not state it · wrong ≤ ${pct(status.reader.supportedErrorBound)}`}
+                />
+                <Stat
+                  label="It said unsupported"
+                  value={`${status.reader.agreement.unsupported.yes} / ${
+                    status.reader.agreement.unsupported.yes + status.reader.agreement.unsupported.no
+                  }`}
+                  hint="you said the post does state it"
+                />
+                <Stat label="It could not say" value={`${status.reader.agreement.uncertain}`} />
+              </CardGrid>
+            </Panel>
+          )}
 
           {status.byFamily.length > 0 && (
             <Panel title="By language and family">

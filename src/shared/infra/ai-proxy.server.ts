@@ -53,6 +53,11 @@ export type ChatResult =
        * answered, not what was asked for. Absent only for transports that do not report it.
        */
       model?: string;
+      /**
+       * Tokens the provider reports this call used. Absent when it reports none; a caller that
+       * budgets tokens then estimates from the text.
+       */
+      usage?: { input: number; output: number };
     }
   | {
       ok: false;
@@ -537,8 +542,16 @@ async function callSingleProvider(
     if (res.ok) {
       type Message = { content?: string | null; reasoning_content?: string | null };
       let msg: Message | undefined;
+      let usage: { input: number; output: number } | undefined;
       try {
-        msg = (JSON.parse(text) as { choices?: { message?: Message }[] }).choices?.[0]?.message;
+        const reply = JSON.parse(text) as {
+          choices?: { message?: Message }[];
+          usage?: { prompt_tokens?: unknown; completion_tokens?: unknown };
+        };
+        msg = reply.choices?.[0]?.message;
+        const input = Number(reply.usage?.prompt_tokens);
+        const output = Number(reply.usage?.completion_tokens);
+        if (Number.isFinite(input) && Number.isFinite(output)) usage = { input, output };
       } catch {
         return unusable("Invalid provider response");
       }
@@ -551,11 +564,16 @@ async function callSingleProvider(
           parseModelJson(content) ??
           (content.trim() ? undefined : parseModelJson(msg?.reasoning_content ?? ""));
         if (!parsed) return unusable("Invalid provider response (no JSON object)");
-        return { ok: true, content: JSON.stringify(parsed), model: d.model };
+        return {
+          ok: true,
+          content: JSON.stringify(parsed),
+          model: d.model,
+          ...(usage ? { usage } : {}),
+        };
       }
       const out = content.trim() ? content : (msg?.reasoning_content ?? "");
       if (!out.trim()) return unusable("Invalid provider response (empty)");
-      return { ok: true, content: out, model: d.model };
+      return { ok: true, content: out, model: d.model, ...(usage ? { usage } : {}) };
     }
 
     // The provider's own explanation is the part that says WHY, so it is kept - but only

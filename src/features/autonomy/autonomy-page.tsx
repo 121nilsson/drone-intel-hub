@@ -3,10 +3,12 @@ import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { useDrones, useServices } from "@/shared/infra/services";
 import { Btn, Card, CardGrid, ListRow, PageTitle, Panel, Tag } from "@/shared/ui/primitives";
+import { Stat } from "./stat";
 import { JobStatusPanel } from "@/shared/ui/job-status-panel";
 import { fetchAutonomyEvents } from "@/shared/infra/autonomy/autonomy.functions";
 import { fetchAutonomy } from "@/shared/infra/evaluation/evaluation.functions";
 import { verificationReport } from "@/shared/infra/verification/run";
+import { SecondReaderPanel } from "./second-reader-panel";
 import type { AutonomyEvent, VerificationRunReport } from "@/shared/contracts/verification";
 import type { AutonomyStatus } from "@/shared/infra/evaluation/rule-sandbox.server";
 
@@ -19,18 +21,6 @@ import type { AutonomyStatus } from "@/shared/infra/evaluation/rule-sandbox.serv
  * is sent to a human queue. The panel exists so the loop is visible and its coverage is honest: every score is
  * reported next to how many claims it was measured over.
  */
-
-function Stat({ label, value, hint }: { label: string; value: string; hint?: string }) {
-  return (
-    <Card className="gap-1 p-3">
-      <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-        {label}
-      </span>
-      <span className="font-mono text-xl tabular-nums text-foreground">{value}</span>
-      {hint && <span className="text-xs text-muted-foreground">{hint}</span>}
-    </Card>
-  );
-}
 
 const pct = (n: number) => `${Math.round(n * 100)}%`;
 
@@ -184,6 +174,8 @@ export function AutonomyPage() {
           {coverage.checked} checked claim(s) is the whole claim the number makes.
         </p>
       </Panel>
+
+      <SecondReaderPanel />
 
       <Panel
         title={`Claims to look at (${view.exceptionCount})`}
