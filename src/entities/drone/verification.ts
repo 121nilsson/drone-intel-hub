@@ -35,9 +35,10 @@ import { outletKey } from "@/entities/source/outlet-record";
  * evidence sentence with the extractor's strict matcher; sources counted per outlet. 3: claims
  * written without a post id are linked back to their post, and a missing post says why. 4: the
  * run moved to the server, which reads the whole archive; version 3 verdicts were written by the
- * browser over its newest 3,000 posts and called older posts "not in the archive".
+ * browser over its newest 3,000 posts and called older posts "not in the archive". 5: names match
+ * with real case endings only; "контракт" and "contrast" no longer name Contra.
  */
-export const VERIFIER_VERSION = "deterministic-4";
+export const VERIFIER_VERSION = "deterministic-5";
 
 export type ClaimTextResolver = (claim: SpecClaim) => string | undefined;
 

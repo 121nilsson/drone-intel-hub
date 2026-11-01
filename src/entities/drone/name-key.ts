@@ -109,6 +109,42 @@ interface PhoneticNeedle {
 
 const needles = new Map<string, PhoneticNeedle>();
 
+/**
+ * Russian and Ukrainian noun endings as phoneticText folds them (я → ia, ю → iu, ы/и/і → i,
+ * х → h), appended to a name's stem: Ланцет-ом, Шахед-ы, Геран-ью, Контр-ою. Longest first, so
+ * the alternation prefers the whole ending. Plus the English plural ("Shaheds", "Gerans").
+ */
+const CASE_ENDINGS = [
+  "iami",
+  "ami",
+  "oiu",
+  "eiu",
+  "iam",
+  "iah",
+  "ovi",
+  "evi",
+  "om",
+  "em",
+  "oi",
+  "ei",
+  "am",
+  "ah",
+  "ov",
+  "ev",
+  "iv",
+  "ia",
+  "iu",
+  "es",
+  "a",
+  "u",
+  "i",
+  "e",
+  "o",
+  "s",
+  // The bare stem: "Нептун" for Neptune, "Вампір" for Vampire, genitive "Комет", "Фурії".
+  "",
+];
+
 function needleFor(name: string): PhoneticNeedle {
   const cached = needles.get(name);
   if (cached) return cached;
@@ -121,12 +157,18 @@ function needleFor(name: string): PhoneticNeedle {
     // "F-35", "F-35B" or "F-35C", the way "Lancet-3" must not match "Lancet-3M" below. Only an
     // English plural is allowed ("F-35As").
     if (/\d[a-z]{1,2}$/.test(needle)) out.plural = ` ${needle}s `;
-    // Russian and Ukrainian inflect names ("Шахеды", "Ланцетом", "Герани"): allow a short case
-    // ending after a name that ends in a letter. Not after a digit - "Lancet-3" must not match
-    // "Lancet-3M", which is a different variant.
+    // Russian and Ukrainian inflect names ("Шахеды", "Ланцетом", "Герани"): allow a case ending
+    // after a name that ends in a letter, and the English plural ("Gerans"). Not after a digit -
+    // "Lancet-3" must not match "Lancet-3M", which is a different variant.
+    //
+    // Only real endings: "any four letters" read "in contrast" and "контракт" (contract) as
+    // Contra, and filed claims from unrelated posts under it.
     else if (/[a-z]$/.test(needle) && needle.length >= 5) {
       const stem = needle.replace(/[aeiou]$/, "");
-      out.inflected = new RegExp(` ${stem.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}[a-z]{0,4} `);
+      const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      out.inflected = new RegExp(
+        ` (?:${esc(stem)}(?:${CASE_ENDINGS.join("|")})|${esc(needle)}e?s) `,
+      );
       out.stem = ` ${stem}`;
     }
   }

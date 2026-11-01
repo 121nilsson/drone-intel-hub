@@ -142,3 +142,27 @@ describe("duplicateGroups", () => {
     ).toEqual([]);
   });
 });
+
+describe("case endings after a name", () => {
+  // Measured on the live archive: "any four letters" after a name filed 14 of Contra's 17 claims
+  // from posts about contracts, control and contrast, and read "лютого" (February) as Lyutyi.
+  it("does not take a word that merely starts with a name", () => {
+    expect(mentionsPhonetic("in contrast to the examples", "Contra")).toBe(false);
+    expect(mentionsPhonetic("контракт на постачання", "Contra")).toBe(false);
+    expect(mentionsPhonetic("system control", "Contra")).toBe(false);
+    expect(mentionsPhonetic("атака 24 лютого", "Лютий")).toBe(false);
+    expect(mentionsPhonetic("the spectrum analyser", "Spectre")).toBe(false);
+    expect(mentionsPhonetic("Nebo-U небо от", "Nebo-U")).toBe(true);
+    expect(mentionsPhonetic("небо от", "Nebo-U")).toBe(false);
+  });
+
+  it("still takes a real case ending, the bare stem and the English plural", () => {
+    expect(mentionsPhonetic("Контрою збили дрон", "Contra")).toBe(true);
+    expect(mentionsPhonetic("удар Ланцетом", "Lancet")).toBe(true);
+    expect(mentionsPhonetic("Шахеды летят", "Shahed")).toBe(true);
+    expect(mentionsPhonetic("збито Геранью", "Geran")).toBe(true);
+    expect(mentionsPhonetic("ракета Нептун", "Neptune")).toBe(true);
+    expect(mentionsPhonetic("дрон Вампір", "Vampire")).toBe(true);
+    expect(mentionsPhonetic("roughly 450 jet-powered Gerans", "Geran")).toBe(true);
+  });
+});
