@@ -16,6 +16,12 @@ dist-ssr
 .nitro
 *.local
 
+# Local env (secrets) — the .example templates are committed
+.env
+.env.*
+!.env.example
+!.env.local.example
+
 # Wrangler / Cloudflare
 .wrangler/
 .dev.vars
@@ -30,3 +36,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# green-check snapshot of the pre-existing finding set. Local by design: a committed baseline
+# goes stale as the codebase moves and turns into diff noise nobody reads.
+.greencheck-baseline.json
