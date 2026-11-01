@@ -14,8 +14,9 @@ import { fold } from "./verification";
 /**
  * Bumping this asks the reader again about every claim it has answered. 2: claims numbered [n]
  * (a reader echoed "ref 1" and its answers were lost), and independence recorded per verdict.
+ * 3: values asked with their unit (claimReading); "40" was asked where the post said 40 knots.
  */
-export const ENTAILMENT_VERSION = "entailment-2";
+export const ENTAILMENT_VERSION = "entailment-3";
 
 /** A short stable hash of a post's text (FNV-1a): a changed post is read again. */
 export function textHash(text: string): string {

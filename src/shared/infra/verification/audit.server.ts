@@ -14,6 +14,7 @@ import {
   type AuditCandidate,
 } from "@/entities/drone/audit";
 import { ANALYST_SOURCE } from "@/entities/drone/claim-review";
+import { claimReading } from "@/entities/drone/claim-reading";
 import { attributeSemantic } from "@/entities/drone/spec-engine";
 import type { Drone, EntailmentVerdict, SpecAttribute, SpecClaim } from "@/entities/drone/types";
 import { entailmentAgreement } from "@/entities/drone/entailment";
@@ -126,7 +127,8 @@ async function insertBatch(
     family: item.family,
     state_at_draw: item.state,
     verifier_version: item.claim.verification?.verifierVersion ?? null,
-    value: item.claim.raw ?? String(item.claim.value),
+    // With its unit: a bare "40" cannot be judged (40 knots is not 40 km/h).
+    value: claimReading(item.spec, item.claim),
     evidence: quoteOf(item.claim),
     source: item.claim.source,
     source_id: item.claim.sourceId ?? null,

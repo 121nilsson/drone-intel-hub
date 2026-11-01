@@ -11,7 +11,8 @@ import {
 } from "@/entities/drone/entailment";
 import { ANALYST_SOURCE } from "@/entities/drone/claim-review";
 import { catalogNames } from "@/entities/drone/catalog-names";
-import type { ClaimEntailment, Drone, SpecClaim } from "@/entities/drone/types";
+import type { ClaimEntailment, Drone, SpecAttribute, SpecClaim } from "@/entities/drone/types";
+import { claimReading } from "@/entities/drone/claim-reading";
 import type { SecondReaderRun, TokenUsageToday } from "@/shared/contracts/verification";
 import { chatCompletionOnce } from "@/shared/infra/ai-proxy.server";
 import { getAvailableProviders, getProviderModel } from "@/shared/infra/ai-providers";
@@ -105,6 +106,7 @@ async function recordUsage(purpose: string, used: { input: number; output: numbe
 interface Target {
   drone: Drone;
   claim: SpecClaim & { id: string };
+  spec: SpecAttribute;
   attribute: string;
 }
 
@@ -174,7 +176,12 @@ export async function runEntailment(): Promise<SecondReaderRun> {
         const wanted = audited.has(claim.id) || claim.verification?.state === "uncertain";
         if (!wanted) continue;
         const list = byPost.get(claim.sourceId) ?? [];
-        list.push({ drone, claim: claim as SpecClaim & { id: string }, attribute: spec.label });
+        list.push({
+          drone,
+          claim: claim as SpecClaim & { id: string },
+          spec,
+          attribute: spec.label,
+        });
         byPost.set(claim.sourceId, list);
       }
   const ids = [...byPost.keys()];
@@ -218,7 +225,7 @@ export async function runEntailment(): Promise<SecondReaderRun> {
         system: t.drone.name,
         aliases: catalogNames(t.drone),
         attribute: t.attribute,
-        value: t.claim.raw ?? String(t.claim.value),
+        value: claimReading(t.spec, t.claim),
       }));
       const { system, prompt, truncated } = entailmentPrompt(post.text, questions);
       const estimate = Math.ceil((system.length + prompt.length) / CHARS_PER_TOKEN);

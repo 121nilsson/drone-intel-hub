@@ -199,7 +199,7 @@ function round(n: number) {
  * has to be worked out by the reader, so from two hours a duration reads in hours, and from
  * three days in days. Only the display changes; min, max and median stay in the stored unit.
  */
-function displayScale(unit: string | undefined, magnitude: number) {
+export function displayScale(unit: string | undefined, magnitude: number) {
   if (unit === "min" && Math.abs(magnitude) >= 4320) return { factor: 1440, suffix: " d" };
   if (unit === "min" && Math.abs(magnitude) >= 120) return { factor: 60, suffix: " h" };
   return { factor: 1, suffix: unit ? ` ${unit}` : "" };
