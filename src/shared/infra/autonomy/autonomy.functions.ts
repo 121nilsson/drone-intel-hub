@@ -1,5 +1,9 @@
 import { createServerFn } from "@tanstack/react-start";
-import type { AutonomyEvent, VerificationRunRecord } from "@/shared/contracts/verification";
+import type {
+  AutonomyEvent,
+  VerificationCoverageCounts,
+  VerificationRunRecord,
+} from "@/shared/contracts/verification";
 import { listAutonomyEvents, recordAutonomyEvent } from "./ledger.server";
 
 /**
@@ -13,6 +17,16 @@ const count = (v: unknown) => {
   return Number.isFinite(n) && n >= 0 ? Math.floor(n) : 0;
 };
 
+const counts = (v: unknown): VerificationCoverageCounts => {
+  const o = v && typeof v === "object" ? (v as Record<string, unknown>) : {};
+  return {
+    verified: count(o["verified"]),
+    uncertain: count(o["uncertain"]),
+    rejected: count(o["rejected"]),
+    unverified: count(o["unverified"]),
+  };
+};
+
 /** Accept only the counts a run reports; anything else is a caller bug, not data. */
 const checkRun = (d: unknown): VerificationRunRecord => {
   if (!d || typeof d !== "object") throw new Error("Invalid verification summary");
@@ -24,10 +38,8 @@ const checkRun = (d: unknown): VerificationRunRecord => {
     checked: count(s["checked"]),
     changed: count(s["changed"]),
     missingText: count(s["missingText"]),
-    verified: count(s["verified"]),
-    uncertain: count(s["uncertain"]),
-    rejected: count(s["rejected"]),
-    unverified: count(s["unverified"]),
+    before: counts(s["before"]),
+    after: counts(s["after"]),
   };
 };
 
@@ -38,7 +50,6 @@ export const fetchAutonomyEvents = createServerFn({ method: "GET" }).handler(
 export const recordVerificationRun = createServerFn({ method: "POST" })
   .validator(checkRun)
   .handler(async ({ data }) => {
-    const { verified, uncertain, rejected, unverified } = data;
     await recordAutonomyEvent({
       action: "verification_run",
       actor: `verifier:${data.verifierVersion}`,
@@ -46,7 +57,8 @@ export const recordVerificationRun = createServerFn({ method: "POST" })
       targetCollection: "drones",
       targetId: "catalogue",
       verdict: data.missingText > 0 ? "partial" : "complete",
-      after: { verified, uncertain, rejected, unverified },
+      before: data.before,
+      after: data.after,
       reason:
         `${data.checked} claim(s) checked, ${data.changed} entry(ies) updated, ` +
         `${data.missingText} without source text`,

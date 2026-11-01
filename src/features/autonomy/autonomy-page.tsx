@@ -34,14 +34,27 @@ function Stat({ label, value, hint }: { label: string; value: string; hint?: str
 
 const pct = (n: number) => `${Math.round(n * 100)}%`;
 
-/** A run's recorded coverage, so the ledger shows the trend a verifier change causes. */
-function coverageAfter(after: unknown): string | undefined {
-  if (!after || typeof after !== "object") return undefined;
-  const a = after as Record<string, unknown>;
-  const n = (k: string) => (typeof a[k] === "number" ? (a[k] as number) : undefined);
-  const verified = n("verified");
-  if (verified === undefined) return undefined;
-  return `after: ${verified} verified, ${n("uncertain") ?? 0} uncertain, ${n("rejected") ?? 0} rejected`;
+/** A run's before/after coverage, so a verifier change that lowers the verified share is visible. */
+function coverageChange(before: unknown, after: unknown): string | undefined {
+  const read = (v: unknown) => {
+    if (!v || typeof v !== "object") return undefined;
+    const o = v as Record<string, unknown>;
+    const n = (k: string) => (typeof o[k] === "number" ? (o[k] as number) : undefined);
+    const verified = n("verified");
+    if (verified === undefined) return undefined;
+    return {
+      verified,
+      uncertain: n("uncertain") ?? 0,
+      rejected: n("rejected") ?? 0,
+    };
+  };
+  const a = read(after);
+  if (!a) return undefined;
+  const b = read(before);
+  const step = (from: number, to: number) => (from === to ? `${to}` : `${from} → ${to}`);
+  return b
+    ? `${step(b.verified, a.verified)} verified · ${step(b.uncertain, a.uncertain)} uncertain · ${step(b.rejected, a.rejected)} rejected`
+    : `after: ${a.verified} verified, ${a.uncertain} uncertain, ${a.rejected} rejected`;
 }
 
 export function AutonomyPage() {
@@ -238,7 +251,7 @@ export function AutonomyPage() {
                     </span>
                   </span>
                 }
-                subtitle={[e.reason, coverageAfter(e.after)].filter(Boolean).join(" · ")}
+                subtitle={[e.reason, coverageChange(e.before, e.after)].filter(Boolean).join(" · ")}
                 meta={
                   <>
                     <Tag mono>{e.actor}</Tag>

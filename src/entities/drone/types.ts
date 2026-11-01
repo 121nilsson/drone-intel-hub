@@ -510,6 +510,11 @@ export interface Candidate {
   id: string;
   raw: string;
   source: string;
+  /**
+   * The archived post this came from; absent for pasted text. Promote and merge stamp it on the
+   * claims they write, so a later verifier run can find the post again.
+   */
+  dispatchId?: string;
   createdAt: string;
   tier: 1 | 2;
   extraction: Extraction;

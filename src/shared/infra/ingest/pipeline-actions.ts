@@ -78,10 +78,17 @@ export function promote(
     at: now,
     ...(c.source ? { source: c.source } : {}),
     sourceCandidateId: c.id,
+    ...(c.dispatchId ? { sourceId: c.dispatchId } : {}),
     conflicts: buildConflictMap(d.drones.list(), base.id),
   });
+  // The post id goes on every claim, so a later verifier run can find the post again.
   const drone = verifyNewClaims(
-    mergeSpecs(withAliases, e.specs, c.source),
+    mergeSpecs(
+      withAliases,
+      e.specs,
+      c.source,
+      c.dispatchId ? { sourceId: c.dispatchId } : undefined,
+    ),
     NO_CLAIMS,
     c.raw,
     d.drones.list(),
@@ -123,17 +130,21 @@ export function mergeInto(
   const target = d.drones.get(droneId);
   if (!target) return;
   const extracted = applyNormalization(c.extraction).extraction;
-  const knownClaimIds = claimIdsOf(target);
   const applyMerge = (base: Drone): Drone => {
+    // Read from `base`, not from the caller's `target`: a replay after a conflict is handed the
+    // stored copy, which may carry a claim another writer just added. That claim came from a
+    // different post, so it must not be checked against this one's text.
+    const knownClaimIds = claimIdsOf(base);
     const merged = mergeDroneIntelligence(
       withNormalizedRf(
         mergeSpecs(base, extracted.specs, c.source, {
+          ...(c.dispatchId ? { sourceId: c.dispatchId } : {}),
           extractionConfidence: extracted.confidence,
         }),
         extracted,
       ),
       extracted,
-      undefined,
+      c.dispatchId,
       { source: c.source, sourceCandidateId: c.id },
     );
     merged.evolution = [

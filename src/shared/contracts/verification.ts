@@ -19,15 +19,25 @@ export interface VerificationSummary {
 }
 
 /**
- * What one run records in the ledger: its own counts plus the catalogue's coverage after it, so
- * the coverage trend - and the drop a stricter verifier causes on purpose - is on the record.
+ * The four counts a run records before and after it, so a verifier change that lowers the
+ * verified share on purpose is on the record as a step, not read later as a regression.
  */
-export interface VerificationRunRecord extends VerificationSummary {
-  verifierVersion: string;
+export interface VerificationCoverageCounts {
   verified: number;
   uncertain: number;
   rejected: number;
   unverified: number;
+}
+
+/**
+ * What one run records in the ledger: its own counts plus the catalogue's coverage before and
+ * after it, so the coverage trend - and the drop a stricter verifier causes on purpose - is on
+ * the record.
+ */
+export interface VerificationRunRecord extends VerificationSummary {
+  verifierVersion: string;
+  before: VerificationCoverageCounts;
+  after: VerificationCoverageCounts;
 }
 
 export interface VerificationRunReport extends VerificationSummary {
@@ -81,7 +91,7 @@ export interface AutonomyEvent {
   id: string;
   at: string;
   action: AutonomyEventKind;
-  /** Who acted, specifically: "verifier:deterministic-2", a rule id, a model. */
+  /** Who acted, specifically: "verifier:deterministic-3", a rule id, a model. */
   actor: string;
   actorKind: AutonomyActorKind;
   /** What the event is about: a collection and a document id (or "catalogue" for a whole run). */

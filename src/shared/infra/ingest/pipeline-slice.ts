@@ -99,6 +99,7 @@ export function applyRelatedSystems(
       id: crypto.randomUUID(),
       raw: primary.candidate.raw,
       source,
+      ...(context.dispatchId ? { dispatchId: context.dispatchId } : {}),
       createdAt: new Date().toISOString(),
       tier: primary.candidate.tier,
       extraction,
@@ -153,8 +154,8 @@ export function applyRelatedSystems(
       !isDistinctVariant
     ) {
       if (target) {
-        // Only this slice's new claims are verified, against the post they came from.
-        const knownClaimIds = claimIdsOf(target);
+        // Only this slice's new claims are verified, against the post they came from. Read from
+        // `base`, so a conflict replay never checks another writer's claim against this text.
         const applyMerge = (base: Drone) =>
           verifyNewClaims(
             mergeDroneIntelligence(
@@ -169,7 +170,7 @@ export function applyRelatedSystems(
               context.dispatchId,
               { source },
             ),
-            knownClaimIds,
+            claimIdsOf(base),
             candidate.raw,
             d.drones.list(),
           );

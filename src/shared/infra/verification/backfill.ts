@@ -21,20 +21,66 @@ export function dispatchTextResolver(dispatches: readonly RawDispatch[]): ClaimT
   return (claim) => (claim.sourceId ? byId.get(claim.sourceId)?.text : undefined);
 }
 
+/** The source string ingestion writes on a claim from an archived post (see auto-ingest). */
+const postSource = (d: RawDispatch) => `${d.sourceName} · ${d.url}`;
+
+/**
+ * Find the archived post of a claim that was written without its id. Claims merged or promoted
+ * from the intake queue used to lose the post id on the way, though their source string is the
+ * post's own outlet and URL. Only a source that names exactly one post with text is linked; an
+ * ambiguous one stays unlinked rather than checked against the wrong article.
+ */
+export function sourcePostLinker(
+  dispatches: readonly RawDispatch[],
+): (claim: SpecClaim) => string | undefined {
+  const bySource = new Map<string, string | null>();
+  for (const d of dispatches) {
+    if (!d.text) continue;
+    const key = postSource(d);
+    bySource.set(key, bySource.has(key) ? null : d.id);
+  }
+  return (claim) => (claim.sourceId ? undefined : (bySource.get(claim.source) ?? undefined));
+}
+
+/** Stamp the post id on every claim the linker can place; the entry is returned as is otherwise. */
+export function linkSourcePosts(
+  drone: Drone,
+  postFor: (claim: SpecClaim) => string | undefined,
+): Drone {
+  let changed = false;
+  const specs = drone.specs.map((spec) => {
+    let specChanged = false;
+    const claims = spec.claims.map((claim) => {
+      const sourceId = postFor(claim);
+      if (!sourceId) return claim;
+      specChanged = changed = true;
+      return { ...claim, sourceId };
+    });
+    return specChanged ? { ...spec, claims } : spec;
+  });
+  return changed ? { ...drone, specs } : drone;
+}
+
 /** A claim the run should look at: never checked, or checked by an older verifier. */
 export const needsVerification = (claim: SpecClaim) =>
   claim.verification?.verifierVersion !== VERIFIER_VERSION;
 
+/** Whether a stored verdict was reached with the post in hand: its quote was looked up in it. */
+const checkedAgainstPost = (claim: SpecClaim) =>
+  claim.verification?.checks.some((c) => c.kind === "evidence_span" && c.verdict !== "uncertain");
+
 /**
- * needsVerification, except that a claim which already has a verdict and whose post has left the
- * archive keeps it: re-checking it without its text could only downgrade it (evidence uncertain),
- * so a verifier upgrade would read as a coverage drop it did not cause. It stays on its older
- * verifier version, visibly, rather than being silently re-judged on less evidence.
+ * needsVerification, except that a claim whose verdict was reached against its post, and whose
+ * post can no longer be found, keeps it: re-checking it without the text could only downgrade it
+ * (evidence uncertain), so a verifier upgrade would read as a coverage drop it did not cause. That
+ * covers a post pruned from the archive and a pasted text that was never archived, which ingest
+ * verified against the paste. It stays on its older verifier version, visibly. A verdict that
+ * never had the post loses nothing by being re-run, so it takes the current wording.
  */
 export const reverifiable =
   (textFor: ClaimTextResolver) =>
   (claim: SpecClaim): boolean =>
-    needsVerification(claim) && (!claim.verification || !claim.sourceId || !!textFor(claim));
+    needsVerification(claim) && (!checkedAgainstPost(claim) || !!textFor(claim));
 
 export interface BackfillResult {
   /** The catalogue with verification applied, entries unchanged where nothing changed. */
@@ -49,19 +95,22 @@ export interface BackfillResult {
 
 /**
  * Pure: verify every outdated claim of every entry against its own source text. `catalog` is the
- * set the identity check compares against; it defaults to the entries being verified.
+ * set the identity check compares against; it defaults to the entries being verified. `postFor`
+ * links claims written without a post id to their post first, so they are checked against it.
  */
 export function backfillDrones(
   drones: readonly Drone[],
   textFor: ClaimTextResolver,
   catalog: readonly Drone[] = drones,
   at = new Date().toISOString(),
+  postFor: (claim: SpecClaim) => string | undefined = () => undefined,
 ): BackfillResult {
   let checked = 0;
   let missingText = 0;
   const changed: Drone[] = [];
   const shouldVerify = reverifiable(textFor);
-  const next = drones.map((drone) => {
+  const next = drones.map((stored) => {
+    const drone = linkSourcePosts(stored, postFor);
     for (const spec of drone.specs)
       for (const claim of spec.claims) {
         if (!needsVerification(claim)) continue;
@@ -69,7 +118,7 @@ export function backfillDrones(
         if (shouldVerify(claim)) checked++;
       }
     const verified = verifyDrone(drone, textFor, catalog, at, shouldVerify);
-    if (verified !== drone) changed.push(verified);
+    if (verified !== stored) changed.push(verified);
     return verified;
   });
   return { drones: next, changed, checked, missingText };
@@ -94,10 +143,18 @@ export async function backfillCatalogue(deps: {
   drones: Pick<DroneRepository, "list" | "upsert">;
   dispatches: Pick<DispatchRepository, "list">;
 }): Promise<BackfillResult> {
-  const textFor = dispatchTextResolver(deps.dispatches.list());
+  const posts = deps.dispatches.list();
+  const textFor = dispatchTextResolver(posts);
+  const postFor = sourcePostLinker(posts);
   const catalog = deps.drones.list();
   const replay = (fresh: Drone) =>
-    verifyDrone(fresh, textFor, catalog, undefined, reverifiable(textFor));
+    verifyDrone(
+      linkSourcePosts(fresh, postFor),
+      textFor,
+      catalog,
+      undefined,
+      reverifiable(textFor),
+    );
   const at = new Date().toISOString();
   const total: BackfillResult = { drones: [], changed: [], checked: 0, missingText: 0 };
   const ids = catalog.map((d) => d.id);
@@ -111,7 +168,7 @@ export async function backfillCatalogue(deps: {
       const d = live.get(id);
       return d ? [d] : [];
     });
-    const part = backfillDrones(chunk, textFor, catalog, at);
+    const part = backfillDrones(chunk, textFor, catalog, at, postFor);
     for (const drone of part.changed) deps.drones.upsert(drone, replay);
     total.drones.push(...part.drones);
     total.changed.push(...part.changed);

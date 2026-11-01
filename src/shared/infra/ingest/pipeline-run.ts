@@ -25,7 +25,7 @@ import {
 } from "./pipeline-internal";
 import { collidesWithCatalog, learnedNegativeKeys, notASystemName } from "./pipeline-triage";
 import { applyRelatedSystems, extractionForSystem } from "./pipeline-slice";
-import { promote } from "./pipeline-actions";
+import { claimIdsOf, promote } from "./pipeline-actions";
 
 export async function runTwoTier(
   raw: string,
@@ -196,6 +196,7 @@ export async function runTwoTier(
     id: crypto.randomUUID(),
     raw,
     source,
+    ...(context.dispatchId ? { dispatchId: context.dispatchId } : {}),
     createdAt: new Date().toISOString(),
     tier,
     extraction,
@@ -256,10 +257,9 @@ export async function runTwoTier(
     const target = d.drones.get(extraction.matchId)!;
     const specsBefore = target.specs.length;
     // Only this post's new claims are verified, against this post's text: an older claim checked
-    // against a newer article would be judged on the wrong evidence.
-    const knownClaimIds = new Set(
-      target.specs.flatMap((s) => s.claims.flatMap((c) => (c.id ? [c.id] : []))),
-    );
+    // against a newer article would be judged on the wrong evidence. The set is read from `base`
+    // because a replay after a conflict receives the stored copy, which may carry a claim another
+    // writer added while this one was in flight.
     const applyMerge = (base: Drone) =>
       verifyNewClaims(
         mergeDroneIntelligence(
@@ -278,7 +278,7 @@ export async function runTwoTier(
           context.dispatchId,
           { source },
         ),
-        knownClaimIds,
+        claimIdsOf(base),
         raw,
         d.drones.list(),
       );

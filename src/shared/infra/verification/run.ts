@@ -5,6 +5,7 @@ import {
   verificationExceptions,
 } from "@/entities/drone/verification";
 import type {
+  VerificationCoverageCounts,
   VerificationExceptionRow,
   VerificationRunReport,
 } from "@/shared/contracts/verification";
@@ -14,6 +15,19 @@ import { backfillCatalogue } from "./backfill";
 
 /** How many exceptions are sent to the page; the count never is. */
 const MAX_EXCEPTIONS = 100;
+
+/** The part of a coverage snapshot a run records in the ledger. */
+const countsOf = (c: {
+  verified: number;
+  uncertain: number;
+  rejected: number;
+  unverified: number;
+}): VerificationCoverageCounts => ({
+  verified: c.verified,
+  uncertain: c.uncertain,
+  rejected: c.rejected,
+  unverified: c.unverified,
+});
 
 const median = (xs: number[]) => {
   if (!xs.length) return 0;
@@ -107,6 +121,8 @@ export async function runCatalogueVerification(deps: {
   drones: Pick<DroneRepository, "list" | "upsert">;
   dispatches: Pick<DispatchRepository, "list">;
 }): Promise<VerificationRunReport> {
+  // Before the write, so the ledger row itself carries the drop a stricter verifier causes.
+  const before = verificationCoverage(deps.drones.list());
   const result = await backfillCatalogue(deps);
   const report = verificationReport(deps.drones.list(), {
     at: new Date().toISOString(),
@@ -122,10 +138,8 @@ export async function runCatalogueVerification(deps: {
         checked: report.checked,
         changed: report.changed,
         missingText: report.missingText,
-        verified: report.coverage.verified,
-        uncertain: report.coverage.uncertain,
-        rejected: report.coverage.rejected,
-        unverified: report.coverage.unverified,
+        before: countsOf(before),
+        after: countsOf(report.coverage),
       },
     });
   } catch {

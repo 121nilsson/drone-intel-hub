@@ -32,9 +32,10 @@ import { outletKey } from "@/entities/source/outlet-record";
 
 /**
  * Bumping this re-verifies the whole catalogue on the next backfill. 2: identity anchored to the
- * evidence sentence with the extractor's strict matcher; sources counted per outlet.
+ * evidence sentence with the extractor's strict matcher; sources counted per outlet. 3: claims
+ * written without a post id are linked back to their post, and a missing post says why.
  */
-export const VERIFIER_VERSION = "deterministic-2";
+export const VERIFIER_VERSION = "deterministic-3";
 
 export type ClaimTextResolver = (claim: SpecClaim) => string | undefined;
 
@@ -118,7 +119,14 @@ function evidenceCheck(claim: SpecClaim, text: string | undefined, at: string): 
       verdict: "uncertain",
       applicable: true,
       confidence: 0.2,
-      detail: "source post is not in the archive",
+      // Three different gaps, told apart so the exception list points at the right fix: a post
+      // pruned from the archive, a reference page that was never a post, and a claim written
+      // without a link to the post it came from.
+      detail: claim.sourceId
+        ? "source post is not in the archive"
+        : claim.extractionEngine === "reference"
+          ? "reference import: there is no post to check against"
+          : "the claim records no source post",
       evidence: proof,
       ...(claim.sourceId ? { sourceId: claim.sourceId } : {}),
       at,

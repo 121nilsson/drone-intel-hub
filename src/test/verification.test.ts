@@ -21,11 +21,15 @@ import {
   backfillCatalogue,
   backfillDrones,
   dispatchTextResolver,
+  linkSourcePosts,
   needsVerification,
+  sourcePostLinker,
 } from "@/shared/infra/verification/backfill";
 import { verificationReport } from "@/shared/infra/verification/run";
 import type { RawDispatch } from "@/entities/dispatch/types";
+import type { Candidate } from "@/entities/drone/types";
 import type { DroneRepository } from "@/shared/contracts/repository";
+import { mergeInto, promote } from "@/shared/infra/ingest/pipeline-actions";
 
 const AT = "2026-10-20T12:00:00.000Z";
 
@@ -349,9 +353,18 @@ describe("backfill", () => {
   it("keeps an older verdict rather than re-judge a claim whose post has left the archive", () => {
     const fresh = catalogue();
     const claim = fresh.specs[0]!.claims[0]!;
-    const older = {
-      state: "verified" as const,
-      checks: [],
+    const older: ClaimVerification = {
+      state: "verified",
+      checks: [
+        {
+          id: "evidence_span",
+          kind: "evidence_span",
+          verdict: "pass",
+          applicable: true,
+          verifierVersion: "deterministic-1",
+          at: AT,
+        },
+      ],
       confidence: 1,
       coverage: 1,
       independentSources: 1,
@@ -366,6 +379,36 @@ describe("backfill", () => {
     expect(result.changed).toHaveLength(0);
     expect(result.missingText).toBe(1);
     expect(result.drones[0]!.specs[0]!.claims[0]!.verification).toBe(older);
+  });
+
+  it("re-runs a verdict that never had the post, since it loses nothing", () => {
+    const fresh = catalogue();
+    const claim = { ...fresh.specs[0]!.claims[0]! };
+    delete claim.sourceId;
+    const blind = verifyClaim({ drone: fresh, spec: fresh.specs[0]!, claim, at: AT })!;
+    const stored: Drone = {
+      ...fresh,
+      specs: [
+        {
+          ...fresh.specs[0]!,
+          claims: [{ ...claim, verification: { ...blind, verifierVersion: "deterministic-1" } }],
+        },
+      ],
+    };
+    const result = backfillDrones([stored], () => undefined, undefined, AT);
+    const check = result.drones[0]!.specs[0]!.claims[0]!.verification!.checks[0]!;
+    expect(check.detail).toBe("the claim records no source post");
+    expect(check.verifierVersion).toBe(VERIFIER_VERSION);
+  });
+
+  it("says a reference import has no post, rather than that its post was lost", () => {
+    const fresh = catalogue();
+    const claim = { ...fresh.specs[0]!.claims[0]!, extractionEngine: "reference" };
+    delete claim.sourceId;
+    const v = verifyClaim({ drone: fresh, spec: fresh.specs[0]!, claim, at: AT })!;
+    expect(v.checks.find((c) => c.kind === "evidence_span")?.detail).toBe(
+      "reference import: there is no post to check against",
+    );
   });
 
   it("reports claims whose source post is not in the archive", () => {
@@ -444,5 +487,179 @@ describe("coverage and report", () => {
     expect(report.coverage.checked).toBe(2);
     expect(report.coverage.analyst).toBe(1);
     expect(report.medianIndependentSources).toBe(1);
+  });
+});
+
+describe("merge verification", () => {
+  /**
+   * A conflicting write is retried against the stored copy. That copy may carry a claim another
+   * session added while this one was in flight; it came from a different post, so it must keep
+   * whatever verdict it has rather than be judged against this post's text.
+   */
+  it("does not re-verify another writer's claim against this post's text", () => {
+    const oldClaim = point(2_000, "km", "a", { evidence: "2,000 km" });
+    const target = drone("x", "X", [spec("range.max", "km", [oldClaim])]);
+    const foreign: SpecClaim = {
+      id: "foreign",
+      value: 40_000,
+      source: "other",
+      date: "2026-10-02T00:00:00.000Z",
+      evidence: "40 000 km",
+    };
+    const fresh = drone("x", "X", [spec("range.max", "km", [oldClaim, foreign])]);
+    let applied: Drone | undefined;
+    const drones = {
+      list: () => [target],
+      get: () => target,
+      upsert: (merged: Drone, replay?: (base: Drone) => Drone) => {
+        applied = replay ? replay(fresh) : merged;
+      },
+      remove: () => {},
+      search: () => [target],
+    };
+    const candidates = {
+      list: () => [],
+      add: () => {},
+      update: () => {},
+      remove: () => {},
+    };
+    const candidate: Candidate = {
+      id: "candidate-1",
+      raw: "The range is 2,000 km.",
+      source: "src",
+      createdAt: "2026-10-02T00:00:00.000Z",
+      tier: 1,
+      status: "pending",
+      extraction: {
+        name: "X",
+        aliases: [],
+        operators: [],
+        specs: [{ key: "range", label: "Range", value: 2_000, raw: "2,000 km", unit: "km" }],
+        rfBands: [],
+        confidence: 0.9,
+        rationale: "test",
+      },
+    };
+
+    mergeInto(candidate, "x", { drones, candidates });
+
+    const claims = (applied ?? target).specs.flatMap((s) => s.claims);
+    expect(claims.find((c) => c.id === "foreign")?.verification).toBeUndefined();
+    expect(
+      claims.find((c) => c.value === 2_000 && c.id !== oldClaim.id)?.verification,
+    ).toBeTruthy();
+  });
+});
+
+describe("linking claims to their post", () => {
+  const post = (id: string, url: string, text = "X has a range of 2,000 km.") =>
+    ({ id, sourceName: "Outlet", url, text }) as unknown as RawDispatch;
+  const unlinked = (source: string) =>
+    drone("x", "X", [
+      spec("range.max", "km", [point(2_000, "km", source, { evidence: "2,000 km" })]),
+    ]);
+
+  it("links a claim to the one post its source string names", () => {
+    const postFor = sourcePostLinker([post("p1", "https://a/1"), post("p2", "https://a/2")]);
+    const linked = linkSourcePosts(unlinked("Outlet · https://a/1"), postFor);
+    expect(linked.specs[0]!.claims[0]!.sourceId).toBe("p1");
+  });
+
+  it("leaves a claim unlinked when its source names two posts", () => {
+    const postFor = sourcePostLinker([post("p1", "https://a/1"), post("p2", "https://a/1")]);
+    const entry = unlinked("Outlet · https://a/1");
+    expect(linkSourcePosts(entry, postFor)).toBe(entry);
+  });
+
+  it("never links to a post whose text was stripped", () => {
+    const postFor = sourcePostLinker([post("p1", "https://a/1", "")]);
+    const entry = unlinked("Outlet · https://a/1");
+    expect(linkSourcePosts(entry, postFor)).toBe(entry);
+  });
+
+  it("never replaces a post id a claim already has", () => {
+    const postFor = sourcePostLinker([post("p1", "https://a/1")]);
+    const claim = point(2_000, "km", "Outlet · https://a/1", { sourceId: "p9" });
+    expect(postFor(claim)).toBeUndefined();
+  });
+
+  it("verifies a linked claim against the post it was linked to", () => {
+    const posts = [post("p1", "https://a/1")];
+    const result = backfillDrones(
+      [unlinked("Outlet · https://a/1")],
+      dispatchTextResolver(posts),
+      undefined,
+      AT,
+      sourcePostLinker(posts),
+    );
+    const claim = result.drones[0]!.specs[0]!.claims[0]!;
+    expect(claim.sourceId).toBe("p1");
+    expect(claim.verification?.checks.find((c) => c.kind === "evidence_span")?.verdict).toBe(
+      "pass",
+    );
+    expect(result.missingText).toBe(0);
+  });
+});
+
+describe("queue items keep their post", () => {
+  const queued = (over: Partial<Candidate> = {}): Candidate => ({
+    id: "cand-1",
+    raw: "X has a range of 2,000 km.",
+    source: "Outlet · https://a/1",
+    dispatchId: "p1",
+    createdAt: AT,
+    tier: 1,
+    status: "pending",
+    extraction: {
+      name: "X",
+      aliases: [],
+      operators: [],
+      specs: [{ key: "range", label: "Range", value: 2_000, raw: "2,000 km", unit: "km" }],
+      rfBands: [],
+      confidence: 0.9,
+      rationale: "test",
+    },
+    ...over,
+  });
+  const repos = (entries: Drone[]) => {
+    const written: Drone[] = [];
+    return {
+      written,
+      drones: {
+        list: () => entries,
+        get: (id: string) => entries.find((e) => e.id === id),
+        upsert: (d: Drone) => {
+          written.push(d);
+        },
+        remove: () => {},
+        search: () => entries,
+      },
+      candidates: { list: () => [], add: () => {}, update: () => {}, remove: () => {} },
+    };
+  };
+
+  it("stamps the post id on the claims a promoted item writes", () => {
+    const r = repos([]);
+    const promoted = promote(queued(), r);
+    const claims = promoted.specs.flatMap((s) => s.claims);
+    expect(claims.length).toBeGreaterThan(0);
+    expect(claims.every((c) => c.sourceId === "p1")).toBe(true);
+  });
+
+  it("stamps the post id on the claims a merged item writes", () => {
+    const r = repos([drone("x", "X", [])]);
+    mergeInto(queued(), "x", r);
+    const claims = r.written.flatMap((d) => d.specs.flatMap((s) => s.claims));
+    expect(claims.length).toBeGreaterThan(0);
+    expect(claims.every((c) => c.sourceId === "p1")).toBe(true);
+  });
+
+  it("writes no post id for pasted text, which has none", () => {
+    const r = repos([drone("x", "X", [])]);
+    const pasted = queued({ source: "Analyst paste" });
+    delete pasted.dispatchId;
+    mergeInto(pasted, "x", r);
+    const claims = r.written.flatMap((d) => d.specs.flatMap((s) => s.claims));
+    expect(claims.some((c) => c.sourceId)).toBe(false);
   });
 });
