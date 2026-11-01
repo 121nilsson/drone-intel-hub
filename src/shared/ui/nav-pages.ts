@@ -5,8 +5,8 @@ export interface NavPage {
 }
 
 /**
- * Twelve pages in four groups by the job they serve: reading the intel, the catalogue built from
- * it, and the engine that reads it. A flat row of twelve wrapped at laptop widths and gave the
+ * The pages in three groups by the job they serve: reading the intel, the catalogue built from it,
+ * and the engine that reads it. A flat row of every page wrapped at laptop widths and gave the
  * daily pages and the maintenance pages the same weight.
  */
 export const NAV_GROUPS: readonly {
@@ -40,6 +40,7 @@ export const NAV_GROUPS: readonly {
       { to: "/specs", label: "Spec engine", hint: "Attributes across the catalog" },
       { to: "/taxonomy", label: "Taxonomy", hint: "Map unknown terms" },
       { to: "/evaluation", label: "Evaluation", hint: "Measure and teach the heuristic" },
+      { to: "/autonomy", label: "Autonomy", hint: "Claim verification and decisions" },
     ],
   },
 ];

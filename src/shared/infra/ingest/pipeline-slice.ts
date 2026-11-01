@@ -13,7 +13,8 @@ import {
   linkVariantReplay,
   withNormalizedRf,
 } from "./pipeline-internal";
-import { promote } from "./pipeline-actions";
+import { claimIdsOf, promote } from "./pipeline-actions";
+import { verifyNewClaims } from "@/entities/drone/verification";
 import { counterpartIdsFor, linkCounterparts } from "@/entities/drone/relations";
 import { linkVariant, mergeDroneIntelligence } from "@/entities/drone/merge-intelligence";
 import { mergeSpecs } from "@/entities/drone/spec-engine";
@@ -152,18 +153,25 @@ export function applyRelatedSystems(
       !isDistinctVariant
     ) {
       if (target) {
+        // Only this slice's new claims are verified, against the post they came from.
+        const knownClaimIds = claimIdsOf(target);
         const applyMerge = (base: Drone) =>
-          mergeDroneIntelligence(
-            withNormalizedRf(
-              mergeSpecs(base, extraction.specs, source, {
-                ...(context.dispatchId ? { sourceId: context.dispatchId } : {}),
-                extractionConfidence: extraction.confidence,
-              }),
+          verifyNewClaims(
+            mergeDroneIntelligence(
+              withNormalizedRf(
+                mergeSpecs(base, extraction.specs, source, {
+                  ...(context.dispatchId ? { sourceId: context.dispatchId } : {}),
+                  extractionConfidence: extraction.confidence,
+                }),
+                extraction,
+              ),
               extraction,
+              context.dispatchId,
+              { source },
             ),
-            extraction,
-            context.dispatchId,
-            { source },
+            knownClaimIds,
+            candidate.raw,
+            d.drones.list(),
           );
         const merged = applyMerge(target);
         d.drones.upsert(merged, applyMerge);

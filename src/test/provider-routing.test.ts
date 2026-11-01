@@ -11,6 +11,7 @@ import { readProviderEnvConfig, readProviderRouting } from "@/shared/infra/provi
  */
 
 const KEYS = [
+  "DEEPRELAY_API_KEY",
   "NVIDIA_API_KEY",
   "GROQ_API_KEY",
   "OPENROUTER_API_KEY",
@@ -51,7 +52,13 @@ describe("readProviderRouting", () => {
   it("lists every enabled provider even when none has a key", async () => {
     const r = await readProviderRouting();
     expect(r).toBeDefined();
-    expect(r!.providers.map((p) => p.name)).toEqual(["nvidia", "groq", "openrouter", "mistral"]);
+    expect(r!.providers.map((p) => p.name)).toEqual([
+      "deeprelay",
+      "nvidia",
+      "groq",
+      "openrouter",
+      "mistral",
+    ]);
     expect(r!.available).toEqual([]);
     expect(r!.multiProvider).toBe(false);
   });
@@ -99,7 +106,7 @@ describe("readProviderRouting", () => {
     const byName = Object.fromEntries(r!.providers.map((p) => [p.name, p]));
     expect(byName["groq"]!.defaultModel).toBe("openai/gpt-oss-20b");
     expect(byName["openrouter"]!.defaultModel).toBe("openrouter/free");
-    expect(r!.providers.map((p) => p.priority)).toEqual([10, 20, 30, 40]);
+    expect(r!.providers.map((p) => p.priority)).toEqual([5, 10, 20, 30, 40]);
   });
 
   // The panel answers "what happens to my tier if that provider goes down?" from these fields,
@@ -176,7 +183,7 @@ describe("readProviderEnvConfig", () => {
     expect(cfg.hasKey).toBe(true);
     expect(cfg.baseUrl).toBe("https://integrate.api.nvidia.com/v1");
     expect(cfg.tier1Model).toBe("nvidia/nemotron-3-super-120b-a12b");
-    expect(cfg.routing?.providers).toHaveLength(4);
+    expect(cfg.routing?.providers).toHaveLength(5);
   });
 
   it("counts any provider's key, and reports that provider's URL and models", async () => {

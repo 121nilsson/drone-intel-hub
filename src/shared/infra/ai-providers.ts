@@ -62,6 +62,18 @@ export interface MultiProviderConfig {
 /** Built-in provider configurations */
 export const BUILTIN_PROVIDERS: AIProvider[] = [
   {
+    // Paid flat-rate plan, so it answers first when its key is set; the free tiers below stay as
+    // fallbacks. deepseek-v4.1-flash is the plan's baseline model and serves both tiers. The only
+    // other model worth setting is deeprelay/glm-5.3-flash (DEEPRELAY_TIER2_MODEL), which costs
+    // 1.75x the token credits - a cost decision, not a default.
+    name: "deeprelay",
+    baseUrl: "https://api.deeprelay.ai/v1",
+    apiKeyEnv: "DEEPRELAY_API_KEY",
+    defaultModel: "deeprelay/deepseek-v4.1-flash",
+    priority: 5,
+    enabled: true,
+  },
+  {
     name: "nvidia",
     baseUrl: "https://integrate.api.nvidia.com/v1",
     apiKeyEnv: "NVIDIA_API_KEY",

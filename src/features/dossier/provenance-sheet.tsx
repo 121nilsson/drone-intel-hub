@@ -1,7 +1,14 @@
 import { Link } from "@tanstack/react-router";
 import { ExternalSourceLink, SourceRef } from "@/shared/ui/links";
-import { useState } from "react";
-import type { ClaimIssue, SpecAttribute, SpecClaim } from "@/entities/drone/types";
+import { useState, type ReactNode } from "react";
+import type {
+  ClaimIssue,
+  ClaimVerification,
+  SpecAttribute,
+  SpecClaim,
+  VerificationCheck,
+  VerificationKind,
+} from "@/entities/drone/types";
 import { useDispatches, useDrones, useServices, useSources } from "@/shared/infra/services";
 import {
   Sheet,
@@ -36,6 +43,48 @@ const ISSUE_BUTTON: Record<ClaimIssue, string> = {
   system: "About another system",
   attribute: "About another attribute",
 };
+
+/** What each deterministic check asks, in the reader's words. */
+const CHECK_LABEL: Record<VerificationKind, string> = {
+  evidence_span: "Evidence in the source",
+  unit_dimension: "Unit matches the attribute",
+  bounds: "Figure is plausible",
+  identity: "Evidence names this system",
+  ai_entailment: "AI read the source as saying this",
+  cross_source: "Other sources agree",
+  reference: "Matches the reference",
+};
+
+const checkMark = (c: VerificationCheck) =>
+  !c.applicable ? "·" : c.verdict === "pass" ? "✓" : c.verdict === "fail" ? "✕" : "?";
+
+const checkTone = (c: VerificationCheck) =>
+  !c.applicable
+    ? "text-muted-foreground"
+    : c.verdict === "pass"
+      ? "text-primary"
+      : c.verdict === "fail"
+        ? "text-destructive"
+        : "text-muted-foreground";
+
+/**
+ * The machine's own verdict, shown only when no human verdict is present: an analyst's word
+ * outranks the check, and a verified claim needs no badge at all.
+ */
+function verificationMark(v: ClaimVerification | undefined, reviewed: boolean): ReactNode {
+  if (!v || reviewed || v.state === "verified") return null;
+  const reason =
+    v.checks.find((c) => c.verdict === "fail")?.detail ??
+    v.checks.find((c) => c.verdict === "uncertain" && c.applicable)?.detail;
+  return (
+    <span
+      className={`shrink-0 ${v.state === "rejected" ? "text-destructive" : "opacity-70"}`}
+      title={`Deterministic check: ${v.state}${reason ? ` — ${reason}` : ""}`}
+    >
+      {v.state === "rejected" ? "✕ check failed" : "? uncertain"}
+    </span>
+  );
+}
 
 /** Short chip naming a claim's source; tapping opens the provenance sheet. */
 export function ClaimChip({ claim, onOpen }: { claim: SpecClaim; onOpen: () => void }) {
@@ -82,6 +131,7 @@ export function ClaimChip({ claim, onOpen }: { claim: SpecClaim; onOpen: () => v
           {rejected ? "✕ rejected" : "✓ confirmed"}
         </span>
       )}
+      {verificationMark(claim.verification, Boolean(claim.review))}
     </ChipButton>
   );
 }
@@ -381,6 +431,67 @@ function ClaimReviewPanel({
   );
 }
 
+/**
+ * What the machine checked on one claim and what it concluded. Read-only on purpose: the verifier
+ * never edits a claim, and this offers no buttons - a correction is the analyst's job, below.
+ */
+function VerificationPanel({ verification }: { verification: ClaimVerification | undefined }) {
+  if (!verification)
+    return (
+      <div className="border-t border-border pt-4">
+        <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+          Deterministic check
+        </p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          No machine check on this claim — an analyst entered it, or it predates the verifier.
+        </p>
+      </div>
+    );
+  return (
+    <div className="border-t border-border pt-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+          Deterministic check
+        </p>
+        <Tag
+          tone={
+            verification.state === "verified"
+              ? "success"
+              : verification.state === "rejected"
+                ? "danger"
+                : "muted"
+          }
+        >
+          {verification.state}
+        </Tag>
+        <Tag>{Math.round(verification.coverage * 100)}% decided</Tag>
+        {verification.independentSources > 1 && (
+          <Tag>{verification.independentSources} outlets agree</Tag>
+        )}
+      </div>
+      <ul className="mt-2 space-y-1">
+        {verification.checks.map((c) => (
+          <li key={c.id} className="flex gap-2 text-xs">
+            <span className={`w-3 shrink-0 text-center font-mono ${checkTone(c)}`}>
+              {checkMark(c)}
+            </span>
+            <span className="min-w-0">
+              <span className="font-mono text-[11px] text-muted-foreground">
+                {CHECK_LABEL[c.kind]}
+              </span>
+              {c.detail && <span className="text-muted-foreground"> — {c.detail}</span>}
+              {!c.applicable && <span className="text-muted-foreground"> (not applicable)</span>}
+            </span>
+          </li>
+        ))}
+      </ul>
+      <p className="mt-1 font-mono text-[10px] text-muted-foreground">
+        {verification.verifierVersion} · {verification.at.slice(0, 10)}
+      </p>
+    </div>
+  );
+}
+
 export function ProvenanceSheet({
   selection,
   droneId,
@@ -470,6 +581,7 @@ export function ProvenanceSheet({
                   </Tag>
                 )}
               </div>
+              <VerificationPanel verification={claim.verification} />
               <ClaimReviewPanel
                 key={`${selection.spec.key}|${claimKey(claim)}`}
                 droneId={droneId}

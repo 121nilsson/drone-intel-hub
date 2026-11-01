@@ -136,6 +136,9 @@ Settings page shows resolved providers, models, and fallback order.
 - **Feed:** dispatch `analysis` metadata (engine, model, prompt version, escalation reasons) on
   `dispatches-page.tsx`.
 - **Sources:** live sync progress via polling `getSyncState`.
+- **Autonomy (`/autonomy`):** deterministic verification coverage (verified / uncertain /
+  rejected / not yet checked), the claims worth a look, the `autonomy_events` decision ledger
+  (migration 018) and rule decisions. Verification is measured only; it does not change consensus.
 
 ---
 

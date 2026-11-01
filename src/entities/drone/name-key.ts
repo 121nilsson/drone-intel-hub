@@ -92,28 +92,100 @@ export function phoneticKey(s: string): string {
 let lastText = "";
 let lastHay = "";
 
+/**
+ * How one name is looked for, folded once. A name is checked against every post (and, by the
+ * verifier, against every sentence of every claim), so folding it per call dominated the cost.
+ */
+interface PhoneticNeedle {
+  /** ` needle ` as it must occur in the folded text; undefined for a key too short to match. */
+  exact?: string;
+  /** The plural form a designation with a variant letter may also take ("F-35As"). */
+  plural?: string;
+  /** Case endings after a name that ends in a letter ("Ланцетом"). */
+  inflected?: RegExp;
+  /** A substring every inflected match contains, tested first because it is far cheaper. */
+  stem?: string;
+}
+
+const needles = new Map<string, PhoneticNeedle>();
+
+function needleFor(name: string): PhoneticNeedle {
+  const cached = needles.get(name);
+  if (cached) return cached;
+  const needle = phoneticText(name);
+  let out: PhoneticNeedle = {};
+  // Very short keys ("ka", "s3") match everywhere once folded.
+  if (needle.replace(/ /g, "").length >= 4) {
+    out = { exact: ` ${needle} ` };
+    // A designation's variant letter is identity, not a case ending: "F-35A" must not match
+    // "F-35", "F-35B" or "F-35C", the way "Lancet-3" must not match "Lancet-3M" below. Only an
+    // English plural is allowed ("F-35As").
+    if (/\d[a-z]{1,2}$/.test(needle)) out.plural = ` ${needle}s `;
+    // Russian and Ukrainian inflect names ("Шахеды", "Ланцетом", "Герани"): allow a short case
+    // ending after a name that ends in a letter. Not after a digit - "Lancet-3" must not match
+    // "Lancet-3M", which is a different variant.
+    else if (/[a-z]$/.test(needle) && needle.length >= 5) {
+      const stem = needle.replace(/[aeiou]$/, "");
+      out.inflected = new RegExp(` ${stem.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}[a-z]{0,4} `);
+      out.stem = ` ${stem}`;
+    }
+  }
+  needles.set(name, out);
+  return out;
+}
+
 /** True when `name` appears in `text` as whole words, in any of the spellings above. */
 export function mentionsPhonetic(text: string, name: string): boolean {
-  const needle = phoneticText(name);
-  // Very short keys ("ka", "s3") match everywhere once folded.
-  if (needle.replace(/ /g, "").length < 4) return false;
+  const { exact, plural, inflected, stem } = needleFor(name);
+  if (!exact) return false;
   if (text !== lastText) {
     lastText = text;
     lastHay = ` ${phoneticText(text)} `;
   }
   const hay = lastHay;
-  if (hay.includes(` ${needle} `)) return true;
-  // A designation's variant letter is identity, not a case ending: "F-35A" must not match
-  // "F-35", "F-35B" or "F-35C", the way "Lancet-3" must not match "Lancet-3M" below. Only an
-  // English plural is allowed ("F-35As").
-  if (/\d[a-z]{1,2}$/.test(needle)) return hay.includes(` ${needle}s `);
-  // Russian and Ukrainian inflect names ("Шахеды", "Ланцетом", "Герани"): allow a short case
-  // ending after a name that ends in a letter. Not after a digit - "Lancet-3" must not match
-  // "Lancet-3M", which is a different variant.
-  if (!/[a-z]$/.test(needle) || needle.length < 5) return false;
-  const stem = needle.replace(/[aeiou]$/, "");
-  const escaped = stem.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return new RegExp(` ${escaped}[a-z]{0,4} `).test(hay);
+  if (hay.includes(exact)) return true;
+  if (plural) return hay.includes(plural);
+  return inflected && stem && hay.includes(stem) ? inflected.test(hay) : false;
+}
+
+/**
+ * Compiled patterns per name. The verifier checks every claim against every catalog name, and a
+ * backfill multiplies that out, so each pattern is built once. Never global, so never stateful.
+ */
+const exactPatterns = new Map<string, RegExp>();
+
+/** The lowercased form of the last text searched, for the substring pre-check in mentions(). */
+let lastExactText = "";
+let lastExactLower = "";
+
+const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/** Exact token-boundary match: "Geran-2" never matches inside "Geran-5" or "Geran-25". */
+export function mentions(text: string, name: string): boolean {
+  const trimmed = name.trim();
+  if (trimmed.length < 2) return false;
+  // A name absent as a plain substring cannot match on token boundaries either; checking that
+  // first skips the regex for nearly every name of a catalog scanned against one text.
+  if (text !== lastExactText) {
+    lastExactText = text;
+    lastExactLower = text.toLowerCase();
+  }
+  if (!lastExactLower.includes(trimmed.toLowerCase())) return false;
+  let re = exactPatterns.get(trimmed);
+  if (!re) {
+    re = new RegExp(`(?<![\\p{L}\\p{N}-])${escapeRe(trimmed)}(?![\\p{L}\\p{N}]|-\\p{N})`, "iu");
+    exactPatterns.set(trimmed, re);
+  }
+  return re.test(text);
+}
+
+/**
+ * mentions(), or the same name in another script or romanisation ("Ланцетом" for Lancet). The one
+ * definition of "this text names that system", shared by the extractor and the verifier so the
+ * two can never disagree about identity.
+ */
+export function mentionsName(text: string, name: string): boolean {
+  return mentions(text, name) || mentionsPhonetic(text, name);
 }
 
 /**

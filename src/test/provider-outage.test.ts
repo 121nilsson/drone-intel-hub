@@ -14,6 +14,7 @@ process.env["PROVIDER_TIMEOUT_MS"] = "0";
 const { chatCompletionOnce, resetProviderState } = await import("@/shared/infra/ai-proxy.server");
 
 const ENV = [
+  "DEEPRELAY_API_KEY",
   "NVIDIA_API_KEY",
   "GROQ_API_KEY",
   "OPENROUTER_API_KEY",

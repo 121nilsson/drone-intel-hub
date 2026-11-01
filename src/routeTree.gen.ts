@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AutonomyRouteImport } from './routes/autonomy'
 import { Route as CatalogRouteImport } from './routes/catalog'
 import { Route as CounterpartsRouteImport } from './routes/counterparts'
 import { Route as DispatchesRouteImport } from './routes/dispatches'
@@ -26,6 +27,11 @@ import { Route as SystemsIdRouteImport } from './routes/systems/$id'
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AutonomyRoute = AutonomyRouteImport.update({
+  id: '/autonomy',
+  path: '/autonomy',
   getParentRoute: () => rootRouteImport,
 } as any)
 const CatalogRoute = CatalogRouteImport.update({
@@ -91,6 +97,7 @@ const SystemsIdRoute = SystemsIdRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/autonomy': typeof AutonomyRoute
   '/catalog': typeof CatalogRoute
   '/counterparts': typeof CounterpartsRoute
   '/dispatches': typeof DispatchesRoute
@@ -106,6 +113,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/autonomy': typeof AutonomyRoute
   '/catalog': typeof CatalogRoute
   '/counterparts': typeof CounterpartsRoute
   '/dispatches': typeof DispatchesRoute
@@ -122,6 +130,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/autonomy': typeof AutonomyRoute
   '/catalog': typeof CatalogRoute
   '/counterparts': typeof CounterpartsRoute
   '/dispatches': typeof DispatchesRoute
@@ -139,6 +148,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/autonomy'
     | '/catalog'
     | '/counterparts'
     | '/dispatches'
@@ -154,6 +164,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/autonomy'
     | '/catalog'
     | '/counterparts'
     | '/dispatches'
@@ -169,6 +180,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/autonomy'
     | '/catalog'
     | '/counterparts'
     | '/dispatches'
@@ -185,6 +197,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AutonomyRoute: typeof AutonomyRoute
   CatalogRoute: typeof CatalogRoute
   CounterpartsRoute: typeof CounterpartsRoute
   DispatchesRoute: typeof DispatchesRoute
@@ -206,6 +219,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/autonomy': {
+      id: '/autonomy'
+      path: '/autonomy'
+      fullPath: '/autonomy'
+      preLoaderRoute: typeof AutonomyRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/catalog': {
@@ -297,6 +317,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AutonomyRoute: AutonomyRoute,
   CatalogRoute: CatalogRoute,
   CounterpartsRoute: CounterpartsRoute,
   DispatchesRoute: DispatchesRoute,

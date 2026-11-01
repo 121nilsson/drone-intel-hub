@@ -22,4 +22,12 @@ describe("App routing", () => {
 
     expect(matches.at(-1)?.routeId).toBe("/procurement");
   });
+
+  it("serves the autonomy page", () => {
+    const router = createRouter({ routeTree, context: { queryClient: new QueryClient() } });
+
+    const matches = router.matchRoutes("/autonomy");
+
+    expect(matches.at(-1)?.routeId).toBe("/autonomy");
+  });
 });

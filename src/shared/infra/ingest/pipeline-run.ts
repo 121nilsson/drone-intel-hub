@@ -12,6 +12,7 @@ import { counterpartIdsFor, linkCounterparts } from "@/entities/drone/relations"
 import { combineExtractions, needsDeepAI, needsFastAI } from "@/entities/drone/extraction-gates";
 import { outletKey } from "@/entities/source/outlet-record";
 import { linkVariant, mergeDroneIntelligence } from "@/entities/drone/merge-intelligence";
+import { verifyNewClaims } from "@/entities/drone/verification";
 import type { AnalysisContext, PipelineTrace, PipelineResult } from "./pipeline-types";
 import {
   annotate,
@@ -254,22 +255,32 @@ export async function runTwoTier(
     // The guard above (re-checked synchronously, no awaits since) guarantees this exists.
     const target = d.drones.get(extraction.matchId)!;
     const specsBefore = target.specs.length;
+    // Only this post's new claims are verified, against this post's text: an older claim checked
+    // against a newer article would be judged on the wrong evidence.
+    const knownClaimIds = new Set(
+      target.specs.flatMap((s) => s.claims.flatMap((c) => (c.id ? [c.id] : []))),
+    );
     const applyMerge = (base: Drone) =>
-      mergeDroneIntelligence(
-        withNormalizedRf(
-          mergeSpecs(base, extraction.specs, source, {
-            ...(context.dispatchId ? { sourceId: context.dispatchId } : {}),
-            extractionConfidence: extraction.confidence,
-            ...(extraction.metadata?.engine
-              ? { extractionEngine: extraction.metadata.engine }
-              : {}),
-            ...(extraction.metadata?.model ? { model: extraction.metadata.model } : {}),
-          }),
+      verifyNewClaims(
+        mergeDroneIntelligence(
+          withNormalizedRf(
+            mergeSpecs(base, extraction.specs, source, {
+              ...(context.dispatchId ? { sourceId: context.dispatchId } : {}),
+              extractionConfidence: extraction.confidence,
+              ...(extraction.metadata?.engine
+                ? { extractionEngine: extraction.metadata.engine }
+                : {}),
+              ...(extraction.metadata?.model ? { model: extraction.metadata.model } : {}),
+            }),
+            extraction,
+          ),
           extraction,
+          context.dispatchId,
+          { source },
         ),
-        extraction,
-        context.dispatchId,
-        { source },
+        knownClaimIds,
+        raw,
+        d.drones.list(),
       );
     const merged = applyMerge(target);
     d.drones.upsert(merged, applyMerge);

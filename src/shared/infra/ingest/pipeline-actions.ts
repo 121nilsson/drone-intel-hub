@@ -13,6 +13,14 @@ import { mergeSpecs } from "@/entities/drone/spec-engine";
 import { organizationKey } from "@/entities/drone/types";
 import { buildConflictMap, intakeAliasClaims } from "@/entities/drone/alias-claims";
 import { toRFLink } from "@/entities/normalization/apply";
+import { verifyNewClaims } from "@/entities/drone/verification";
+
+/** A promoted entry has no prior claims, so every claim it carries is new. */
+const NO_CLAIMS: ReadonlySet<string> = new Set();
+
+/** Claim ids already on an entry, so a merge verifies only what it added. */
+export const claimIdsOf = (drone: Drone): Set<string> =>
+  new Set(drone.specs.flatMap((s) => s.claims.flatMap((c) => (c.id ? [c.id] : []))));
 
 export function promote(
   c: Candidate,
@@ -72,7 +80,12 @@ export function promote(
     sourceCandidateId: c.id,
     conflicts: buildConflictMap(d.drones.list(), base.id),
   });
-  const drone = mergeSpecs(withAliases, e.specs, c.source);
+  const drone = verifyNewClaims(
+    mergeSpecs(withAliases, e.specs, c.source),
+    NO_CLAIMS,
+    c.raw,
+    d.drones.list(),
+  );
   d.drones.upsert(drone);
   // A promoted system often arrives alongside ones already catalogued ("Shahed-136 seen
   // with Geran-2"), so seed its relations from the same systems[] the auto-merge path uses.
@@ -110,7 +123,8 @@ export function mergeInto(
   const target = d.drones.get(droneId);
   if (!target) return;
   const extracted = applyNormalization(c.extraction).extraction;
-  const applyMerge = (base: Drone) => {
+  const knownClaimIds = claimIdsOf(target);
+  const applyMerge = (base: Drone): Drone => {
     const merged = mergeDroneIntelligence(
       withNormalizedRf(
         mergeSpecs(base, extracted.specs, c.source, {
@@ -131,7 +145,7 @@ export function mergeInto(
         source: c.source,
       },
     ];
-    return merged;
+    return verifyNewClaims(merged, knownClaimIds, c.raw, d.drones.list());
   };
   d.drones.upsert(applyMerge(target), applyMerge);
   d.candidates.update(c.id, { status: "merged", resolvedInto: droneId });

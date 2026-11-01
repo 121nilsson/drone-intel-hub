@@ -2,48 +2,17 @@
  * System-name detection and catalog resolution. Pure text logic: exact token boundaries keep
  * variant numbers strict ("Geran-2" never matches "Geran-5"), phonetic keys bridge scripts.
  */
-import { mentionsPhonetic, phoneticKey } from "@/entities/drone/name-key";
-import { cleanAliasList, isFamilyAlias } from "@/entities/drone/alias-policy";
+import { mentions, mentionsName, phoneticKey } from "@/entities/drone/name-key";
+import { catalogNames, NAME_STOPWORDS } from "@/entities/drone/catalog-names";
 import type { DetectedSystem, Drone } from "@/entities/drone/types";
-import { getRe } from "./regex-cache";
 
-const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-
-/** Exact token-boundary match: "Geran-2" never matches inside "Geran-5" or "Geran-25". */
-export function mentions(text: string, name: string) {
-  if (name.trim().length < 2) return false;
-  return getRe(`(?<![\\p{L}\\p{N}-])${esc(name.trim())}(?![\\p{L}\\p{N}]|-\\p{N})`, "iu").test(
-    text,
-  );
-}
-
-const STOP = new Set(
-  (
-    "Telegram Russian Russia Ukrainian Ukraine Iranian Iran Chinese China The A An In On At Of And Or But New Our We They It This That These Those " +
-    "Monday Tuesday Wednesday Thursday Friday Saturday Sunday January February March April May June July August September October November December " +
-    // Cyrillic calendar words are not system names: "Февраль" (February) sat as a Lyutyi alias and
-    // auto-merged a Starlink post into its dossier. Ukrainian months are omitted on purpose —
-    // "Лютий" (February) IS the FP-1/Lyutyi name and must stay matchable.
-    "Январь Февраль Март Апрель Май Июнь Июль Август Сентябрь Октябрь Ноябрь Декабрь " +
-    "MHz GHz CRPA GNSS GPS FPV UAV UAVs USV UGV EW AI RF HD km kg USD EUR UAH RUB Air Land Sea Defense Defence Forces Army Navy Report Dispatch Update Source Sources " +
-    "Also New One Two Three Several Later Then After Before Near Meanwhile Reportedly Estimated Price Cost Unit Russians Ukrainians Kyiv Moscow Kharkiv Odesa Donetsk Crimea Black Front Western Eastern Southern Northern Sea Oblast"
-  )
-    .split(" ")
-    .map((w) => w.toLowerCase()),
-);
-
-/**
- * mentions(), or the same name in another script or romanisation ("Ланцетом" for Lancet). For
- * catalog matching; detectNames keeps the exact form, since a novel name is not yet known.
- */
-export function mentionsName(text: string, name: string) {
-  return mentions(text, name) || mentionsPhonetic(text, name);
-}
+// The matchers live in the entity layer so the verifier uses the same definition of identity.
+export { mentions, mentionsName } from "@/entities/drone/name-key";
 
 /** Find proper nouns, acronyms and model designations without requiring quotes. */
 export function detectNames(raw: string, extraStop?: ReadonlySet<string>): string[] {
   const out: string[] = [];
-  const isStop = (w: string) => STOP.has(w) || !!extraStop?.has(w);
+  const isStop = (w: string) => NAME_STOPWORDS.has(w) || !!extraStop?.has(w);
   const add = (s: string) => {
     const words = s
       .trim()
@@ -126,21 +95,6 @@ function dropContained(names: string[], against: string[]) {
   );
 }
 
-/**
- * Names a catalog entry may be resolved by. Aliases pass the intake policy at match time too, so
- * a generic phrase already stored before the guard existed (or injected by a dynamic rule) never
- * captures a mention: "interceptor drones" resolves nothing, "Bars interceptor drones" resolves
- * the Bars entry.
- */
-const catalogNames = (d: Drone) =>
-  [
-    ...d.name.split(/\s*\/\s*/),
-    d.name,
-    d.cyrillic ?? "",
-    // A family alias stored before the guard ("F-35" on F-35A) stays on the record for the
-    // analyst to clean up, but no longer files a sibling's report under this entry.
-    ...cleanAliasList(d.aliases).filter((a) => !isFamilyAlias(a, [d.name, d.cyrillic])),
-  ].filter((n) => n.length > 2 && !STOP.has(n.toLowerCase()));
 /**
  * The ways a designation splits into a family stem and a variant, for "is this new name a
  * variant of a catalog entry?". Two names are variants when any of their splits share a stem

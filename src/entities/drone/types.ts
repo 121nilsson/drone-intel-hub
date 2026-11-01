@@ -58,6 +58,60 @@ export interface SpecClaim {
    * other verdicts it never rewrites the claim; consensus reads it only once `applied`.
    */
   autoCorrection?: AutoCorrection;
+  /**
+   * The machine's own check of this claim against the source and the attribute it was filed
+   * under (verification.ts). Additive and separate from every other verdict: it never removes
+   * a claim by itself in Phase 1 - it records whether the evidence, units, bounds and identity
+   * hold, so the autonomy loops can be measured before any human gate is removed.
+   */
+  verification?: ClaimVerification;
+}
+
+export type VerificationVerdict = "pass" | "fail" | "uncertain";
+
+/** What the verification checks, as a whole, conclude about a claim. */
+export type VerificationState = "verified" | "uncertain" | "rejected";
+
+export type VerificationKind =
+  | "evidence_span"
+  | "unit_dimension"
+  | "bounds"
+  | "identity"
+  | "ai_entailment"
+  | "cross_source"
+  | "reference";
+
+export interface VerificationCheck {
+  /** Stable per kind, so a recomputation can be compared without looking at the timestamp. */
+  id: string;
+  kind: VerificationKind;
+  verdict: VerificationVerdict;
+  /**
+   * False when the check has nothing to say about this claim (a text value has no unit, a
+   * seed claim has no source post). An inapplicable check is reported but never lowers coverage.
+   */
+  applicable: boolean;
+  /** How sure the check is of its own verdict, 0..1. */
+  confidence?: number;
+  detail?: string;
+  evidence?: string;
+  sourceId?: string;
+  model?: string;
+  verifierVersion: string;
+  at: string;
+}
+
+export interface ClaimVerification {
+  state: VerificationState;
+  checks: VerificationCheck[];
+  /** Confidence of the weakest passing check; 0 when any applicable check failed. */
+  confidence: number;
+  /** Share of applicable checks that reached a definite pass or fail. */
+  coverage: number;
+  /** Distinct outlets whose claims on the same attribute state the same figure. */
+  independentSources: number;
+  verifierVersion: string;
+  at: string;
 }
 
 export interface AutoCorrection {

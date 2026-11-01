@@ -50,7 +50,11 @@ export const getStoreStatus = createServerFn({ method: "POST" }).handler(async (
     console.error("[store] provider settings unavailable", e);
   }
 
-  return { postgres, provider, providerError };
+  // Lovable Cloud reports revision 0 and stays last-write-wins (see AGENTS.md), so a client must
+  // not run unattended bulk writes against it on the assumption that conflicts are caught.
+  const revisions = !postgres || !!process.env["DATABASE_URL"];
+
+  return { postgres, revisions, provider, providerError };
 });
 
 /**

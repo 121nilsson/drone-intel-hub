@@ -33,6 +33,7 @@ import { HeuristicExtractor, HeuristicSummarizer } from "./heuristic-ai";
 import { OpenAICompatibleExtractor, OpenAICompatibleSummarizer } from "./openai-compatible-ai";
 import { openAIProcurementExtractor } from "./procurement-extractor";
 import { createCatalogMutations } from "./catalog-operations";
+import { backfillCatalogue } from "./verification/backfill";
 
 export { DEFAULT_SETTINGS } from "./settings-defaults";
 import { DEFAULT_SETTINGS } from "./settings-defaults";
@@ -130,6 +131,27 @@ export function ServicesProvider({ children }: { children: ReactNode }) {
   );
 
   /**
+   * Verify stored claims once the catalogue is attached, so an entry ingested before the verifier
+   * existed still gets a verdict. Idempotent (see backfill.ts), so a re-attach rewrites nothing.
+   *
+   * Only against a store that enforces revisions: the backfill rewrites many entries unattended,
+   * and against a last-write-wins store (Lovable Cloud) one of those writes could replace an
+   * analyst's concurrent edit. There the run stays a deliberate action on the Autonomy page.
+   * A failure never breaks startup, but it is shown, not just logged.
+   */
+  const backfillVerification = useCallback(
+    (revisions: boolean) => {
+      if (!revisions) return;
+      // Not awaited: it yields between chunks and must not hold up the attached UI.
+      backfillCatalogue({ drones, dispatches }).catch((e: unknown) => {
+        console.error("[verification] backfill failed", e);
+        setStorageWarning(`Stored claims could not be re-verified (${reason(e)}).`);
+      });
+    },
+    [drones, dispatches],
+  );
+
+  /**
    * The explicit escape hatch from a failed server catalog. It is never chosen automatically:
    * silently continuing on localStorage would give the analyst a second, unsynced catalog.
    */
@@ -150,10 +172,12 @@ export function ServicesProvider({ children }: { children: ReactNode }) {
       setStorageWarning(
         "Using browser storage. Changes are saved in this browser and are not synced to the server.",
       );
+      // Browser storage enforces revisions. After the warning, so a backfill failure replaces it.
+      backfillVerification(true);
     } catch (e) {
       setStorageError(`Browser storage could not be opened (${reason(e)}).`);
     }
-  }, [repos]);
+  }, [repos, backfillVerification]);
 
   useEffect(() => {
     try {
@@ -179,11 +203,13 @@ export function ServicesProvider({ children }: { children: ReactNode }) {
       // so it must not fall back silently - the error path asks the analyst to retry.
       let store: DocumentStore;
       let server = false;
+      let revisions = true;
       try {
         const status = await getStoreStatus();
         if (cancelled) return;
         setEnvCfg(status.provider ?? null);
         server = status.postgres;
+        revisions = status.revisions;
         store = server ? new RemoteStore() : new LocalStorageStore();
       } catch (e) {
         if (cancelled) return;
@@ -213,6 +239,7 @@ export function ServicesProvider({ children }: { children: ReactNode }) {
           return;
         }
         setAttached(true);
+        backfillVerification(revisions);
       } catch (e) {
         if (cancelled) return;
         setStorageError(
@@ -225,7 +252,7 @@ export function ServicesProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [repos]);
+  }, [repos, backfillVerification]);
 
   // The catalog operations are bound to the repository instances, not to a snapshot of their
   // contents: the instances are stable for the provider's life, and they read through to
