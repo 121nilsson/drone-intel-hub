@@ -34,6 +34,10 @@ import { OpenAICompatibleExtractor, OpenAICompatibleSummarizer } from "./openai-
 import { openAIProcurementExtractor } from "./procurement-extractor";
 import { createCatalogMutations } from "./catalog-operations";
 import { backfillCatalogue } from "./verification/backfill";
+import { runCatalogueVerification } from "./verification/run";
+import { triggerServerVerification } from "./verification/verification.functions";
+import { recordVerificationRun } from "./autonomy/autonomy.functions";
+import type { VerificationRunner } from "@/shared/contracts/verification";
 
 export { DEFAULT_SETTINGS } from "./settings-defaults";
 import { DEFAULT_SETTINGS } from "./settings-defaults";
@@ -76,6 +80,8 @@ interface Services {
    * repositories it happens to work on.
    */
   catalog: CatalogMutations;
+  /** Runs claim verification where the storage in use says it must run. */
+  verification: VerificationRunner;
   /**
    * False until the repositories have attached their store. Until then every list reads empty,
    * which is indistinguishable from "no data" and would render false empty states (dossier
@@ -83,6 +89,11 @@ interface Services {
    * must gate on this.
    */
   attached: boolean;
+  /**
+   * True when claim verification runs on the server, against the whole archive (PostgreSQL). The
+   * Autonomy page then asks the server to run it rather than running it over the browser's window.
+   */
+  verificationOnServer: boolean;
   /**
    * A blocking storage failure: the server or browser catalog could not be opened. The shell
    * replaces the page with an explanation instead of showing seed data as if it were the catalog.
@@ -122,6 +133,7 @@ export function ServicesProvider({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
   const [envCfg, setEnvCfg] = useState<EnvProviderConfig | null>(null);
   const [attached, setAttached] = useState(false);
+  const [verificationOnServer, setVerificationOnServer] = useState(false);
   const [storageError, setStorageError] = useState<string | null>(null);
   const [storageWarning, setStorageWarning] = useState<string | null>(null);
 
@@ -134,9 +146,11 @@ export function ServicesProvider({ children }: { children: ReactNode }) {
    * Verify stored claims once the catalogue is attached, so an entry ingested before the verifier
    * existed still gets a verdict. Idempotent (see backfill.ts), so a re-attach rewrites nothing.
    *
-   * Only against a store that enforces revisions: the backfill rewrites many entries unattended,
-   * and against a last-write-wins store (Lovable Cloud) one of those writes could replace an
-   * analyst's concurrent edit. There the run stays a deliberate action on the Autonomy page.
+   * Only in browser storage. With PostgreSQL the server runs it (tasks/verification/run.ts),
+   * because the browser holds only the newest posts and would judge every claim from an older one
+   * "not in the archive". Against a last-write-wins store (Lovable Cloud) an unattended rewrite
+   * could replace an analyst's concurrent edit, so there the run stays a deliberate action on
+   * the Autonomy page.
    * A failure never breaks startup, but it is shown, not just logged.
    */
   const backfillVerification = useCallback(
@@ -239,7 +253,8 @@ export function ServicesProvider({ children }: { children: ReactNode }) {
           return;
         }
         setAttached(true);
-        backfillVerification(revisions);
+        setVerificationOnServer(server && revisions);
+        if (!server) backfillVerification(revisions);
       } catch (e) {
         if (cancelled) return;
         setStorageError(
@@ -260,6 +275,30 @@ export function ServicesProvider({ children }: { children: ReactNode }) {
   const catalog = useMemo<CatalogMutations>(
     () => createCatalogMutations({ drones, candidates, dispatches }),
     [drones, candidates, dispatches],
+  );
+
+  /**
+   * Where verification runs follows the storage: on the server over the whole archive with
+   * PostgreSQL, otherwise in the browser over its own store. After a server run the catalogue is
+   * reloaded so the page shows the stored verdicts - but only once this tab's queued writes have
+   * landed, before and after: reload() adopts the server's revisions, and a write still queued
+   * then would carry the new revision and quietly put back the copy the run had just verified.
+   */
+  const verification = useMemo<VerificationRunner>(
+    () => ({
+      run: async () => {
+        if (!verificationOnServer)
+          return await runCatalogueVerification({ drones, dispatches }, async (run) => {
+            await recordVerificationRun({ data: run });
+          });
+        await drones.flush();
+        const report = await triggerServerVerification();
+        await drones.flush();
+        await drones.reload();
+        return report;
+      },
+    }),
+    [verificationOnServer, drones, dispatches],
   );
 
   const value = useMemo<Services>(() => {
@@ -319,7 +358,9 @@ export function ServicesProvider({ children }: { children: ReactNode }) {
           }
         : {}),
       catalog,
+      verification,
       attached,
+      verificationOnServer,
       storageError,
       storageWarning,
       clearStorageWarning: () => setStorageWarning(null),
@@ -335,7 +376,9 @@ export function ServicesProvider({ children }: { children: ReactNode }) {
     taxonomyCandidates,
     settings,
     envCfg,
+    verification,
     attached,
+    verificationOnServer,
     storageError,
     storageWarning,
     continueInBrowser,

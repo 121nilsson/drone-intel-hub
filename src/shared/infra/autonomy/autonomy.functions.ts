@@ -4,7 +4,7 @@ import type {
   VerificationCoverageCounts,
   VerificationRunRecord,
 } from "@/shared/contracts/verification";
-import { listAutonomyEvents, recordAutonomyEvent } from "./ledger.server";
+import { listAutonomyEvents, recordVerificationRunEvent } from "./ledger.server";
 
 /**
  * Browser bridge to the autonomy ledger. The verification itself runs against whichever store the
@@ -50,20 +50,6 @@ export const fetchAutonomyEvents = createServerFn({ method: "GET" }).handler(
 export const recordVerificationRun = createServerFn({ method: "POST" })
   .validator(checkRun)
   .handler(async ({ data }) => {
-    await recordAutonomyEvent({
-      action: "verification_run",
-      actor: `verifier:${data.verifierVersion}`,
-      actorKind: "verifier",
-      targetCollection: "drones",
-      targetId: "catalogue",
-      verdict: data.missingText > 0 ? "partial" : "complete",
-      before: data.before,
-      after: data.after,
-      reason:
-        `${data.checked} claim(s) checked, ${data.changed} entry(ies) updated, ` +
-        `${data.missingText} without source text`,
-      // A run changes nothing by itself; the claims it re-verified carry their own verdicts.
-      reversible: false,
-    });
+    await recordVerificationRunEvent(data);
     return { ok: true };
   });

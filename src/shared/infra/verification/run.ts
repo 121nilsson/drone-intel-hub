@@ -6,11 +6,11 @@ import {
 } from "@/entities/drone/verification";
 import type {
   VerificationCoverageCounts,
+  VerificationRunRecord,
   VerificationExceptionRow,
   VerificationRunReport,
 } from "@/shared/contracts/verification";
 import type { DispatchRepository, DroneRepository } from "@/shared/contracts/repository";
-import { recordVerificationRun } from "@/shared/infra/autonomy/autonomy.functions";
 import { backfillCatalogue } from "./backfill";
 
 /** How many exceptions are sent to the page; the count never is. */
@@ -116,11 +116,18 @@ export const EMPTY_VERIFICATION: VerificationRunReport = {
  * Verify the catalogue and record the run in the autonomy ledger. The catalogue write is the
  * point; the ledger event is best-effort, so a database without the migration still lets the
  * analyst run the check.
+ *
+ * `record` writes the ledger row, and is always passed: the browser goes through the server
+ * function (services.tsx), the server writes the ledger directly (verify.server.ts). A default
+ * here would pull the browser's server-function bridge into the server task's bundle.
  */
-export async function runCatalogueVerification(deps: {
-  drones: Pick<DroneRepository, "list" | "upsert">;
-  dispatches: Pick<DispatchRepository, "list">;
-}): Promise<VerificationRunReport> {
+export async function runCatalogueVerification(
+  deps: {
+    drones: Pick<DroneRepository, "list" | "upsert">;
+    dispatches: Pick<DispatchRepository, "list">;
+  },
+  record: (run: VerificationRunRecord) => Promise<void>,
+): Promise<VerificationRunReport> {
   // Before the write, so the ledger row itself carries the drop a stricter verifier causes.
   const before = verificationCoverage(deps.drones.list());
   const result = await backfillCatalogue(deps);
@@ -131,16 +138,14 @@ export async function runCatalogueVerification(deps: {
     missingText: result.missingText,
   });
   try {
-    await recordVerificationRun({
-      data: {
-        at: report.at,
-        verifierVersion: VERIFIER_VERSION,
-        checked: report.checked,
-        changed: report.changed,
-        missingText: report.missingText,
-        before: countsOf(before),
-        after: countsOf(report.coverage),
-      },
+    await record({
+      at: report.at,
+      verifierVersion: VERIFIER_VERSION,
+      checked: report.checked,
+      changed: report.changed,
+      missingText: report.missingText,
+      before: countsOf(before),
+      after: countsOf(report.coverage),
     });
   } catch {
     /* the ledger is best-effort; the run already happened */

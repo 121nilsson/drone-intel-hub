@@ -33,9 +33,11 @@ import { outletKey } from "@/entities/source/outlet-record";
 /**
  * Bumping this re-verifies the whole catalogue on the next backfill. 2: identity anchored to the
  * evidence sentence with the extractor's strict matcher; sources counted per outlet. 3: claims
- * written without a post id are linked back to their post, and a missing post says why.
+ * written without a post id are linked back to their post, and a missing post says why. 4: the
+ * run moved to the server, which reads the whole archive; version 3 verdicts were written by the
+ * browser over its newest 3,000 posts and called older posts "not in the archive".
  */
-export const VERIFIER_VERSION = "deterministic-3";
+export const VERIFIER_VERSION = "deterministic-4";
 
 export type ClaimTextResolver = (claim: SpecClaim) => string | undefined;
 

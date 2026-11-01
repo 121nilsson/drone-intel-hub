@@ -134,3 +134,72 @@ export const AUTONOMY_ACTOR_KINDS = [
   "system",
 ] as const;
 export type AutonomyActorKind = (typeof AUTONOMY_ACTOR_KINDS)[number];
+
+/** The auditor's answer to "does the post state this value for this attribute of this system?" */
+export type AuditAnswer = "yes" | "no" | "cannot_tell";
+
+/** One claim as the auditor sees it: a snapshot taken when it was drawn. */
+export interface AuditItem {
+  id: string;
+  batchId: string;
+  position: number;
+  droneId: string;
+  droneName: string;
+  specLabel: string;
+  value: string;
+  evidence?: string;
+  source: string;
+  sourceId?: string;
+  /** The post as it was when drawn; absent when the claim has no archived post. */
+  postText?: string;
+  language: string;
+  family: string;
+  answer?: AuditAnswer;
+  obviouslyWrong: boolean;
+  readVia?: "original" | "translation";
+}
+
+/** Answers counted for one slice of the audit (overall, a language, a family). */
+export interface AuditTally {
+  /** Answered yes or no; "cannot tell" is excluded. */
+  answered: number;
+  /** Answered "no": the post does not state it. */
+  errors: number;
+  cannotTell: number;
+  /** One-sided 95% upper bound on the error rate. */
+  upperBound: number;
+}
+
+export interface AuditStatus {
+  /** False when the server has no database; the audit needs one. */
+  available: boolean;
+  /** pass / fail / continue / not_proven, against the 5% low-risk budget (plan §4.5). */
+  decision: "pass" | "fail" | "continue" | "not_proven";
+  /** The batch boundary (100, 150, 200 answers) the decision was taken at. */
+  decidedAt?: number;
+  budget: number;
+  overall: AuditTally;
+  byLanguage: Array<AuditTally & { language: string }>;
+  byFamily: Array<AuditTally & { family: string; alarm: boolean }>;
+  /** Answered via machine translation: weaker independence, reported apart. */
+  viaTranslation: number;
+  obviouslyWrong: number;
+  /** Batches excluded because their auditor passed a hidden control. */
+  failedControlBatches: string[];
+  /** The next claim waiting for an answer, with its post. */
+  next?: AuditItem;
+  /** How many claims are waiting. */
+  openCount: number;
+  seed: { size: number; answered: number; frozen: boolean };
+  /** Verified claims with a post never drawn; counted only when asked for (a catalogue scan). */
+  undrawn?: number;
+}
+
+/**
+ * Runs deterministic verification over the catalogue, wherever the storage in use says it must
+ * run: on the server against the whole archive (PostgreSQL), or in the browser over its own store.
+ * A page asks for the run; services.tsx chooses where it happens.
+ */
+export interface VerificationRunner {
+  run(): Promise<VerificationRunReport>;
+}

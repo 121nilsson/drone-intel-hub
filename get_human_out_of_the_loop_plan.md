@@ -182,15 +182,19 @@ Until coverage is high, mix references explicitly and report coverage next to ev
 
 ### 4.5 Error budgets
 
-Initial values; calibrate with production data.
+Set 2026-11-01; calibrate with production data.
 
-| Risk tier | Examples                                           | Error budget | Gate                                                          |
-| --------- | -------------------------------------------------- | ------------ | ------------------------------------------------------------- |
-| Low       | Unit scales, value normalizers                     | 2–5%         | Immediate; canary 1h                                          |
-| Medium    | Cue rules, context reroutes, attribute moves       | 1–2%         | 24h shadow; canary 24h                                        |
-| High      | Aliases, stopwords, lexicon terms, identity merges | 0.5%         | 48h shadow; full sandbox; two judges; canary 24h; auto-revert |
+| Risk tier | Examples                                           | Error budget | Measured by                                                     | Gate                                                          |
+| --------- | -------------------------------------------------- | ------------ | --------------------------------------------------------------- | ------------------------------------------------------------- |
+| Low       | Unit scales, value normalizers                     | 5%           | Sampled audit (§9, Phase 2): upper 95% bound ≤ 5%               | Immediate; canary 1h                                          |
+| Medium    | Cue rules, context reroutes, attribute moves       | 2%           | Escape rate from the ledger, once Phase 4 has a reversal record | 24h shadow; canary 24h                                        |
+| High      | Aliases, stopwords, lexicon terms, identity merges | 0.5%         | Not measurable by sampling at this volume; the human gate stays | 48h shadow; full sandbox; two judges; canary 24h; auto-revert |
 
 An action that exceeds its budget is rolled back and the category is paused. The human sees an exception, not a queue.
+
+**An error, for the audit, is a reading error:** an audited `verified` claim whose post does not state that value for that attribute of that system. The auditor separately flags a figure the post does state but that is plainly wrong; that is reported, never counted against the budget, because no reader of the text could have caught it.
+
+**Why only the low budget is measured by sampling.** Proving an error rate below a bound needs roughly `3 / bound` clean samples: about 60 for 5%, 150 for 2% and 600 for 0.5%, and more with any error found. At 70–200 new claims a day, a medium or high budget cannot be proven by a person reading a sample, so those tiers are measured from the reversals the ledger records, or keep their gate. Phase 3 removes gates for low risk only, which is the one budget a sample can establish.
 
 **Why aliases and stopwords are high risk, not low.** The table originally put them in the lowest tier on the reasoning that a word is smaller than a number. The blast radius is the opposite. An alias decides _which system_ a passage is filed under, and the catalogue records the consequence in `src/entities/drone/alias-policy.ts`: the alias "interceptor drones" resolved a Defense Express post about Patriot onto **Bars**. Every claim in that post was then filed against the wrong system — and removing the alias afterwards does not file them back, because nothing records which claims arrived through it. A wrong unit scale stays on one claim and is undone by undoing the claim.
 
@@ -486,6 +490,26 @@ Keep `src/shared/infra/services.tsx` as the only composition root. Wire verifica
 
 Phase 2 does not close until the audit exists. A verified reference with no measured precision is the confidence loop §1 warns about, and Phase 3 is not allowed to build on it.
 
+**Build order.** (1) Deterministic verification runs on the server against the whole archive — the browser holds only the newest 3,000 posts, which left 565 claims "not in the archive" whose post was there. (2) Seed set and audit sampler. (3) AI verifier, measured against the seed set before it may make a claim `verified`. (4) Challenger. (5) `verifiedReference` in evaluation, with coverage and seed-set agreement next to every score. (6) The audit runs to its stopping rule.
+
+**Why a person, and what the person is for.** Not because a person reads better than a model — not assumed, and checked: every batch carries hidden controls (claims the deterministic checks already proved misread), and a batch whose auditor passes a control is not counted. The person is there because their errors are independent of the extractor's and the verifier's: two models that share a blind spot agree, and are both wrong. That independence is weakest where the auditor reads through machine translation, so audits record whether the post was read in the original or translated, and a translated audit is reported as such.
+
+**The question the auditor answers** is one, fixed: _does the post state this value for this attribute of this system?_ — yes / no / cannot tell, plus an optional "the post says it, but it is plainly wrong" flag (§4.5).
+
+**Audit protocol — sequential, so a clear result costs little.** Verified claims are drawn at random with a recorded seed, English first, then Ukrainian, then Russian, spread across attribute families. The first draw is 100 (50 cannot pass: even zero errors leaves the bound at 5.8%), then batches of 50, each followed by a stopping rule computed exactly from the binomial tail, one-sided at 95%, against the 5% budget:
+
+| Answered | Pass       | Fail (proven worse than 5%) | Otherwise        |
+| -------- | ---------- | --------------------------- | ---------------- |
+| 100      | ≤ 1 error  | ≥ 10 errors                 | draw 50 more     |
+| 150      | ≤ 2 errors | ≥ 13 errors                 | draw 50 more     |
+| 200      | ≤ 4 errors | ≥ 16 errors                 | stop: not proven |
+
+"Cannot tell" answers are not errors and not passes; they are excluded and reported. A family with ≥ 2 errors in its first 20 is flagged on its own, whatever the overall result. The auditor may ask for another batch at any time for a tighter number.
+
+**Seed set.** 150 claims, frozen once: the first 100 audited verified claims, plus 25 `rejected` and 25 `uncertain` drawn the same way — without negatives a verifier that says "verified" too easily would agree with it perfectly. It is stored apart from `SpecClaim.review` (`verification_audit`, migration 019), because every learning loop reads the analyst's review; nothing that learns may read the seed set. A first session is about 150 claims at 30–45 s each with the quote highlighted: about 1.5 hours, more only when the result is borderline.
+
+**After Phase 2:** 15 verified claims a week under the same rule, so drift — a new source, a model change — is measured rather than assumed. A skipped week leaves the week unmeasured; nothing waits on it.
+
 ### Phase 3 — Remove human gates for **low** risk only
 
 - Replace `minDecisions`/`minTrust` with evidence policy, for low-risk categories.
@@ -601,14 +625,17 @@ Two questions this list used to carry are **closed by the code as it stands**, a
 - ~~Deployment topology: single container or multiple instances?~~ **Multiple.** `withActivationLock` in `src/shared/infra/evaluation/rule-sandbox.server.ts` takes a `pg_advisory_lock` specifically so two processes do not sandbox at once, and `task_runs` exists to serialise scheduled work. Shadow and mining therefore need the same treatment, not a new decision.
 - ~~Does an analyst override remain the highest authority, even over verification?~~ **Yes.** `claimCounts` in `src/entities/drone/claim-review.ts` already returns the analyst's verdict first, in both directions, before `autoCorrection` or `adjudication`. `verification` is recorded and never overrules it.
 
+Decided by the project owner, 2026-11-01:
+
+- ~~Cost ceiling per day for verification and judges.~~ **0.5M output tokens and 5M input tokens a day**, enforced in code with a daily counter that stops the verifier and records the stop. Measured volume (20–45 posts a day, ~1.5k input and ~300 output tokens per post in one call) uses a few percent of it; a reasoning model's thinking counts as output and can use it about five times faster.
+- ~~Which languages are highest priority for the first audit?~~ **English, then Ukrainian, then Russian.**
+- ~~What error budget is acceptable per category?~~ **5% / 2% / 0.5%** for low / medium / high, with how each is measured (§4.5).
+- ~~How large must the audit sample be, and who samples?~~ **Sequential batches of 50 to a stopping rule** (§9, Phase 2): 100 claims settle a good verifier, 200 at most. The system draws the sample with a recorded seed; the project owner audits.
+
 Still open:
 
-1. Cost ceiling per day for verification and judges.
-2. Which languages/sources are highest priority for the first verified corpus, and therefore for the first audit sample.
-3. Are code-patch proposals in scope at all, or deferred indefinitely?
-4. What error budget is acceptable per category, and who sets it?
-5. Should uncertain claims appear in consensus as `unconfirmed`, or stay entirely out?
-6. How large must the audit sample be for verified precision to be meaningful per family, and who does the sampling?
+1. Are code-patch proposals in scope at all, or deferred indefinitely?
+2. Should uncertain claims appear in consensus as `unconfirmed`, or stay entirely out?
 
 ---
 
@@ -646,3 +673,6 @@ This revision was written before Phase 2 started, after Phase 0 and part of Phas
 | 10  | §9: Phase 3 removes gates for **low risk only**; Phase 2's coverage target is set from Phase 1's measured coverage; Phase 1 records before/after coverage                               | The ≥70% figure was invented before any measurement, and the identity fix will lower the verified share by design                            |
 | 11  | §14: deployment topology and analyst-override authority **closed** by `withActivationLock`/`task_runs` and `claimCounts`; audit sample size added                                       | They were answered by code already in the tree                                                                                               |
 | 12  | §4.1: Phase 1 records states without changing consensus, and the UI must say so                                                                                                         | The diagram shows the Phase 3 target; presenting it as current would let an analyst trust a number that has not changed                      |
+| 13  | §4.5: budgets set to 5% / 2% / 0.5%, each with how it is measured; only the low budget by sampling                                                                                      | Proving a bound needs about `3 / bound` clean samples; 0.5% would need ~600 audits                                                           |
+| 14  | §9 Phase 2: build order, sequential audit with a stopping rule, hidden controls, translated audits labelled, 150-claim seed set in its own table; §14 four questions closed             | A fixed 200-claim audit spends hours a good verifier does not need; a seed set kept in `SpecClaim.review` would be read by every learner     |
+| 15  | §9 Phase 2: deterministic verification moves to the server                                                                                                                              | The browser holds the newest 3,000 posts; run there, 565 claims were judged "not in the archive" while their post was                        |

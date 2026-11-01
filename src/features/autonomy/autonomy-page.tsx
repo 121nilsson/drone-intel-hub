@@ -6,7 +6,7 @@ import { Btn, Card, CardGrid, ListRow, PageTitle, Panel, Tag } from "@/shared/ui
 import { JobStatusPanel } from "@/shared/ui/job-status-panel";
 import { fetchAutonomyEvents } from "@/shared/infra/autonomy/autonomy.functions";
 import { fetchAutonomy } from "@/shared/infra/evaluation/evaluation.functions";
-import { runCatalogueVerification, verificationReport } from "@/shared/infra/verification/run";
+import { verificationReport } from "@/shared/infra/verification/run";
 import type { AutonomyEvent, VerificationRunReport } from "@/shared/contracts/verification";
 import type { AutonomyStatus } from "@/shared/infra/evaluation/rule-sandbox.server";
 
@@ -95,10 +95,7 @@ export function AutonomyPage() {
   const run = async () => {
     setBusy(true);
     try {
-      const r = await runCatalogueVerification({
-        drones: svc.drones,
-        dispatches: svc.dispatches,
-      });
+      const r = await svc.verification.run();
       setReport(r);
       toast.success(
         `Checked ${r.checked} claim(s); ${r.changed} entry(ies) updated, ${r.missingText} without source text.`,
@@ -141,6 +138,12 @@ export function AutonomyPage() {
         <p className="mt-2 text-xs text-muted-foreground">
           These checks show the extractor read the post correctly, not that the post is right. For
           now they are measured only: uncertain and rejected claims are still counted in consensus.
+          How often a verified claim is actually right is measured by a person reading a sample, on
+          the{" "}
+          <Link to="/audit" className="underline">
+            Audit
+          </Link>{" "}
+          page.
         </p>
 
         <CardGrid cols={3} className="mt-4">

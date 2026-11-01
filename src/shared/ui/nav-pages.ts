@@ -41,6 +41,7 @@ export const NAV_GROUPS: readonly {
       { to: "/taxonomy", label: "Taxonomy", hint: "Map unknown terms" },
       { to: "/evaluation", label: "Evaluation", hint: "Measure and teach the heuristic" },
       { to: "/autonomy", label: "Autonomy", hint: "Claim verification and decisions" },
+      { to: "/audit", label: "Audit", hint: "Measure how often verified is right" },
     ],
   },
 ];

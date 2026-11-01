@@ -29,6 +29,13 @@ export const SCHEDULED_TASKS: readonly ScheduledTask[] = [
     does: "Scores shadow rules on newly ingested reports, and auto-activates the ones that meet the bar (unless RULES_AUTOPROMOTE=off).",
   },
   {
+    name: "verification:run",
+    cron: "50 * * * *",
+    label: "Claim verification",
+    every: "hourly at :50",
+    does: "Checks claims against their posts over the whole archive: new claims, claims a verifier upgrade has to re-check, and claims linked back to a post. Rewrites only what changed.",
+  },
+  {
     name: "evaluation:run",
     cron: "15 3 * * *",
     label: "Heuristic evaluation",

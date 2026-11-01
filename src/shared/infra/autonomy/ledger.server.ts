@@ -7,6 +7,7 @@ import {
   type AutonomyEvent,
   type AutonomyEventKind,
   type LedgerJson,
+  type VerificationRunRecord,
 } from "@/shared/contracts/verification";
 
 /**
@@ -62,6 +63,25 @@ export async function recordAutonomyEvent(input: AutonomyEventInput): Promise<vo
   } catch (e) {
     console.error("[autonomy] could not record event", e);
   }
+}
+
+/** A verification run, as the ledger records it: wherever the run happened, one row the same shape. */
+export async function recordVerificationRunEvent(run: VerificationRunRecord): Promise<void> {
+  await recordAutonomyEvent({
+    action: "verification_run",
+    actor: `verifier:${run.verifierVersion}`,
+    actorKind: "verifier",
+    targetCollection: "drones",
+    targetId: "catalogue",
+    verdict: run.missingText > 0 ? "partial" : "complete",
+    before: run.before,
+    after: run.after,
+    reason:
+      `${run.checked} claim(s) checked, ${run.changed} entry(ies) updated, ` +
+      `${run.missingText} without source text`,
+    // A run changes nothing by itself; the claims it re-verified carry their own verdicts.
+    reversible: false,
+  });
 }
 
 interface Row {

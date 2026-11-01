@@ -30,4 +30,12 @@ describe("App routing", () => {
 
     expect(matches.at(-1)?.routeId).toBe("/autonomy");
   });
+
+  it("serves the audit page", () => {
+    const router = createRouter({ routeTree, context: { queryClient: new QueryClient() } });
+
+    const matches = router.matchRoutes("/audit");
+
+    expect(matches.at(-1)?.routeId).toBe("/audit");
+  });
 });
