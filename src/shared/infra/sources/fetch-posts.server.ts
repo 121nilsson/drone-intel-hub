@@ -307,7 +307,7 @@ export async function fetchAllSources(
   {
     const mode = process.env["CATALOG_REPAIR"]?.toLowerCase();
     if (mode !== "off") {
-      const repaired = repairCatalog(drones, procurements, { apply: mode === "on" });
+      const repaired = repairCatalog(drones, procurements, { apply: mode === "on", dispatches });
       if (repaired.entries.length)
         console.log(
           `[sources:sync] catalog repair${mode === "on" ? "" : " (preview, CATALOG_REPAIR=on applies)"}: ${repaired.drones} entr${repaired.drones === 1 ? "y" : "ies"}, ${repaired.procurementsAdded} procurement(s) filed, ${repaired.linksNarrowed} deal link set(s) narrowed`,

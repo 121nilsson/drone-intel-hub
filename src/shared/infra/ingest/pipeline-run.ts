@@ -198,6 +198,7 @@ export async function runTwoTier(
     raw,
     source,
     ...(context.dispatchId ? { dispatchId: context.dispatchId } : {}),
+    ...(context.publishedAt ? { publishedAt: context.publishedAt } : {}),
     createdAt: new Date().toISOString(),
     tier,
     extraction,
@@ -267,6 +268,7 @@ export async function runTwoTier(
           withNormalizedRf(
             mergeSpecs(base, extraction.specs, source, {
               ...(context.dispatchId ? { sourceId: context.dispatchId } : {}),
+              ...(context.publishedAt ? { publishedAt: context.publishedAt } : {}),
               extractionConfidence: extraction.confidence,
               ...readBy(extraction),
             }),

@@ -26,6 +26,7 @@ export function alt(
 
 export const cue = (k: keyof Lexicon["cues"]) => alt((l) => l.cues[k]);
 export const unit = (k: keyof Lexicon["units"]) => alt((l) => l.units[k]);
+export const rate = (k: keyof Lexicon["rates"]) => alt((l) => l.rates[k]);
 
 // ---- Money vocabulary, shared by heuristic extraction and normalization ----
 

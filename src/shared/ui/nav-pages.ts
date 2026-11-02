@@ -31,6 +31,7 @@ export const NAV_GROUPS: readonly {
       { to: "/catalog", label: "Systems", hint: "Search and filter the catalog" },
       { to: "/procurement", label: "Procurement", hint: "Contracts and production deals" },
       { to: "/counterparts", label: "Counterparts", hint: "Compare two systems" },
+      { to: "/families", label: "Families", hint: "Families, variants and misfiled names" },
       { to: "/spectrum", label: "Spectrum", hint: "RF links, jammers and radars" },
     ],
   },

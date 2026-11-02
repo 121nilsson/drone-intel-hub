@@ -83,6 +83,11 @@ Same pipeline as manual Queue paste: `runTwoTier` in `src/shared/infra/ingest/pi
 4. Outcomes: auto-merge, auto-promote, auto-discard, or queue candidate for analyst review.
 5. **Evidence brake:** a spec whose quoted evidence is not in the post (whitespace-folded) is
    dropped before the merge and promote gates; the identity decision is untouched.
+6. **Activity split:** figures that count events (launched, intercepted, delivered, produced,
+   kills, ordered) leave the specs in `mergeSpecs` and become `Drone.activity` records with
+   quantity, bound, counted unit and period (`src/entities/drone/activity.ts`). The catalogue
+   repair moves the ones stored as specs before this existed. Shown in the dossier's Activity
+   panel; never in consensus.
 
 **Post-sync automation** (`src/shared/infra/sources/fetch-posts.server.ts`):
 
@@ -141,6 +146,34 @@ Settings page shows resolved providers, models, and fallback order.
   (migration 018) and rule decisions. Verification is measured only; it does not change consensus.
 
 ---
+
+## System relations and families
+
+- **Typed relations** (`Drone.relations`, `src/entities/drone/system-hierarchy.ts`): `variant_of`,
+  `derived_from`, `subsystem_of`, `effector_for`, `carried_by` (stored on the dependent entry)
+  and `counterpart_to` (stored once). The inverse (`has_variant`, `parent_of`, `has_subsystem`,
+  `operates_effector`, `carries`) is generated when read, never stored.
+- **System class** (`Drone.systemClass`): platform, family, complex, subsystem, effector,
+  payload_ew. A family is the umbrella a generic mention ("Gerans") belongs to.
+- **One reader:** `resolveRelations`, `lineage`, `familyRoot` read typed relations and the legacy
+  `variantOfId`/`variantIds`/`counterpartIds` together while the repair copies the legacy links
+  over. Catalogue operations `linkSystems`, `unlinkSystems`, `reviewRelation`, `setSystemClass`
+  write both, and unlink on both sides.
+- **Family review** (`/families`, `src/entities/drone/family-audit.ts`): proposals derived from the
+  catalogue's names - families, unlinked variants, misfiled aliases, one family under two entries.
+  Each is applied by an analyst through an existing operation; a declined one is remembered.
+- **Migration:** the catalogue repair copies `variantOfId`/`variantIds`/`counterpartIds` into typed
+  relations (`legacyRelationsToMigrate`); the legacy fields stay until every reader is moved.
+- **Dossier:** a Relations panel (`src/features/dossier/system-relations-panel.tsx`) lists every
+  relation from the entry's side, with Unlink, the reports' suggested relations with Confirm /
+  Reject, a form to link another system by a stored kind, and the kind of system; a breadcrumb
+  under the title shows the family chain. The counterparts page, catalogue cards, related-intel
+  graph and briefing digest read relations through `resolveRelations` too. Labels live in
+  `src/shared/ui/relation-labels.ts`.
+- **Inherited specs** are a comparison view only (`compileEffectiveSpecs`), labelled with the parent.
+- **Not built yet:** relation suggestions at ingest (lexicon lineage cues writing candidate
+  relations - the Relations panel already reviews candidates), and the family comparison view
+  that shows inherited specs (`compileEffectiveSpecs` exists, nothing renders it).
 
 ## Analyst review
 

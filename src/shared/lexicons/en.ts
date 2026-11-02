@@ -63,6 +63,12 @@ export const en: Lexicon = {
     nmi: ["nautical\\s+miles?"],
     days: ["days?"],
   },
+  rates: {
+    day: ["per day", "daily", "each day", "every day"],
+    week: ["per week", "weekly", "each week", "every week"],
+    month: ["per month", "monthly", "each month", "every month"],
+    year: ["per year", "annual(?:ly)?", "yearly", "each year", "every year", "per annum"],
+  },
   cues: {
     speed: ["speed", "flies at"],
     // Not "cruise missile": a weapon class, not a speed.

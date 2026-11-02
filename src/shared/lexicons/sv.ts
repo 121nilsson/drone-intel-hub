@@ -39,6 +39,13 @@ export const sv: Lexicon = {
     mach: ["mach"],
     days: ["dygn", "dag(?:ar)?"],
   },
+  rates: {
+    day: ["per dag", "om dagen", "dagligen"],
+    // Not "i veckan": also "this week".
+    week: ["per vecka", "varje vecka"],
+    month: ["per månad", "i månaden", "varje månad"],
+    year: ["per år", "om året", "årligen", "varje år"],
+  },
   cues: {
     speed: ["hastighet"],
     cruiseSpeed: ["marschfart", "marschhastighet"],

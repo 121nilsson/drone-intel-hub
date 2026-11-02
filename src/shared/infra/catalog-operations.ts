@@ -1,4 +1,24 @@
-import type { Drone, SpecAttribute, SpecClaim } from "@/entities/drone/types";
+import type {
+  Drone,
+  RelationKind,
+  SpecAttribute,
+  SpecClaim,
+  SystemClass,
+  SystemRelationClaim,
+} from "@/entities/drone/types";
+import {
+  isRelationActive,
+  withUnlink,
+  withDeclinedRelation,
+  withDistinct,
+  cleanRelations,
+  relationProblem,
+  retargetRelations,
+  withRelation,
+  withRelationReview,
+  withoutRelationsTo,
+} from "@/entities/drone/system-hierarchy";
+import { withActivity } from "@/entities/drone/activity";
 import { attributeSemantic } from "@/entities/drone/spec-engine";
 import { mergeLinks } from "@/entities/normalization/apply";
 import type {
@@ -138,12 +158,15 @@ function mergeDronePair(keep: Drone, merge: Drone, reason?: string): Drone {
         : merge.createdAt
       : keep.createdAt || merge.createdAt || new Date().toISOString();
 
+  // Both entries' activity, each figure once: a merge must not lose what either one reported.
+  const activity = withActivity(keep.activity, merge.activity ?? []);
   const result: Drone = {
     id: keepId,
     name,
     ...(cyrillic ? { cyrillic } : {}),
     aliases,
     aliasClaims,
+    ...(activity.length ? { activity } : {}),
     domain,
     origin,
     ...(manufacturer ? { manufacturer } : {}),
@@ -182,6 +205,31 @@ function mergeDronePair(keep: Drone, merge: Drone, reason?: string): Drone {
     variantIds: [...new Set([...(keep.variantIds ?? []), ...(merge.variantIds ?? [])])].filter(
       (id) => id !== keepId && id !== mergeId,
     ),
+    // Both entries' typed relations, the merged-away id pointing at the one that remains.
+    ...(keep.relations || merge.relations
+      ? {
+          relations: oneFamily(
+            keep,
+            cleanRelations(
+              keepId,
+              [...(keep.relations ?? []), ...(merge.relations ?? [])].map((r) =>
+                r.targetSystemId === mergeId ? { ...r, targetSystemId: keepId } : r,
+              ),
+            ),
+          ),
+        }
+      : {}),
+    ...(keep.systemClass || merge.systemClass
+      ? { systemClass: keep.systemClass ?? merge.systemClass }
+      : {}),
+    // "Different systems" from either side still holds for the entry that remains.
+    ...(keep.distinctFrom || merge.distinctFrom
+      ? {
+          distinctFrom: [
+            ...new Set([...(keep.distinctFrom ?? []), ...(merge.distinctFrom ?? [])]),
+          ].filter((id) => id !== keepId && id !== mergeId),
+        }
+      : {}),
     ...(keep.reference || merge.reference ? { reference: keep.reference ?? merge.reference } : {}),
     createdAt,
     updatedAt: new Date().toISOString(),
@@ -220,10 +268,24 @@ function pairAliasClaims(keep: Drone, merge: Drone, name: string, cyrillic?: str
   return claims;
 }
 
+/**
+ * The merged entry keeps one family - the kept entry's - as every other path does: a second
+ * active variant_of from the entry merged away is dropped.
+ */
+function oneFamily(keep: Drone, relations: SystemRelationClaim[]): SystemRelationClaim[] {
+  const family =
+    (keep.relations ?? []).find((r) => r.kind === "variant_of" && isRelationActive(r))
+      ?.targetSystemId ?? keep.variantOfId;
+  if (!family) return relations;
+  return relations.filter(
+    (r) => !(r.kind === "variant_of" && isRelationActive(r) && r.targetSystemId !== family),
+  );
+}
+
 /** Rewrite another entry's links from a merged-away id to the entry that remains. */
 function relinkAfterMerge(doc: Drone, from: string, to: string, at: string): Drone {
   if (!linksTo(doc, from)) return doc;
-  const { variantOfId, ...rest } = doc;
+  const { variantOfId, distinctFrom, ...rest } = retargetRelations(doc, from, to);
   const counterpartIds = [
     ...new Set(
       doc.counterpartIds.map((id) => (id === from ? to : id)).filter((id) => id !== doc.id),
@@ -233,6 +295,13 @@ function relinkAfterMerge(doc: Drone, from: string, to: string, at: string): Dro
     ...rest,
     counterpartIds,
     ...(variantOfId ? { variantOfId: variantOfId === from ? to : variantOfId } : {}),
+    ...(distinctFrom
+      ? {
+          distinctFrom: [...new Set(distinctFrom.map((id) => (id === from ? to : id)))].filter(
+            (id) => id !== doc.id,
+          ),
+        }
+      : {}),
     ...(doc.variantIds
       ? { variantIds: [...new Set(doc.variantIds.map((id) => (id === from ? to : id)))] }
       : {}),
@@ -263,11 +332,8 @@ export function mergeDrones(
   // 7. Update counterpart links on other drones pointing to mergeId
   for (const other of d.drones.list()) {
     if (other.id === keepId || other.id === mergeId) continue;
-    if (
-      other.counterpartIds.includes(mergeId) ||
-      other.variantOfId === mergeId ||
-      other.variantIds?.includes(mergeId)
-    ) {
+    // linksTo, so a typed relation is moved with the legacy links rather than left dangling.
+    if (linksTo(other, mergeId)) {
       d.drones.upsert(relinkAfterMerge(other, mergeId, keepId, at), (fresh) =>
         relinkAfterMerge(fresh, mergeId, keepId, at),
       );
@@ -303,6 +369,8 @@ export function removalImpact(id: string, d: CatalogDeps): RemoveDroneReport {
 
 function linksTo(drone: Drone, id: string): boolean {
   return (
+    (drone.relations ?? []).some((r) => r.targetSystemId === id) ||
+    (drone.distinctFrom ?? []).includes(id) ||
     drone.counterpartIds.includes(id) ||
     drone.variantOfId === id ||
     (drone.variantIds?.includes(id) ?? false)
@@ -312,14 +380,167 @@ function linksTo(drone: Drone, id: string): boolean {
 /** Drop every link to a removed entry, keeping the rest of the document as it is. */
 function unlinkAfterRemove(doc: Drone, id: string, at: string): Drone {
   if (!linksTo(doc, id)) return doc;
-  const { variantOfId, ...rest } = doc;
-  return {
-    ...rest,
-    ...(variantOfId && variantOfId !== id ? { variantOfId } : {}),
-    counterpartIds: doc.counterpartIds.filter((x) => x !== id),
-    ...(doc.variantIds ? { variantIds: doc.variantIds.filter((x) => x !== id) } : {}),
-    updatedAt: at,
+  const unlinked = withoutRelationsTo(doc, id, at);
+  return unlinked.distinctFrom?.includes(id)
+    ? { ...unlinked, distinctFrom: unlinked.distinctFrom.filter((x) => x !== id), updatedAt: at }
+    : unlinked;
+}
+
+/** See CatalogMutations.linkSystems. */
+export function linkSystems(
+  sourceId: string,
+  targetId: string,
+  kind: RelationKind,
+  d: Pick<CatalogDeps, "drones">,
+  role?: string,
+  at = new Date().toISOString(),
+): Drone | undefined {
+  const source = d.drones.get(sourceId);
+  const target = d.drones.get(targetId);
+  if (!source || !target) return undefined;
+  const catalog = d.drones.list();
+  if (relationProblem(source, target, kind, catalog)) return undefined;
+  const apply = (fresh: Drone) => withRelation(fresh, target, kind, d.drones.list(), at, role);
+  const next = apply(source);
+  d.drones.upsert(next, apply);
+  return next;
+}
+
+/** See CatalogMutations.unlinkSystems. */
+export function unlinkSystems(
+  sourceId: string,
+  targetId: string,
+  d: Pick<CatalogDeps, "drones">,
+  at = new Date().toISOString(),
+): Drone | undefined {
+  const source = d.drones.get(sourceId);
+  const target = d.drones.get(targetId);
+  if (!source || !target) return undefined;
+  // Both sides, each recording the unlink: a counterpart is listed on each, a parent may list its
+  // variant, and a report naming both would otherwise bring the link back.
+  const unlinkSource = (fresh: Drone) => withUnlink(fresh, d.drones.get(targetId) ?? target, at);
+  const unlinkTarget = (fresh: Drone) => withUnlink(fresh, d.drones.get(sourceId) ?? source, at);
+  const next = unlinkSource(source);
+  const t = unlinkTarget(target);
+  if (next !== source) d.drones.upsert(next, unlinkSource);
+  if (t !== target) d.drones.upsert(t, unlinkTarget);
+  return next;
+}
+
+/** See CatalogMutations.reviewRelation. */
+export function reviewRelation(
+  droneId: string,
+  claimId: string,
+  verdict: "confirmed" | "rejected" | null,
+  d: Pick<CatalogDeps, "drones">,
+  notes?: string,
+  at = new Date().toISOString(),
+): Drone | undefined {
+  const drone = d.drones.get(droneId);
+  if (!drone) return undefined;
+  const next = withRelationReview(drone, claimId, verdict, at, notes);
+  if (!next) return undefined;
+  d.drones.upsert(next, (fresh) => withRelationReview(fresh, claimId, verdict, at, notes) ?? fresh);
+  const claim = drone.relations?.find((r) => r.id === claimId);
+  if (verdict === "rejected" && claim?.kind === "variant_of")
+    dropFromVariantList(claim.targetSystemId, droneId, d, at);
+  if (verdict === "rejected" && claim?.kind === "counterpart_to")
+    dropFromCounterparts(claim.targetSystemId, droneId, d, at);
+  return next;
+}
+
+/** See CatalogMutations.declineRelation. */
+export function declineRelation(
+  sourceId: string,
+  targetId: string,
+  kind: RelationKind,
+  d: Pick<CatalogDeps, "drones">,
+  at = new Date().toISOString(),
+): Drone | undefined {
+  const source = d.drones.get(sourceId);
+  if (!source) return undefined;
+  const apply = (fresh: Drone) => withDeclinedRelation(fresh, targetId, kind, at);
+  const next = apply(source);
+  if (next !== source) d.drones.upsert(next, apply);
+  if (kind === "variant_of") dropFromVariantList(targetId, sourceId, d, at);
+  if (kind === "counterpart_to") dropFromCounterparts(targetId, sourceId, d, at);
+  return next;
+}
+
+/** A turned-down counterpart leaves the other side's legacy list too: the pipeline lists both. */
+function dropFromCounterparts(
+  otherId: string,
+  droneId: string,
+  d: Pick<CatalogDeps, "drones">,
+  at: string,
+) {
+  const other = d.drones.get(otherId);
+  if (!other?.counterpartIds.includes(droneId)) return;
+  const apply = (fresh: Drone): Drone =>
+    fresh.counterpartIds.includes(droneId)
+      ? {
+          ...fresh,
+          counterpartIds: fresh.counterpartIds.filter((id) => id !== droneId),
+          updatedAt: at,
+        }
+      : fresh;
+  d.drones.upsert(apply(other), apply);
+}
+
+/** A turned-down variant leaves its parent's legacy list too, for the readers that use it. */
+function dropFromVariantList(
+  parentId: string,
+  childId: string,
+  d: Pick<CatalogDeps, "drones">,
+  at: string,
+) {
+  const parent = d.drones.get(parentId);
+  if (!parent?.variantIds?.includes(childId)) return;
+  const apply = (fresh: Drone): Drone =>
+    fresh.variantIds?.includes(childId)
+      ? { ...fresh, variantIds: fresh.variantIds.filter((id) => id !== childId), updatedAt: at }
+      : fresh;
+  d.drones.upsert(apply(parent), apply);
+}
+
+/** See CatalogMutations.markDistinct. */
+export function markDistinct(
+  aId: string,
+  bId: string,
+  d: Pick<CatalogDeps, "drones">,
+  at = new Date().toISOString(),
+): Drone | undefined {
+  const a = d.drones.get(aId);
+  const b = d.drones.get(bId);
+  if (!a || !b || a.id === b.id) return undefined;
+  for (const [x, other] of [
+    [b, aId],
+    [a, bId],
+  ] as const) {
+    const apply = (fresh: Drone) => withDistinct(fresh, other, at);
+    const next = apply(x);
+    if (next !== x) d.drones.upsert(next, apply);
+  }
+  return d.drones.get(aId);
+}
+
+/** See CatalogMutations.setSystemClass. */
+export function setSystemClass(
+  droneId: string,
+  systemClass: SystemClass | null,
+  d: Pick<CatalogDeps, "drones">,
+  at = new Date().toISOString(),
+): Drone | undefined {
+  const drone = d.drones.get(droneId);
+  if (!drone) return undefined;
+  const apply = (fresh: Drone): Drone => {
+    const { systemClass: _old, ...rest } = fresh;
+    void _old;
+    return { ...rest, ...(systemClass ? { systemClass } : {}), updatedAt: at };
   };
+  const next = apply(drone);
+  d.drones.upsert(next, apply);
+  return next;
 }
 
 /**
@@ -634,5 +855,12 @@ export function createCatalogMutations(d: CatalogDeps): CatalogMutations {
     moveAlias: (sourceDroneId, claimId, targetDroneId) =>
       moveAliasToSystem(sourceDroneId, claimId, targetDroneId, d),
     undoMoveAlias: (sourceDroneId, claimId) => undoAliasMoveFromSystem(sourceDroneId, claimId, d),
+    linkSystems: (sourceId, targetId, kind, role) => linkSystems(sourceId, targetId, kind, d, role),
+    unlinkSystems: (sourceId, targetId) => unlinkSystems(sourceId, targetId, d),
+    reviewRelation: (droneId, claimId, verdict, notes) =>
+      reviewRelation(droneId, claimId, verdict, d, notes),
+    setSystemClass: (droneId, systemClass) => setSystemClass(droneId, systemClass, d),
+    declineRelation: (sourceId, targetId, kind) => declineRelation(sourceId, targetId, kind, d),
+    markDistinct: (aId, bId) => markDistinct(aId, bId, d),
   };
 }

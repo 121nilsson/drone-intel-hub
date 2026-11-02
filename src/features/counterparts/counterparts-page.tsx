@@ -1,4 +1,5 @@
 import { useNavigate } from "@tanstack/react-router";
+import { resolveRelations } from "@/entities/drone/system-hierarchy";
 import { consensus } from "@/entities/drone/consensus";
 import { intersectBands, linkIsFiber } from "@/entities/normalization/rf";
 import {
@@ -117,7 +118,7 @@ export function CounterpartsPage({ a, b }: { a?: string | undefined; b?: string 
   // Must exclude A, or the "no b in the URL" case can resolve to the same system twice.
   const B =
     drones.find((d) => d.id === b && d.id !== A.id) ??
-    drones.find((d) => d.id !== A.id && A.counterpartIds.includes(d.id)) ??
+    resolveRelations(A, drones).find((e) => e.kind === "counterpart_to")?.target ??
     drones.find((d) => d.id !== A.id);
   if (!B) return null;
   const keys = [...new Set([...A.specs, ...B.specs].map((s) => s.key))];

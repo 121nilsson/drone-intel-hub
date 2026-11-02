@@ -1,4 +1,5 @@
 import { Link } from "@tanstack/react-router";
+import { firstCounterparts } from "@/entities/drone/system-hierarchy";
 import { useServerFn } from "@tanstack/react-start";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { consensus } from "@/entities/drone/consensus";
@@ -269,6 +270,8 @@ export function CatalogPage({
     return last;
   }, [dispatches]);
   const results = useMemo(() => repo.search(q, f), [repo, q, f]);
+  // One pass over the catalogue for every card's counterpart, not one resolution per card.
+  const counterparts = useMemo(() => firstCounterparts(drones), [drones]);
   const sorted = useMemo(() => {
     const list = [...results];
     if (sort === "name") list.sort((a, b) => a.name.localeCompare(b.name));
@@ -519,9 +522,7 @@ export function CatalogPage({
         ) : (
           <CardGrid>
             {sorted.map((d) => {
-              const cp = d.counterpartIds
-                .map((id) => drones.find((x) => x.id === id))
-                .find(Boolean);
+              const cp = counterparts.get(d.id);
               return <CatalogCard key={d.id} d={d} cp={cp} />;
             })}
           </CardGrid>

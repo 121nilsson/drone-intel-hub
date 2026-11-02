@@ -87,6 +87,70 @@ const MONTHS: Record<string, number> = {
   грудня: 12,
 };
 
+/**
+ * The locative, how a period is said in a sentence ("у червні", "в июне" - in June). Not a date
+ * form, so normalizeDate does not read it; activity periods do (inflectedMonth).
+ */
+const LOCATIVE: Record<string, number> = {
+  січні: 1,
+  лютому: 2,
+  березні: 3,
+  квітні: 4,
+  травні: 5,
+  червні: 6,
+  липні: 7,
+  серпні: 8,
+  вересні: 9,
+  жовтні: 10,
+  листопаді: 11,
+  грудні: 12,
+  январе: 1,
+  феврале: 2,
+  марте: 3,
+  апреле: 4,
+  мае: 5,
+  июне: 6,
+  июле: 7,
+  августе: 8,
+  сентябре: 9,
+  октябре: 10,
+  ноябре: 11,
+  декабре: 12,
+};
+
+/** English month names in full, as written: capitalised, so the verbs "may" and "march" are not. */
+const ENGLISH_FULL = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+];
+
+/**
+ * The month one word of running text names, for the period of a reported figure. Stricter than
+ * a date field: an English month only in full and capitalised, and a Ukrainian or Russian month
+ * only inflected (genitive or locative) - the nominative "Лютий" is also a drone, "травень"
+ * and "май" read the same as a heading, and a period in a sentence is said "у лютому", "лютого".
+ */
+export function inflectedMonth(word: string): number | undefined {
+  const english = ENGLISH_FULL.indexOf(word);
+  if (english >= 0) return english + 1;
+  const w = word.toLowerCase();
+  if (LOCATIVE[w]) return LOCATIVE[w];
+  // Genitive only: every genitive in MONTHS ends in -а/-я but Ukrainian "лютого", and no
+  // nominative does.
+  const m = MONTHS[w];
+  return m && (/[ая]$/.test(w) || w === "лютого") ? m : undefined;
+}
+
 const ISO = /^(\d{4})-(\d{1,2})-(\d{1,2})$/;
 /** Day first: "12.10.2025", "12/10/2025". */
 const DAY_FIRST = /^(\d{1,2})[./](\d{1,2})[./](\d{4})$/;

@@ -423,15 +423,40 @@ export interface Drone {
   /** Fingerprint of system facts used for the cached AI brief, so merges/edits invalidate it. */
   llmSummaryFingerprint?: string;
   specs: SpecAttribute[];
+  /**
+   * What reports say happened with the system - launched, intercepted, delivered, produced - over
+   * a period (activity.ts). Kept apart from `specs`: "launched 2,800 in August" is not a property
+   * of the system, and filed as a spec it became an attribute per month and a meaningless
+   * consensus. Nothing reads it into consensus; it is a series, not a figure.
+   */
+  activity?: ActivityRecord[];
   rf: RFLink[];
   components: SupplyComponent[];
   payloads?: PayloadObservation[];
   sensors?: SensorObservation[];
   evolution: EvolutionEvent[];
   counterpartIds: string[];
-  /** Explicit family relationship. Variants are not counterparts. */
+  /**
+   * Explicit family relationship. Variants are not counterparts. Legacy: the typed `relations`
+   * below supersede these. Every reader goes through system-hierarchy.ts, which reads both until
+   * the repair has copied them all into `relations`; the pipeline still writes these, and every
+   * relation write keeps them in step. To retire once the pipeline writes typed relations.
+   */
   variantOfId?: string;
   variantIds?: string[];
+  /**
+   * What kind of system this entry is. `family` is an umbrella (Geran, Shahed): not a build
+   * standard, the entry a report naming the family generically ("Gerans", "Shahed-type drones")
+   * belongs to, and the one its variants point at.
+   */
+  systemClass?: SystemClass;
+  /** Typed, directed relations to other entries, each stated once (system-hierarchy.ts). */
+  relations?: SystemRelationClaim[];
+  /**
+   * Entries the analyst has said are a different system, though they share names: the family
+   * audit does not propose merging them again.
+   */
+  distinctFrom?: string[];
   reference?: DroneReference;
   createdAt: string;
   updatedAt: string;
@@ -548,6 +573,8 @@ export interface Candidate {
    * claims they write, so a later verifier run can find the post again.
    */
   dispatchId?: string;
+  /** When that post was published: an activity figure's month without a year is placed by it. */
+  publishedAt?: string;
   createdAt: string;
   tier: 1 | 2;
   extraction: Extraction;
@@ -564,3 +591,88 @@ export interface Candidate {
 
 /** Plain-text country code; rendered flags live in `CountryBadge` (flag-icons). */
 export const flag = (c: string) => c.trim().toUpperCase();
+
+/** What a report counted. */
+export type ActivityMetric =
+  "launched" | "intercepted" | "delivered" | "produced" | "kills" | "ordered";
+
+/** One activity figure from one report, with the period it covers when the report says. */
+export interface ActivityRecord {
+  id: string;
+  metric: ActivityMetric;
+  /** The attribute the extractor filed it under, kept so nothing it said is lost. */
+  label: string;
+  /** The figure as the report gave it ("more than 2,800"). */
+  raw: string;
+  /** A point, or a bound when the report gave one ("more than" → min). */
+  quantity: { value?: number; min?: number; max?: number; approximate?: boolean };
+  /** What was counted, when the report names it ("missiles", "drones", "rounds"). */
+  unit?: string;
+  /** The period the figure covers, as an ISO date span; `label` is how the report put it. */
+  period?: { from?: string; to?: string; label: string };
+  /** A rate rather than a total ("per month", "a year"). */
+  per?: "day" | "week" | "month" | "year";
+  source: string;
+  sourceId?: string;
+  evidence?: string;
+  /** When the report was read. */
+  date: string;
+  /** When the post was published, which a month without a year was placed against. */
+  publishedAt?: string;
+  extractionEngine?: string;
+  model?: string;
+  /** Who stood behind the figure after an AI pass (ExtractedSpec.provenance); absent when repaired. */
+  provenance?: SpecProvenance;
+}
+
+/**
+ * platform: a complete vehicle (aircraft, UAV, USV, tank). family: an umbrella over variants of
+ * one design (Geran, Shahed). complex: a distributed battery of radar, command and launchers
+ * (Patriot). subsystem: an integrated unit of one (radar, ground station, engine). effector: an
+ * expended munition (missile, glide bomb). payload_ew: a removable pod, jammer or optronic ball.
+ */
+export type SystemClass =
+  "platform" | "family" | "complex" | "subsystem" | "effector" | "payload_ew";
+
+/**
+ * The relations that are stored, each in one direction only, from the entry that depends on the
+ * other: a variant points at its family, a clone at its origin, a radar at its battery, a missile
+ * at its launcher, a pod at its carrier. `counterpart_to` is symmetric and stored once.
+ */
+export type RelationKind =
+  "variant_of" | "derived_from" | "subsystem_of" | "effector_for" | "carried_by" | "counterpart_to";
+
+/** How a relation reads from the other end. Never stored: generated by the resolver. */
+export type RelationDisplayKind =
+  RelationKind | "has_variant" | "parent_of" | "has_subsystem" | "operates_effector" | "carries";
+
+export interface SystemRelationClaim {
+  id: string;
+  targetSystemId: string;
+  kind: RelationKind;
+  /**
+   * verified: stated by an analyst, or carried over from a link the catalogue already held.
+   * candidate: suggested by a report, waiting for review; nothing reads it as true until then.
+   * rejected: reviewed and turned down, kept so it is not suggested again.
+   */
+  status: "verified" | "candidate" | "rejected";
+  role?: string;
+  notes?: string;
+  /** "Outlet · URL" of the report that suggested it. */
+  source?: string;
+  sourceId?: string;
+  sourceCandidateId?: string;
+  /** The sentence that suggested it. */
+  evidence?: string;
+  confidence?: number;
+  date: string;
+  /**
+   * Set when confirming this claim wrote the legacy link it mirrors (`variantOfId`), so taking
+   * the verdict back removes only a link the verdict made, never one that predates it.
+   */
+  wroteLegacy?: boolean;
+  /** Set when rejecting this claim removed the legacy link, so taking it back restores it. */
+  clearedLegacy?: boolean;
+  /** The analyst's verdict, which outranks `status` (as on an alias claim). */
+  review?: { verdict: "confirmed" | "rejected"; by: "analyst"; at: string; notes?: string };
+}

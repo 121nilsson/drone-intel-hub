@@ -2,7 +2,8 @@ import { countryCode, countryCodes } from "@/entities/normalization/country";
 import { canonicalUnitForSemantic, semanticKeyFor } from "@/entities/normalization/semantic";
 import { isFinancialSpec } from "@/entities/procurement/routing";
 import { regroup, sameAttribute } from "./spec-engine";
-import type { Drone, SpecAttribute } from "./types";
+import { activityFromStoredSpec, isActivitySpec, withActivity } from "./activity";
+import type { Drone, SpecAttribute, SpecClaim } from "./types";
 
 /**
  * Brings a stored entry up to the rules new reporting is read with. The ingest boundary only
@@ -15,7 +16,7 @@ import type { Drone, SpecAttribute } from "./types";
  * even when its key now reads as a deal figure, because their call outranks the router's.
  */
 
-export type RepairKind = "semantic" | "merged" | "financial" | "country";
+export type RepairKind = "semantic" | "merged" | "financial" | "country" | "activity";
 
 export interface RepairChange {
   kind: RepairKind;
@@ -53,7 +54,14 @@ function resolved(s: SpecAttribute): SpecAttribute {
 const hasDuplicates = (specs: readonly SpecAttribute[]) =>
   specs.some((a, i) => specs.slice(i + 1).some((b) => sameAttribute(a, b)));
 
-export function repairDrone(drone: Drone): DroneRepair {
+/**
+ * `publishedFor` finds when a claim's post was published, so a repaired activity figure's month
+ * without a year is placed by the post and not by when it was read.
+ */
+export function repairDrone(
+  drone: Drone,
+  publishedFor?: (claim: SpecClaim) => string | undefined,
+): DroneRepair {
   const changes: RepairChange[] = [];
   const financial: SpecAttribute[] = [];
 
@@ -71,10 +79,18 @@ export function repairDrone(drone: Drone): DroneRepair {
     });
 
   let specs: SpecAttribute[] = [];
+  let activity = drone.activity;
   for (const s of drone.specs) {
     if (isFinancialSpec(s) && !analystOwned(s)) {
       financial.push(s);
       changes.push({ kind: "financial", detail: `${s.label} (${s.key}) → procurement` });
+      continue;
+    }
+    // An activity figure stored before activity existed: it moves out of the specs, every claim
+    // becoming a record, so "Launch Volume (June)" stops being an attribute of the system.
+    if (isActivitySpec(s) && !analystOwned(s)) {
+      activity = withActivity(activity, activityFromStoredSpec(s, publishedFor));
+      changes.push({ kind: "activity", detail: `${s.label} (${s.key}) → activity` });
       continue;
     }
     const r = resolved(s);
@@ -96,7 +112,7 @@ export function repairDrone(drone: Drone): DroneRepair {
 
   if (!changes.length) return { drone, financial, changes };
   return {
-    drone: { ...drone, origin, operators, specs },
+    drone: { ...drone, origin, operators, specs, ...(activity ? { activity } : {}) },
     financial,
     changes,
   };

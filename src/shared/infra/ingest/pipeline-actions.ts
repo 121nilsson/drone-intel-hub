@@ -30,6 +30,7 @@ export const claimIdsOf = (drone: Drone): Set<string> =>
  */
 const provenanceOf = (c: Candidate) => ({
   ...(c.dispatchId ? { sourceId: c.dispatchId } : {}),
+  ...(c.publishedAt ? { publishedAt: c.publishedAt } : {}),
   ...readBy(c.extraction),
 });
 

@@ -13,6 +13,7 @@ import { normalizeExtraction } from "@/entities/normalization/apply";
 import { semanticKeyFor } from "@/entities/normalization/semantic";
 import { phoneticKey } from "@/entities/drone/name-key";
 import { isFinancialSpec } from "@/entities/procurement/routing";
+import { isActivitySpec } from "@/entities/drone/activity";
 
 /**
  * Heuristic evaluation mode. READ-ONLY INVARIANT: this module only calls
@@ -428,7 +429,8 @@ export function queueFixtures(
 
 /** Usable specs only: financial/procurement keys are routed out of drone specs, so ignore them. */
 export function comparableSpecs(e: Extraction): Norm[] {
-  return e.specs.filter((s) => !isFinancialSpec(s)).map(norm);
+  // Deal figures and activity figures leave the specs at merge; they are not scored as specs.
+  return e.specs.filter((s) => !isFinancialSpec(s) && !isActivitySpec(s)).map(norm);
 }
 
 export interface SpecComparison {

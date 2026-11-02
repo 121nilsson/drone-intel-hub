@@ -1,4 +1,6 @@
 import type { Drone, SpecAttribute, RFLink } from "@/entities/drone/types";
+import { resolveRelations, type ResolvedEdge } from "@/entities/drone/system-hierarchy";
+import { RELATION_LABEL } from "@/shared/ui/relation-labels";
 import { consensus } from "@/entities/drone/consensus";
 import type { RawDispatch as Dispatch } from "@/entities/dispatch/types";
 import {
@@ -35,8 +37,10 @@ export function computeRelatedIntel(
   const sourceDrone = drones.find((d) => d.id === sourceId);
 
   if (sourceDrone) {
+    // Relations resolved once: each resolution scans the whole catalogue.
+    const relations = resolveRelations(sourceDrone, drones);
     // 1. Explicit counterparts
-    edges.push(...computeCounterpartEdges(sourceDrone, drones));
+    edges.push(...computeCounterpartEdges(relations, sourceDrone));
 
     // 2. RF overlap (computed)
     edges.push(...computeRfOverlapEdges(sourceDrone, drones));
@@ -51,7 +55,7 @@ export function computeRelatedIntel(
     edges.push(...computeOperatorEdges(sourceDrone, drones));
 
     // 6. Variant lineage (parent/variants)
-    edges.push(...computeLineageEdges(sourceDrone, drones));
+    edges.push(...computeLineageEdges(relations));
 
     // 7. Spec disputes
     edges.push(...computeSpecDisputeEdges(sourceDrone));
@@ -76,13 +80,13 @@ export function computeRelatedIntel(
   };
 }
 
-/** 1. Explicit counterpart links */
-function computeCounterpartEdges(source: Drone, drones: Drone[]): GraphEdge[] {
+/** 1. Explicit counterpart links, from either side, through the one reader of relations. */
+function computeCounterpartEdges(relations: readonly ResolvedEdge[], source: Drone): GraphEdge[] {
   const edges: GraphEdge[] = [];
 
-  for (const cid of source.counterpartIds) {
-    const target = drones.find((d) => d.id === cid);
-    if (!target) continue;
+  for (const e of relations) {
+    if (e.kind !== "counterpart_to") continue;
+    const target = e.target;
 
     edges.push({
       type: "counterpart",
@@ -317,40 +321,24 @@ function computeOperatorEdges(source: Drone, drones: Drone[]): GraphEdge[] {
   return edges;
 }
 
-/** 6. Variant lineage (parent/variants) */
-function computeLineageEdges(source: Drone, drones: Drone[]): GraphEdge[] {
+/**
+ * 6. Lineage and structure: family, derivation, subsystems, effectors, carriers - every typed
+ * relation but counterparts, read through system-hierarchy.ts and named as the dossier names them.
+ */
+function computeLineageEdges(relations: readonly ResolvedEdge[]): GraphEdge[] {
   const edges: GraphEdge[] = [];
-
-  // Parent
-  if (source.variantOfId) {
-    const parent = drones.find((d) => d.id === source.variantOfId);
-    if (parent) {
-      edges.push({
-        type: "lineage",
-        targetId: parent.id,
-        targetLabel: parent.name,
-        strength: 0.95,
-        evidence: ["Parent system"],
-        deepLink: makeDossierDeepLink(parent.id, "#variants"),
-      });
-    }
-  }
-
-  // Variants
-  const variants = drones.filter(
-    (d) => d.variantOfId === source.id || source.variantIds?.includes(d.id),
-  );
-  for (const variant of variants) {
+  for (const e of relations) {
+    if (e.kind === "counterpart_to") continue;
     edges.push({
       type: "lineage",
-      targetId: variant.id,
-      targetLabel: variant.name,
-      strength: 0.9,
-      evidence: ["Variant"],
-      deepLink: makeDossierDeepLink(variant.id, "#variants"),
+      targetId: e.target.id,
+      targetLabel: e.target.name,
+      // The family a system belongs to is the closest relation there is.
+      strength: e.displayKind === "variant_of" ? 0.95 : 0.9,
+      evidence: [RELATION_LABEL[e.displayKind].one],
+      deepLink: makeDossierDeepLink(e.target.id, "#variants"),
     });
   }
-
   return edges;
 }
 

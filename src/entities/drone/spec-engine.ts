@@ -1,9 +1,12 @@
 import type { Drone, ExtractedSpec, SpecAttribute, SpecClaim } from "@/entities/drone/types";
 import { consensus } from "@/entities/drone/consensus";
 import { canonicalUnitForSemantic, semanticKeyFor } from "@/entities/normalization/semantic";
+import { isActivitySpec, toActivity, withActivity } from "./activity";
 
 export interface SpecSourceRef {
   sourceId?: string;
+  /** When the post was published: an activity figure's month without a year is placed by it. */
+  publishedAt?: string;
   extractionConfidence?: number;
   evidence?: string;
   extractionEngine?: string;
@@ -95,6 +98,20 @@ export function mergeSpecs(
   ref?: SpecSourceRef,
 ): Drone {
   const date = new Date().toISOString();
+  // Activity figures ("launched 2,800 in August") are not properties: they leave the specs here,
+  // where every ingest path merges, and become the entry's activity series (activity.ts).
+  const activity = specs.flatMap((e) => {
+    const r = toActivity(e, {
+      source,
+      date,
+      ...(ref?.sourceId ? { sourceId: ref.sourceId } : {}),
+      ...(ref?.publishedAt ? { publishedAt: ref.publishedAt } : {}),
+      ...(ref?.extractionEngine ? { extractionEngine: ref.extractionEngine } : {}),
+      ...(ref?.model ? { model: ref.model } : {}),
+    });
+    return r ? [r] : [];
+  });
+  if (activity.length) specs = specs.filter((e) => !isActivitySpec(e));
   const next = regroup(drone.specs);
   // Signatures of claims added in this batch, so two specs from the same extraction that
   // restate the same figure in the same words are recorded once. Claims already on the drone
@@ -126,7 +143,12 @@ export function mergeSpecs(
       });
     }
   }
-  return { ...drone, specs: next, updatedAt: date };
+  return {
+    ...drone,
+    specs: next,
+    ...(activity.length ? { activity: withActivity(drone.activity, activity) } : {}),
+    updatedAt: date,
+  };
 }
 
 export interface SpecKeySummary {

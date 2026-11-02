@@ -1,4 +1,5 @@
 import { consensus } from "@/entities/drone/consensus";
+import { isRelationActive } from "@/entities/drone/system-hierarchy";
 import type { Drone } from "@/entities/drone/types";
 
 export interface SystemEvidenceDigest {
@@ -82,6 +83,17 @@ export const buildSystemEvidenceDigest = (drone: Drone): SystemEvidenceDigest =>
     counterpartIds: drone.counterpartIds,
     ...(drone.variantOfId ? { variantOfId: drone.variantOfId } : {}),
     ...(drone.variantIds ? { variantIds: drone.variantIds } : {}),
+    ...(drone.systemClass ? { systemClass: drone.systemClass } : {}),
+    // The typed relations this entry states, active ones only: what the briefing may rely on.
+    ...(drone.relations?.some(isRelationActive)
+      ? {
+          relations: drone.relations.filter(isRelationActive).map((r) => ({
+            kind: r.kind,
+            targetId: r.targetSystemId,
+            ...(r.role ? { role: r.role } : {}),
+          })),
+        }
+      : {}),
   };
   const specifications = drone.specs.map((spec) => {
     const report = int(spec);
@@ -112,6 +124,22 @@ export const buildSystemEvidenceDigest = (drone: Drone): SystemEvidenceDigest =>
       ...(link.source ? { source: link.source } : {}),
     })),
     specifications,
+    // What reports say happened with the system, period by period: launches, deliveries, kills.
+    // Only when there is some: an empty key would change every entry's fingerprint and send every
+    // stored brief back to the model for nothing.
+    ...(drone.activity?.length
+      ? {
+          activity: drone.activity.map((r) => ({
+            metric: r.metric,
+            quantity: r.quantity,
+            ...(r.unit ? { unit: r.unit } : {}),
+            ...(r.period ? { period: r.period.label } : {}),
+            ...(r.per ? { per: r.per } : {}),
+            source: r.source,
+            ...(r.evidence ? { evidence: r.evidence } : {}),
+          })),
+        }
+      : {}),
     components: drone.components.map((component) => ({
       part: component.part,
       manufacturer: component.manufacturer,

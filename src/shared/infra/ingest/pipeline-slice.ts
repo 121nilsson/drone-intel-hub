@@ -101,6 +101,7 @@ export function applyRelatedSystems(
       raw: primary.candidate.raw,
       source,
       ...(context.dispatchId ? { dispatchId: context.dispatchId } : {}),
+      ...(context.publishedAt ? { publishedAt: context.publishedAt } : {}),
       createdAt: new Date().toISOString(),
       tier: primary.candidate.tier,
       extraction,
@@ -163,6 +164,7 @@ export function applyRelatedSystems(
               withNormalizedRf(
                 mergeSpecs(base, extraction.specs, source, {
                   ...(context.dispatchId ? { sourceId: context.dispatchId } : {}),
+                  ...(context.publishedAt ? { publishedAt: context.publishedAt } : {}),
                   extractionConfidence: extraction.confidence,
                   ...readBy(extraction),
                 }),

@@ -6,7 +6,8 @@ import { clusterEvents } from "@/entities/dispatch/events";
 import type { FetchedPost } from "@/shared/infra/sources/source-fetch.functions";
 import type { DispatchRepository } from "@/shared/contracts/repository";
 import { runTwoTier, type PipelineDeps, type PipelineResult } from "@/shared/infra/ingest/pipeline";
-import type { Drone, SpecClaim } from "@/entities/drone/types";
+import type { ActivityRecord, Drone, SpecClaim } from "@/entities/drone/types";
+import { withActivity } from "@/entities/drone/activity";
 import {
   claimKey,
   heldReviews,
@@ -726,17 +727,21 @@ function retractContribution(
   const mine = (c: SpecClaim) =>
     c.extractionEngine !== "analyst" && (c.sourceId === d.id || c.source === source);
   /** Remove this post's claims from a fresh copy, so a concurrent review survives the retry. */
+  // Its activity records go with its claims: the re-read files them again.
+  const mineActivity = (r: ActivityRecord) => r.sourceId === d.id || r.source === source;
   const withoutMine = (drone: Drone): Drone => ({
     ...drone,
     specs: drone.specs
       .map((s) => ({ ...s, claims: s.claims.filter((c) => !mine(c)) }))
       .filter((s) => s.claims.length > 0),
+    ...(drone.activity ? { activity: drone.activity.filter((r) => !mineActivity(r)) } : {}),
     updatedAt: at,
   });
   const before: Drone[] = [];
   const held: HeldReview[] = [];
   for (const drone of deps.drones.list()) {
-    if (!drone.specs.some((s) => s.claims.some(mine))) continue;
+    if (!drone.specs.some((s) => s.claims.some(mine)) && !drone.activity?.some(mineActivity))
+      continue;
     before.push(drone);
     held.push(...heldReviews(drone, mine));
     deps.drones.upsert(withoutMine(drone), withoutMine);
@@ -765,7 +770,16 @@ function retractContribution(
               changed = true;
             }
           }
-          return changed ? { ...fresh, specs, updatedAt: at } : fresh;
+          // And the activity records this retraction took, back in the same way.
+          const lostActivity = (drone.activity ?? []).filter(mineActivity);
+          const activity = lostActivity.length
+            ? withActivity(fresh.activity, lostActivity)
+            : fresh.activity;
+          if (activity !== fresh.activity && activity?.length !== fresh.activity?.length)
+            changed = true;
+          return changed
+            ? { ...fresh, specs, ...(activity ? { activity } : {}), updatedAt: at }
+            : fresh;
         };
         const fresh = deps.drones.get(drone.id);
         if (fresh) deps.drones.upsert(restoreRemoved(fresh), restoreRemoved);

@@ -1,6 +1,6 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import { ExternalSourceLink, SourceRef, withUnit } from "@/shared/ui/links";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import {
   DropdownMenu,
@@ -27,6 +27,9 @@ import { buildSystemEvidenceDigest } from "@/shared/infra/system-evidence-digest
 import { Btn, ConfidenceTag, Loading, Panel, Tag, EmptyNote } from "@/shared/ui/primitives";
 import { DataTable, type Column } from "@/shared/ui/data-table";
 import { SectionNav } from "@/shared/ui/section-nav";
+import { ActivityPanel } from "./activity-panel";
+import { FamilyBreadcrumb, SystemRelationsPanel } from "./system-relations-panel";
+import { resolveRelations } from "@/entities/drone/system-hierarchy";
 import { KeyFigures } from "./key-figures";
 import { SummaryText } from "@/shared/ui/summary-text";
 import { ContractRow } from "@/shared/ui/contracts";
@@ -39,9 +42,10 @@ const DOSSIER_SECTIONS = [
   { id: "rf", label: "RF spectrum" },
   { id: "supply", label: "Supply chain" },
   { id: "contracts", label: "Procurement" },
+  { id: "activity", label: "Activity" },
   { id: "payloads", label: "Payloads" },
   { id: "sensors", label: "Sensors" },
-  { id: "variants", label: "Variants" },
+  { id: "variants", label: "Relations" },
   { id: "counterparts", label: "Counterparts" },
   { id: "timeline", label: "Timeline" },
   { id: "claims", label: "Claim timeline" },
@@ -484,11 +488,16 @@ export function DossierPage({ id }: { id: string }) {
   const svc = useServices();
   const d = drones.find((x) => x.id === id);
   const relatedIntel = useRelatedIntel(id);
-  const counterparts = d ? drones.filter((x) => d.counterpartIds.includes(x.id)) : [];
-  const parent = d?.variantOfId ? drones.find((x) => x.id === d.variantOfId) : undefined;
-  const variants = d
-    ? drones.filter((x) => d.variantIds?.includes(x.id) || x.variantOfId === d.id)
-    : [];
+  // Counterparts read through the one reader of relations, typed and legacy alike.
+  const counterparts = useMemo(
+    () =>
+      d
+        ? resolveRelations(d, drones)
+            .filter((e) => e.kind === "counterpart_to")
+            .map((e) => e.target)
+        : [],
+    [d, drones],
+  );
   // The payload and sensor panels read the observations and the figures: a report's list of
   // what a system carries, and the specs that measure it.
   const payloadFacts = d ? payloadSpecs(d) : [];
@@ -540,6 +549,9 @@ export function DossierPage({ id }: { id: string }) {
             {d.name} {d.cyrillic && <span className="text-muted-foreground">{d.cyrillic}</span>}
           </h1>
           <DeleteSystem key={d.id} drone={d} />
+        </div>
+        <div className="mt-1">
+          <FamilyBreadcrumb drone={d} catalog={drones} />
         </div>
         <div className="mt-4">
           <KeyFigures drone={d} />
@@ -650,6 +662,7 @@ export function DossierPage({ id }: { id: string }) {
             </p>
           )}
         </Panel>
+        <ActivityPanel activity={d.activity} />
         <Panel id="payloads" title="Payload configurations" className="scroll-mt-28">
           <ul className="space-y-2 text-sm">
             {(d.payloads ?? []).map((p, i) => (
@@ -731,30 +744,7 @@ export function DossierPage({ id }: { id: string }) {
             </>
           )}
         </Panel>
-        <Panel id="variants" title="Variant family" className="scroll-mt-28">
-          {parent && (
-            <Link
-              data-testid={`parent-link-${parent.id}`}
-              to="/systems/$id"
-              params={{ id: parent.id }}
-              className="block py-1 hover:text-primary"
-            >
-              Parent: {parent.name} →
-            </Link>
-          )}
-          {variants.map((variant) => (
-            <Link
-              data-testid={`variant-link-${variant.id}`}
-              key={variant.id}
-              to="/systems/$id"
-              params={{ id: variant.id }}
-              className="block py-1 hover:text-primary"
-            >
-              Variant: {variant.name} →
-            </Link>
-          ))}
-          {!parent && !variants.length && <EmptyNote>No family relationship recorded.</EmptyNote>}
-        </Panel>
+        <SystemRelationsPanel drone={d} catalog={drones} />
         <Panel id="counterparts" title="Counterparts" className="scroll-mt-28">
           {counterparts.map((c) => (
             <Link

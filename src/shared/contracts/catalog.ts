@@ -1,4 +1,10 @@
-import type { ClaimIssue, Drone, SpecClaim } from "@/entities/drone/types";
+import type {
+  ClaimIssue,
+  Drone,
+  RelationKind,
+  SpecClaim,
+  SystemClass,
+} from "@/entities/drone/types";
 
 /**
  * What removing a catalog entry would touch, without changing anything.
@@ -114,6 +120,35 @@ export interface CatalogMutations {
   moveAlias(sourceDroneId: string, claimId: string, targetDroneId: string): Drone | undefined;
   /** Take an alias move back out: the filed copy leaves the target, the source verdict clears. */
   undoMoveAlias(sourceDroneId: string, claimId: string): Drone | undefined;
+  /**
+   * Store a typed relation on the entry that depends on the other (a variant on its family), as
+   * the analyst's. Only the stored kinds; a duplicate, a link to itself or a variant cycle is
+   * refused. Returns the updated source entry, or undefined when refused or either entry is gone.
+   */
+  linkSystems(
+    sourceId: string,
+    targetId: string,
+    kind: RelationKind,
+    role?: string,
+  ): Drone | undefined;
+  /**
+   * Remove every link between two entries, typed and legacy, on both sides - a legacy link left
+   * behind would be copied back by the repair. Returns the updated source entry.
+   */
+  unlinkSystems(sourceId: string, targetId: string): Drone | undefined;
+  /** The analyst's verdict on a suggested relation, or null to clear it. */
+  reviewRelation(
+    droneId: string,
+    claimId: string,
+    verdict: "confirmed" | "rejected" | null,
+    notes?: string,
+  ): Drone | undefined;
+  /** What kind of system an entry is (a family, a platform, …), or null to clear it. */
+  setSystemClass(droneId: string, systemClass: SystemClass | null): Drone | undefined;
+  /** Turn down a suggested relation, so it is not suggested again. */
+  declineRelation(sourceId: string, targetId: string, kind: RelationKind): Drone | undefined;
+  /** Record that two entries sharing names are different systems, on both. */
+  markDistinct(aId: string, bId: string): Drone | undefined;
 }
 
 export type ClaimVerdict =

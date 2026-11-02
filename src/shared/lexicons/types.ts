@@ -44,6 +44,11 @@ export interface Lexicon {
     days: string[];
   };
   /** Spec cue phrases, by spec. Each list is matched shortly before the number. */
+  /**
+   * Words that make a count a rate rather than a total ("350 per month", "в сутки"), for activity
+   * figures (entities/drone/activity.ts). Only unambiguous ones: "a month" is also "a month ago".
+   */
+  rates: { day: string[]; week: string[]; month: string[]; year: string[] };
   cues: {
     speed: string[];
     /**
