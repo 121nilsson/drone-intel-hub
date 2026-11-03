@@ -51,6 +51,7 @@ const EXAMPLES: Record<RuleKind, string> = {
 };
 
 const f1 = (n: number) => (n >= 0 ? "+" : "") + n.toFixed(3);
+const pct = (n: number) => `${Math.round(n * 100)}%`;
 
 function Verdict({ r }: { r: SandboxResult & { evaluatedAt: string } }) {
   return (
@@ -67,6 +68,12 @@ function Verdict({ r }: { r: SandboxResult & { evaluatedAt: string } }) {
         {r.before.name.f1.toFixed(3)} → {r.after.name.f1.toFixed(3)} · matchId{" "}
         {r.before.matchId.f1.toFixed(3)} → {r.after.matchId.f1.toFixed(3)}
       </div>
+      {r.reference && (
+        <div className="text-muted-foreground">
+          reference {pct(r.reference.ratio)} verified of {r.reference.scored} scored
+          {r.reference.uncertain > 0 && ` · ${r.reference.uncertain} uncertain left out`}
+        </div>
+      )}
       {r.reasons.length > 0 && <div className="text-destructive">{r.reasons.join("; ")}</div>}
       {r.regressions.slice(0, 3).map((b) => (
         <div key={b.id} className="break-words text-destructive">
@@ -126,6 +133,7 @@ function Shadow({ m }: { m: NonNullable<RuleView["shadow"]> }) {
         shadow since {m.startedAt.slice(0, 16).replace("T", " ")} · {m.evaluated} new reports ·{" "}
         {m.hits} hits · {m.concordant} better · {m.conflicts} worse
         {decided > 0 && ` · precision ${Math.round((m.concordant / decided) * 100)}%`}
+        {m.reference && ` · ref ${pct(m.reference.ratio)} of ${m.reference.scored}`}
       </div>
       {m.blockers && m.blockers.length > 0 && (
         <div className="text-muted-foreground">Waiting on: {m.blockers.join(" · ")}</div>

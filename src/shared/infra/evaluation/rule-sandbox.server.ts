@@ -29,9 +29,10 @@ import {
 } from "@/shared/infra/evaluation/autonomy";
 import { hypothesisId, mineHypotheses } from "@/shared/infra/evaluation/hypotheses";
 import {
-  analystFixtures,
   analystVerdicts,
   queueFixtures,
+  verifiedFixtures,
+  verifiedVerdicts,
   type EvalFixture,
 } from "@/shared/infra/evaluation/evaluation";
 import type { Candidate, Drone } from "@/entities/drone/types";
@@ -145,6 +146,21 @@ async function reviewedCandidates(drones: readonly Drone[]) {
   return asCandidates(rows as unknown as { data: unknown }[]);
 }
 
+/**
+ * The candidates behind any claim the verifier or an analyst has judged (verifiedFixtures),
+ * newest first. Capped: the sandbox replays every fixture twice (baseline and proposed), so an
+ * uncapped catalogue-wide fixture set would make each activation slower than the decision it
+ * serves. The cap keeps the newest reports, which is where a rule's terms actually appear.
+ */
+async function judgedCandidates(drones: readonly Drone[], limit = 2000) {
+  const sources = [...verifiedVerdicts(drones).keys()];
+  if (!sources.length) return [];
+  const rows = await db()`
+    select data from candidates where data->>'source' = any(${sources})
+    order by created_at desc limit ${limit}`;
+  return asCandidates(rows as unknown as { data: unknown }[]);
+}
+
 /** Candidates an analyst promoted or merged from the Queue, newest first (queueFixtures). */
 async function analystResolvedCandidates(limit = 2000) {
   const rows = await db()`
@@ -191,8 +207,9 @@ async function withActivationLock<T>(
 
 /**
  * Approved + pending_fix fixtures: latest DB version per id, then git files not in the DB, then
- * the fixtures derived live and never stored: Queue decisions (queueFixtures) and the analyst
- * verdicts in the catalog (analystFixtures).
+ * the fixtures derived live and never stored: Queue decisions (queueFixtures) and the catalogue's
+ * verified claims (verifiedFixtures - analyst verdicts keep their "review-" ids, machine
+ * verification gets "verified-").
  */
 async function loadFixtures(drones: readonly Drone[]): Promise<EvalFixture[]> {
   const rows = await db()`
@@ -214,9 +231,9 @@ async function loadFixtures(drones: readonly Drone[]): Promise<EvalFixture[]> {
     for (const fx of JSON.parse(fs.readFileSync(full, "utf8")) as EvalFixture[])
       if (!byId.has(fx.id)) byId.set(fx.id, fx);
   }
-  const verdicts = analystVerdicts(drones);
+  const verdicts = verifiedVerdicts(drones);
   for (const fx of queueFixtures(await analystResolvedCandidates(), verdicts)) byId.set(fx.id, fx);
-  for (const fx of analystFixtures(await reviewedCandidates(drones), verdicts)) byId.set(fx.id, fx);
+  for (const fx of verifiedFixtures(await judgedCandidates(drones), verdicts)) byId.set(fx.id, fx);
   return [...byId.values()].filter((f) => typeof f.text === "string" && f.text.length > 0);
 }
 

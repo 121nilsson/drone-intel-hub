@@ -19,6 +19,7 @@ import {
   mismatchesToFixtures,
   type EvalReport,
   type Prf,
+  type ReferenceCoverage,
 } from "@/shared/infra/evaluation/evaluation";
 import {
   triggerEvaluation,
@@ -74,6 +75,15 @@ function Kpi({ label, v }: { label: string; v: Prf }) {
   );
 }
 
+/** Reference coverage beside a score: how much of what it was measured over is actually verified. */
+function Coverage({ c }: { c: ReferenceCoverage }) {
+  return (
+    <Tag tone={c.ratio >= 0.7 ? "success" : c.ratio >= 0.3 ? "warning" : "danger"} mono>
+      ref {pct(c.ratio)} of {c.scored}
+    </Tag>
+  );
+}
+
 function download(name: string, data: unknown) {
   const url = URL.createObjectURL(
     new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }),
@@ -95,7 +105,9 @@ export function EvaluationPage() {
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [report, setReport] = useState<EvalReport | null>(null);
   const [openKey, setOpenKey] = useState<string | null>(null);
-  const [trend, setTrend] = useState<{ generatedAt: string; f1: number }[]>([]);
+  const [trend, setTrend] = useState<
+    { generatedAt: string; f1: number; ref?: number | undefined }[]
+  >([]);
   const [keyTrends, setKeyTrends] = useState<EvalKeyTrend[]>([]);
   const [autoBusy, setAutoBusy] = useState<string | null>(null);
   const [autoStartedAt, setAutoStartedAt] = useState<number | null>(null);
@@ -110,7 +122,11 @@ export function EvaluationPage() {
   useEffect(() => {
     fetchEvalReports()
       .then((rows) =>
-        setTrend(rows.map((r) => ({ generatedAt: r.generatedAt, f1: r.f1 })).reverse()),
+        setTrend(
+          rows
+            .map((r) => ({ generatedAt: r.generatedAt, f1: r.f1, ref: r.reference?.ratio }))
+            .reverse(),
+        ),
       )
       .catch(() => {});
     fetchEvalKeyTrends()
@@ -190,9 +206,9 @@ export function EvaluationPage() {
         <Panel title="Run an evaluation">
           <p className="mb-3 text-xs text-muted-foreground">
             Picks a sample of processed reports, reads each again with the heuristic, and compares
-            the result with what is stored (analyst verdicts first, then the AI&apos;s reading).
-            Pick a sample size and run it here, or run it on the server to keep the report for the
-            trend.
+            the result with what the catalogue has verified (analyst verdicts first, then machine
+            verification, then the stored AI reading). Pick a sample size and run it here, or run it
+            on the server to keep the report for the trend.
           </p>
           <div className="flex flex-wrap items-center gap-2">
             <Segmented
@@ -255,6 +271,12 @@ export function EvaluationPage() {
               heuristic&apos;s value and dropped it, <em>miss</em> = the stored reading has
               something the heuristic missed.
             </p>
+            <p className="mt-2">
+              <strong>Reference coverage</strong> is the share of the comparison that rests on a
+              verified claim (machine-verified, or an analyst's verdict). Claims the verifier could
+              not decide are excluded from the scores rather than counted as misses, and everything
+              else falls back to the stored reading — so an F1 on low coverage says little.
+            </p>
           </details>
         </Panel>
 
@@ -265,6 +287,40 @@ export function EvaluationPage() {
               <Kpi label="System names" v={report.identity.name} />
               <Kpi label="Catalog links" v={report.identity.matchId} />
             </CardGrid>
+
+            <Panel title="Reference coverage">
+              <div className="flex flex-wrap gap-1.5">
+                <Coverage c={report.reference} />
+                <Tag tone="success" mono>
+                  verified {report.reference.verified}
+                </Tag>
+                <Tag tone="danger" mono>
+                  rejected {report.reference.rejected}
+                </Tag>
+                <Tag tone="info" mono>
+                  analyst {report.reference.analyst}
+                </Tag>
+                <Tag tone="muted" mono>
+                  unverified {report.reference.unverified}
+                </Tag>
+                {report.reference.dropped > 0 && (
+                  <Tag tone="muted" mono>
+                    ai-dropped {report.reference.dropped}
+                  </Tag>
+                )}
+                {report.reference.uncertain > 0 && (
+                  <Tag tone="warning" mono>
+                    uncertain, left out {report.reference.uncertain}
+                  </Tag>
+                )}
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">
+                Scores are measured against verified catalogue claims. A claim the verifier could
+                not decide is left out of every score, and a claim nobody has judged still falls
+                back to the stored AI reading — so a score on low coverage is weak evidence, not a
+                regression.
+              </p>
+            </Panel>
 
             <Panel title={`Sample: ${report.totalItems} reports`}>
               <div className="flex flex-wrap gap-1.5">
@@ -380,9 +436,15 @@ export function EvaluationPage() {
                       }
                       subtitle={`tp ${v.tp} · fp ${v.fp} · fn ${v.fn}`}
                       meta={
-                        <Tag tone={v.f1 < 0.5 ? "danger" : v.f1 < 0.8 ? "warning" : "success"} mono>
-                          F1 {v.f1.toFixed(2)} · P {pct(v.precision)} · R {pct(v.recall)}
-                        </Tag>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <Tag
+                            tone={v.f1 < 0.5 ? "danger" : v.f1 < 0.8 ? "warning" : "success"}
+                            mono
+                          >
+                            F1 {v.f1.toFixed(2)} · P {pct(v.precision)} · R {pct(v.recall)}
+                          </Tag>
+                          {report.perKeyReference[k] && <Coverage c={report.perKeyReference[k]!} />}
+                        </div>
                       }
                       below={
                         openKey === k ? (
@@ -431,6 +493,8 @@ export function EvaluationPage() {
               <Sparkline values={trend.map((t) => t.f1)} width={120} height={24} />
               <span className="font-mono text-xs text-muted-foreground">
                 {trend.length} server runs · latest F1 {trend[trend.length - 1]?.f1.toFixed(2)}
+                {trend[trend.length - 1]?.ref !== undefined &&
+                  ` · ref ${pct(trend[trend.length - 1]!.ref!)}`}
               </span>
             </div>
           </Panel>

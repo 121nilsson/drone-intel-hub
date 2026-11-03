@@ -6,6 +6,7 @@ import type {
   ExtractedSpec,
   Extraction,
   SpecProvenance,
+  VerificationState,
 } from "@/entities/drone/types";
 import { attributeSemantic } from "@/entities/drone/spec-engine";
 import type { IntelExtractor } from "@/shared/contracts/ai";
@@ -68,6 +69,10 @@ export interface EvalReport {
   summary: Prf;
   identity: { name: Prf; matchId: Prf };
   perKey: Record<string, Prf>;
+  /** Reference coverage overall, reported beside every score (plan §4.4). */
+  reference: ReferenceCoverage;
+  /** Reference coverage per spec key, so a key's F1 is never read without it. */
+  perKeyReference: Record<string, ReferenceCoverage>;
   mismatches: EvalMismatch[];
   topIssues: string[];
   /** Agreements usable as regression fixtures. */
@@ -185,8 +190,10 @@ export interface Norm {
   max?: number | undefined;
   evidence: string;
   provenance?: SpecProvenance | undefined;
-  /** An analyst's verdict on the catalog claim this spec became (referenceSpecs). */
+  /** An analyst's verdict on the catalog claim this spec became (verifiedReference). */
   verdict?: "confirmed" | "rejected" | undefined;
+  /** The verifier's conclusion on that claim. An analyst verdict outranks it (verifiedReference). */
+  verification?: VerificationState | undefined;
 }
 
 function norm(s: ExtractedSpec): Norm {
@@ -251,24 +258,40 @@ function sameValue(a: Norm, b: Norm): "exact" | "differentReading" | "raw" | nul
 }
 
 /**
- * Whether a reference claim is known to be wrong. An analyst's verdict outranks the AI's in both
- * directions, the same order claimCounts() applies to the catalog.
+ * Whether a reference claim is known to be wrong. An analyst's verdict outranks the verifier in
+ * both directions, the same order claimCounts() applies to the catalog.
  */
 const isDropped = (r: Norm) =>
-  r.verdict ? r.verdict === "rejected" : r.provenance === "heuristic";
+  r.verdict
+    ? r.verdict === "rejected"
+    : r.verification
+      ? r.verification === "rejected"
+      : r.provenance === "heuristic";
 
-/** An analyst's verdict on a catalog claim, located by what the claim was extracted from. */
-export interface AnalystVerdict {
+/** A claim the verifier could not decide: it is left out of the scores, never counted as a miss. */
+const isExcluded = (r: Norm) => !r.verdict && r.verification === "uncertain";
+
+/**
+ * What the catalogue knows about one claim that came from a report: what the verifier concluded,
+ * and what an analyst said about it if they looked. Keyed by the report's source line.
+ */
+export interface ReferenceVerdict {
   droneId: string;
   semantic: string;
   value: string;
   canonical?: number | undefined;
   canonicalUnit?: string | undefined;
-  verdict: "confirmed" | "rejected";
+  /** The verifier's conclusion, absent when it has not run on this claim. */
+  verification?: VerificationState | undefined;
+  /** The analyst's verdict, which outranks the verifier in both directions. */
+  verdict?: "confirmed" | "rejected" | undefined;
   issue?: ClaimIssue | undefined;
 }
 
-/** Verdicts keyed by the claim's source line, which is the `source` of the candidate it came from. */
+export type ReferenceVerdicts = ReadonlyMap<string, readonly ReferenceVerdict[]>;
+
+/** Only the claims an analyst has ruled on. */
+export type AnalystVerdict = ReferenceVerdict & { verdict: "confirmed" | "rejected" };
 export type AnalystVerdicts = ReadonlyMap<string, readonly AnalystVerdict[]>;
 
 /** Every analyst verdict on a claim that came from a report. Hand-entered values have no report. */
@@ -294,6 +317,33 @@ export function analystVerdicts(catalog: readonly Drone[]): AnalystVerdicts {
 }
 
 /**
+ * Every claim a verifier or an analyst has judged, keyed by the report it came from. This is the
+ * reference `verifiedReference` builds on: an unverified claim is still scored, but the report
+ * says how much of the reference that score rests on.
+ */
+export function verifiedVerdicts(catalog: readonly Drone[]): ReferenceVerdicts {
+  const out = new Map<string, ReferenceVerdict[]>();
+  for (const d of catalog)
+    for (const s of d.specs)
+      for (const c of s.claims) {
+        if (c.extractionEngine === "analyst") continue;
+        if (!c.verification && !c.review) continue;
+        const list = out.get(c.source) ?? [];
+        list.push({
+          droneId: d.id,
+          semantic: attributeSemantic(s),
+          value: String(c.value),
+          canonical: c.normalized?.canonicalValue,
+          canonicalUnit: c.normalized?.canonicalUnit,
+          ...(c.verification ? { verification: c.verification.state } : {}),
+          ...(c.review ? { verdict: c.review.verdict, issue: c.review.issue } : {}),
+        });
+        out.set(c.source, list);
+      }
+  return out;
+}
+
+/**
  * A verdict belongs to the candidate that fed that entry. A report naming two systems has one
  * candidate per system, and a figure rejected as "about another system" on one of them may still
  * be right for the other.
@@ -306,7 +356,7 @@ function feeds(c: Candidate, droneId: string): boolean {
   );
 }
 
-function verdictMatches(v: AnalystVerdict, n: Norm): boolean {
+function verdictMatches(v: ReferenceVerdict, n: Norm): boolean {
   if (v.semantic !== n.semantic) return false;
   if (String(n.value) === v.value) return true;
   return (
@@ -317,39 +367,72 @@ function verdictMatches(v: AnalystVerdict, n: Norm): boolean {
   );
 }
 
-/** The analyst verdicts on claims this candidate fed into the catalog. */
-export function verdictsFor(c: Candidate, verdicts: AnalystVerdicts): AnalystVerdict[] {
+/** The verdicts on claims this candidate fed into the catalogue. */
+export function verdictsFor(
+  c: Candidate,
+  verdicts: ReferenceVerdicts,
+): readonly ReferenceVerdict[] {
   return (verdicts.get(c.source) ?? []).filter((v) => feeds(c, v.droneId));
 }
 
 /**
- * What a heuristic run on this candidate is scored against: the stored extraction, with the
- * analyst's verdict on each claim it became. A rejected figure counts as one the AI dropped - a
- * heuristic that still produces it is `rejected`, the strongest false positive there is - and a
- * confirmed one counts even when the AI dropped it.
+ * Prefer a definite verdict when the same figure is filed under two systems. An analyst outranks
+ * a machine verdict, and a definite machine verdict beats one that could not decide.
  */
-export function referenceSpecs(c: Candidate, verdicts: AnalystVerdicts): Norm[] {
+function chooseVerdict(mine: readonly ReferenceVerdict[], n: Norm): ReferenceVerdict | undefined {
+  const matches = mine.filter((v) => verdictMatches(v, n));
+  return (
+    matches.find((v) => v.verdict) ??
+    matches.find((v) => v.verification === "verified") ??
+    matches.find((v) => v.verification === "rejected") ??
+    matches[0]
+  );
+}
+
+/**
+ * What a heuristic run on this candidate is scored against: the stored extraction, with the
+ * catalogue's verdict on each claim it became.
+ *
+ * A verified claim counts even when the AI dropped it, a rejected one counts as an expected
+ * negative, and an uncertain one is left out rather than scored as a miss (plan §4.4). An analyst
+ * verdict still overrides the verifier in both directions. A claim nobody has judged keeps the
+ * stored reading as a fallback, so an unverified catalogue behaves exactly as it did before.
+ */
+export function verifiedReference(c: Candidate, verdicts: ReferenceVerdicts): Norm[] {
   const ref = comparableSpecs(c.extraction);
   const mine = verdictsFor(c, verdicts);
   if (!mine.length) return ref;
   return ref.map((n) => {
-    const v = mine.find((x) => verdictMatches(x, n));
-    return v ? { ...n, verdict: v.verdict } : n;
+    const v = chooseVerdict(mine, n);
+    if (!v) return n;
+    return {
+      ...n,
+      ...(v.verdict ? { verdict: v.verdict } : {}),
+      ...(v.verification ? { verification: v.verification } : {}),
+    };
   });
 }
 
 /**
- * Regression fixtures from analyst verdicts: per candidate, a positive one (confirmed figures must
- * keep being found) and a negative one (rejected figures must not come back), the same split as
- * the two git corpora. Derived from the catalog on every load rather than stored, so an undone
- * verdict takes its expectation with it.
+ * @deprecated Use `verifiedReference`. Kept for callers that still pass analyst verdicts only;
+ * with those it behaves exactly as before.
+ */
+export const referenceSpecs = verifiedReference;
+
+/**
+ * Regression fixtures from the catalogue's verdicts: per candidate, a positive one (verified or
+ * confirmed figures must keep being found) and a negative one (rejected figures must not come
+ * back), the same split as the two git corpora. Uncertain claims are left out: the verifier could
+ * not decide, so a rule is neither required to find nor forbidden to produce them. Derived from
+ * the catalogue on every load rather than stored, so an undone verdict takes its expectation with
+ * it.
  *
  * "About another system" is left out: a fixture checks the whole text's output, and the figure
  * may well be right for another system the same report names.
  */
-export function analystFixtures(
+function fixturesFrom(
   candidates: readonly Candidate[],
-  verdicts: AnalystVerdicts,
+  verdicts: ReferenceVerdicts,
 ): EvalFixture[] {
   const out: EvalFixture[] = [];
   for (const c of candidates) {
@@ -357,25 +440,55 @@ export function analystFixtures(
     const ref = comparableSpecs(c.extraction);
     const expect: EvalFixture["expect"] = [];
     const forbid: NonNullable<EvalFixture["forbid"]> = [];
+    const seen = new Set<string>();
+    let reviewed = false;
     for (const v of verdictsFor(c, verdicts)) {
       if (v.issue === "system") continue;
+      const state = v.verdict ?? v.verification;
+      // No verdict, or an uncertain one, is not an expectation either way.
+      if (!v.verdict && v.verification !== "verified" && v.verification !== "rejected") continue;
+      // An analyst verdict keeps the candidate's fixture under the id eval_corpus already keys,
+      // even when a machine-verified duplicate expectation would have carried it first.
+      if (v.verdict) reviewed = true;
       // In the same canonical terms checkFixture compares a fresh run in.
       const n = ref.find((x) => verdictMatches(v, x));
       const value = n?.canonical ?? v.canonical ?? n?.value ?? v.value;
       const unit = n?.canonical !== undefined ? n.canonicalUnit : v.canonicalUnit;
-      (v.verdict === "confirmed" ? expect : forbid).push({
+      const key = `${v.semantic}|${value}|${unit ?? ""}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      (state === "confirmed" || state === "verified" ? expect : forbid).push({
         semantic: v.semantic,
         value,
         ...(unit ? { unit } : {}),
       });
     }
     // "review-", not "analyst-": eval_corpus still holds retired Queue fixtures under
-    // "analyst-<candidate id>" (migration 015), and loadFixtures keys every source by id.
+    // "analyst-<candidate id>" (migration 015), and loadFixtures keys every source by id. A
+    // machine-verified fixture gets its own id so it can retire with the verification that
+    // produced it.
+    const prefix = reviewed ? "review" : "verified";
     const base = { source: c.source, text: c.raw, status: "approved" as const };
-    if (expect.length) out.push({ ...base, id: `review-${c.id}`, expect });
-    if (forbid.length) out.push({ ...base, id: `review-neg-${c.id}`, expect: [], forbid });
+    if (expect.length) out.push({ ...base, id: `${prefix}-${c.id}`, expect });
+    if (forbid.length) out.push({ ...base, id: `${prefix}-neg-${c.id}`, expect: [], forbid });
   }
   return out;
+}
+
+/** Fixtures from analyst verdicts only: the pre-verifier behaviour, kept for its call sites. */
+export function analystFixtures(
+  candidates: readonly Candidate[],
+  verdicts: AnalystVerdicts,
+): EvalFixture[] {
+  return fixturesFrom(candidates, verdicts);
+}
+
+/** Fixtures from both machine verification and analyst verdicts (plan §4.4). */
+export function verifiedFixtures(
+  candidates: readonly Candidate[],
+  verdicts: ReferenceVerdicts,
+): EvalFixture[] {
+  return fixturesFrom(candidates, verdicts);
 }
 
 /**
@@ -402,21 +515,21 @@ export async function analystCorpus(
 /**
  * Regression fixtures from Queue decisions: a candidate an analyst promoted or merged is a report
  * whose figures they accepted, so the heuristic should keep finding them. Only the figures that
- * survive the reference (none the AI dropped or an analyst rejected), in canonical terms. A
- * discarded candidate yields nothing: the analyst rejected the report, and its figures may be
- * right or wrong. Derived from the candidates' current state like analystFixtures, so an undone
- * decision takes its fixture with it.
+ * survive the reference (none the AI dropped, an analyst rejected or the verifier could not
+ * decide), in canonical terms. A discarded candidate yields nothing: the analyst rejected the
+ * report, and its figures may be right or wrong. Derived from the candidates' current state like
+ * verifiedFixtures, so an undone decision takes its fixture with it.
  */
 export function queueFixtures(
   candidates: readonly Candidate[],
-  verdicts: AnalystVerdicts,
+  verdicts: ReferenceVerdicts,
 ): EvalFixture[] {
   const out: EvalFixture[] = [];
   for (const c of candidates) {
     if (c.resolvedBy !== "analyst" || (c.status !== "promoted" && c.status !== "merged")) continue;
     if ((c.raw?.trim().length ?? 0) < MIN_RAW) continue;
-    const expect = referenceSpecs(c, verdicts)
-      .filter((n) => !isDropped(n))
+    const expect = verifiedReference(c, verdicts)
+      .filter((n) => !isDropped(n) && !isExcluded(n))
       .map((n) => {
         const unit = n.canonical !== undefined ? n.canonicalUnit : n.unit;
         return { semantic: n.semantic, value: n.canonical ?? n.value, ...(unit ? { unit } : {}) };
@@ -440,6 +553,8 @@ export interface SpecComparison {
   wrongKeys: { h: Norm; r: Norm }[];
   /** Heuristic claims matching a reference claim the AI dropped: false positives with proof. */
   rejected: { h: Norm; r: Norm }[];
+  /** Reference claims the verifier could not decide: left out of every score, not counted as misses. */
+  excluded: Norm[];
 }
 
 /**
@@ -447,12 +562,15 @@ export interface SpecComparison {
  *
  * The stored extraction keeps every heuristic claim, so pairing against it as-is would score the
  * heuristic against its own ingest-time output. Claims the AI dropped (provenance "heuristic")
- * are therefore never a match: a heuristic claim equal to one is `rejected`, and one the
- * heuristic no longer makes is not a miss. Candidates stored before provenance behave as before.
+ * or the verifier rejected are therefore never a match: a heuristic claim equal to one is
+ * `rejected`, and one the heuristic no longer makes is not a miss. A claim the verifier could not
+ * decide is not scored at all - neither its absence (a miss) nor a heuristic claim matching it (a
+ * false positive). Candidates stored before provenance behave as before.
  */
 export function compareSpecs(heur: Norm[], allRef: Norm[]): SpecComparison {
-  const ref = allRef.filter((r) => !isDropped(r));
-  const dropped = allRef.filter(isDropped);
+  const excluded = allRef.filter(isExcluded);
+  const ref = allRef.filter((r) => !isExcluded(r) && !isDropped(r));
+  const dropped = allRef.filter((r) => !isExcluded(r) && isDropped(r));
   const usedR = new Set<number>();
   const usedH = new Set<number>();
   const pairs: SpecComparison["pairs"] = [];
@@ -483,6 +601,8 @@ export function compareSpecs(heur: Norm[], allRef: Norm[]): SpecComparison {
   const falsePositives: Norm[] = [];
   heur.forEach((h, hi) => {
     if (usedH.has(hi)) return;
+    // A claim the verifier could not decide is not evidence against the heuristic either.
+    if (excluded.some((x) => x.semantic === h.semantic && sameValue(h, x))) return;
     const r = dropped.find((d) => d.semantic === h.semantic && sameValue(h, d));
     if (r) rejected.push({ h, r });
     else falsePositives.push(h);
@@ -493,7 +613,93 @@ export function compareSpecs(heur: Norm[], allRef: Norm[]): SpecComparison {
     falsePositives,
     misses: ref.filter((_, i) => !usedR.has(i)),
     rejected,
+    excluded,
   };
+}
+
+/**
+ * How much of the reference a score was measured over is actually verified (plan §4.4). An
+ * unverified claim keeps the stored extraction as fallback, so the scores stay comparable while
+ * the catalogue catches up; the ratio says how far that is evidence.
+ */
+export interface ReferenceCoverage {
+  /** Claims the scores were measured over: every reference claim except the uncertain ones. */
+  scored: number;
+  /** Passed verification. */
+  verified: number;
+  /** Failed verification; scored as an expected negative. */
+  rejected: number;
+  /** Carried an analyst's verdict, which outranks verification. */
+  analyst: number;
+  /** No verifier or analyst verdict: scored against the stored extraction. */
+  unverified: number;
+  /** The AI dropped it at ingest and nobody has judged it since. */
+  dropped: number;
+  /** Verification could not decide; left out rather than counted as a miss. */
+  uncertain: number;
+  /** (verified + rejected + analyst) / scored; 0 when nothing was scored. */
+  ratio: number;
+}
+
+/** The mutable counters behind a `ReferenceCoverage`, so callers can add one claim at a time. */
+export type CoverageTally = Omit<ReferenceCoverage, "ratio">;
+
+export const emptyCoverage = (): CoverageTally => ({
+  scored: 0,
+  verified: 0,
+  rejected: 0,
+  analyst: 0,
+  unverified: 0,
+  dropped: 0,
+  uncertain: 0,
+});
+
+/** Count one reference claim. An analyst verdict outranks the verifier, which outranks ingest. */
+export function addCoverage(t: CoverageTally, n: Norm): void {
+  if (n.verdict) {
+    t.scored++;
+    t.analyst++;
+    return;
+  }
+  if (n.verification === "uncertain") {
+    t.uncertain++;
+    return;
+  }
+  t.scored++;
+  if (n.verification === "verified") t.verified++;
+  else if (n.verification === "rejected") t.rejected++;
+  else if (n.provenance === "heuristic") t.dropped++;
+  else t.unverified++;
+}
+
+export function finishCoverage(t: CoverageTally): ReferenceCoverage {
+  const decided = t.verified + t.rejected + t.analyst;
+  return { ...t, ratio: t.scored ? decided / t.scored : 0 };
+}
+
+/** Coverage of a whole comparison: every reference claim is in exactly one bucket. */
+export function comparisonCoverage(cmp: SpecComparison): ReferenceCoverage {
+  const t = emptyCoverage();
+  for (const p of cmp.pairs) addCoverage(t, p.r);
+  for (const w of cmp.wrongKeys) addCoverage(t, w.r);
+  for (const r of cmp.misses) addCoverage(t, r);
+  for (const x of cmp.rejected) addCoverage(t, x.r);
+  for (const x of cmp.excluded) addCoverage(t, x);
+  return finishCoverage(t);
+}
+
+/** Coverage of a list of reference claims, before comparing anything to them. */
+export function coverageOf(reference: readonly Norm[]): ReferenceCoverage {
+  const t = emptyCoverage();
+  for (const r of reference) addCoverage(t, r);
+  return finishCoverage(t);
+}
+
+/** Add two finished coverages, e.g. a shadow run's running total and its latest batch. */
+export function mergeCoverage(a: ReferenceCoverage, b: ReferenceCoverage): ReferenceCoverage {
+  const t = emptyCoverage();
+  for (const k of Object.keys(t) as (keyof CoverageTally)[]) t[k] = a[k] + b[k];
+  return finishCoverage(t);
 }
 
 function prf(tp: number, fp: number, fn: number): Prf {
@@ -557,17 +763,34 @@ export function evalPosts(candidates: readonly Candidate[]): EvalPost[] {
   });
 }
 
-/** Everything the AI read in the post, each figure once. */
-function postReferences(p: EvalPost, verdicts: AnalystVerdicts): Norm[] {
-  const seen = new Set<string>();
-  return p.systems
-    .flatMap((c) => referenceSpecs(c, verdicts))
-    .filter((n) => {
+/**
+ * When two systems in one report carry the same figure, the strongest knowledge of it wins: an
+ * analyst verdict, then a verifier verdict, then the unverified stored reading, and last the
+ * claim the verifier could not decide.
+ */
+const referenceRank = (n: Norm): number =>
+  n.verdict === "confirmed"
+    ? 5
+    : n.verdict === "rejected"
+      ? 4
+      : n.verification === "verified"
+        ? 3
+        : n.verification === "rejected"
+          ? 2
+          : n.verification === "uncertain"
+            ? 0
+            : 1;
+
+/** Everything the catalogue read in the post, each figure once, with its verification state. */
+function postReferences(p: EvalPost, verdicts: ReferenceVerdicts): Norm[] {
+  const byKey = new Map<string, Norm>();
+  for (const c of p.systems)
+    for (const n of verifiedReference(c, verdicts)) {
       const k = `${n.semantic}|${n.canonical ?? n.value}|${n.canonicalUnit ?? n.unit ?? ""}`;
-      if (seen.has(k)) return false;
-      seen.add(k);
-      return true;
-    });
+      const prev = byKey.get(k);
+      if (!prev || referenceRank(n) > referenceRank(prev)) byKey.set(k, n);
+    }
+  return [...byKey.values()];
 }
 
 const postExtraction = (p: EvalPost): Extraction => ({
@@ -604,7 +827,7 @@ export async function evaluateHeuristic(
     sampleSize,
     opts.seed ?? 1,
   );
-  const verdicts = analystVerdicts(catalog);
+  const verdicts = verifiedVerdicts(catalog);
 
   const strat: EvalReport["stratification"] = { platform: {}, outcome: {}, epoch: {} };
   const keyCounts = new Map<string, { tp: number; fp: number; fn: number }>();
@@ -612,6 +835,21 @@ export async function evaluateHeuristic(
     const c = keyCounts.get(k) ?? { tp: 0, fp: 0, fn: 0 };
     c[f]++;
     keyCounts.set(k, c);
+  };
+  const reference = emptyCoverage();
+  const perKeyReference = new Map<string, CoverageTally>();
+  const cover = (n: Norm) => {
+    addCoverage(reference, n);
+    const t = perKeyReference.get(n.semantic) ?? emptyCoverage();
+    addCoverage(t, n);
+    perKeyReference.set(n.semantic, t);
+  };
+  const coverComparison = (cmp: SpecComparison) => {
+    for (const p of cmp.pairs) cover(p.r);
+    for (const w of cmp.wrongKeys) cover(w.r);
+    for (const r of cmp.misses) cover(r);
+    for (const x of cmp.rejected) cover(x.r);
+    for (const x of cmp.excluded) cover(x);
   };
   const id = { name: { tp: 0, fp: 0, fn: 0 }, matchId: { tp: 0, fp: 0, fn: 0 } };
   const mismatches: EvalMismatch[] = [];
@@ -679,6 +917,7 @@ export async function evaluateHeuristic(
       continue;
     }
     const cmp = compareSpecs(comparableSpecs(heur), postReferences(post, verdicts));
+    coverComparison(cmp);
     for (const p of cmp.pairs) {
       bump(p.h.semantic, "tp");
       if (p.type === "differentReading") pushMis(c, "differentReading", p.h, p.r);
@@ -727,8 +966,11 @@ export async function evaluateHeuristic(
         return !proof || rawFolded.includes(fold(String(proof)));
       });
       if (hasEvidence && c.raw.trim().length > 50 && c.status !== "discarded") {
-        // Enforce corroboration: only keep agreed specs that >=2 candidates confirm.
+        // Enforce corroboration: only keep agreed specs that >=2 candidates confirm, unless the
+        // catalogue itself verified the claim - a fact checked against the post needs no second
+        // report to become a regression test.
         const corroborated = agreed.filter((p) => {
+          if (p.r.verdict === "confirmed" || p.r.verification === "verified") return true;
           const key = `${p.h.semantic}|${p.h.canonical ?? p.h.value}|${p.h.canonicalUnit ?? p.h.unit ?? ""}`;
           return (refCounts.get(key) ?? 0) >= 2;
         });
@@ -770,6 +1012,9 @@ export async function evaluateHeuristic(
       return `${k}: F1 ${v.f1.toFixed(2)} — ${kind} (fp ${v.fp}, fn ${v.fn})`;
     });
 
+  const perKeyCoverage: Record<string, ReferenceCoverage> = {};
+  for (const [k, t] of perKeyReference) perKeyCoverage[k] = finishCoverage(t);
+
   return {
     generatedAt: new Date().toISOString(),
     sampleSize,
@@ -781,6 +1026,8 @@ export async function evaluateHeuristic(
       matchId: prf(id.matchId.tp, id.matchId.fp, id.matchId.fn),
     },
     perKey,
+    reference: finishCoverage(reference),
+    perKeyReference: perKeyCoverage,
     unscoredMisses,
     mismatches,
     topIssues,

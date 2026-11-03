@@ -3,11 +3,12 @@ import { PostgresStore } from "@/shared/infra/postgres/postgres-store.server";
 import { HeuristicExtractor } from "@/shared/infra/heuristic-ai";
 import { getOrRefreshRuleSnapshot } from "@/shared/infra/heuristics/rule-registry.server";
 import {
-  analystVerdicts,
   evaluateHeuristic,
   compareSpecs,
   comparableSpecs,
-  referenceSpecs,
+  verifiedReference,
+  verifiedVerdicts,
+  type ReferenceCoverage,
 } from "@/shared/infra/evaluation/evaluation";
 import { normalizeExtraction } from "@/entities/normalization/apply";
 import { sanitizeJson } from "@/shared/infra/json-sanitize";
@@ -372,7 +373,7 @@ export async function runAdjudication(): Promise<{
     const decidedBy = autoApprove ? "autonomous" : null;
     // A claim an analyst ruled on is settled: it compares as dropped or confirmed, never as a
     // conflict to put to the model.
-    const verdicts = analystVerdicts(drones);
+    const verdicts = verifiedVerdicts(drones);
     // The fixture ids the adjudication writes are deterministic, so a conflict that was already
     // judged can be recognised and left to the model no more. They are read in one query: the
     // candidate list is thousands long, and a query per candidate would be thousands of round
@@ -385,7 +386,7 @@ export async function runAdjudication(): Promise<{
       if (adjudicated >= MAX) break;
       if (!c.raw || c.raw.trim().length < 50) continue;
       const heur = normalizeExtraction(await heuristic.extract(c.raw, drones)).extraction;
-      const cmp = compareSpecs(comparableSpecs(heur), referenceSpecs(c, verdicts));
+      const cmp = compareSpecs(comparableSpecs(heur), verifiedReference(c, verdicts));
       const conflicts = [...cmp.wrongKeys, ...cmp.falsePositives.map((h) => ({ h, r: null }))];
       if (conflicts.length === 0) continue;
 
@@ -495,6 +496,8 @@ export interface EvalReportRow {
   f1: number;
   precision: number;
   recall: number;
+  /** Absent on reports stored before the verified reference landed. */
+  reference?: ReferenceCoverage;
 }
 
 export interface EvalKeyTrend {
@@ -536,6 +539,7 @@ export async function getEvalReports(limit = 20): Promise<EvalReportRow[]> {
   return rows.map((r) => {
     const rep = r["report"] as Record<string, unknown>;
     const summary = (rep["summary"] ?? {}) as Record<string, unknown>;
+    const reference = rep["reference"] as ReferenceCoverage | undefined;
     return {
       id: r["id"] as string,
       generatedAt: (r["generated_at"] as Date).toISOString(),
@@ -543,6 +547,7 @@ export async function getEvalReports(limit = 20): Promise<EvalReportRow[]> {
       f1: typeof summary["f1"] === "number" ? (summary["f1"] as number) : 0,
       precision: typeof summary["precision"] === "number" ? (summary["precision"] as number) : 0,
       recall: typeof summary["recall"] === "number" ? (summary["recall"] as number) : 0,
+      ...(reference && typeof reference.ratio === "number" ? { reference } : {}),
     };
   });
 }

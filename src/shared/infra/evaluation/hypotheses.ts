@@ -10,7 +10,8 @@ import {
   compareSpecs,
   comparableSpecs,
   namesOf,
-  referenceSpecs,
+  verifiedReference,
+  verifiedVerdicts,
   stratifiedSample,
   verdictsFor,
   type Norm,
@@ -137,10 +138,12 @@ export async function mineHypotheses(
   const eligible = candidates.filter(
     (c) => (c.raw?.trim().length ?? 0) > 50 && c.status !== "discarded",
   );
-  const verdicts = analystVerdicts(catalog);
+  const verdicts = verifiedVerdicts(catalog);
+  const analyst = analystVerdicts(catalog);
   // Reports an analyst has ruled on always join the sample: they are the only reference that is
-  // not a model's opinion, so they should not depend on the draw.
-  const reviewed = eligible.filter((c) => verdictsFor(c, verdicts).length);
+  // not a model's opinion, so they should not depend on the draw. Verified claims use the same
+  // bounded draw rather than forcing nearly the whole archive into it.
+  const reviewed = eligible.filter((c) => verdictsFor(c, analyst).length);
   const drawn = stratifiedSample(eligible, opts.sampleSize ?? 400, opts.seed ?? 1);
   const sample = [...new Map([...reviewed, ...drawn].map((c) => [c.id, c])).values()];
 
@@ -169,7 +172,7 @@ export async function mineHypotheses(
       if (!ref.has(phoneticKey(s.name))) note(falseNames, s.name.toLowerCase(), c, s.name);
     }
 
-    const cmp = compareSpecs(comparableSpecs(heur), referenceSpecs(c, verdicts));
+    const cmp = compareSpecs(comparableSpecs(heur), verifiedReference(c, verdicts));
     for (const p of cmp.pairs) {
       if (p.type === "differentReading") parserDefects++;
       // Every word near an agreed figure, cue words included: none of them may ever trigger.

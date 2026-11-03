@@ -144,6 +144,10 @@ Settings page shows resolved providers, models, and fallback order.
 - **Autonomy (`/autonomy`):** deterministic verification coverage (verified / uncertain /
   rejected / not yet checked), the claims worth a look, the `autonomy_events` decision ledger
   (migration 018) and rule decisions. Verification is measured only; it does not change consensus.
+- **Audit (`/audit`):** the stratified human audit of `verified` claims (migrations 019/020) —
+  drawn with a recorded seed, hidden controls, the binomial stopping rule against the 5 % budget,
+  and the second reader's agreement with the person's answers. The frozen seed set lives only in
+  `verification_audit`; nothing that learns may read it.
 
 ---
 
@@ -186,6 +190,29 @@ Settings page shows resolved providers, models, and fallback order.
 
 ---
 
+## Verified reference and evaluation
+
+The heuristic is scored against what the catalogue has judged, not just what the AI stored
+(`src/shared/infra/evaluation/evaluation.ts`, plan §4.4):
+
+- `verifiedReference(c, verifiedVerdicts(catalog))` maps each stored spec to its claim's verdict:
+  machine-verified claims count as expected positives (even when the AI dropped them), rejected
+  ones as expected negatives, and claims the verifier could not decide are **excluded** from every
+  score — not counted as misses. An analyst's `review` still overrides the verifier in both
+  directions. A claim nobody has judged falls back to the stored reading, so an unverified
+  catalogue behaves exactly as before.
+- `ReferenceCoverage` (overall and per spec key) travels with every `EvalReport`, and is shown
+  beside the F1 numbers on the Evaluation page, in the sandbox verdict and in the shadow line:
+  `ref 62% of 140` — the share of scored claims resting on a verified or analyst verdict.
+- Regression fixtures come from `verifiedFixtures` (verified → expect, rejected → forbid,
+  uncertain → neither); analyst-decided candidates keep their `review-` fixture ids, machine-only
+  ones get `verified-`. Mining keeps its analyst-reviewed sample but scores against the verified
+  reference; `shadowStep` and contradiction adjudication do the same.
+- The second reader (`SpecClaim.entailment`) and the challenger remain measurement-only until the
+  audit earns them a vote.
+
+---
+
 ## Reference import
 
 On-demand Wikipedia/Wikidata catalog import from the Catalog page (`src/shared/infra/wikipedia/`,
@@ -204,5 +231,5 @@ On-demand Wikipedia/Wikidata catalog import from the Catalog page (`src/shared/i
 
 ## Schema
 
-Authoritative SQL: `migrations/001`–`016` (see README PostgreSQL table). `drizzle/` is not used at
+Authoritative SQL: `migrations/001`–`020` (see README PostgreSQL table). `drizzle/` is not used at
 application runtime.

@@ -9,6 +9,7 @@ import {
   stratifiedSample,
   type EvalFixture,
   type Prf,
+  type ReferenceCoverage,
 } from "./evaluation";
 
 /**
@@ -69,6 +70,8 @@ export interface SandboxResult {
   changedCandidates: number;
   before: SandboxScores;
   after: SandboxScores;
+  /** How much of the reference those scores were measured over is verified (plan §4.4). Absent on verdicts stored before the verified reference landed. */
+  reference?: ReferenceCoverage;
   /** Largest F1 change across spec, name and matchId. */
   f1Delta: number;
   preview: ImpactPreview[];
@@ -236,6 +239,7 @@ export async function runSandbox(input: SandboxInput): Promise<SandboxResult> {
     changedCandidates: changed,
     before,
     after,
+    reference: rb.reference,
     f1Delta: deltas.reduce((m, d) => (Math.abs(d) > Math.abs(m) ? d : m), 0),
     preview,
   };

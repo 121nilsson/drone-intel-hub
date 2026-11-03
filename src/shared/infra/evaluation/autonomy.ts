@@ -2,12 +2,15 @@ import type { Candidate, Drone, Extraction } from "@/entities/drone/types";
 import type { IntelExtractor } from "@/shared/contracts/ai";
 import { normalizeExtraction } from "@/entities/normalization/apply";
 import {
-  analystVerdicts,
   compareSpecs,
   comparableSpecs,
+  coverageOf,
+  mergeCoverage,
   namesOf,
-  referenceSpecs,
+  verifiedReference,
+  verifiedVerdicts,
   type Norm,
+  type ReferenceCoverage,
 } from "./evaluation";
 import type { SandboxResult } from "./sandbox";
 
@@ -29,6 +32,8 @@ export interface ShadowMetrics {
   startedAt: string;
   /** createdAt of the newest candidate already scored; only later ones count. */
   watermark: string;
+  /** Reference coverage accumulated over every candidate scored so far (plan §4.4). */
+  reference?: ReferenceCoverage;
 }
 
 export const newShadowMetrics = (now: string): ShadowMetrics => ({
@@ -41,9 +46,9 @@ export const newShadowMetrics = (now: string): ShadowMetrics => ({
 });
 
 /**
- * How well one extraction agrees with the stored, AI-judged one: confirmed claims and names
- * minus unconfirmed ones. Only the difference between two runs on the same text is meaningful.
- * `refSpecs` is the reference with analyst verdicts applied, when the caller has them.
+ * How well one extraction agrees with the verified reference: confirmed claims and names minus
+ * unconfirmed ones. Only the difference between two runs on the same text is meaningful.
+ * `refSpecs` is the verified reference, with analyst verdicts applied, when the caller has them.
  */
 export function agreementScore(
   heur: Extraction,
@@ -81,13 +86,14 @@ export async function shadowStep(
     .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
     .slice(0, max);
   const next = { ...metrics };
-  const verdicts = analystVerdicts(catalog);
+  const verdicts = verifiedVerdicts(catalog);
   for (const c of fresh) {
     const a = normalizeExtraction(await active.extract(c.raw, catalog)).extraction;
     const s = normalizeExtraction(await shadow.extract(c.raw, catalog)).extraction;
     next.evaluated++;
     next.watermark = c.createdAt;
-    const ref = referenceSpecs(c, verdicts);
+    const ref = verifiedReference(c, verdicts);
+    next.reference = mergeCoverage(next.reference ?? coverageOf([]), coverageOf(ref));
     const before = agreementScore(a, c.extraction, ref);
     const after = agreementScore(s, c.extraction, ref);
     const changed =
