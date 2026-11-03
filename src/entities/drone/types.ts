@@ -110,6 +110,7 @@ export type VerificationKind =
   | "unit_dimension"
   | "bounds"
   | "identity"
+  | "target"
   | "ai_entailment"
   | "cross_source"
   | "reference";

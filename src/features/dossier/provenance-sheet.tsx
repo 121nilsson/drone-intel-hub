@@ -50,6 +50,7 @@ const CHECK_LABEL: Record<VerificationKind, string> = {
   unit_dimension: "Unit matches the attribute",
   bounds: "Figure is plausible",
   identity: "Evidence names this system",
+  target: "Figure is for the attribute's target",
   ai_entailment: "AI read the source as saying this",
   cross_source: "Other sources agree",
   reference: "Matches the reference",

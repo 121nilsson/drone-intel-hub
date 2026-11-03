@@ -1,6 +1,6 @@
 import { countryCode, countryCodes } from "@/entities/normalization/country";
 import { canonicalUnitForSemantic, semanticKeyFor } from "@/entities/normalization/semantic";
-import { isFinancialSpec } from "@/entities/procurement/routing";
+import { isDealFigure, isFinancialSpec } from "@/entities/procurement/routing";
 import { regroup, sameAttribute } from "./spec-engine";
 import { activityFromStoredSpec, isActivitySpec, withActivity } from "./activity";
 import type { Drone, SpecAttribute, SpecClaim } from "./types";
@@ -80,7 +80,7 @@ export function repairDrone(
 
   let specs: SpecAttribute[] = [];
   let activity = drone.activity;
-  for (const s of drone.specs) {
+  for (let s of drone.specs) {
     if (isFinancialSpec(s) && !analystOwned(s)) {
       financial.push(s);
       changes.push({ kind: "financial", detail: `${s.label} (${s.key}) → procurement` });
@@ -92,6 +92,20 @@ export function repairDrone(
       activity = withActivity(activity, activityFromStoredSpec(s, publishedFor));
       changes.push({ kind: "activity", detail: `${s.label} (${s.key}) → activity` });
       continue;
+    }
+    // A sale total read as a unit price leaves claim by claim: the attribute keeps real prices.
+    const deals = s.claims.filter(
+      (c) => !c.review && !c.movedFrom && isDealFigure({ key: s.key, evidence: c.evidence ?? "" }),
+    );
+    if (deals.length && s.discoveredBy !== "analyst") {
+      financial.push({ ...s, claims: deals });
+      changes.push({
+        kind: "financial",
+        detail: `${deals.length} deal figure(s) in ${s.label} (${s.key}) → procurement`,
+      });
+      const rest = s.claims.filter((c) => !deals.includes(c));
+      if (!rest.length) continue;
+      s = { ...s, claims: rest };
     }
     const r = resolved(s);
     if (r !== s)

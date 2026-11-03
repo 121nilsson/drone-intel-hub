@@ -43,6 +43,11 @@ describe("what counts as activity", () => {
     expect(activityMetric({ key: "missiles_received_90d", label: "Missiles received" })).toBe(
       "delivered",
     );
+    expect(activityMetric({ key: "missiles_fired", label: "Missiles fired" })).toBe("launched");
+    expect(activityMetric({ key: "number_expended", label: "x" })).toBe("launched");
+    expect(activityMetric({ key: "precision_engagements", label: "Precision engagements" })).toBe(
+      "launched",
+    );
   });
 
   it("leaves attributes that only mention an event as specs", () => {
@@ -63,6 +68,10 @@ describe("what counts as activity", () => {
       "serial_production",
       "signal_received",
       "power_supplied",
+      "test_fired_range",
+      "fire_rate",
+      "simultaneous_engagements",
+      "engagement_range",
       "range",
     ])
       expect(activityMetric({ key, label: key }), key).toBeUndefined();

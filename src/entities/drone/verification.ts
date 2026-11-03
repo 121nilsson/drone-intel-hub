@@ -3,6 +3,7 @@ import { ANALYST_SOURCE, claimCounts, correctedPoint } from "./claim-review";
 import { PLAUSIBLE } from "./auto-correction";
 import { rawPoint } from "./consensus";
 import { mentionsName } from "./name-key";
+import { targetVerdict } from "./target-check";
 import { attributeSemantic } from "./spec-engine";
 import type {
   ClaimVerification,
@@ -36,9 +37,10 @@ import { outletKey } from "@/entities/source/outlet-record";
  * written without a post id are linked back to their post, and a missing post says why. 4: the
  * run moved to the server, which reads the whole archive; version 3 verdicts were written by the
  * browser over its newest 3,000 posts and called older posts "not in the archive". 5: names match
- * with real case endings only; "контракт" and "contrast" no longer name Contra.
+ * with real case endings only; "контракт" and "contrast" no longer name Contra. 6: a figure whose
+ * clause names another target than its attribute ("vehicles at 12 km" as micro-drone range) fails.
  */
-export const VERIFIER_VERSION = "deterministic-5";
+export const VERIFIER_VERSION = "deterministic-6";
 
 export type ClaimTextResolver = (claim: SpecClaim) => string | undefined;
 
@@ -479,6 +481,33 @@ export function independentSourceCount(spec: SpecAttribute, claim: SpecClaim): n
  * Verify one claim. Undefined means there is nothing to verify: a hand-entered analyst claim is
  * already the highest authority and is deliberately left without a machine verdict.
  */
+/**
+ * A figure filed under an attribute about one target ("micro drone detection range") whose own
+ * clause is about another ("vehicles at over 12 kilometers"). Read in the sentence that carries
+ * the quote; silent when the attribute or the clause names no target (target-check.ts).
+ */
+function targetCheck(
+  spec: SpecAttribute,
+  claim: SpecClaim,
+  text: string | undefined,
+  at: string,
+): VerificationCheck {
+  const quote = claim.evidence?.trim() || claim.raw?.trim() || "";
+  const passage = (text && quote && evidencePassages(text, quote)[0]) || fold(quote);
+  const v = targetVerdict(spec, String(claim.raw ?? claim.value), passage);
+  if (!v.applicable) return check({ kind: "target", verdict: "uncertain", applicable: false, at });
+  return check({
+    kind: "target",
+    verdict: v.verdict,
+    applicable: true,
+    confidence: v.verdict === "fail" ? 0.9 : 0.8,
+    detail: v.detail,
+    evidence: v.clause,
+    ...(claim.sourceId ? { sourceId: claim.sourceId } : {}),
+    at,
+  });
+}
+
 export function verifyClaim(input: {
   drone: Drone;
   spec: SpecAttribute;
@@ -495,6 +524,7 @@ export function verifyClaim(input: {
     unitCheck(spec, claim, at),
     boundsCheck(spec, claim, at),
     identityCheck(drone, claim, text, catalog, at),
+    targetCheck(spec, claim, text, at),
   ];
   const applicable = checks.filter((c) => c.applicable);
   const failed = applicable.find((c) => c.verdict === "fail");

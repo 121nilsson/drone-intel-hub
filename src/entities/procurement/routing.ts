@@ -33,6 +33,26 @@ export function isFinancialSpec(spec: { key: string; label?: string }): boolean 
   return isFinancialSpecKey(spec.key) || FINANCIAL_LABEL.test(spec.label ?? "");
 }
 
+const PRICE_KEY =
+  /^(?:unit_)?(?:price|cost)$|^(?:unit_price|unit_cost|price_per_unit|cost_per_unit)$/;
+/** The sentence speaks of a deal: "US approves $2.1 billion Patriot missile sale". */
+const DEAL_CUE =
+  /\b(?:sales?|deals?|contracts?|packages?|agreements?|purchases?|procurement|aid)\b|продаж|угод|контракт|пакет|закупів|закупк|сделк|договор/iu;
+/** ...unless it also prices one unit: "at $4 million each", "per missile", "за штуку". */
+const PER_UNIT_CUE =
+  /\b(?:each|apiece|per\s+(?:unit|piece|missile|drone|round|system|interceptor|launcher|copy))\b|за\s+(?:одиницю|штуку|одну|один)|кожн|кажд|(?<!\p{L})шт(?!\p{L})/iu;
+
+/**
+ * A figure filed as what one unit costs, whose own sentence prices a deal instead and never a
+ * unit: a sale total read as a unit price. Judged per claim, from its evidence, because the same
+ * attribute also holds real unit prices.
+ */
+export function isDealFigure(spec: { key: string; evidence?: string }): boolean {
+  if (!PRICE_KEY.test(spec.key.trim().toLowerCase())) return false;
+  const text = spec.evidence ?? "";
+  return DEAL_CUE.test(text) && !PER_UNIT_CUE.test(text);
+}
+
 export interface RoutedExtraction {
   extraction: Extraction;
   financial: ExtractedSpec[];
@@ -43,7 +63,7 @@ export function splitFinancialSpecs(extraction: Extraction): RoutedExtraction {
   const financial: ExtractedSpec[] = [];
   const keep = (specs: ExtractedSpec[]) =>
     specs.filter((s) => {
-      if (!isFinancialSpec(s)) return true;
+      if (!isFinancialSpec(s) && !isDealFigure(s)) return true;
       financial.push(s);
       return false;
     });

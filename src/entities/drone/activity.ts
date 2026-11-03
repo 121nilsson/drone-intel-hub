@@ -25,7 +25,7 @@ import type {
 /** Keys and labels, folded to snake case, that name a count of events, with what they count. */
 const METRICS: ReadonlyArray<readonly [RegExp, ActivityMetric]> = [
   [
-    /(?:^|_)launch(?:ed|es)?_(?:volume|count|number|total|tally|quantity)(?:_|$)|(?:^|_)(?:quantity|number|count|total)_launched(?:_|$)|^launched$|^launches$|(?:^|_)quantity_in_attack$/,
+    /(?:^|_)launch(?:ed|es)?_(?:volume|count|number|total|tally|quantity)(?:_|$)|(?:^|_)(?:quantity|number|count|total)_(?:launched|fired|expended)(?:_|$)|^(?:missiles|rounds|interceptors|rockets|shells|drones)_(?:fired|expended)(?:_|$)|^(?:precision_|live_|successful_)?engagements(?:_count)?$|^launched$|^launches$|(?:^|_)quantity_in_attack$/,
     "launched",
   ],
   [
