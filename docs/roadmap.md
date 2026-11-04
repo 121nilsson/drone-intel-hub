@@ -52,12 +52,11 @@ Verified open work as of October 2026. Shipped behavior is documented in
 
 ## Autonomy plan (`get_human_out_of_the_loop_plan.md`)
 
-| Priority | Item                         | Notes                                                                                                                                                                                                              |
-| -------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| High     | Run the first audit          | Phase 2 closes only when the `/audit` session runs to its stopping rule (≈150 claims, the project owner) and the seed set freezes; verified precision is then measured, not assumed.                               |
-| High     | Seed-set agreement reporting | Score the heuristic against the frozen seed set and report it beside the evaluation scores (plan §1: every score carries coverage and seed agreement). Reporting only — nothing that learns may read the seed set. |
-| Deferred | Challenger                   | Plan §4.3 step 8: a second judge on disagreement between checks. Nothing to arbitrate until the second reader earns a vote from the audit, so it stays deferred.                                                   |
-| Gated    | Phase 3 gate removal         | Low-risk promotion without analyst decisions, canary/auto-revert — not before audited verified precision is at or above the 5 % budget (plan §9).                                                                  |
+| Priority | Item                 | Notes                                                                                                                                                                                                                                                                                  |
+| -------- | -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| High     | Run the first audit  | Phase 2 closes only when the `/audit` session runs to its stopping rule (≈150 claims, the project owner) and the seed set freezes; verified precision is then measured, not assumed. Seed-set agreement is already reported beside the evaluation scores (`seed-agreement.server.ts`). |
+| Deferred | Challenger           | Plan §4.3 step 8: a second judge on disagreement between checks. Nothing to arbitrate until the second reader earns a vote from the audit, so it stays deferred.                                                                                                                       |
+| Gated    | Phase 3 gate removal | Low-risk promotion without analyst decisions, canary/auto-revert — not before audited verified precision is at or above the 5 % budget (plan §9).                                                                                                                                      |
 
 ---
 

@@ -28,8 +28,10 @@ import {
   triggerGitImport,
   triggerHarvest,
   triggerAdjudication,
+  fetchSeedAgreement,
 } from "@/shared/infra/evaluation/evaluation.functions";
 import type { EvalKeyTrend } from "@/shared/infra/evaluation/evaluation.server";
+import type { SeedAgreement } from "@/shared/infra/evaluation/seed-agreement";
 import { RulesPanel } from "./rules-panel";
 import { AnalystReviewPanel } from "./analyst-review-panel";
 import { CorrectionQueue } from "./correction-queue";
@@ -112,6 +114,9 @@ export function EvaluationPage() {
   const [autoBusy, setAutoBusy] = useState<string | null>(null);
   const [autoStartedAt, setAutoStartedAt] = useState<number | null>(null);
   const [autoNow, setAutoNow] = useState(Date.now());
+  const [seed, setSeed] = useState<
+    (SeedAgreement & { available: boolean; reason?: string }) | null
+  >(null);
 
   useEffect(() => {
     if (!autoBusy || !autoStartedAt) return;
@@ -131,6 +136,9 @@ export function EvaluationPage() {
       .catch(() => {});
     fetchEvalKeyTrends()
       .then((rows) => setKeyTrends(rows))
+      .catch(() => {});
+    fetchSeedAgreement()
+      .then((s) => setSeed(s))
       .catch(() => {});
   }, []);
 
@@ -321,6 +329,55 @@ export function EvaluationPage() {
                 regression.
               </p>
             </Panel>
+
+            {seed && (
+              <Panel title="Seed set agreement">
+                {!seed.available || seed.scored === 0 ? (
+                  <p className="text-xs text-muted-foreground">
+                    {seed.reason ??
+                      "The seed set has no answered claims yet. It is filled by the first audit."}
+                  </p>
+                ) : (
+                  <>
+                    <div className="flex flex-wrap gap-1.5">
+                      <Tag tone="info" mono>
+                        agreement {pct(seed.agreement)} of {seed.scored}
+                      </Tag>
+                      <Tag tone="muted" mono>
+                        bound ≤ {pct(seed.upperBound)}
+                      </Tag>
+                      <Tag tone={seed.missed > 0 ? "warning" : "success"} mono>
+                        found {seed.found}/{seed.found + seed.missed}
+                      </Tag>
+                      <Tag tone={seed.invented > 0 ? "warning" : "success"} mono>
+                        avoided {seed.avoided}/{seed.avoided + seed.invented}
+                      </Tag>
+                      {seed.cannotTell > 0 && (
+                        <Tag tone="muted" mono>
+                          cannot tell {seed.cannotTell}
+                        </Tag>
+                      )}
+                      {seed.skipped > 0 && (
+                        <Tag tone="muted" mono>
+                          unreadable {seed.skipped}
+                        </Tag>
+                      )}
+                      {seed.obviouslyWrong > 0 && (
+                        <Tag tone="muted" mono>
+                          plainly wrong {seed.obviouslyWrong}
+                        </Tag>
+                      )}
+                    </div>
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      The frozen seed set — claims a person answered — read once more by today's
+                      heuristic: a "yes" answer must be found, a "no" must not be produced, and
+                      "cannot tell" is left out. Measurement only: nothing that learns reads the
+                      seed set.
+                    </p>
+                  </>
+                )}
+              </Panel>
+            )}
 
             <Panel title={`Sample: ${report.totalItems} reports`}>
               <div className="flex flex-wrap gap-1.5">

@@ -30,6 +30,7 @@ import {
   recordTaskRun,
   shadowOutcome,
 } from "@/shared/infra/task-runs.server";
+import { seedAgreement } from "./seed-agreement.server";
 
 export const triggerEvaluation = createServerFn({ method: "POST" }).handler(async () => {
   return await recordTaskRun("evaluation:run", "manual", runEvaluation, ranOutcome);
@@ -143,6 +144,14 @@ export const fetchEvalReports = createServerFn({ method: "GET" }).handler(async 
 
 export const fetchEvalKeyTrends = createServerFn({ method: "GET" }).handler(async () => {
   return await getEvalKeyTrends(20);
+});
+
+/**
+ * The heuristic scored against the frozen seed set, shown beside the evaluation scores.
+ * Reporting only: nothing that learns may read the seed set (plan §3, principle 7).
+ */
+export const fetchSeedAgreement = createServerFn({ method: "GET" }).handler(async () => {
+  return await seedAgreement();
 });
 
 export const fetchPendingFixtures = createServerFn({ method: "GET" }).handler(async () => {

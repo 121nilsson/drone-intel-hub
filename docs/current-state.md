@@ -208,6 +208,11 @@ The heuristic is scored against what the catalogue has judged, not just what the
   uncertain → neither); analyst-decided candidates keep their `review-` fixture ids, machine-only
   ones get `verified-`. Mining keeps its analyst-reviewed sample but scores against the verified
   reference; `shadowStep` and contradiction adjudication do the same.
+- **Seed-set agreement** (`seed-agreement.server.ts`, shown on the Evaluation page): the frozen
+  seed set — the claims a person answered in the audit — is read once more by today's heuristic.
+  A "yes" answer must be found, a "no" must not be produced, "cannot tell" is excluded, and the
+  disagreement bound is the audit's own Clopper-Pearson bound. Reporting only, read-only on
+  `verification_audit`: nothing that learns imports it (plan §3, principle 7).
 - The second reader (`SpecClaim.entailment`) and the challenger remain measurement-only until the
   audit earns them a vote.
 
