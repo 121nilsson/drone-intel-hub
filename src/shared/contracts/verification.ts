@@ -160,6 +160,24 @@ export interface AuditItem {
   readVia?: "original" | "translation";
 }
 
+/**
+ * A hidden control the auditor answered "yes". `altered` controls carry a figure the post does
+ * not contain and cannot be disputed; `misread` ones, from the first sessions, rest on the
+ * identity check and can be (`disputed`), after which they void nothing.
+ */
+export interface AuditFailedControl {
+  id: string;
+  batchId: string;
+  droneName: string;
+  specLabel: string;
+  value: string;
+  evidence?: string;
+  source: string;
+  sourceId?: string;
+  kind: "altered" | "misread";
+  disputed: boolean;
+}
+
 /** Answers counted for one slice of the audit (overall, a language, a family). */
 export interface AuditTally {
   /** Answered yes or no; "cannot tell" is excluded. */
@@ -185,8 +203,10 @@ export interface AuditStatus {
   /** Answered via machine translation: weaker independence, reported apart. */
   viaTranslation: number;
   obviouslyWrong: number;
-  /** Batches excluded because their auditor passed a hidden control. */
-  failedControlBatches: string[];
+  /** Hidden controls answered "yes", disputed or not; each voids the answers around it. */
+  failedControls: AuditFailedControl[];
+  /** Answers not counted because a standing failed control sits next to them. */
+  voidedAnswers: number;
   /** The next claim waiting for an answer, with its post. */
   next?: AuditItem;
   /** How many claims are waiting. */

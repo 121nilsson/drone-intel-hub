@@ -4,7 +4,10 @@ import {
   AUDIT_FIRST_DRAW,
   CONTROL_EVERY,
   FAMILY_ALARM,
+  alteredReading,
   attributeFamily,
+  failedControl,
+  voidedByControls,
   sequentialDecision,
   controlPositions,
   drawAuditSample,
@@ -12,7 +15,9 @@ import {
   seededRandom,
   textLanguage,
   type AuditCandidate,
+  type ControlKind,
 } from "@/entities/drone/audit";
+import { figuresIn } from "@/entities/drone/value-in-quote";
 import { ANALYST_SOURCE } from "@/entities/drone/claim-review";
 import { claimReading } from "@/entities/drone/claim-reading";
 import { attributeSemantic } from "@/entities/drone/spec-engine";
@@ -20,6 +25,7 @@ import type { Drone, EntailmentVerdict, SpecAttribute, SpecClaim } from "@/entit
 import { entailmentAgreement } from "@/entities/drone/entailment";
 import type {
   AuditAnswer,
+  AuditFailedControl,
   AuditItem,
   AuditStatus,
   AuditTally,
@@ -45,11 +51,11 @@ interface Drawable extends AuditCandidate {
   state: "verified" | "uncertain" | "rejected";
   postText?: string;
   /**
-   * Proven misread: the quote is in the post, but its sentence names another system. Only this
-   * kind serves as a hidden control - a quote missing from the post would show no highlight on
-   * the audit page and give the control away.
+   * The claim's reading with its figure changed to one the post does not contain, when it can
+   * serve as a hidden control: a verified claim with a post and a measured figure. Shown with
+   * its real quote, so the highlight is there and the mismatch is what the auditor must catch.
    */
-  misread: boolean;
+  altered?: string;
 }
 
 /** Every machine-verified claim with a stable id, with its post's text and language. */
@@ -80,6 +86,13 @@ async function drawable(): Promise<Drawable[]> {
   return claims.map(({ drone, spec, claim }) => {
     const postText = (claim.sourceId && posts.get(claim.sourceId)) || undefined;
     const verification = claim.verification!;
+    const measured = verification.checks.some(
+      (c) => c.kind === "unit_dimension" && c.verdict === "pass",
+    );
+    const altered =
+      verification.state === "verified" && measured && postText
+        ? alteredReading(claimReading(spec, claim), figuresIn(postText))
+        : undefined;
     return {
       claimId: claim.id,
       drone,
@@ -89,9 +102,7 @@ async function drawable(): Promise<Drawable[]> {
       ...(postText ? { postText } : {}),
       language: textLanguage(postText ?? claim.evidence ?? claim.raw ?? String(claim.value)),
       family: attributeFamily(attributeSemantic(spec)),
-      misread:
-        verification.checks.some((c) => c.kind === "identity" && c.verdict === "fail") &&
-        verification.checks.some((c) => c.kind === "evidence_span" && c.verdict === "pass"),
+      ...(altered ? { altered } : {}),
     };
   });
 }
@@ -99,6 +110,8 @@ async function drawable(): Promise<Drawable[]> {
 interface Placed {
   item: Drawable;
   role: "audit" | "control" | "negative";
+  /** A control's kind; set on controls only. */
+  controlKind?: ControlKind;
 }
 
 /** The quote the verifier checked: `evidence`, else `raw` - the one the page highlights. */
@@ -111,7 +124,7 @@ async function insertBatch(
   inSeed: boolean,
 ): Promise<string> {
   const batchId = `audit-${new Date().toISOString().slice(0, 19)}-${seed.toString(36)}`;
-  const rows = placed.map(({ item, role }, position) => ({
+  const rows = placed.map(({ item, role, controlKind }, position) => ({
     batch_id: batchId,
     position,
     draw_seed: seed,
@@ -127,8 +140,13 @@ async function insertBatch(
     family: item.family,
     state_at_draw: item.state,
     verifier_version: item.claim.verification?.verifierVersion ?? null,
-    // With its unit: a bare "40" cannot be judged (40 knots is not 40 km/h).
-    value: claimReading(item.spec, item.claim),
+    // With its unit: a bare "40" cannot be judged (40 knots is not 40 km/h). A control shows
+    // its altered figure; the snapshot is all the page ever reads, so the catalogue is untouched.
+    value:
+      controlKind === "altered" && item.altered
+        ? item.altered
+        : claimReading(item.spec, item.claim),
+    control_kind: controlKind ?? null,
     evidence: quoteOf(item.claim),
     source: item.claim.source,
     source_id: item.claim.sourceId ?? null,
@@ -144,7 +162,9 @@ function withControls(items: Placed[], controls: Drawable[], seed: number): Plac
   const out = [...items];
   // Inserted from the last position back, so earlier positions stay where they were drawn.
   const positions = controlPositions(items.length, count, seed).reverse();
-  positions.forEach((p, i) => out.splice(p, 0, { item: controls[i]!, role: "control" }));
+  positions.forEach((p, i) =>
+    out.splice(p, 0, { item: controls[i]!, role: "control", controlKind: "altered" }),
+  );
   return out;
 }
 
@@ -193,9 +213,9 @@ export async function drawFirstSession(): Promise<{ batchId: string; size: numbe
     );
     if (!verified.length) throw new Error("There are no verified claims with a post to audit yet.");
     const controls = pick(
-      all.filter((d) => d.misread && d.postText),
+      all.filter((d) => d.altered),
       Math.ceil(AUDIT_FIRST_DRAW / CONTROL_EVERY),
-      audited,
+      new Set([...audited, ...verified.map((d) => d.claimId)]),
       1,
     );
     const taken = new Set([
@@ -239,11 +259,12 @@ export async function drawMore(size = AUDIT_BATCH): Promise<{ batchId: string; s
       audited,
     ).map((c) => byId.get(c.claimId)!);
     if (!verified.length) throw new Error("Every verified claim with a post has been audited.");
+    // A control is a verified claim too, so it is drawn from the claims this batch did not take.
     const controls = drawAuditSample(
-      all.filter((d) => d.misread && d.postText),
+      all.filter((d) => d.altered),
       Math.ceil(size / CONTROL_EVERY),
       seed + 1,
-      audited,
+      new Set([...audited, ...verified.map((d) => d.claimId)]),
     ).map((c) => byId.get(c.claimId)!);
     const placed = withControls(
       verified.map((item) => ({ item, role: "audit" as const })),
@@ -267,6 +288,19 @@ export async function answerAudit(input: {
      where id = ${input.id}
      returning id`;
   if (!rows.length) throw new Error("No such audit item");
+}
+
+/**
+ * The owner's dispute of a failed 'misread' control: the post did state the figure for this
+ * system, so the control was wrong and voids nothing. An 'altered' control is wrong by
+ * construction and cannot be disputed. `disputed: false` withdraws a dispute.
+ */
+export async function disputeControl(input: { id: string; disputed: boolean }): Promise<void> {
+  const rows = await db()`update verification_audit
+       set control_disputed_at = ${input.disputed ? new Date() : null}
+     where id = ${input.id} and role = 'control' and coalesce(control_kind, 'misread') = 'misread'
+     returning id`;
+  if (!rows.length) throw new Error("Only a control of the first sessions' kind can be disputed");
 }
 
 interface AuditRow {
@@ -295,6 +329,8 @@ interface AuditRow {
   obviously_wrong: boolean;
   read_via: "original" | "translation" | null;
   drawn_at: Date;
+  control_kind?: ControlKind | null;
+  control_disputed_at?: Date | null;
 }
 
 const toItem = (r: AuditRow): AuditItem => ({
@@ -332,14 +368,24 @@ const drawOrder = (a: AuditRow, b: AuditRow) =>
 
 /** Pure: what a set of audit rows proves. Exported for tests. */
 export function summarizeAudit(rows: AuditRow[], undrawn?: number): AuditStatus {
-  // A batch whose auditor said a proven misreading was stated by the post is not counted.
-  const failedControlBatches = [
-    ...new Set(
-      rows.filter((r) => r.role === "control" && r.answer === "yes").map((r) => r.batch_id),
-    ),
-  ];
-  const failed = new Set(failedControlBatches);
-  const scored = rows.filter((r) => r.role === "audit" && !failed.has(r.batch_id)).sort(drawOrder);
+  // A control answered "yes" voids the answers around it, not its whole batch (CONTROL_WINDOW).
+  const voided = voidedByControls(rows);
+  const scored = rows.filter((r) => r.role === "audit" && !voided.has(r.id)).sort(drawOrder);
+  const failedControls: AuditFailedControl[] = rows
+    .filter((r) => r.role === "control" && r.answer === "yes")
+    .sort(drawOrder)
+    .map((r) => ({
+      id: r.id,
+      batchId: r.batch_id,
+      droneName: r.drone_name,
+      specLabel: r.spec_label,
+      value: r.value,
+      ...(r.evidence ? { evidence: r.evidence } : {}),
+      source: r.source,
+      ...(r.source_id ? { sourceId: r.source_id } : {}),
+      kind: r.control_kind ?? "misread",
+      disputed: !failedControl(r),
+    }));
   const overall = tally(scored);
   // Decided only at the batch boundaries, over the answers in draw order (entities/drone/audit.ts).
   const { decision, decidedAt } = sequentialDecision(
@@ -356,7 +402,7 @@ export function summarizeAudit(rows: AuditRow[], undrawn?: number): AuditStatus 
   // and seed negatives alike, never a control, which tests the person rather than the claim.
   const pairs = rows.flatMap((r) =>
     r.role !== "control" &&
-    !failed.has(r.batch_id) &&
+    !voided.has(r.id) &&
     (r.answer === "yes" || r.answer === "no") &&
     r.reader
       ? [{ human: r.answer, reader: r.reader, unknown: r.reader_independence === "unknown" }]
@@ -378,7 +424,8 @@ export function summarizeAudit(rows: AuditRow[], undrawn?: number): AuditStatus 
     }),
     viaTranslation: scored.filter((r) => r.answer && r.read_via === "translation").length,
     obviouslyWrong: scored.filter((r) => r.obviously_wrong).length,
-    failedControlBatches,
+    failedControls,
+    voidedAnswers: rows.filter((r) => voided.has(r.id) && r.answer).length,
     ...(open[0] ? { next: toItem(open[0]) } : {}),
     openCount: open.length,
     seed: {
@@ -409,7 +456,8 @@ const EMPTY: AuditStatus = {
   byFamily: [],
   viaTranslation: 0,
   obviouslyWrong: 0,
-  failedControlBatches: [],
+  failedControls: [],
+  voidedAnswers: 0,
   openCount: 0,
   seed: { size: 0, answered: 0, frozen: false },
 };
@@ -423,7 +471,7 @@ export async function auditStatus(opts: { countUndrawn?: boolean } = {}): Promis
   const sql = db();
   const rows = await sql<AuditRow[]>`select id, batch_id, position, role, in_seed, drone_id,
       drone_name, spec_label, claim_id, language, family, value, evidence, source, source_id,
-      answer, obviously_wrong, read_via, drawn_at
+      answer, obviously_wrong, read_via, drawn_at, control_kind, control_disputed_at
     from verification_audit`;
   // Only the entries the audit drew from are unnested: this runs after every answer, and a scan
   // of the whole catalogue there is what the status read is kept small to avoid.

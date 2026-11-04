@@ -55,7 +55,7 @@ const ITEM_BREAK =
   /[;:]|,(?!\d)|\s(?:and|while|whereas|but|or|та|і|й|а|и|но|или|або)\s|\s[–—-]\s/iu;
 
 /** The item of the passage that holds the figure: from the break before it to the break after. */
-function clauseAround(passage: string, at: number, length: number): string {
+export function clauseAround(passage: string, at: number, length: number): string {
   const before = passage.slice(0, at);
   const after = passage.slice(at + length);
   const breaks = [...before.matchAll(new RegExp(ITEM_BREAK, "giu"))];
@@ -67,7 +67,7 @@ function clauseAround(passage: string, at: number, length: number): string {
 }
 
 /** The number a value states, as the post writes digits: "12 kilometers" → "12". */
-const figureDigits = (value: string) => value.match(/\d+(?:[.,]\d+)*/)?.[0];
+export const figureDigits = (value: string) => value.match(/\d+(?:[.,]\d+)*/)?.[0];
 
 export type TargetVerdict =
   | { applicable: false }

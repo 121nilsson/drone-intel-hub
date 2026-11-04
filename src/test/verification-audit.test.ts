@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  CONTROL_WINDOW,
+  alteredReading,
   auditDecision,
   controlPositions,
   drawAuditSample,
@@ -11,6 +13,28 @@ import { summarizeAudit, type AuditRow } from "@/shared/infra/verification/audit
 import { runCatalogueVerification } from "@/shared/infra/verification/run";
 import type { Drone } from "@/entities/drone/types";
 import type { VerificationRunRecord } from "@/shared/contracts/verification";
+
+describe("an altered control", () => {
+  it("scales every figure by one factor the post does not contain", () => {
+    expect(alteredReading("40 km", [40])).toBe("120 km");
+    expect(alteredReading("10–20 km", [10, 20])).toBe("30–60 km");
+    // 120 is in the post, so ×3 would make the altered figure true; ×4 is used instead.
+    expect(alteredReading("40 km", [40, 120])).toBe("160 km");
+  });
+
+  it("keeps the grouping it was written with", () => {
+    expect(alteredReading("2,000 km", [2000])).toBe("6,000 km");
+  });
+
+  it("drops the catalogue's conversion, which would give the control away", () => {
+    expect(alteredReading("40 kn (≈ 74.08 km/h)", [40])).toBe("120 kn");
+  });
+
+  it("is not made from a value with no figure, or a zero", () => {
+    expect(alteredReading("solid rocket motor", [])).toBeUndefined();
+    expect(alteredReading("0 m", [])).toBeUndefined();
+  });
+});
 
 describe("the audit's stopping rule", () => {
   // The table in get_human_out_of_the_loop_plan.md §9 is this function's output; if one changes,
@@ -132,17 +156,50 @@ describe("what the answers prove", () => {
     expect(s.overall).toMatchObject({ answered: 2, errors: 1, cannotTell: 1 });
   });
 
-  it("drops a batch whose auditor passed a hidden control", () => {
+  it("drops the answers around a hidden control answered yes, not the rest of its batch", () => {
+    const at = (position: number, over: Partial<AuditRow> = {}) =>
+      row({ batch_id: "b1", position, ...over });
     const s = summarizeAudit(
       [
-        row({ batch_id: "b1", answer: "yes" }),
-        row({ batch_id: "b1", role: "control", answer: "yes" }),
-        row({ batch_id: "b2", answer: "no" }),
+        at(0),
+        at(10, { role: "control", answer: "yes", control_kind: "altered" }),
+        at(10 + CONTROL_WINDOW),
+        at(11 + CONTROL_WINDOW, { answer: "no" }),
+        row({ batch_id: "b2", position: 10, answer: "no" }),
       ],
       0,
     );
-    expect(s.failedControlBatches).toEqual(["b1"]);
-    expect(s.overall).toMatchObject({ answered: 1, errors: 1 });
+    expect(s.failedControls.map((c) => c.kind)).toEqual(["altered"]);
+    expect(s.voidedAnswers).toBe(2);
+    // Outside the window in b1, and the other batch entirely.
+    expect(s.overall).toMatchObject({ answered: 2, errors: 2 });
+  });
+
+  it("counts the answers again once a first-session control is disputed", () => {
+    const rows = [
+      row({ position: 1 }),
+      row({ position: 2, role: "control", answer: "yes", control_kind: "misread" }),
+    ];
+    expect(summarizeAudit(rows, 0).overall.answered).toBe(0);
+    rows[1]!.control_disputed_at = new Date();
+    const s = summarizeAudit(rows, 0);
+    expect(s.overall.answered).toBe(1);
+    expect(s.voidedAnswers).toBe(0);
+    expect(s.failedControls[0]).toMatchObject({ kind: "misread", disputed: true });
+  });
+
+  it("never lets an altered control be disputed away", () => {
+    const rows = [
+      row({ position: 1 }),
+      row({
+        position: 2,
+        role: "control",
+        answer: "yes",
+        control_kind: "altered",
+        control_disputed_at: new Date(),
+      }),
+    ];
+    expect(summarizeAudit(rows, 0).overall.answered).toBe(0);
   });
 
   it("never scores a control or a seed negative as an audited verified claim", () => {

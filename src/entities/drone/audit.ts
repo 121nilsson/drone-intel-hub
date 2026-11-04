@@ -107,6 +107,87 @@ export function controlPositions(length: number, count: number, seed: number): n
 /** One hidden control per this many audited claims. */
 export const CONTROL_EVERY = 25;
 
+/**
+ * How a hidden control is known to be wrong.
+ * - altered: a verified claim shown with its figure changed to one the post does not contain. Wrong
+ *   by construction, whatever any check says, so a "yes" on it is the auditor's slip.
+ * - misread: the first sessions' kind - a claim whose quote's sentence names another system. That
+ *   was an inference of the identity check, and the check misses "It builds on…" and a system
+ *   named as part of another, so the owner may dispute one; an altered control cannot be disputed.
+ */
+export type ControlKind = "altered" | "misread";
+
+/**
+ * Answers either side of a failed control that are not counted. A slip says the auditor was not
+ * reading closely around then - not that every answer in the session is suspect - so it voids the
+ * stretch of about CONTROL_EVERY answers it sits in, not the whole batch.
+ */
+export const CONTROL_WINDOW = Math.floor(CONTROL_EVERY / 2);
+
+export interface ControlledRow {
+  id: string;
+  batch_id: string;
+  position: number;
+  role: "audit" | "control" | "negative";
+  answer: "yes" | "no" | "cannot_tell" | null;
+  control_kind?: ControlKind | null;
+  control_disputed_at?: Date | string | null;
+}
+
+/** A control answered "yes" that still stands: not disputed, or of a kind that cannot be. */
+export const failedControl = (r: ControlledRow) =>
+  r.role === "control" &&
+  r.answer === "yes" &&
+  !(r.control_kind !== "altered" && r.control_disputed_at);
+
+/** Ids of the answers a failed control voids: its batch, within CONTROL_WINDOW positions of it. */
+export function voidedByControls(rows: readonly ControlledRow[]): Set<string> {
+  const failed = rows.filter(failedControl);
+  return new Set(
+    rows
+      .filter(
+        (r) =>
+          r.role !== "control" &&
+          failed.some(
+            (c) => c.batch_id === r.batch_id && Math.abs(c.position - r.position) <= CONTROL_WINDOW,
+          ),
+      )
+      .map((r) => r.id),
+  );
+}
+
+/** Multipliers an altered control tries, in turn: far enough from the figure to be a clear "no". */
+const ALTERATIONS = [3, 4, 5, 6] as const;
+
+const NUMBER_IN_READING = /\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?/g;
+
+/**
+ * A claim's reading with every figure scaled by one factor the post contains none of, or undefined
+ * when no factor works. Reads only the stated part: the catalogue's "(≈ …)" conversion is dropped,
+ * since an altered figure next to its true conversion would give the control away.
+ */
+export function alteredReading(
+  reading: string,
+  postFigures: readonly number[],
+): string | undefined {
+  const stated = reading.replace(/\s*\(≈[^)]*\)\s*$/, "").trim();
+  const figures = [...stated.matchAll(NUMBER_IN_READING)].map((m) =>
+    Number(m[0].replace(/,/g, "")),
+  );
+  if (!figures.length || figures.some((n) => !(n > 0))) return undefined;
+  for (const factor of ALTERATIONS) {
+    const scaled = figures.map((n) => Number((n * factor).toPrecision(6)));
+    if (scaled.some((s) => postFigures.some((p) => Math.abs(p - s) < 1e-9 * Math.max(1, s))))
+      continue;
+    let i = 0;
+    return stated.replace(NUMBER_IN_READING, (m) => {
+      const s = scaled[i++]!;
+      return m.includes(",") ? s.toLocaleString("en-US") : String(s);
+    });
+  }
+  return undefined;
+}
+
 /** The budget the audit measures: the low-risk tier (plan §4.5). */
 export const AUDIT_BUDGET = 0.05;
 /** One-sided confidence of every audit decision. */

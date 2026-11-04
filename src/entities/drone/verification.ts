@@ -3,7 +3,10 @@ import { ANALYST_SOURCE, claimCounts, correctedPoint } from "./claim-review";
 import { PLAUSIBLE } from "./auto-correction";
 import { rawPoint } from "./consensus";
 import { mentionsName } from "./name-key";
+import { altitudeVerdict } from "./altitude-check";
+import { speedVerdict } from "./speed-check";
 import { targetVerdict } from "./target-check";
+import { readsAsSentence, valueInQuote } from "./value-in-quote";
 import { attributeSemantic } from "./spec-engine";
 import type {
   ClaimVerification,
@@ -39,8 +42,13 @@ import { outletKey } from "@/entities/source/outlet-record";
  * browser over its newest 3,000 posts and called older posts "not in the archive". 5: names match
  * with real case endings only; "контракт" and "contrast" no longer name Contra. 6: a figure whose
  * clause names another target than its attribute ("vehicles at 12 km" as micro-drone range) fails.
+ * 7: a claim whose quote does not state its value is uncertain, not verified (value-in-quote.ts).
+ * 8: an altitude whose clause is a distance ("targets up to 2,000 km away") fails (altitude-check.ts).
+ * 9: a figure whose reading is a whole sentence is uncertain (value-in-quote.ts readsAsSentence).
+ * 10: a cruise speed whose words make it a top speed, or the reverse, fails (speed-check.ts).
+ * 11: mm, cm and inches are units; a bare figure takes its attribute's unit; units compare by dimension.
  */
-export const VERIFIER_VERSION = "deterministic-6";
+export const VERIFIER_VERSION = "deterministic-11";
 
 export type ClaimTextResolver = (claim: SpecClaim) => string | undefined;
 
@@ -98,14 +106,27 @@ function expectedUnit(spec: SpecAttribute): string | undefined {
 
 /** The claim's own reading, parsed from `normalized`, `raw` or the stored value plus spec unit. */
 function reading(claim: SpecClaim, spec: SpecAttribute) {
-  if (claim.normalized) return claim.normalized;
-  if (claim.raw) {
-    const parsed = normalizeQuantityLoose(claim.raw);
-    if (parsed) return parsed;
+  // A stored reading without a unit is a bare number; the attribute's unit may still say what it is.
+  if (claim.normalized?.canonicalUnit) return claim.normalized;
+  const stated = claim.raw?.trim() || String(claim.value ?? "").trim();
+  const parsed = stated ? normalizeQuantityLoose(stated) : undefined;
+  if (parsed?.canonicalUnit) return parsed;
+  // A bare figure - "240" under a Calibre in mm, stored as text or as a number - is in the
+  // attribute's unit: that is what the attribute's unit means.
+  const bare = (s: string) => /^[\s\d.,–—~≈<>≤≥+-]+$/.test(s);
+  if (spec.unit) {
+    if (bare(stated)) {
+      const withUnit = normalizeQuantityLoose(`${stated} ${spec.unit}`);
+      if (withUnit) return withUnit;
+    }
+    // Raw wording the parser cannot read ("endurance of 30 days"): the stored figure is enough.
+    const value = String(claim.value ?? "").trim();
+    if (value && bare(value)) {
+      const withUnit = normalizeQuantityLoose(`${value} ${spec.unit}`);
+      if (withUnit) return withUnit;
+    }
   }
-  if (typeof claim.value === "number" && spec.unit)
-    return normalizeQuantityLoose(`${claim.value} ${spec.unit}`);
-  return normalizeQuantityLoose(String(claim.value));
+  return parsed ?? claim.normalized;
 }
 
 function evidenceCheck(claim: SpecClaim, text: string | undefined, at: string): VerificationCheck {
@@ -174,7 +195,9 @@ function unitCheck(spec: SpecAttribute, claim: SpecClaim, at: string): Verificat
       at,
     });
   }
-  if (parsed.canonicalUnit !== expected)
+  // By dimension: a length is read into kilometres, the distance canonical, while a calibre is
+  // shown in millimetres and a hull in metres - the same measurement, not a wrong one.
+  if (parsed.canonicalUnit !== expected && parsed.canonicalUnit !== canonicalUnitFor(expected))
     return check({
       kind: "unit_dimension",
       verdict: "fail",
@@ -508,6 +531,73 @@ function targetCheck(
   });
 }
 
+/**
+ * The words beside the figure fit the attribute it is filed under: a height is not a distance
+ * (altitude-check.ts), a cruise speed is not a top speed and the reverse (speed-check.ts). Read in
+ * the sentence that carries the quote, like the target check; silent when the words say neither.
+ */
+function wordsCheck(
+  spec: SpecAttribute,
+  claim: SpecClaim,
+  text: string | undefined,
+  at: string,
+): VerificationCheck {
+  const quote = claim.evidence?.trim() || claim.raw?.trim() || "";
+  const passage = (text && quote && evidencePassages(text, quote)[0]) || fold(quote);
+  const semantic = attributeSemantic(spec);
+  const value = String(claim.raw ?? claim.value);
+  const altitude = altitudeVerdict(semantic, value, passage);
+  const v = altitude.applicable ? altitude : speedVerdict(semantic, value, passage);
+  if (!v.applicable)
+    return check({ kind: "attribute_words", verdict: "uncertain", applicable: false, at });
+  return check({
+    kind: "attribute_words",
+    verdict: v.verdict,
+    applicable: true,
+    confidence: v.verdict === "fail" ? 0.9 : 0.8,
+    detail: v.detail,
+    evidence: v.clause,
+    ...(claim.sourceId ? { sourceId: claim.sourceId } : {}),
+    at,
+  });
+}
+
+/**
+ * The quote says the value it is evidence for (value-in-quote.ts). Only a miss-or-match on the
+ * quote: it never fails a claim, because a declined number word or a translated quote cannot be
+ * matched deterministically; it keeps such a claim from reading as verified.
+ */
+function valueCheck(claim: SpecClaim, at: string): VerificationCheck {
+  const quote = claim.evidence?.trim();
+  if (readsAsSentence(claim.value, claim.raw))
+    return check({
+      kind: "value_in_quote",
+      verdict: "uncertain",
+      applicable: true,
+      confidence: 0.2,
+      detail:
+        "the figure's reading is a whole sentence; a bound or another figure in it may be lost",
+      ...(quote ? { evidence: quote } : {}),
+      ...(claim.sourceId ? { sourceId: claim.sourceId } : {}),
+      at,
+    });
+  const value = claim.raw?.trim() || String(claim.value ?? "").trim();
+  const v = quote ? valueInQuote(value, quote) : ({ applicable: false } as const);
+  // Without a quote of its own the claim's evidence is its raw value, which states itself.
+  if (!v.applicable)
+    return check({ kind: "value_in_quote", verdict: "uncertain", applicable: false, at });
+  return check({
+    kind: "value_in_quote",
+    verdict: v.stated ? "pass" : "uncertain",
+    applicable: true,
+    confidence: v.stated ? 0.9 : 0.3,
+    detail: v.detail,
+    ...(quote ? { evidence: quote } : {}),
+    ...(claim.sourceId ? { sourceId: claim.sourceId } : {}),
+    at,
+  });
+}
+
 export function verifyClaim(input: {
   drone: Drone;
   spec: SpecAttribute;
@@ -525,6 +615,8 @@ export function verifyClaim(input: {
     boundsCheck(spec, claim, at),
     identityCheck(drone, claim, text, catalog, at),
     targetCheck(spec, claim, text, at),
+    valueCheck(claim, at),
+    wordsCheck(spec, claim, text, at),
   ];
   const applicable = checks.filter((c) => c.applicable);
   const failed = applicable.find((c) => c.verdict === "fail");

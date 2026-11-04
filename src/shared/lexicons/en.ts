@@ -110,7 +110,10 @@ export const en: Lexicon = {
       "interception altitude",
       "intercept altitude",
       "max(?:imum)? target altitude",
-      "targets up to",
+      // Not the bare "targets up to": every one in the archive is a distance ("hit targets up to
+      // 2,000 km away", "surface targets up to 50 km"), which filed a strike drone's reach as the
+      // altitude it engages at. Only a phrase that names the height is an altitude cue.
+      "targets at altitudes? (?:of )?(?:up to )?",
     ],
     fuelCapacity: ["fuel capacity"],
     usvDraft: ["draft", "draught"],

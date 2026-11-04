@@ -63,6 +63,19 @@ export const answerAuditItem = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+export const disputeAuditControl = createServerFn({ method: "POST" })
+  .validator((d: unknown) => {
+    const o = d && typeof d === "object" ? (d as Record<string, unknown>) : {};
+    const id = typeof o["id"] === "string" ? o["id"].slice(0, 100) : "";
+    if (!id) throw new Error("Invalid control");
+    return { id, disputed: o["disputed"] !== false };
+  })
+  .handler(async ({ data }) => {
+    const { disputeControl } = await import("./audit.server");
+    await disputeControl(data);
+    return { ok: true };
+  });
+
 export const triggerEntailment = createServerFn({ method: "POST" }).handler(async () => {
   const { runEntailment } = await import("./entailment.server");
   const { recordTaskRun, entailmentOutcome } = await import("@/shared/infra/task-runs.server");

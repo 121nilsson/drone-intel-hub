@@ -7,6 +7,7 @@ import {
   type Money,
   type MoneyRange,
 } from "@/entities/normalization/currency";
+import { leadingQualifier } from "@/entities/normalization/numeric";
 import { alt, compoundAlt, currencyAlt, magnitudeAlt } from "@/shared/lexicons";
 
 /**
@@ -87,27 +88,55 @@ const TOTAL_CUE = new RegExp(
   "iu",
 );
 
-export function extractUnitPrice(
-  raw: string,
-  extra: ExtraScales = [],
-): { value: string; evidence: string } | undefined {
+/**
+ * A price found in a clause, with the evidence that proves it and the phrase that states it.
+ * `evidence` is the whole clause - the cue that makes it a unit price is usually words away from
+ * the figure - and `phrase` is the price with any bound in front of it ("less than $1 million"),
+ * which is what the claim reads as. Without the phrase the claim's reading was the sentence.
+ */
+export interface FoundPrice {
+  value: string;
+  evidence: string;
+  phrase: string;
+}
+
+/** The bound written before the price ("less than", "up to", "понад"), joined to the price. */
+function pricePhrase(clause: string, value: string): string {
+  const num = value.match(/\d[\d,. ]*\d|\d/)?.[0];
+  if (!num) return value;
+  const text = clause.replace(/[\p{Zs}]/gu, " ");
+  const escaped = num.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  // The space goes with the symbol only: "до 5" must keep the space that ends its "до".
+  const at = text.search(new RegExp(`(?:(?:${CUR})\\s?)?${escaped}`, "u"));
+  if (at < 0) return value;
+  const before = text.slice(Math.max(0, at - 32), at);
+  // Longest first, from each word start: "no more than" before "more than".
+  for (let i = 0; i < before.length; i++) {
+    if (i > 0 && !/\s/.test(before[i - 1]!)) continue;
+    const words = before.slice(i);
+    if (!words.trim()) break;
+    const { qualifier, rest } = leadingQualifier(`${words}§`);
+    if (qualifier !== "exact" && rest === "§") return `${words.trim()} ${value}`;
+  }
+  return value;
+}
+
+export function extractUnitPrice(raw: string, extra: ExtraScales = []): FoundPrice | undefined {
   for (const clause of raw.split(/(?<=[.!?;\n])\s+/)) {
     const value = extractPrice(clause, extra);
     if (!value) continue;
     if (!PRICE_CUE.test(clause) || TOTAL_CUE.test(clause)) continue;
-    return { value, evidence: clause.trim().slice(0, 300) };
+    return { value, evidence: clause.trim().slice(0, 300), phrase: pricePhrase(clause, value) };
   }
   return undefined;
 }
 
 /** A contract-scale figure (deal, contract, budget). Kept apart from unit cost on purpose. */
-export function extractContractValue(
-  raw: string,
-  extra: ExtraScales = [],
-): { value: string; evidence: string } | undefined {
+export function extractContractValue(raw: string, extra: ExtraScales = []): FoundPrice | undefined {
   for (const clause of raw.split(/(?<=[.!?;\n])\s+/)) {
     const value = extractPrice(clause, extra);
-    if (value && TOTAL_CUE.test(clause)) return { value, evidence: clause.trim().slice(0, 300) };
+    if (value && TOTAL_CUE.test(clause))
+      return { value, evidence: clause.trim().slice(0, 300), phrase: pricePhrase(clause, value) };
   }
   return undefined;
 }

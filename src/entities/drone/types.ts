@@ -111,6 +111,8 @@ export type VerificationKind =
   | "bounds"
   | "identity"
   | "target"
+  | "value_in_quote"
+  | "attribute_words"
   | "ai_entailment"
   | "cross_source"
   | "reference";

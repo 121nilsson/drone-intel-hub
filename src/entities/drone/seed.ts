@@ -35,7 +35,7 @@ export const SEED_DRONES: Drone[] = [
     summary:
       "Long-range delta-wing loitering munition, now license-produced at Alabuga with Kometa-M anti-jam GNSS.",
     specs: [
-      s("speed", "Cruise speed", "km/h", [
+      s("cruise_speed", "Cruise speed", "km/h", [
         [185, "GUR briefing", 40],
         [180, "OSINT Telegram", 20],
         [190, "CIT", 9],
@@ -103,7 +103,7 @@ export const SEED_DRONES: Drone[] = [
     summary:
       "Ukrainian long-range strike UAV used against refineries and airbases deep inside Russia.",
     specs: [
-      s("speed", "Cruise speed", "km/h", [
+      s("cruise_speed", "Cruise speed", "km/h", [
         [200, "Ukroboronprom", 50],
         [180, "Forbes", 30],
       ]),

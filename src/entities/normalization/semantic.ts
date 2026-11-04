@@ -219,6 +219,8 @@ export function semanticKeyFor(key: string, label = ""): string {
 }
 
 export function canonicalUnitForSemantic(semantic: string): string | undefined {
+  // A calibre is written in millimetres; "0.24 m" for a 240 mm mortar reads as nobody writes it.
+  if (semantic === "dimension.caliber") return "mm";
   if (semantic.startsWith("dimension.")) return "m";
   if (semantic.startsWith("range.") || semantic.startsWith("altitude.")) return "km";
   if (semantic.startsWith("speed.")) return "km/h";

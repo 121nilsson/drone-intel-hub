@@ -9,6 +9,11 @@ export type AddSpec = (
   value: number | string,
   unit: string | undefined,
   evidence: string,
+  /**
+   * The figure as the post words it, when the evidence is wider than that: a unit price quoted
+   * with its whole sentence. Defaults to the evidence, which for a cue match is the figure.
+   */
+  raw?: string,
 ) => void;
 
 export const NUMBER = String.raw`\d(?:[\d., ]*\d)?`;

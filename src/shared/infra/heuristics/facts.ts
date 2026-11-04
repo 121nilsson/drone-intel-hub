@@ -45,12 +45,23 @@ function extractMoney(raw: string, add: AddSpec, scales: RuleSnapshot["scales"] 
   if (unit) {
     const money = parseMoney(unit.value, scales);
     if (money) {
-      add("unit_cost", "Unit Cost / Price", money.amount, money.currency, unit.evidence);
+      // The sentence is the evidence; the claim's own reading is the price and its bound ("less
+      // than $1 million"). Stored as the sentence, the audit showed a sentence as the value and
+      // the bound was lost behind it.
+      add(
+        "unit_cost",
+        "Unit Cost / Price",
+        money.amount,
+        money.currency,
+        unit.evidence,
+        unit.phrase,
+      );
       return;
     }
   }
   const deal = extractContractValue(raw, scales);
-  if (deal) add("contract_value", "Contract value", deal.value, undefined, deal.evidence);
+  if (deal)
+    add("contract_value", "Contract value", deal.value, undefined, deal.evidence, deal.phrase);
 }
 
 /** Fiber-spool length ("recoiled 30 km of fiber"); a spec claim, so the same schema gate. */
@@ -66,6 +77,7 @@ function buildSpec(
   value: number | string,
   unit: string | undefined,
   evidence: string,
+  raw = evidence,
 ): ExtractedSpec {
   const semantic = semanticKeyFor(key, label);
   return {
@@ -74,7 +86,7 @@ function buildSpec(
     value,
     ...(unit ? { unit } : {}),
     ...(semantic !== key ? { semantic } : {}),
-    raw: evidence,
+    raw,
     evidence,
   };
 }
@@ -91,11 +103,11 @@ const relabel = (s: ExtractedSpec, key: string) =>
 export function extractFacts(raw: string, rules?: RuleSnapshot): Facts {
   const facts: Facts = { specs: [], payloads: [], sensors: [], components: [], guidance: [] };
   const seen = new Set<string>();
-  const add: AddSpec = (key, label, value, unit, evidence) => {
+  const add: AddSpec = (key, label, value, unit, evidence, raw) => {
     const token = `${key}|${String(value)}|${unit ?? ""}|${evidence}`;
     if (seen.has(token)) return;
     // Same boundary as AI output: a malformed spec is skipped, not the whole extraction.
-    const spec = buildSpec(key, label, value, unit, evidence);
+    const spec = buildSpec(key, label, value, unit, evidence, raw);
     if (!ExtractedSpecSchema.safeParse(spec).success) return;
     seen.add(token);
     facts.specs.push(spec);

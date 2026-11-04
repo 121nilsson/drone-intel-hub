@@ -1,9 +1,11 @@
 import { countryCode, countryCodes } from "@/entities/normalization/country";
 import { canonicalUnitForSemantic, semanticKeyFor } from "@/entities/normalization/semantic";
 import { isDealFigure, isFinancialSpec } from "@/entities/procurement/routing";
-import { regroup, sameAttribute } from "./spec-engine";
+import { attributeSemantic, regroup, sameAttribute } from "./spec-engine";
+import { canonicalUnitFor } from "@/entities/normalization/units";
 import { activityFromStoredSpec, isActivitySpec, withActivity } from "./activity";
 import type { Drone, SpecAttribute, SpecClaim } from "./types";
+import { cue } from "@/shared/lexicons";
 
 /**
  * Brings a stored entry up to the rules new reporting is read with. The ingest boundary only
@@ -16,7 +18,39 @@ import type { Drone, SpecAttribute, SpecClaim } from "./types";
  * even when its key now reads as a deal figure, because their call outranks the router's.
  */
 
-export type RepairKind = "semantic" | "merged" | "financial" | "country" | "activity";
+export type RepairKind = "semantic" | "merged" | "financial" | "country" | "activity" | "speed";
+
+const CRUISE = new RegExp(cue("cruiseSpeed"), "iu");
+
+/**
+ * A plain "speed" attribute labelled "Cruise speed": the seed wrote two that way, and the old
+ * heuristic filed every unqualified speed under that label (21 right, 99 wrong). The label made
+ * the attribute read as cruise speed, so every plain speed that joined it later was counted as
+ * one - "a speed of up to 500 km/h" as a cruise speed of 500.
+ */
+const mislabelledCruise = (s: SpecAttribute) => s.key === "speed" && /cruis/i.test(s.label);
+
+/**
+ * Which claims of such an attribute really are cruise speeds: a claim whose words say cruise, a
+ * claim with no words to read (a seed figure, filed as cruise by whoever entered it), and one an
+ * analyst ruled on or moved there. The rest are plain speeds and leave under "Speed".
+ */
+const stillCruise = (c: SpecClaim) =>
+  !!c.review ||
+  !!c.movedFrom ||
+  !(c.evidence?.trim() || c.raw?.trim()) ||
+  CRUISE.test(`${c.evidence ?? ""} ${c.raw ?? ""}`);
+
+/** One attribute as a new key and label, its semantic and unit resolved for them. */
+function asAttribute(s: SpecAttribute, key: string, label: string, claims: SpecClaim[]) {
+  const semantic = semanticKeyFor(key, label);
+  const next: SpecAttribute = { ...s, key, label, claims };
+  if (semantic === key) delete next.semantic;
+  else next.semantic = semantic;
+  const unit = canonicalUnitForSemantic(semantic);
+  if (unit) next.canonicalUnit = unit;
+  return next;
+}
 
 export interface RepairChange {
   kind: RepairKind;
@@ -49,6 +83,20 @@ function resolved(s: SpecAttribute): SpecAttribute {
     else delete next.canonicalUnit;
   }
   return next;
+}
+
+/**
+ * The canonical unit an attribute stores, moved to the one its meaning now uses, within the same
+ * dimension only: calibres were stored in metres before they were millimetres. A unit of another
+ * dimension, or one normalization set for money ("USD"), is not this rule's to change.
+ */
+function unitResolved(s: SpecAttribute): SpecAttribute {
+  const want = canonicalUnitForSemantic(attributeSemantic(s));
+  const have = s.canonicalUnit;
+  if (!want || !have || have === want) return s;
+  const dim = canonicalUnitFor(have);
+  if (!dim || dim !== canonicalUnitFor(want)) return s;
+  return { ...s, canonicalUnit: want };
 }
 
 const hasDuplicates = (specs: readonly SpecAttribute[]) =>
@@ -93,6 +141,19 @@ export function repairDrone(
       changes.push({ kind: "activity", detail: `${s.label} (${s.key}) → activity` });
       continue;
     }
+    if (mislabelledCruise(s) && s.discoveredBy !== "analyst") {
+      const cruise = s.claims.filter(stillCruise);
+      const plain = s.claims.filter((c) => !stillCruise(c));
+      changes.push({
+        kind: "speed",
+        detail: `${s.label} (${s.key}): ${plain.length} plain speed(s) → Speed, ${cruise.length} kept as cruise speed`,
+      });
+      // Both go through the rest of the loop's rules on the next run; the fold below joins each
+      // to an attribute of the same meaning already on the entry.
+      if (cruise.length) specs.push(asAttribute(s, "cruise_speed", "Cruise speed", cruise));
+      if (plain.length) specs.push(asAttribute(s, "speed", "Speed", plain));
+      continue;
+    }
     // A sale total read as a unit price leaves claim by claim: the attribute keeps real prices.
     const deals = s.claims.filter(
       (c) => !c.review && !c.movedFrom && isDealFigure({ key: s.key, evidence: c.evidence ?? "" }),
@@ -113,7 +174,13 @@ export function repairDrone(
         kind: "semantic",
         detail: `${s.label} (${s.key}): ${s.semantic} → ${r.semantic ?? "unresolved"}`,
       });
-    specs.push(r);
+    const u = unitResolved(r);
+    if (u !== r)
+      changes.push({
+        kind: "semantic",
+        detail: `${s.label} (${s.key}): canonical unit ${r.canonicalUnit} → ${u.canonicalUnit}`,
+      });
+    specs.push(u);
   }
 
   if (hasDuplicates(specs)) {

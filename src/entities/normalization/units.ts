@@ -36,6 +36,8 @@ const MILE_KM = 1.609344;
 const NM_KM = 1.852;
 /** International foot in metres. */
 const FOOT_M = 0.3048;
+/** International inch in metres. */
+const INCH_M = 0.0254;
 const LB_KG = 0.45359237;
 const OZ_KG = 0.028349523125;
 
@@ -121,7 +123,8 @@ const UNITS: UnitDef[] = [
     token: "kn",
     dimension: "speed",
     toCanonical: NM_KM,
-    pattern: /(?:knots?|kts?|(?<![\p{L}/])kn|вузл[а-яіїєґ]*|вузол|уз(?:л(?:ов|а)?)?)(?![\p{L}\p{N}])/iu,
+    pattern:
+      /(?:knots?|kts?|(?<![\p{L}/])kn|вузл[а-яіїєґ]*|вузол|уз(?:л(?:ов|а)?)?)(?![\p{L}\p{N}])/iu,
   },
   {
     token: "Mach",
@@ -154,6 +157,29 @@ const UNITS: UnitDef[] = [
     dimension: "distance",
     toCanonical: 1,
     pattern: /(?:km|kilometers?|kilometres?|км)(?![\p{L}\p{N}])/iu,
+  },
+  // Calibre and small dimensions. Before "m": "мм" and "см" end in "м", "mm" in "m". The hyphen
+  // is the adjectival form - "a 155-mm howitzer", "2.75‑inch rockets" (a non-breaking hyphen).
+  {
+    token: "mm",
+    dimension: "distance",
+    toCanonical: 1e-6,
+    pattern:
+      /(?<![\p{L}/])[-‐‑‒–]?\s*(?:mm|мм|millimet(?:er|re)s?|міліметр[а-яіїєґ]*|миллиметр[а-яё]*)(?![\p{L}\p{N}])/iu,
+  },
+  {
+    token: "cm",
+    dimension: "distance",
+    toCanonical: 1e-5,
+    pattern:
+      /(?<![\p{L}/])[-‐‑‒–]?\s*(?:cm|см|centimet(?:er|re)s?|сантиметр[а-яіїєґё]*)(?![\p{L}\p{N}])/iu,
+  },
+  {
+    token: "in",
+    dimension: "distance",
+    toCanonical: INCH_M / 1000,
+    // Not a bare "in": it is a word. The inch mark is the double prime, not a quotation mark.
+    pattern: /[-‐‑‒–]?\s*(?:inch(?:es)?|дюйм[а-яіїєґё]*|″)(?![\p{L}\p{N}])/iu,
   },
   {
     token: "m",

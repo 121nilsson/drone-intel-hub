@@ -156,15 +156,16 @@
   {
     "id": "22fbe12d-0dcc-4974-bbfd-15d453089c73",
     "text": "Ukraine’s hobbit-named robot fired on targets up to 1.3 km away in a demo for border guards\n\nUkraine’s hobbit-named robot fired on targets up to 1.3 km away in a demo for border guards\n\nUkraine’s six-wheeled Frodo ground robot fired on targets during a demonstration in Kharkiv Oblast for the Pomsta (Revenge) Border Guard Brigade, a border guard detachment posted on Facebook. Frodo made its public debut only on 30 September.\n\nUkraine had contracted more than 22,000 ground robots for 2026 by July, mostly logistics carriers, with combat models the smallest group, the Defense Ministry said. Frodo’s first reported mission was an evacuation. The demo shows its armed version to a fighting brigade, the kind of robot Ukraine has ordered least.\n\nThe platform completed its tasks at a training ground in near-combat conditions, said the 3rd Border Guard Detachment named after Hero of Ukraine Colonel Yevhenii Pikus. The Buria turret mounted on Frodo can fire either a Mk 19 automatic grenade launcher or a Browning M2 heavy machine gun. It engaged targets at up to 1.3 km (0.8 mile), the detachment said.\n\nThe 47-kg (104-lb) module has a ballistic calculator, stores up to 256 targets, aims in three seconds, and has a stated autonomous run time of up to 48 hours, the post said. Frodo is rated for up to 150 km (93 miles) on paved roads and 75–80 km (47–50 miles) over rough terrain, the post added. A Frontline Robotics Zoom reconnaissance drone flew reconnaissance during the test.\n\nThe developer, Frontline Robotics, describes its core philosophy as arriving fast, doing the job, and leaving very fast—hit and run, the detachment’s post said. Familiarizing the brigade’s soldiers with such systems aims first and foremost to preserve personnel’s lives and health, the detachment said.\n\nFrontline Robotics told Militarnyi at the unveiling that Frodo had passed Defense Ministry codification and was built for logistics, evacuation, and strike missions. The robot reaches 40 km/h (25 mph) and carries up to 200 kg (441 lb) of payload, or 400 kg (882 lb) at most, the company said. A single soldier can swap its batteries.\n\nThe 92nd Assault Brigade used an early test unit to evacuate a wounded soldier, Frontline Robotics told Militarnyi. An operator, callsign Tango, named the robot’s speed and its ability to handle complex maneuvers as its main advantages, Militarnyi reported.\n\nTo suggest a correction or clarification, write to us here\n\nYou can also highlight the text and press Ctrl + Enter\n\nWe are an independent media outlet that relies solely on advertising revenue to sustain itself. We do not endorse or promote any products or services for financial gain. Therefore, we kindly ask for your support by disabling your ad blocker. Your assistance helps us continue providing quality content. Thank you!",
-    "expect": [
-      {
-        "unit": "km",
-        "value": 1.3,
-        "semantic": "altitude.target_max"
-      }
-    ],
+    "expect": [],
     "source": "Euromaidan Press · https://euromaidanpress.com/2026/10/15/ukraines-hobbit-named-robot-fired-on-targets-up-to-1-3-km-away-in-a-demo-for-border-guards/",
-    "expectNames": ["Frodo"]
+    "expectNames": ["Frodo"],
+    "forbid": [
+      {
+        "semantic": "altitude.target_max",
+        "value": 1.3,
+        "unit": "km"
+      }
+    ]
   },
   {
     "id": "2374c5af-174b-4c70-b491-1a95aa80fbfc",
@@ -277,15 +278,16 @@
   {
     "id": "3e6d7aa6-efcb-40f6-9b82-5d5d93fd5915",
     "text": "Two tankers burn off Romania’s Sulina as Bulgaria says it lacks proof Russia is behind the Black Sea ship attacks\n\nTwo tankers burn off Romania’s Sulina as Bulgaria says it lacks proof Russia is behind the Black Sea ship attacks\n\nTwo tankers caught fire within sia launched them.\n\nFor months, Russia has struck civilian ships on the sea route that carries most of Ukraine’s farm exports, while its drones have repeatedly crossed into Moldova and Romania during attacks on Ukraine. As long as Bucharest and Sofia wait for drone wreckage before naming anyone, Russia, the party Bulgaria’s own prime minister says the logic points to, pays no price for extending its war on Ukraine’s trade routes into NATO members’ waters.\n\nThe San Marino-flagged chemical tanker Wine Trader reported a fire in its superstructure around 07:00 on 15 October while anchored in Romanian territorial waters e for the fire, though unnamed sources Read Also “Operation to strike Russian targets deep in swamps continues”: Ukrainian Commander Madiar says his unit hits 7,306 Russian troops in first half of October, up 59% on August Ukraine’s hobbit-named robot fired on targets up to 1.3 km away in a demo for border guards Ukraine and Japan plan prefabricated backup crossings for Kyiv’s bridges: 720 meters of structures already delivered\n\nTo suggest a correction or clarification, write to us here\n\nYou can also highlight the text and press Ctrl + Enter\n\nWe are an independent media outlet that relies solely on advertising revenue to sustain itself. We do not endorse or promote any products or services for financial gain. Therefore, we kindly ask for your support by disabling your ad blocker. Your assistance helps us continue providing quality content. Thank you!",
-    "expect": [
-      {
-        "unit": "km",
-        "value": 1.3,
-        "semantic": "altitude.target_max"
-      }
-    ],
+    "expect": [],
     "source": "Euromaidan Press · https://euromaidanpress.com/2026/10/15/two-tankers-burn-off-romanias-sulina-as-bulgaria-says-it-lacks-proof-russia-is-behind-the-black-sea-ship-attacks/",
-    "expectNames": ["San"]
+    "expectNames": ["San"],
+    "forbid": [
+      {
+        "semantic": "altitude.target_max",
+        "value": 1.3,
+        "unit": "km"
+      }
+    ]
   },
   {
     "id": "4041feb6-6461-4df3-99f9-2e94801fed65",
@@ -313,15 +315,16 @@
   {
     "id": "440e26a8-f6ef-4509-b9de-399dc8d59130",
     "text": "Two tankers burn off Romania’s Sulina as Bulgaria says it lacks proof Russia is behind the Black Sea ship attacks\n\nTwo tankers burn off Romania’s Sulina as Bulgaria says it lacks proof Russia is behind the Black Sea ship attacks\n\nTwo tankers caught fire within sia launched them.\n\nFor months, Russia has struck civilian ships on the sea route that carries most of Ukraine’s farm exports, while its drones have repeatedly crossed into Moldova and Romania during attacks on Ukraine. As long as Bucharest and Sofia wait for drone wreckage before naming anyone, Russia, the party Bulgaria’s own prime minister says the logic points to, pays no price for extending its war on Ukraine’s trade routes into NATO members’ waters.\n\nThe San Marino-flagged chemical tanker Wine Trader reported a fire in its superstructure around 07:00 on 15 October while anchored in Romanian territorial waters e for the fire, though unnamed sources Read Also “Operation to strike Russian targets deep in swamps continues”: Ukrainian Commander Madiar says his unit hits 7,306 Russian troops in first half of October, up 59% on August Ukraine’s hobbit-named robot fired on targets up to 1.3 km away in a demo for border guards Ukraine and Japan plan prefabricated backup crossings for Kyiv’s bridges: 720 meters of structures already delivered\n\nTo suggest a correction or clarification, write to us here\n\nYou can also highlight the text and press Ctrl + Enter\n\nWe are an independent media outlet that relies solely on advertising revenue to sustain itself. We do not endorse or promote any products or services for financial gain. Therefore, we kindly ask for your support by disabling your ad blocker. Your assistance helps us continue providing quality content. Thank you!",
-    "expect": [
-      {
-        "unit": "km",
-        "value": 1.3,
-        "semantic": "altitude.target_max"
-      }
-    ],
+    "expect": [],
     "source": "Euromaidan Press · https://euromaidanpress.com/2026/10/15/two-tankers-burn-off-romanias-sulina-as-bulgaria-says-it-lacks-proof-russia-is-behind-the-black-sea-ship-attacks/",
-    "expectNames": ["San"]
+    "expectNames": ["San"],
+    "forbid": [
+      {
+        "semantic": "altitude.target_max",
+        "value": 1.3,
+        "unit": "km"
+      }
+    ]
   },
   {
     "id": "466c445b-1540-41a6-8fda-654fb3519eb1",
@@ -927,15 +930,16 @@
   {
     "id": "ee23c26b-545b-4f94-a88f-a3fa0ec3f3ee",
     "text": "CHAOS Industries unveils VESPID counter-drone interceptors with 10-kilometer range and annual production target of 12,000 units\n\nCHAOS Industries has unveiled VESPID, a family of autonomous counter-drone interceptors that it plans to manufacture at an initial rate of 12,000 a year. The Los Angeles-based company says the design can cut costs by up to 90% compared with conventional solid-rocket-motor and turbojet interceptors.\n\nThe family includes the man-portable Mk 0 and the faster, more maneuverable Mk 1 for multitube launchers. Both are designed to defend against Group 1–3 unmanned aircraft and one-way attack threats.\n\nVESPID uses an electric ducted fan and commercial off-the-shelf drone electronics. CHAOS says the interceptor weighs less than 12 pounds, launches in under five seconds and can engage targets up to 10 kilometers away in under 100 seconds.\n\nThrust vector control enables maneuvering against targets attempting to evade interception. The weapon destroys its target through direct impact rather than an explosive warhead.\n\n“The United States and its allies require more than expensive, exquisite systems that take years to develop and are produced in limited quantities,” said Dr. Bo Marr, co-founder and chief technology officer of CHAOS Industries. “We need effective interceptors that can be built quickly, fielded broadly, and employed at a cost that makes sense against threats arriving at scale.”\n\nCHAOS has not disclosed a unit price. Its manufacturing architecture is designed to support expansion to 50,000 interceptors annually as customer demand grows.\n\nDuring the midcourse phase, VESPID receives guidance from CHAOS radars or an external command-and-control system. A direct-to-radar datalink narrows the area the terminal seeker must search and, according to the company, improves resistance to jamming.\n\nThe interceptor then switches to a commercial long-wave infrared seeker with AI-enabled target acquisition and guidance. CHAOS says engagement requires no operator input after launch and does not depend on GPS.\n\nVESPID can integrate with existing sensors, command systems and launch platforms. Its connection to CHAOS’ NEXUS command-and-control system is intended to coordinate responses to drone swarms.\n\nThe family is interoperable with CHAOS’ multistatic radars, including VANQUISH PRIME systems. When paired with a CHAOS radar, the interceptor’s datalink signal also helps NEXUS distinguish it from hostile aircraft.\n\nThe Mk 0 can be assembled in under a minute without special tools. It launches vertically under electric fan power from the ground or a truck bed, with its battery and wings removed for transport.\n\nThe Mk 1 uses a tubular launcher with a pyrotechnic launch cartridge. CHAOS says a 10-round trainable launcher is available and gives an engagement velocity of 150 meters per second, or more than 300 miles per hour.\n\nA planned version would carry more than 100 interceptors in a 20-foot ISO container. That configuration is intended for integration with uncrewed ground or surface vehicles.\n\nCHAOS is relying on commercial components and simplified assembly to support high-volume production. The company’s stated aim is to give forces enough affordable interceptors to sustain protection against repeated drone attacks.\n\n“Affordability and the ability to rapidly replace capability are not secondary considerations,” Marr said. “They are operational advantages.”\n\nThe company announced VESPID on October 12 and scheduled the Mk 1’s first public display aboard a Forterra MESA vehicle at AUSA 2026 in Washington. Founded in 2022, CHAOS manufactures its systems in the United States and has raised $1 billion from investors including 8VC, Accel and Valor Equity Partners.",
-    "expect": [
-      {
-        "unit": "km",
-        "value": 10,
-        "semantic": "altitude.target_max"
-      }
-    ],
+    "expect": [],
     "source": "Defence Industry Europe · https://defence-industry.eu/chaos-industries-unveils-vespid-counter-drone-interceptors-with-10-kilometer-range-and-annual-production-target-of-12000-units/",
-    "expectNames": ["VESPID"]
+    "expectNames": ["VESPID"],
+    "forbid": [
+      {
+        "semantic": "altitude.target_max",
+        "value": 10,
+        "unit": "km"
+      }
+    ]
   },
   {
     "id": "f01c101c-11ed-436f-9209-e7bf65f6336e",
