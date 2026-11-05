@@ -15,6 +15,23 @@ import { organizationKey } from "@/entities/drone/types";
 import { buildConflictMap, intakeAliasClaims } from "@/entities/drone/alias-claims";
 import { toRFLink } from "@/entities/normalization/apply";
 import { verifyNewClaims } from "@/entities/drone/verification";
+import { originFor, UNKNOWN_ORIGIN, withOriginClaim } from "@/entities/drone/origin-audit";
+
+/**
+ * The entry with this report's reading of its origin recorded (entities/drone/origin-audit.ts),
+ * so a wrong first reading can be noticed by the reports that come after it.
+ */
+export function recordOrigin(drone: Drone, e: Extraction, c: Candidate): Drone {
+  const country = originFor(e, drone);
+  if (!country) return drone;
+  return withOriginClaim(drone, {
+    country,
+    source: c.source,
+    ...(c.dispatchId ? { sourceId: c.dispatchId } : {}),
+    candidateId: c.id,
+    at: c.createdAt,
+  });
+}
 
 /** A promoted entry has no prior claims, so every claim it carries is new. */
 const NO_CLAIMS: ReadonlySet<string> = new Set();
@@ -52,7 +69,8 @@ export function promote(
     // any collision with the current catalog: verified-only identity, nothing auto-approves.
     aliases: [],
     domain: e.domain ?? "Multi",
-    origin: e.origin ?? "??",
+    // This system's own origin: in a digest the top-level one is often another system's.
+    origin: originFor(e, { name }) ?? UNKNOWN_ORIGIN,
     ...(e.manufacturer
       ? {
           manufacturer: e.manufacturer,
@@ -95,7 +113,7 @@ export function promote(
   });
   // The post id goes on every claim, so a later verifier run can find the post again.
   const drone = verifyNewClaims(
-    mergeSpecs(withAliases, e.specs, c.source, {
+    mergeSpecs(recordOrigin(withAliases, e, c), e.specs, c.source, {
       ...provenanceOf(c),
       extractionConfidence: e.confidence,
     }),
@@ -166,7 +184,12 @@ export function mergeInto(
         source: c.source,
       },
     ];
-    return verifyNewClaims(merged, knownClaimIds, c.raw, d.drones.list());
+    return verifyNewClaims(
+      recordOrigin(merged, extracted, c),
+      knownClaimIds,
+      c.raw,
+      d.drones.list(),
+    );
   };
   d.drones.upsert(applyMerge(target), applyMerge);
   d.candidates.update(c.id, { status: "merged", resolvedInto: droneId });

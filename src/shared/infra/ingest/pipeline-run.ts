@@ -26,7 +26,7 @@ import {
 } from "./pipeline-internal";
 import { collidesWithCatalog, learnedNegativeKeys, notASystemName } from "./pipeline-triage";
 import { applyRelatedSystems, extractionForSystem } from "./pipeline-slice";
-import { claimIdsOf, promote } from "./pipeline-actions";
+import { claimIdsOf, promote, recordOrigin } from "./pipeline-actions";
 
 export async function runTwoTier(
   raw: string,
@@ -264,19 +264,23 @@ export async function runTwoTier(
     // writer added while this one was in flight.
     const applyMerge = (base: Drone) =>
       verifyNewClaims(
-        mergeDroneIntelligence(
-          withNormalizedRf(
-            mergeSpecs(base, extraction.specs, source, {
-              ...(context.dispatchId ? { sourceId: context.dispatchId } : {}),
-              ...(context.publishedAt ? { publishedAt: context.publishedAt } : {}),
-              extractionConfidence: extraction.confidence,
-              ...readBy(extraction),
-            }),
+        recordOrigin(
+          mergeDroneIntelligence(
+            withNormalizedRf(
+              mergeSpecs(base, extraction.specs, source, {
+                ...(context.dispatchId ? { sourceId: context.dispatchId } : {}),
+                ...(context.publishedAt ? { publishedAt: context.publishedAt } : {}),
+                extractionConfidence: extraction.confidence,
+                ...readBy(extraction),
+              }),
+              extraction,
+            ),
             extraction,
+            context.dispatchId,
+            { source },
           ),
           extraction,
-          context.dispatchId,
-          { source },
+          candidate,
         ),
         claimIdsOf(base),
         raw,

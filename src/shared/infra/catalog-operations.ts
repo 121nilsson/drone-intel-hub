@@ -47,6 +47,7 @@ import {
   unsetAliasVerdict,
 } from "@/entities/drone/alias-claims";
 import { aliasFold } from "@/entities/drone/alias-policy";
+import { decideOrigin } from "@/entities/drone/origin-audit";
 import type { AliasClaim } from "@/entities/drone/types";
 
 /**
@@ -504,6 +505,21 @@ function dropFromVariantList(
 }
 
 /** See CatalogMutations.markDistinct. */
+/** See CatalogMutations.setOrigin. */
+export function setOrigin(
+  droneId: string,
+  origin: string,
+  d: Pick<CatalogDeps, "drones">,
+  at = new Date().toISOString(),
+): Drone | undefined {
+  const drone = d.drones.get(droneId);
+  if (!drone || !origin.trim()) return undefined;
+  const apply = (fresh: Drone) => decideOrigin(fresh, origin, at);
+  const next = apply(drone);
+  d.drones.upsert(next, apply);
+  return next;
+}
+
 export function markDistinct(
   aId: string,
   bId: string,
@@ -862,5 +878,6 @@ export function createCatalogMutations(d: CatalogDeps): CatalogMutations {
     setSystemClass: (droneId, systemClass) => setSystemClass(droneId, systemClass, d),
     declineRelation: (sourceId, targetId, kind) => declineRelation(sourceId, targetId, kind, d),
     markDistinct: (aId, bId) => markDistinct(aId, bId, d),
+    setOrigin: (droneId, origin) => setOrigin(droneId, origin, d),
   };
 }

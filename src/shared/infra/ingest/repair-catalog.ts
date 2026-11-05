@@ -1,9 +1,11 @@
 import { repairDrone, type RepairKind } from "@/entities/drone/repair";
 import { legacyRelationsToMigrate } from "@/entities/drone/system-hierarchy";
-import type { Drone, SpecAttribute, SpecClaim } from "@/entities/drone/types";
+import type { Candidate, Drone, SpecAttribute, SpecClaim } from "@/entities/drone/types";
+import { originFor, withOriginClaim } from "@/entities/drone/origin-audit";
 import { narrowLinks } from "@/entities/procurement/linking";
 import { procurementsFromStoredSpec } from "@/entities/procurement/routing";
 import type {
+  CandidateRepository,
   DispatchRepository,
   DroneRepository,
   ProcurementRepository,
@@ -45,6 +47,11 @@ export function repairCatalog(
     now?: number;
     /** The archived posts, for when a claim's post was published. */
     dispatches?: Pick<DispatchRepository, "list">;
+    /**
+     * The intake candidates, for the origin each report gave: entries written before origins were
+     * recorded get them once, from the candidates that created or fed them (origin-audit.ts).
+     */
+    candidates?: Pick<CandidateRepository, "list">;
   } = {},
 ): CatalogRepairReport {
   const apply = opts.apply !== false;
@@ -80,10 +87,40 @@ export function repairCatalog(
     (opts.dispatches?.list() ?? []).flatMap((p) => (p.publishedAt ? [[p.id, p.publishedAt]] : [])),
   );
   const publishedFor = (c: SpecClaim) => (c.sourceId ? published.get(c.sourceId) : undefined);
+
+  const fed = new Map<string, Candidate[]>();
+  for (const c of opts.candidates?.list() ?? [])
+    if (c.resolvedInto && (c.status === "promoted" || c.status === "merged"))
+      fed.set(c.resolvedInto, [...(fed.get(c.resolvedInto) ?? []), c]);
+  // Idempotent: a candidate already recorded adds nothing (withOriginClaim).
+  const withReportedOrigins = (drone: Drone): Drone => {
+    let next = drone;
+    for (const c of fed.get(drone.id) ?? []) {
+      const country = originFor(c.extraction, next);
+      if (country)
+        next = withOriginClaim(next, {
+          country,
+          source: c.source,
+          ...(c.dispatchId ? { sourceId: c.dispatchId } : {}),
+          candidateId: c.id,
+          at: c.createdAt,
+        });
+    }
+    return next;
+  };
+  const repairOne = (drone: Drone) => {
+    const seeded = withReportedOrigins(drone);
+    const added = (seeded.originClaims?.length ?? 0) - (drone.originClaims?.length ?? 0);
+    const r = repairDrone(seeded, publishedFor);
+    const changes = added
+      ? [{ kind: "origin" as const, detail: `${added} report origin(s) recorded` }, ...r.changes]
+      : r.changes;
+    return { ...r, changes, drone: added && !r.changes.length ? seeded : r.drone };
+  };
   // Entries whose stored record changes, each once whatever changed in it.
   const changed = new Set<string>();
   for (const drone of drones.list()) {
-    const r = repairDrone(drone, publishedFor);
+    const r = repairOne(drone);
     if (!r.changes.length) continue;
     changed.add(drone.id);
     for (const c of r.changes) rep.entries.push({ droneId: drone.id, name: drone.name, ...c });
@@ -91,7 +128,7 @@ export function repairCatalog(
     if (!apply) continue;
     drones.upsert({ ...r.drone, updatedAt: at }, (fresh) => {
       // Another writer won the race: repair what it stored, filing any deal figure it holds.
-      const again = repairDrone(fresh, publishedFor);
+      const again = repairOne(fresh);
       for (const s of again.financial) file(fresh, s);
       return again.changes.length ? { ...again.drone, updatedAt: at } : fresh;
     });

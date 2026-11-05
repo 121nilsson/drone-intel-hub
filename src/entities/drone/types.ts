@@ -202,6 +202,29 @@ export interface AliasReview {
   moveId?: string;
 }
 
+/** One report's reading of a system's country of origin. */
+export interface OriginClaim {
+  /** ISO 3166-1 alpha-2, as countryCode() normalizes it ("EU" for a joint European programme). */
+  country: string;
+  /** "Outlet · URL", same convention as SpecClaim.source. */
+  source: string;
+  sourceId?: string;
+  /** The candidate it came from: one claim per candidate, so re-reading a post adds nothing. */
+  candidateId?: string;
+  at: string;
+}
+
+/**
+ * The analyst's decision on an origin. `turnedDown` are the countries the reports proposed that
+ * the analyst ruled out; they are not proposed again, however many more reports say so.
+ */
+export interface OriginReview {
+  origin: string;
+  turnedDown: string[];
+  at: string;
+  by: "analyst";
+}
+
 export interface AliasClaim {
   /**
    * Stable identity: `alias-${fold}`, the phonetic key of the declension-stripped alias. One
@@ -400,6 +423,14 @@ export interface Drone {
   aliasClaims?: AliasClaim[];
   domain: Domain;
   origin: string; // country of origin code
+  /**
+   * The country each report gave as this system's origin (entities/drone/origin-audit.ts). The
+   * stored origin is set once, at promotion; these are what later reports say, so a wrong first
+   * reading can be noticed and proposed for correction instead of standing forever.
+   */
+  originClaims?: OriginClaim[];
+  /** The analyst's last decision on the origin; it outranks every report (origin-audit.ts). */
+  originReview?: OriginReview;
   manufacturer?: string; // company that designed/produces the system
   organizationLinks?: OrganizationLink[]; // roles, evidence, and first/last-seen provenance
   operators: string[]; // battlefield operator codes

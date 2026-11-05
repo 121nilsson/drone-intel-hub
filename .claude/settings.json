@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__00df8b29-cf6d-46ef-89ba-ad30f4d56679__get_issue",
+      "Bash(npm run green)",
+      "Bash(npx tsc --noEmit)",
+      "Bash(npx tsc --noEmit -p .)",
+      "Bash(npx vitest run)",
+      "Bash(npm run typecheck)",
+      "Bash(npm run lint)",
+      "Bash(npm run test)"
+    ]
+  }
+}

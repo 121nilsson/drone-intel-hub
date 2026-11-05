@@ -1,3 +1,4 @@
+import { OriginControl } from "./origin-control";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { ExternalSourceLink, SourceRef, withUnit } from "@/shared/ui/links";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -522,9 +523,7 @@ export function DossierPage({ id }: { id: string }) {
       <div>
         <div className="flex flex-wrap gap-2">
           <Tag tone="primary">{d.domain}</Tag>
-          <Tag caps={false} mono={false}>
-            Origin <CountryBadge code={d.origin} />
-          </Tag>
+          <OriginControl drone={d} />
           {d.manufacturer && <Tag tone="accent">{d.manufacturer}</Tag>}
           {d.organizationLinks?.map((link) => (
             <Tag

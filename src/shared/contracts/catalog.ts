@@ -149,6 +149,12 @@ export interface CatalogMutations {
   declineRelation(sourceId: string, targetId: string, kind: RelationKind): Drone | undefined;
   /** Record that two entries sharing names are different systems, on both. */
   markDistinct(aId: string, bId: string): Drone | undefined;
+  /**
+   * The analyst sets the entry's country of origin (ISO 3166-1 alpha-2). Every other country the
+   * reports gave is turned down and not proposed again (entities/drone/origin-audit.ts). Accepting
+   * a proposal and correcting a wrong origin are the same call.
+   */
+  setOrigin(droneId: string, origin: string): Drone | undefined;
 }
 
 export type ClaimVerdict =

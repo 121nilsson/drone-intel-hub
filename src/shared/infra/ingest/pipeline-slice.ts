@@ -14,7 +14,7 @@ import {
   withNormalizedRf,
   readBy,
 } from "./pipeline-internal";
-import { claimIdsOf, promote } from "./pipeline-actions";
+import { claimIdsOf, promote, recordOrigin } from "./pipeline-actions";
 import { verifyNewClaims } from "@/entities/drone/verification";
 import { counterpartIdsFor, linkCounterparts } from "@/entities/drone/relations";
 import { linkVariant, mergeDroneIntelligence } from "@/entities/drone/merge-intelligence";
@@ -160,19 +160,23 @@ export function applyRelatedSystems(
         // `base`, so a conflict replay never checks another writer's claim against this text.
         const applyMerge = (base: Drone) =>
           verifyNewClaims(
-            mergeDroneIntelligence(
-              withNormalizedRf(
-                mergeSpecs(base, extraction.specs, source, {
-                  ...(context.dispatchId ? { sourceId: context.dispatchId } : {}),
-                  ...(context.publishedAt ? { publishedAt: context.publishedAt } : {}),
-                  extractionConfidence: extraction.confidence,
-                  ...readBy(extraction),
-                }),
+            recordOrigin(
+              mergeDroneIntelligence(
+                withNormalizedRf(
+                  mergeSpecs(base, extraction.specs, source, {
+                    ...(context.dispatchId ? { sourceId: context.dispatchId } : {}),
+                    ...(context.publishedAt ? { publishedAt: context.publishedAt } : {}),
+                    extractionConfidence: extraction.confidence,
+                    ...readBy(extraction),
+                  }),
+                  extraction,
+                ),
                 extraction,
+                context.dispatchId,
+                { source },
               ),
               extraction,
-              context.dispatchId,
-              { source },
+              candidate,
             ),
             claimIdsOf(base),
             candidate.raw,

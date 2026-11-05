@@ -6,6 +6,7 @@ import { canonicalUnitFor } from "@/entities/normalization/units";
 import { activityFromStoredSpec, isActivitySpec, withActivity } from "./activity";
 import type { Drone, SpecAttribute, SpecClaim } from "./types";
 import { cue } from "@/shared/lexicons";
+import { originProposal } from "./origin-audit";
 
 /**
  * Brings a stored entry up to the rules new reporting is read with. The ingest boundary only
@@ -18,7 +19,8 @@ import { cue } from "@/shared/lexicons";
  * even when its key now reads as a deal figure, because their call outranks the router's.
  */
 
-export type RepairKind = "semantic" | "merged" | "financial" | "country" | "activity" | "speed";
+export type RepairKind =
+  "semantic" | "merged" | "financial" | "country" | "activity" | "speed" | "origin";
 
 const CRUISE = new RegExp(cue("cruiseSpeed"), "iu");
 
@@ -113,12 +115,20 @@ export function repairDrone(
   const changes: RepairChange[] = [];
   const financial: SpecAttribute[] = [];
 
-  const origin = drone.origin ? countryCode(drone.origin) : drone.origin;
+  // An unknown origin the reports agree on is filled; one they contradict is only proposed.
+  const fill = originProposal(drone);
+  const origin =
+    fill?.kind === "fill" ? fill.country : drone.origin ? countryCode(drone.origin) : drone.origin;
   const stated = drone.operators ?? [];
   const operators = countryCodes(stated);
   const operatorsChanged =
     operators.length !== stated.length || operators.some((o, i) => o !== stated[i]);
-  if (origin !== drone.origin)
+  if (fill?.kind === "fill")
+    changes.push({
+      kind: "origin",
+      detail: `origin ${drone.origin} → ${origin}: ${fill.support} report(s) agree, none disagree`,
+    });
+  else if (origin !== drone.origin)
     changes.push({ kind: "country", detail: `origin ${drone.origin} → ${origin}` });
   if (operatorsChanged)
     changes.push({
