@@ -62,6 +62,8 @@ function recordWeight(stored: number, relevant: number): number {
 export function outletRecords(dispatches: Iterable<RawDispatch>): OutletRecord[] {
   const record = new Map<string, { name: string; stored: number; relevant: number }>();
   for (const d of dispatches) {
+    // One malformed document must not stop the sync that reads the whole archive.
+    if (typeof d.sourceName !== "string") continue;
     const key = outletKeyOfName(d.sourceName);
     if (!key) continue;
     const r = record.get(key) ?? { name: d.sourceName, stored: 0, relevant: 0 };

@@ -241,5 +241,5 @@ On-demand Wikipedia/Wikidata catalog import from the Catalog page (`src/shared/i
 
 ## Schema
 
-Authoritative SQL: `migrations/001_init.sql`–`021_audit_controls.sql` (see README PostgreSQL table). `drizzle/` is not used at
+Authoritative SQL: `migrations/001_init.sql`–`022_repair_double_encoded_documents.sql` (see README PostgreSQL table). `drizzle/` is not used at
 application runtime.

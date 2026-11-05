@@ -99,8 +99,10 @@ async function main() {
               from drones where id = ${row.id}`;
             await tx`delete from drones where id = ${row.id}`;
           } else {
-            await tx.unsafe(`update ${table} set data = $1::jsonb, rev = rev + 1 where id = $2`, [
-              JSON.stringify(data),
+            // tx.json(), not JSON.stringify: a string parameter for a jsonb column is encoded a
+            // second time and stored as a JSON string (see migrations/022).
+            await tx.unsafe(`update ${table} set data = $1, rev = rev + 1 where id = $2`, [
+              tx.json(data as never) as never,
               row.id,
             ]);
           }
