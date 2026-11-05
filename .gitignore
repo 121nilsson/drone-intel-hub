@@ -40,3 +40,6 @@ dist-ssr
 # green-check snapshot of the pre-existing finding set. Local by design: a committed baseline
 # goes stale as the codebase moves and turns into diff noise nobody reads.
 .greencheck-baseline.json
+
+# Agent worktrees (Claude Code creates one per delegated task).
+.claude/worktrees/

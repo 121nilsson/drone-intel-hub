@@ -12,6 +12,8 @@ export default tseslint.config(
       "dist",
       ".output",
       ".vinxi",
+      // Agent worktrees are full copies of the repo; linting them reports the copy, not the tree.
+      ".claude/worktrees",
       // Lovable-generated integration glue, marked "automatically generated — do not edit".
       // Editing it by hand gets overwritten on the next generation round, so lint findings
       // there are not actionable: exclude the area instead (same policy as routeTree.gen.ts

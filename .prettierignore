@@ -11,3 +11,6 @@ routeTree.gen.ts
 # The build regenerates it, so formatting it here is undone on the next run; the lint
 # config excludes the same area (see eslint.config.js).
 src/integrations
+
+# Agent worktrees are full copies of the repo; formatting them reports the copy, not the tree.
+.claude/worktrees

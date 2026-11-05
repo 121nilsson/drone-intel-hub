@@ -6,7 +6,7 @@ function candidateId(taxonomy: string, rawTerm: string) {
   const slug = rawTerm
     .trim()
     .toLowerCase()
-    .replace(/[^a-z0-9Ѐ-ӿ]+/g, "-")
+    .replace(/[^a-z0-9\u0400-\u04ff]+/g, "-")
     .replace(/^-|-$/g, "");
   return `${taxonomy}/${slug || "term"}`;
 }

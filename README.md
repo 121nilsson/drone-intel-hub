@@ -98,14 +98,14 @@ bounded batches, through the same pipeline the Queue page uses (`runTwoTier` in
    new system is promoted into the catalog, and a low-confidence result is discarded. Everything
    else waits in the Queue for an analyst. Thresholds are on the Settings page.
 
-**Auto-triage** (`src/features/intake/auto-triage.ts`) then works the Queue after every
+**Auto-triage** (`src/shared/infra/ingest/auto-triage.ts`) then works the Queue after every
 auto-sync, so it does not need a person on it daily. Everything it resolves is marked "auto",
 which never blocks a name the way an analyst's discard does:
 
 - **Corroboration.** A new name the AI reported from **two or more independent outlets** (each
   report at least 50% confident, passing the auto-promotion guards) is promoted, or merged if the
   catalog has it by then. Outlets are weighed by what their past reporting actually produced
-  (`src/features/intake/outlet-record.ts`): a pair of outlets with a real track record carries the
+  (`src/entities/source/outlet-record.ts`): a pair of outlets with a real track record carries the
   decision, while two feeds that only ever repost fall below the evidence bar.
 - **Learned negatives.** A name the pipeline itself discards from **three different outlets** is
   remembered as a repeating false-positive pattern and no longer auto-promoted, the way an
@@ -116,7 +116,7 @@ which never blocks a name the way an analyst's discard does:
   The verdict rides on the claims (the supported one marked, the others as outliers) so a disputed
   figure reads as adjudicated instead of unresolved. No claim is ever removed or rewritten, and a
   check the model cannot decide leaves every claim untouched
-  (`src/features/intake/contradictions.ts`).
+  (`src/shared/infra/ingest/contradictions.ts`).
 - **Adjudication.** A candidate matched to a catalog entry with middling confidence is put to the
   tier-2 model once, as "is this report about _that_ entry?". A confident yes merges it; a
   confident no releases it as a new name, which corroboration can then pick up. At most 10 per
@@ -222,14 +222,14 @@ Never prefix a secret with `VITE_`: Vite exposes `VITE_*` variables to the brows
 
 Catalog → **Import reference catalog** loads unmanned aerial, surface and ground vehicles and
 loitering munitions linked to Ukraine or Russia from Wikidata, with their English, Ukrainian or
-Russian Wikipedia article (`src/shared/infra/wikipedia.server.ts`). It runs on demand, not on a
+Russian Wikipedia article (`src/shared/infra/wikipedia/server.ts`). It runs on demand, not on a
 schedule. For each system it fills in:
 
 - **Identity:** name, Cyrillic name, aliases, domain, origin, manufacturer, operators, and a
   summary from the article lead. Existing values are kept; the import fills gaps.
 - **Specifications:** weights (MTOW, empty, launch), payload and warhead, speeds, range, combat
   radius, endurance, ceiling and altitude, dimensions, engine, guidance and unit cost. They are
-  read deterministically, with no AI calls (`src/shared/infra/wiki-specs.ts`), from:
+  read deterministically, with no AI calls (`src/shared/infra/wikipedia/specs.ts`), from:
   - the article's infobox or spec template: `Infobox weapon`, `{{Aircraft specs}}`, Ukrainian
     `Картка:БПЛА`, Russian `Карточка ЛА`;
   - a bulleted "Specifications" section, the form many English aviation articles use;
@@ -247,7 +247,7 @@ Content is CC BY-SA 4.0; each imported system records the article, revision and 
 ## Scheduled auto-ingest
 
 A Nitro task polls the monitored sources every 10 minutes and runs relevant posts through the
-pipeline above. Which sources a tick polls follows their own yield (`src/features/sources/cadence.ts`):
+pipeline above. Which sources a tick polls follows their own yield (`src/entities/source/cadence.ts`):
 a source with any drone-related post keeps the fast lane, a source whose records show only noise
 drops to hourly, and the manual **Sync all now** polls every source regardless. It runs **only in
 the built app**: Nitro is a build-time plugin here, so `npm run dev` schedules nothing.
@@ -256,9 +256,9 @@ the built app**: Nitro is a build-time plugin here, so `npm run dev` schedules n
 | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
 | `vite.config.ts`                                           | Cron expression and the `sources:sync` task name                                           |
 | `tasks/sources/sync.ts`                                    | Task entry point; calls the shared `runAutoSync`                                           |
-| `src/shared/infra/source-sync.server.ts`                   | Throttle, cooldown and stored run state                                                    |
-| `src/shared/infra/fetch-posts.server.ts`                   | Server-side ingest body                                                                    |
-| `src/shared/infra/fetch-posts.ts`                          | Transport parsing, shared with the browser                                                 |
+| `src/shared/infra/sources/source-sync.server.ts`           | Throttle, cooldown and stored run state                                                    |
+| `src/shared/infra/sources/fetch-posts.server.ts`           | Server-side ingest body                                                                    |
+| `src/shared/infra/sources/fetch-posts.ts`                  | Transport parsing, shared with the browser                                                 |
 | `src/shared/infra/ingest/collect.ts`, `process-pending.ts` | Collection and the bounded queue processor (`auto-ingest.ts` re-exports the stage modules) |
 
 **Collection.** Stage 1 fetches every monitored source in parallel: six lanes, with at most one
@@ -302,7 +302,7 @@ overlapping a cron tick cannot process the same post twice. Leases are released 
 ends, and expire on their own (5 min to 1 h, scaled to the batch) so a crashed worker never pins
 a post.
 
-**Source health** (`src/features/sources/source-health.ts`). A source that fails **3 fetches in a
+**Source health** (`src/entities/source/health.ts`). A source that fails **3 fetches in a
 row** is paused for **7 days** and then tried again automatically. If it fails 3 times again
 without a success in between, it is turned off (its Auto box unticked) and the reason is shown on
 the Sources page. Any successful fetch clears the record, and ticking Auto again starts the source
