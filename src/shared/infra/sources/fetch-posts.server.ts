@@ -19,6 +19,7 @@ import { openAIProcurementExtractor } from "../procurement-extractor";
 import { outletWeights } from "@/entities/source/outlet-record";
 import { adjudicateContradictions } from "@/shared/infra/ingest/contradictions";
 import { autoCorrect } from "@/shared/infra/ingest/auto-correct";
+import { autonomySwitchEnabled } from "@/shared/infra/autonomy/switches.server";
 import { pruneRepeatedCandidates } from "@/shared/infra/ingest/prune-candidates";
 import { repairCatalog } from "@/shared/infra/ingest/repair-catalog";
 import { dbConfigured } from "../postgres/db.server";
@@ -328,7 +329,7 @@ export async function fetchAllSources(
   // longer a dispute to spend a contradiction check on. AUTOCORRECT=off keeps every finding a
   // proposal, the way RULES_AUTOPROMOTE=off keeps rules in shadow.
   const corrected = autoCorrect(drones, {
-    apply: process.env["AUTOCORRECT"]?.toLowerCase() !== "off",
+    apply: autonomySwitchEnabled("autocorrect"),
   });
   if (corrected.proposed || corrected.applied || corrected.withdrawn)
     console.log(

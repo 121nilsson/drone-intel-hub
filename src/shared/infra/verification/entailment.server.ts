@@ -16,6 +16,7 @@ import { claimReading } from "@/entities/drone/claim-reading";
 import type { SecondReaderRun, TokenUsageToday } from "@/shared/contracts/verification";
 import { chatCompletionOnce } from "@/shared/infra/ai-proxy.server";
 import { getAvailableProviders, getProviderModel } from "@/shared/infra/ai-providers";
+import { autonomySwitchEnabled } from "@/shared/infra/autonomy/switches.server";
 import { db, dbConfigured } from "@/shared/infra/postgres/db.server";
 import { PostgresStore } from "@/shared/infra/postgres/postgres-store.server";
 import { LocalDroneRepository } from "@/shared/infra/storage/local-repository";
@@ -152,7 +153,7 @@ export async function runEntailment(): Promise<SecondReaderRun> {
   const empty = { posts: 0, claims: 0, supported: 0, unsupported: 0, uncertain: 0, deferred: 0 };
   const tokens = { input: 0, output: 0 };
   if (!dbConfigured()) return { ran: false, reason: "no database configured", ...empty, tokens };
-  if (process.env["AI_VERIFIER"] === "off")
+  if (!autonomySwitchEnabled("ai_verifier"))
     return { ran: false, reason: "AI_VERIFIER=off", ...empty, tokens };
   const options = readerOptions();
   if (!options.length) return { ran: false, reason: "no AI provider configured", ...empty, tokens };

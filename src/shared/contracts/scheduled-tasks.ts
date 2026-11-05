@@ -11,6 +11,12 @@ export interface ScheduledTask {
   /** When it runs, in words. */
   every: string;
   does: string;
+  /**
+   * The autonomy switch (AUTONOMY_SWITCHES in shared/infra/autonomy/switches.server.ts) that
+   * turns this job's autonomous step off. A name only: this file is client-safe and must not
+   * import the server module that defines the switches.
+   */
+  switch?: string;
 }
 
 export const SCHEDULED_TASKS: readonly ScheduledTask[] = [
@@ -20,6 +26,7 @@ export const SCHEDULED_TASKS: readonly ScheduledTask[] = [
     label: "Source sync",
     every: "every 10 min",
     does: "Polls the monitored sources and ingests new reports. A run stops starting AI work after 8 min, so ticks never overlap.",
+    switch: "autocorrect",
   },
   {
     name: "evaluation:shadow",
@@ -27,6 +34,7 @@ export const SCHEDULED_TASKS: readonly ScheduledTask[] = [
     label: "Shadow scoring",
     every: "hourly at :35",
     does: "Scores shadow rules on newly ingested reports, and auto-activates the ones that meet the bar (unless RULES_AUTOPROMOTE=off).",
+    switch: "rules_autopromote",
   },
   {
     name: "verification:run",
@@ -41,6 +49,7 @@ export const SCHEDULED_TASKS: readonly ScheduledTask[] = [
     label: "Second reader",
     every: "hourly at :55",
     does: "An independent model checks the claims the deterministic checks left uncertain, and every audited claim, within the daily token ceiling. Measured only: no claim changes state.",
+    switch: "ai_verifier",
   },
   {
     name: "evaluation:run",

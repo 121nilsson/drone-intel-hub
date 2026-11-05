@@ -1,5 +1,6 @@
 import { db, dbConfigured } from "@/shared/infra/postgres/db.server";
 import { PostgresStore } from "@/shared/infra/postgres/postgres-store.server";
+import { autonomySwitchEnabled } from "@/shared/infra/autonomy/switches.server";
 import { HeuristicExtractor } from "@/shared/infra/heuristic-ai";
 import { getOrRefreshRuleSnapshot } from "@/shared/infra/heuristics/rule-registry.server";
 import { sanitizeJson } from "@/shared/infra/json-sanitize";
@@ -526,7 +527,7 @@ export async function mineAndSandbox(): Promise<MineRunResult> {
   }
 }
 
-const autopromoteEnabled = () => process.env["RULES_AUTOPROMOTE"]?.toLowerCase() !== "off";
+const autopromoteEnabled = () => autonomySwitchEnabled("rules_autopromote");
 
 async function decisionsAndTrust() {
   const rows = await db()`select category, origin, decision, actor from rule_decisions`;
