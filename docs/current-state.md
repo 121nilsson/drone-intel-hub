@@ -133,7 +133,13 @@ Settings page is read-only: it shows the resolved providers, models, the transla
 fallback order, and the built-in thresholds. Nothing is typed in the browser, and a key never
 lives there (an old browser copy is removed on load). Translation runs on its own server-side
 route (`translateCompletion`: `TRANSLATE_PROVIDER`, `TRANSLATE_MODEL`, then each provider's
-translation model), so the browser's model setting is never sent.
+translation model), so the browser's model setting is never sent. English text is not sent at
+all (`detectLanguage`, entities/normalization/language.ts): NVIDIA's Riva-Translate reads its
+system message as a language pair (`ru-en`, `uk-en`) and, given English and an instruction, answers
+in a language of its own choosing. The route sends the pair for Russian and Ukrainian and the plain
+instruction for other languages, which Riva follows. The dossier summary shows one thing at a time
+(`summaryView`): the scraped text with a status line while a brief is generated, then the brief,
+with a translation only when no brief is coming.
 
 ---
 

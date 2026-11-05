@@ -49,13 +49,20 @@ afterEach(() => {
 });
 
 function stubFetch(fail: (host: string) => boolean = () => false) {
-  const seen: { host: string; model: string }[] = [];
+  const seen: { host: string; model: string; system?: string }[] = [];
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string | URL, init?: { body?: string }) => {
       const u = new URL(String(url));
-      const body = JSON.parse(init?.body ?? "{}") as { model: string };
-      seen.push({ host: u.host, model: body.model });
+      const body = JSON.parse(init?.body ?? "{}") as {
+        model: string;
+        messages?: { role: string; content: string }[];
+      };
+      seen.push({
+        host: u.host,
+        model: body.model,
+        system: body.messages?.find((m) => m.role === "system")?.content ?? "",
+      });
       if (fail(u.host)) return new Response("no such model", { status: 404 });
       return new Response(JSON.stringify({ choices: [{ message: { content: "translated" } }] }), {
         status: 200,
@@ -79,7 +86,7 @@ describe("which provider and model translate", () => {
 
     expect(r.ok).toBe(true);
     // Deeprelay has priority 5 and would normally answer first; it is not asked at all.
-    expect(seen).toEqual([
+    expect(seen.map(({ host, model }) => ({ host, model }))).toEqual([
       { host: "integrate.api.nvidia.com", model: "nvidia/riva-translate-4b-instruct-v2" },
     ]);
   });
@@ -106,7 +113,7 @@ describe("which provider and model translate", () => {
     const r = await ask();
 
     expect(r.ok).toBe(true);
-    expect(seen).toEqual([
+    expect(seen.map(({ host, model }) => ({ host, model }))).toEqual([
       { host: "integrate.api.nvidia.com", model: "nvidia/riva-custom" },
       // TRANSLATE_MODEL belongs to the chosen provider and means nothing to the fallback.
       { host: "api.deeprelay.ai", model: "deeprelay/deepseek-v4.1-flash" },
@@ -121,7 +128,9 @@ describe("which provider and model translate", () => {
 
     await ask();
 
-    expect(seen).toEqual([{ host: "api.deeprelay.ai", model: "deeprelay/deepseek-v4.1-flash" }]);
+    expect(seen.map(({ host, model }) => ({ host, model }))).toEqual([
+      { host: "api.deeprelay.ai", model: "deeprelay/deepseek-v4.1-flash" },
+    ]);
   });
 
   it("never sends the Groq default that an unconfigured browser holds", async () => {
@@ -153,5 +162,50 @@ describe("which provider and model translate", () => {
       "x/y",
       "deeprelay/deepseek-v4.1-flash",
     ]);
+  });
+});
+
+describe("Riva-Translate gets its language pair, not an instruction", () => {
+  const riva = () => {
+    process.env["NVIDIA_API_KEY"] = "k-nv";
+    process.env["TRANSLATE_PROVIDER"] = "nvidia";
+  };
+  const askWith = (prompt: string) =>
+    translateCompletion({ system: "Translate to English.", prompt });
+
+  it("names the pair for Russian and for Ukrainian", async () => {
+    riva();
+    const seen = stubFetch();
+    await askWith("ВСУ сообщили, что ударные беспилотники атаковали Одессу ночью, потерь нет");
+    await askWith(
+      "Збройні Сили України знищили понад 8000 російських дронів і ракет, відбиваючи атаки",
+    );
+    expect(seen.map((s) => s.system)).toEqual(["ru-en", "uk-en"]);
+  });
+
+  it("keeps the instruction for a language it cannot name, which Riva follows for non-English text", async () => {
+    riva();
+    const seen = stubFetch();
+    await askWith(
+      "Siły Zbrojne Ukrainy zniszczyły ponad 8000 rosyjskich dronów i rakiet w październiku",
+    );
+    expect(seen[0]?.system).toBe("Translate to English.");
+  });
+
+  it("leaves an instruct model's prompt alone", async () => {
+    process.env["DEEPRELAY_API_KEY"] = "k-dr";
+    const seen = stubFetch();
+    await askWith("ВСУ сообщили, что ударные беспилотники атаковали Одессу ночью, потерь нет");
+    expect(seen[0]?.system).toBe("Translate to English.");
+  });
+
+  it("shapes the request per provider on a fall-through", async () => {
+    process.env["NVIDIA_API_KEY"] = "k-nv";
+    process.env["DEEPRELAY_API_KEY"] = "k-dr";
+    process.env["TRANSLATE_PROVIDER"] = "nvidia";
+    const seen = stubFetch((host) => host === "integrate.api.nvidia.com");
+    await askWith("ВСУ сообщили, что ударные беспилотники атаковали Одессу ночью, потерь нет");
+    // Riva got the pair; the instruct model behind it got the instruction.
+    expect(seen.map((s) => s.system)).toEqual(["ru-en", "Translate to English."]);
   });
 });

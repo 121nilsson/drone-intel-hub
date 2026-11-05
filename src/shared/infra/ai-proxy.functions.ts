@@ -7,6 +7,7 @@ import {
 } from "./ai-proxy.server";
 import { DEFAULT_SETTINGS } from "./settings-defaults";
 import type { Drone } from "@/entities/drone/types";
+import { detectLanguage } from "@/entities/normalization/language";
 import { sanitizeText } from "@/shared/infra/json-sanitize";
 import { buildSystemEvidenceDigest } from "@/shared/infra/system-evidence-digest";
 import { parseModelJson, humanizeBriefItem, stripPointerNotation } from "./model-json";
@@ -50,6 +51,9 @@ export const translateText = createServerFn({ method: "POST" })
   })
   .handler(
     async ({ data }): Promise<{ ok: true; translated: string } | { ok: false; error: string }> => {
+      // English text needs no translation, and a translation model given English has no target:
+      // Riva-Translate answered a dossier summary in Norwegian. Say so without calling anyone.
+      if (detectLanguage(data.text) === "en") return { ok: true as const, translated: data.text };
       const result = await translateCompletion({
         system:
           "Translate the following text to English. If the text is already in English, return it unchanged. Preserve technical terms, numbers, and proper nouns.",

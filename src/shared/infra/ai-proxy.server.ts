@@ -23,6 +23,7 @@ import {
   type AIProvider,
 } from "./ai-providers";
 import { parseModelJson } from "./model-json";
+import { detectLanguage } from "@/entities/normalization/language";
 
 export interface ChatInput {
   baseUrl?: string;
@@ -419,9 +420,10 @@ export async function chatCompletionOnce(d: ChatInput): Promise<ChatResult> {
  * The browser's model setting is never consulted: before the server's configuration reaches the
  * browser it holds the Groq default, which the first provider rejects.
  */
-export async function translateCompletion(
-  d: Pick<ChatInput, "system" | "prompt">,
-): Promise<ChatResult> {
+export async function translateCompletion(d: {
+  system: string;
+  prompt: string;
+}): Promise<ChatResult> {
   const providers = getTranslationProviders();
   const first = providers[0];
   const input: ChatInput = {
@@ -433,10 +435,27 @@ export async function translateCompletion(
   };
   // Nothing configured: let the usual path fail with the message that names the variable to set.
   if (!first) return chatCompletionOnce(input);
+  // Riva-Translate reads its system message as the language pair ("ru-en"), not as an instruction.
+  // Given an instruction and English text it has no target and answers in a language of its own
+  // choosing (Norwegian, in a dossier), so a known source gets its pair; anything else keeps the
+  // instruction, which it follows for non-English text.
+  const pair = riva.pairFor(d.prompt);
+  const adapt = (call: ChatInput, p: AIProvider): ChatInput =>
+    pair && riva.is(getTranslationModel(p, providers)) ? { ...call, system: pair } : call;
   return providers.length > 1
-    ? callWithProviders(input, providers)
-    : callSingleProvider(input, first);
+    ? callWithProviders(input, providers, adapt)
+    : callSingleProvider(adapt(input, first), first);
 }
+
+/** What is specific to NVIDIA's Riva-Translate models. */
+const riva = {
+  is: (model: string) => /riva-translate/i.test(model),
+  /** The system message that names the pair, for the sources this catalogue reads. */
+  pairFor(text: string): string | null {
+    const lang = detectLanguage(text);
+    return lang === "ru" || lang === "uk" ? `${lang}-en` : null;
+  },
+};
 
 /** Statuses that say "this provider cannot serve anyone right now", not "this request is bad". */
 const OUTAGE_STATUS = new Set([401, 402, 403, 425, 429, 500, 502, 503, 504]);
@@ -666,7 +685,12 @@ async function callSingleProvider(
  * reply makes it a document-level failure, so a queue does not stall behind a post no provider
  * can handle.
  */
-async function callWithProviders(d: ChatInput, providers: AIProvider[]): Promise<ChatResult> {
+async function callWithProviders(
+  d: ChatInput,
+  providers: AIProvider[],
+  /** Reshape the request for one provider (translation models want their own prompt format). */
+  adapt: (input: ChatInput, provider: AIProvider) => ChatInput = (input) => input,
+): Promise<ChatResult> {
   if (providers.length === 0) return { ok: false, error: "No AI providers configured" };
 
   const used: string[] = [];
@@ -697,12 +721,15 @@ async function callWithProviders(d: ChatInput, providers: AIProvider[]): Promise
 
   for (const [index, provider] of ready.entries()) {
     const apiKey = getProviderApiKey(provider);
-    const providerInput: ChatInput = {
-      ...d,
-      baseUrl: getProviderBaseUrl(provider),
-      ...(apiKey ? { apiKey } : {}),
-      model: modelFor(provider),
-    };
+    const providerInput: ChatInput = adapt(
+      {
+        ...d,
+        baseUrl: getProviderBaseUrl(provider),
+        ...(apiKey ? { apiKey } : {}),
+        model: modelFor(provider),
+      },
+      provider,
+    );
     used.push(`${provider.name}:${providerInput.model}`);
     const hasNext = index < ready.length - 1;
 

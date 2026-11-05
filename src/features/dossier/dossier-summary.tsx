@@ -2,7 +2,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { translateText, generateSystemSummary } from "@/shared/infra/ai-proxy.functions";
 import { buildSystemEvidenceDigest } from "@/shared/infra/system-evidence-digest";
-import { useServices } from "@/shared/infra/use-services";
+import { useAttached, useServices } from "@/shared/infra/use-services";
+import { detectLanguage } from "@/entities/normalization/language";
+import { awaitingBrief, summaryView } from "./summary-view";
 import { type Drone } from "@/entities/drone/types";
 import { Btn } from "@/shared/ui/primitives";
 import { SummaryText } from "@/shared/ui/summary-text";
@@ -84,7 +86,11 @@ export function DossierSummary({
   const sourceSummary = drone.summary;
   const summary = generatedSummary ?? sourceSummary;
   const storageSummary = drone.summaryEnglish;
-  const likelyEnglish = Boolean(generatedSummary);
+  // Text that is already English is not sent anywhere: a translator given English has no target.
+  const likelyEnglish = Boolean(generatedSummary) || detectLanguage(sourceSummary) === "en";
+  // Nothing below starts before the store has attached, because the server's AI configuration
+  // arrives with it. Starting earlier meant acting on defaults and then again on the real values.
+  const ready = useAttached();
   const [translated, setTranslated] = useState<string | null>(null);
   const [translating, setTranslating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -106,6 +112,13 @@ export function DossierSummary({
     drone.llmSummaryFingerprint !== briefFingerprint ||
     briefStale ||
     briefIsBlob;
+  const holdTranslation = awaitingBrief({
+    ready,
+    aiConfigured: svc.aiConfigured,
+    briefNeedsWork,
+    briefError,
+    hasBrief: Boolean(drone.llmBrief),
+  });
 
   useEffect(() => {
     // A generated brief is English and is the steady-state content; translating the scrape
@@ -128,6 +141,8 @@ export function DossierSummary({
       setTranslating(false);
       return;
     }
+    // The brief replaces this text, so translating it first only adds a step to the panel.
+    if (holdTranslation) return;
     let cancelled = false;
     setTranslating(true);
     setError(null);
@@ -156,7 +171,16 @@ export function DossierSummary({
     return () => {
       cancelled = true;
     };
-  }, [drone, generatedSummary, likelyEnglish, sourceSummary, storageSummary, drones, translateFn]);
+  }, [
+    drone,
+    generatedSummary,
+    likelyEnglish,
+    sourceSummary,
+    storageSummary,
+    drones,
+    holdTranslation,
+    translateFn,
+  ]);
 
   const runBriefGeneration = useCallback(
     async (force = false) => {
@@ -191,7 +215,7 @@ export function DossierSummary({
   );
 
   useEffect(() => {
-    if (!svc.aiConfigured) return;
+    if (!ready || !svc.aiConfigured) return;
     if (!briefNeedsWork) return;
     const generationKey = `${drone.id}:${briefFingerprint}:${drone.llmSummaryGeneratedAt ?? "never"}`;
     if (briefAttempted.current === generationKey) return;
@@ -202,13 +226,22 @@ export function DossierSummary({
     briefNeedsWork,
     drone.id,
     drone.llmSummaryGeneratedAt,
+    ready,
     svc.aiConfigured,
     runBriefGeneration,
   ]);
 
-  // A landed AI brief outranks a pending translation at any render, not only once the
-  // translation effect has caught up.
-  if (translated && !drone.llmBrief) {
+  const view = summaryView({
+    hasBrief: Boolean(drone.llmBrief),
+    ready,
+    aiConfigured: svc.aiConfigured,
+    briefNeedsWork,
+    briefError,
+    translated,
+    translating,
+  });
+
+  if (view === "translated") {
     return (
       <div className="space-y-2">
         <p className="max-w-3xl text-base leading-relaxed">{translated}</p>
@@ -222,32 +255,22 @@ export function DossierSummary({
     );
   }
 
-  if (!likelyEnglish && translating) {
-    return (
-      <div className="space-y-2">
+  return (
+    <div className="space-y-2">
+      {view === "translating" && (
         <p className="max-w-3xl animate-pulse font-mono text-sm text-muted-foreground">
           Translating summary...
         </p>
-        {drone.llmBrief ? <SystemBrief brief={drone.llmBrief} /> : <SummaryText text={summary} />}
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-2">
+      )}
       {drone.llmBrief ? <SystemBrief brief={drone.llmBrief} /> : <SummaryText text={summary} />}
-      {briefGenerating && (
-        <p className="font-mono text-xs text-muted-foreground">
+      {(view === "generating" || briefGenerating) && (
+        <p className="animate-pulse font-mono text-xs text-muted-foreground">
           Generating intelligence summary...
         </p>
       )}
-      {!briefGenerating && (
+      {view !== "generating" && !briefGenerating && ready && (
         <div className="flex flex-wrap gap-2 pt-1">
-          <Btn
-            variant="ghost"
-            onClick={() => void runBriefGeneration(true)}
-            disabled={briefGenerating}
-          >
+          <Btn variant="ghost" onClick={() => void runBriefGeneration(true)}>
             {generatedSummary ? "Regenerate AI brief" : "Generate AI brief"}
           </Btn>
         </div>
