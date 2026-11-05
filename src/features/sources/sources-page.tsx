@@ -3,7 +3,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Domain } from "@/entities/drone/types";
 import type { MonitoredSource, SourcePlatform } from "@/entities/source/types";
-import { useDispatches, useServices, useSources } from "@/shared/infra/services";
+import { useDispatches, useServices, useSources, useAttached } from "@/shared/infra/use-services";
 import type { DispatchStatus } from "@/entities/dispatch/types";
 import { fetchSourcePosts } from "@/shared/infra/sources/source-fetch.functions";
 import { FETCH_CONCURRENCY, sourceHost } from "@/shared/infra/sources/fetch-posts";
@@ -31,6 +31,7 @@ import { CollectionPanel } from "./collection-panel";
 
 export function SourcesPage() {
   const svc = useServices();
+  const attached = useAttached();
   const sources = useSources();
   const fetchFn = useServerFn(fetchSourcePosts);
   const stateFn = useServerFn(getSyncState);
@@ -237,7 +238,7 @@ export function SourcesPage() {
 
   // Until the store attaches, an empty watchlist would tell the analyst to add sources when
   // their sources are simply still loading.
-  if (!svc.attached) return <Loading label="Loading sources…" />;
+  if (!attached) return <Loading label="Loading sources…" />;
 
   const sourceList = (
     <>

@@ -3,7 +3,7 @@ import { toast } from "sonner";
 import { ExternalSourceLink } from "@/shared/ui/links";
 import type { MonitoredSource } from "@/entities/source/types";
 import { sampleDispatch } from "@/entities/source/seed";
-import { useServices } from "@/shared/infra/services";
+import { useServices } from "@/shared/infra/use-services";
 import { FAILURES_BEFORE_PAUSE, isPaused, reenable, silenceNotice } from "@/entities/source/health";
 import { Switch } from "@/components/ui/switch";
 import { TimeAgo } from "@/shared/ui/time-ago";

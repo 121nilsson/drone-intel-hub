@@ -64,26 +64,25 @@ export function AnalystReviewPanel({ drones }: { drones: readonly Drone[] }) {
           {trust.map(([family, v]) => {
             const n = v.agreed + v.disagreed;
             return (
-              <li key={family}>
-                <ListRow
-                  title={<span className="font-mono">{family}</span>}
-                  subtitle={`${n} reviewed check verdict${n === 1 ? "" : "s"} · ${pct(n ? v.agreed / n : 0)} agreed`}
-                  meta={
-                    <Tag
-                      tone={
-                        v.state === "earned"
-                          ? "success"
-                          : v.state === "distrusted"
-                            ? "danger"
-                            : "muted"
-                      }
-                      mono
-                    >
-                      {v.state} · bar {v.bar}
-                    </Tag>
-                  }
-                />
-              </li>
+              <ListRow
+                key={family}
+                title={<span className="font-mono">{family}</span>}
+                subtitle={`${n} reviewed check verdict${n === 1 ? "" : "s"} · ${pct(n ? v.agreed / n : 0)} agreed`}
+                meta={
+                  <Tag
+                    tone={
+                      v.state === "earned"
+                        ? "success"
+                        : v.state === "distrusted"
+                          ? "danger"
+                          : "muted"
+                    }
+                    mono
+                  >
+                    {v.state} · bar {v.bar}
+                  </Tag>
+                }
+              />
             );
           })}
         </ul>

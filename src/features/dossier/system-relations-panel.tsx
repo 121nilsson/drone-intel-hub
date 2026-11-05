@@ -9,7 +9,7 @@ import {
   resolveRelations,
 } from "@/entities/drone/system-hierarchy";
 import type { Drone, RelationKind, SystemClass } from "@/entities/drone/types";
-import { useServices } from "@/shared/infra/services";
+import { useServices } from "@/shared/infra/use-services";
 import { Btn, EmptyNote, Panel, Tag } from "@/shared/ui/primitives";
 import { SystemChip } from "@/shared/ui/links";
 import { Input, Select } from "@/shared/ui/fields";

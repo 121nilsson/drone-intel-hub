@@ -6,7 +6,7 @@ import {
   type TaxonomyCandidate,
   type TaxonomyTerm,
 } from "@/entities/normalization/taxonomy";
-import { useServices, useTaxonomies, useTaxonomyCandidates } from "@/shared/infra/services";
+import { useServices, useTaxonomies, useTaxonomyCandidates } from "@/shared/infra/use-services";
 import { Input, SearchInput, Select } from "@/shared/ui/fields";
 import { SourceRef } from "@/shared/ui/links";
 import { splitSourceLabel } from "@/shared/ui/source-label";

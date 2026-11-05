@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { toast } from "sonner";
-import { useCandidates, useDrones, useServices } from "@/shared/infra/services";
+import { useCandidates, useDrones, useServices } from "@/shared/infra/use-services";
 import { Btn, Panel, Segmented } from "@/shared/ui/primitives";
 import { evaluateHeuristic, type EvalReport } from "@/shared/infra/evaluation/evaluation";
 import { triggerEvaluation } from "@/shared/infra/evaluation/evaluation.functions";

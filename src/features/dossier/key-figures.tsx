@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { consensus } from "@/entities/drone/consensus";
 import { topSpecs } from "@/entities/drone/spec-groups";
 import type { Drone } from "@/entities/drone/types";
-import { useDispatches } from "@/shared/infra/services";
+import { useDispatches } from "@/shared/infra/use-services";
 import { TimeAgo } from "@/shared/ui/time-ago";
 
 function Figure({

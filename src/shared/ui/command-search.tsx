@@ -1,7 +1,7 @@
 import { useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { ArrowRight, Search } from "lucide-react";
-import { useDrones, useServices } from "@/shared/infra/services";
+import { useDrones, useServices } from "@/shared/infra/use-services";
 import { droneHaystack } from "@/shared/infra/storage/local-repository";
 import { cn } from "@/lib/utils";
 import { CountryBadge } from "./country-badge";

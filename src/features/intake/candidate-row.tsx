@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import { useServices } from "@/shared/infra/services";
+import { useServices } from "@/shared/infra/use-services";
 import { translateText } from "@/shared/infra/ai-proxy.functions";
 import { Btn, ChipButton, Tag } from "@/shared/ui/primitives";
 import { runTwoTier } from "@/shared/infra/ingest/pipeline";

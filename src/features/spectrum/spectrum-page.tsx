@@ -8,7 +8,7 @@ import {
   type Exposure,
   type SegmentStatus,
 } from "@/entities/normalization/spectrum-bands";
-import { useDrones, useServices } from "@/shared/infra/services";
+import { useDrones, useServices, useAttached } from "@/shared/infra/use-services";
 import { Select } from "@/shared/ui/fields";
 import { Loading, PageTitle, Panel, Card } from "@/shared/ui/primitives";
 import { useRelatedIntel, RelatedRail } from "@/shared/ui/intel-graph";
@@ -93,6 +93,7 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 export function SpectrumPage() {
   const drones = useDrones();
   const svc = useServices();
+  const attached = useAttached();
   const entries = useMemo(() => spectrumEntries(drones), [drones]);
   const segments = useMemo(() => segmentStatus(entries), [entries]);
   const radars = radarSystems(entries);
@@ -105,7 +106,7 @@ export function SpectrumPage() {
   const relatedIntel = useRelatedIntel(focus);
 
   // Until the store attaches, every segment reads as "no documented RF" — hold instead.
-  if (!svc.attached) return <Loading label="Loading spectrum…" />;
+  if (!attached) return <Loading label="Loading spectrum…" />;
 
   return (
     <div className="space-y-6">

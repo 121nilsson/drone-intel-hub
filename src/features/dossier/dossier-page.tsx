@@ -4,7 +4,7 @@ import { ExternalSourceLink } from "@/shared/ui/links";
 import { OriginControl } from "./origin-control";
 import { CountryBadge } from "@/shared/ui/country-badge";
 import { Panel, Tag, Loading } from "@/shared/ui/primitives";
-import { useDrones, useServices } from "@/shared/infra/services";
+import { useDrones, useServices, useAttached } from "@/shared/infra/use-services";
 import { useProcurements } from "@/shared/infra/use-procurements";
 import { resolveRelations } from "@/entities/drone/system-hierarchy";
 import { payloadSpecs, sensorSpecs } from "@/entities/drone/observations";
@@ -34,6 +34,7 @@ export function DossierPage({ id }: { id: string }) {
   const drones = useDrones();
   const procurements = useProcurements();
   const svc = useServices();
+  const attached = useAttached();
   const d = drones.find((x) => x.id === id);
   const relatedIntel = useRelatedIntel(id);
   // Counterparts read through the one reader of relations, typed and legacy alike.
@@ -53,7 +54,7 @@ export function DossierPage({ id }: { id: string }) {
   const contracts = d ? contractsForDrone(procurements, d) : [];
 
   if (!d)
-    return svc.attached ? (
+    return attached ? (
       <p className="text-muted-foreground">
         System not found.{" "}
         <Link to="/catalog" className="text-primary">

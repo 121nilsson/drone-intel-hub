@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { Input, Select } from "@/shared/ui/fields";
 import { Btn, ListRow, Panel, Tag } from "@/shared/ui/primitives";
 import { SourceRef } from "@/shared/ui/links";
-import { useServices } from "@/shared/infra/services";
+import { useServices } from "@/shared/infra/use-services";
 import { aliasFold, isFamilyAlias, isGenericAlias } from "@/entities/drone/alias-policy";
 import { buildConflictMap, conflictOwners } from "@/entities/drone/alias-claims";
 import type { AliasClaim, Drone } from "@/entities/drone/types";

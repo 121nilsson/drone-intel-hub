@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { translateText, generateSystemSummary } from "@/shared/infra/ai-proxy.functions";
 import { buildSystemEvidenceDigest } from "@/shared/infra/system-evidence-digest";
-import { useServices } from "@/shared/infra/services";
+import { useServices } from "@/shared/infra/use-services";
 import { type Drone } from "@/entities/drone/types";
 import { Btn } from "@/shared/ui/primitives";
 import { SummaryText } from "@/shared/ui/summary-text";

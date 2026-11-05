@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { cn } from "@/lib/utils";
-import { ExternalSourceLink, shortUrl } from "./links";
+import { ExternalSourceLink } from "./links";
+import { shortUrl } from "./link-text";
 import { Btn } from "./primitives";
 
 /**

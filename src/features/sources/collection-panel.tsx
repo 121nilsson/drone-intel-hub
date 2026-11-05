@@ -1,6 +1,6 @@
 import { useServerFn } from "@tanstack/react-start";
 import { Btn, Panel } from "@/shared/ui/primitives";
-import { useServices } from "@/shared/infra/services";
+import { useServices } from "@/shared/infra/use-services";
 import {
   getSyncState,
   triggerAutoSync,

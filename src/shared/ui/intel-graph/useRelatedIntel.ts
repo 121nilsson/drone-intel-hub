@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { useDrones, useDispatches } from "@/shared/infra/services";
+import { useDrones, useDispatches } from "@/shared/infra/use-services";
 import { computeRelatedIntel } from "./intel-graph.service";
 import type { RelatedIntel, GraphEdge, GraphEdgeType } from "./intel-graph.contracts";
 

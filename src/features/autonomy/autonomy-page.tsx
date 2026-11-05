@@ -2,7 +2,7 @@ import { pct } from "@/shared/ui/format";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
-import { useDrones, useServices } from "@/shared/infra/services";
+import { useDrones, useServices } from "@/shared/infra/use-services";
 import { Btn, Card, CardGrid, ListRow, PageTitle, Panel, Tag } from "@/shared/ui/primitives";
 import { Stat } from "./stat";
 import { JobStatusPanel } from "@/shared/ui/job-status-panel";

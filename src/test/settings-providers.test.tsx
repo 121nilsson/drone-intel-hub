@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { SettingsPage } from "@/features/settings/settings-page";
-import { useServices } from "@/shared/infra/services";
+import { useServices } from "@/shared/infra/use-services";
 import type { ProviderEnvConfig, ProviderStatus } from "@/shared/contracts/ai";
 
 /**
@@ -10,8 +10,9 @@ import type { ProviderEnvConfig, ProviderStatus } from "@/shared/contracts/ai";
  * inferred. Rendering it is the only way to be sure the facts reach the operator.
  */
 
+vi.mock("@/shared/infra/use-services", () => ({ useServices: () => mockServices }));
+
 vi.mock("@/shared/infra/services", () => ({
-  useServices: () => mockServices,
   DEFAULT_SETTINGS: {
     baseUrl: "",
     apiKey: "",

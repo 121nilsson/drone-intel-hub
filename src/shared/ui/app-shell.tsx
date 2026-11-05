@@ -1,7 +1,7 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState, type ReactNode } from "react";
 import { Menu, Plus, Search, X, Radar } from "lucide-react";
-import { useDrones, useServices } from "@/shared/infra/services";
+import { useDrones, useServices } from "@/shared/infra/use-services";
 import { droneHaystack } from "@/shared/infra/storage/local-repository";
 import { CountryBadge } from "@/shared/ui/country-badge";
 import { buttonClass } from "@/shared/ui/button-class";

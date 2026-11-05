@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { useDrones, useServices } from "@/shared/infra/services";
+import { useDrones, useServices, useAttached } from "@/shared/infra/use-services";
 import { DataTable, type Column } from "@/shared/ui/data-table";
 import { Input, SearchInput } from "@/shared/ui/fields";
 import { Btn, EmptyState, Loading, Panel, PageTitle, Tag } from "@/shared/ui/primitives";
@@ -28,6 +28,7 @@ function OriginTag({ k }: { k: SpecKeySummary }) {
 export function SpecsPage() {
   const drones = useDrones();
   const svc = useServices();
+  const attached = useAttached();
   const { drones: repo } = svc;
   const keys = useMemo(() => allSpecKeys(drones), [drones]);
   const [editing, setEditing] = useState<string | null>(null);
@@ -105,7 +106,7 @@ export function SpecsPage() {
   });
 
   // Until the store attaches, the panel would read "0 attributes" before showing real ones.
-  if (!svc.attached) return <Loading label="Loading attributes…" />;
+  if (!attached) return <Loading label="Loading attributes…" />;
 
   const labelCell = (k: SpecKeySummary) =>
     editing === k.key ? (

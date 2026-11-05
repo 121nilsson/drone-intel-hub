@@ -14,7 +14,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select } from "@/shared/ui/fields";
 import { Btn } from "@/shared/ui/primitives";
-import { useServices } from "@/shared/infra/services";
+import { useServices } from "@/shared/infra/use-services";
 import type { Drone, SpecAttribute, SpecClaim } from "@/entities/drone/types";
 import { ANALYST_SOURCE } from "@/entities/drone/claim-review";
 import { attributeSemantic } from "@/entities/drone/spec-engine";

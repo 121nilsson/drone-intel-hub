@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useDrones, useServices } from "@/shared/infra/services";
+import { useDrones, useServices } from "@/shared/infra/use-services";
 import { CardGrid, PageTitle, Panel, Sparkline, Tag } from "@/shared/ui/primitives";
 import type { EvalReport } from "@/shared/infra/evaluation/evaluation";
 import {

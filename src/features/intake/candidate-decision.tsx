@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
-import { useDrones, useServices } from "@/shared/infra/services";
+import { useDrones, useServices } from "@/shared/infra/use-services";
 import { Input, Select } from "@/shared/ui/fields";
 import { Btn } from "@/shared/ui/primitives";
 import { mergeInto, promote, recordMention } from "@/shared/infra/ingest/pipeline";

@@ -4,7 +4,7 @@ import { claimKey } from "@/entities/drone/claim-review";
 import type { Drone } from "@/entities/drone/types";
 import { correctionTrust } from "@/shared/infra/ingest/auto-correct";
 import { TRUST_AGREEMENT, TRUST_MIN_REVIEWS } from "@/shared/infra/ingest/earned-trust";
-import { useDispatches, useServices } from "@/shared/infra/services";
+import { useDispatches, useServices } from "@/shared/infra/use-services";
 import { correctionMark, describeCorrection } from "@/shared/ui/correction";
 import { SystemChip } from "@/shared/ui/links";
 import { ReviewSource } from "@/shared/ui/review-source";
@@ -66,26 +66,25 @@ export function CorrectionQueue({ drones }: { drones: readonly Drone[] }) {
           const t = trust.get(k);
           const n = (t?.agreed ?? 0) + (t?.disagreed ?? 0);
           return (
-            <li key={k}>
-              <ListRow
-                title={KIND_LABEL[k]}
-                subtitle={`${n} answered · ${n ? pct((t?.agreed ?? 0) / n) : "—"} agreed`}
-                meta={
-                  <Tag
-                    tone={
-                      t?.state === "earned"
-                        ? "success"
-                        : t?.state === "distrusted"
-                          ? "danger"
-                          : "muted"
-                    }
-                    mono
-                  >
-                    {t?.state === "earned" ? "applied" : (t?.state ?? "default")}
-                  </Tag>
-                }
-              />
-            </li>
+            <ListRow
+              key={k}
+              title={KIND_LABEL[k]}
+              subtitle={`${n} answered · ${n ? pct((t?.agreed ?? 0) / n) : "—"} agreed`}
+              meta={
+                <Tag
+                  tone={
+                    t?.state === "earned"
+                      ? "success"
+                      : t?.state === "distrusted"
+                        ? "danger"
+                        : "muted"
+                  }
+                  mono
+                >
+                  {t?.state === "earned" ? "applied" : (t?.state ?? "default")}
+                </Tag>
+              }
+            />
           );
         })}
       </ul>

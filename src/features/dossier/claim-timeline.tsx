@@ -1,5 +1,6 @@
 import { Panel, EmptyNote } from "@/shared/ui/primitives";
-import { SourceRef, withUnit } from "@/shared/ui/links";
+import { SourceRef } from "@/shared/ui/links";
+import { withUnit } from "@/shared/ui/link-text";
 import { type Drone } from "@/entities/drone/types";
 
 export function ClaimTimeline({ drone: d }: { drone: Drone }) {

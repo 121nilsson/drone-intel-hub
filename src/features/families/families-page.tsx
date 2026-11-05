@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { familyProposals, type FamilyProposal } from "@/entities/drone/family-audit";
-import { useDrones, useServices } from "@/shared/infra/services";
+import { useDrones, useServices, useAttached } from "@/shared/infra/use-services";
 import { Btn, EmptyNote, ListRow, PageTitle, Panel, Tag } from "@/shared/ui/primitives";
 import { SystemChip } from "@/shared/ui/links";
 
@@ -38,6 +38,7 @@ const GROUPS: Array<{ kind: FamilyProposal["kind"]; title: string; says: string 
 
 export function FamiliesPage() {
   const svc = useServices();
+  const attached = useAttached();
   const drones = useDrones();
   const [busy, setBusy] = useState(false);
   const proposals = useMemo(() => familyProposals(drones), [drones]);
@@ -216,7 +217,7 @@ export function FamiliesPage() {
       <PageTitle subtitle="Which entries are families, which are their variants, and which names are filed in the wrong place. Proposals only: nothing changes until you decide, and a proposal you turn down is not made again.">
         Families
       </PageTitle>
-      {!svc.attached ? null : proposals.length === 0 ? (
+      {!attached ? null : proposals.length === 0 ? (
         <EmptyNote>
           Nothing to review: every family, variant and name is where it belongs.
         </EmptyNote>

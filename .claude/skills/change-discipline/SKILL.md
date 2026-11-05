@@ -147,17 +147,18 @@ satisfies.
 
 ### Current state — know this so you can tell "pre-existing" from "yours"
 
-| Check                | Baseline                  |
-| -------------------- | ------------------------- |
-| `tsc --noEmit`       | 0 errors                  |
-| `eslint .`           | 0 errors, **14 warnings** |
-| `prettier --check .` | clean                     |
-| `vitest run`         | all passing               |
+| Check                | Baseline                                           |
+| -------------------- | -------------------------------------------------- |
+| `tsc --noEmit`       | 0 errors                                           |
+| `eslint .`           | 0 findings, warnings included (`--max-warnings 0`) |
+| `prettier --check .` | clean                                              |
+| `vitest run`         | all passing                                        |
 
-Those 14 warnings are `react-refresh/only-export-components` and `react-hooks/exhaustive-deps`.
-They are a structural consequence of the Feature-Sliced layout, they are not errors, and fixing
-one usually means restructuring rather than editing. Do not quietly clear them as drive-by, and
-do not let them hide a real new warning of the same rule.
+The tree is clean, so there is nothing to tolerate: any finding `npm run green` reports is yours,
+and a warning blocks like an error. Fix it at the cause. The one scoped exception is
+`src/components/ui` (shadcn components export their variants next to the component, and
+`shadcn add` writes them back), switched off for `react-refresh/only-export-components` in
+`eslint.config.js` with the reason beside it. Do not widen it.
 
 ### If something is not green
 

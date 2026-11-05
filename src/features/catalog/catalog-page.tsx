@@ -9,7 +9,7 @@ import { CountryBadge } from "@/shared/ui/country-badge";
 import { ieeeLabel } from "@/entities/normalization/bands";
 import { effectiveInstallationId, effectivePropulsionId } from "@/entities/normalization/taxonomy";
 import { effectiveIeeeBands, linkIsFiber } from "@/entities/normalization/rf";
-import { useDispatches, useDrones, useServices } from "@/shared/infra/services";
+import { useDispatches, useDrones, useServices, useAttached } from "@/shared/infra/use-services";
 import { fetchWikipediaReference } from "@/shared/infra/wikipedia/functions";
 import { DataTable, type Column } from "@/shared/ui/data-table";
 import { useRememberedChoice, useRememberedSearch } from "@/shared/ui/remembered";
@@ -196,6 +196,7 @@ export function CatalogPage({
   const drones = useDrones();
   const dispatches = useDispatches();
   const svc = useServices();
+  const attached = useAttached();
   const { drones: repo } = svc;
   // Search, sort and facets are URL state: the URL is the single truth, changes navigate with a
   // replace so a shared or refreshed link always restores the exact view. Session-only bits
@@ -351,7 +352,7 @@ export function CatalogPage({
 
   // The repositories fill asynchronously after SSR; until then every list reads empty, which
   // would read as a legitimately empty catalog. Hold a loading state instead.
-  if (!svc.attached) return <Loading label="Loading catalog…" />;
+  if (!attached) return <Loading label="Loading catalog…" />;
 
   const toggleIn = (key: ListFacet) => (v: string) => {
     const values: string[] = f[key];

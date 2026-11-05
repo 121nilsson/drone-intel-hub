@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { DEFAULT_SETTINGS, useServices } from "@/shared/infra/services";
+import { DEFAULT_SETTINGS } from "@/shared/infra/services";
+import { useServices } from "@/shared/infra/use-services";
 import { DataTable, type Column } from "@/shared/ui/data-table";
 import { Input } from "@/shared/ui/fields";
 import { Btn, PageTitle, Panel, Tag } from "@/shared/ui/primitives";

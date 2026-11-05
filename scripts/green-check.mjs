@@ -52,7 +52,7 @@ function run(args) {
   return { code: r.status ?? 1, out };
 }
 
-/** Errors block. Warnings are reported but tolerated - see eslint's 14 existing react-refresh ones. */
+/** Every finding blocks: tsc, eslint (warnings included), prettier and vitest are all at zero. */
 const CHECKS = [
   {
     name: "tsc",
@@ -86,7 +86,8 @@ const CHECKS = [
         const rel = relative(ROOT, file.filePath ?? "");
         for (const m of file.messages ?? []) {
           findings.push(key(rel, m.severity === 2 ? "error" : "warning", m.ruleId, m.message));
-          if (m.severity === 2) blocking = true;
+          // A warning blocks too: the tree is clean, so any warning is one somebody just added.
+          blocking = true;
         }
       }
       return { findings, blocking };

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
-import { useDrones, useServices } from "@/shared/infra/services";
+import { useDrones, useServices } from "@/shared/infra/use-services";
 import type { TokenUsageToday } from "@/shared/contracts/verification";
 import { Btn, Card, CardGrid, Panel, Tag } from "@/shared/ui/primitives";
 import { Stat } from "./stat";

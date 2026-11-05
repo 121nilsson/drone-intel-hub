@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { ClaimIssue, SpecAttribute } from "@/entities/drone/types";
-import { useDrones, useServices } from "@/shared/infra/services";
+import { useDrones, useServices } from "@/shared/infra/use-services";
 import { Input, Select } from "@/shared/ui/fields";
 import { Btn, Tag } from "@/shared/ui/primitives";
 import { correctionMark, describeCorrection } from "@/shared/ui/correction";

@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { ServicesProvider, useServices } from "@/shared/infra/services";
+import { ServicesProvider } from "@/shared/infra/services";
+import { useServices } from "@/shared/infra/use-services";
 
 const { getStoreStatus, storeLoadPage, storeSeed } = vi.hoisted(() => ({
   getStoreStatus: vi.fn(),

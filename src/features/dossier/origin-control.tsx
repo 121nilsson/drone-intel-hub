@@ -3,7 +3,7 @@ import { toast } from "sonner";
 import type { Drone } from "@/entities/drone/types";
 import { originProposal, originTally, UNKNOWN_ORIGIN } from "@/entities/drone/origin-audit";
 import { countryCode } from "@/entities/normalization/country";
-import { useServices } from "@/shared/infra/services";
+import { useServices } from "@/shared/infra/use-services";
 import { CountryBadge } from "@/shared/ui/country-badge";
 import { Input } from "@/shared/ui/fields";
 import { Btn, Tag } from "@/shared/ui/primitives";

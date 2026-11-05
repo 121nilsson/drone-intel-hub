@@ -3,7 +3,7 @@ import { Panel } from "@/shared/ui/primitives";
 import { ContractRow } from "@/shared/ui/contracts";
 import { type Drone } from "@/entities/drone/types";
 import { contractsForDrone } from "@/entities/procurement/match";
-import { useDrones } from "@/shared/infra/services";
+import { useDrones } from "@/shared/infra/use-services";
 
 export function ContractsPanel({
   drone: d,

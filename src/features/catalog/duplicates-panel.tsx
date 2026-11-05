@@ -2,7 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
 import type { duplicateGroups } from "@/entities/drone/duplicates";
-import { useServices } from "@/shared/infra/services";
+import { useServices } from "@/shared/infra/use-services";
 import { Select } from "@/shared/ui/fields";
 import { Btn, Panel } from "@/shared/ui/primitives";
 

@@ -1,5 +1,5 @@
 import { toast } from "sonner";
-import { useCandidates, useDrones, useServices } from "@/shared/infra/services";
+import { useCandidates, useDrones, useServices } from "@/shared/infra/use-services";
 import { Btn, Panel } from "@/shared/ui/primitives";
 import {
   analystCorpus,

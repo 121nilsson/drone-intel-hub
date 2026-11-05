@@ -5,7 +5,7 @@ import { byNewestContract } from "@/entities/procurement/match";
 import { procurementSystemRefs } from "@/entities/procurement/presentation";
 import { groupSameDeal, isUnknown } from "@/entities/procurement/same-deal";
 import type { Drone } from "@/entities/drone/types";
-import { useDrones, useServices } from "@/shared/infra/services";
+import { useDrones, useServices, useAttached } from "@/shared/infra/use-services";
 import { useProcurements } from "@/shared/infra/use-procurements";
 import { ContractRow } from "@/shared/ui/contracts";
 import { CountryBadge } from "@/shared/ui/country-badge";
@@ -134,6 +134,7 @@ export function ProcurementPage({
   const procurements = useProcurements();
   const drones = useDrones();
   const svc = useServices();
+  const attached = useAttached();
   useRememberedSearch("procurement", url, setUrl);
   const state = useMemo(() => fromProcurementSearchParams(url), [url]);
   const facets = useMemo(() => procurementFacets(procurements), [procurements]);
@@ -191,7 +192,7 @@ export function ProcurementPage({
     })),
   ];
 
-  if (!svc.attached) return <Loading label="Loading contracts…" />;
+  if (!attached) return <Loading label="Loading contracts…" />;
   return (
     <div className="space-y-4">
       <PageTitle subtitle="Contracts, grants and production deals routed out of system specs.">

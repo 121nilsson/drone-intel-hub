@@ -10,7 +10,7 @@ import {
 } from "@/entities/normalization/ew-matrix";
 import { type Drone } from "@/entities/drone/types";
 import { CountryBadge } from "@/shared/ui/country-badge";
-import { useDrones, useServices } from "@/shared/infra/services";
+import { useDrones, useServices, useAttached } from "@/shared/infra/use-services";
 import { DataTable } from "@/shared/ui/data-table";
 import { Select } from "@/shared/ui/fields";
 import { Loading, Panel, Tag, EmptyNote } from "@/shared/ui/primitives";
@@ -100,10 +100,11 @@ function KineticColumn({ target, defender }: { target: Drone; defender: Drone })
 export function CounterpartsPage({ a, b }: { a?: string | undefined; b?: string | undefined }) {
   const drones = useDrones();
   const svc = useServices();
+  const attached = useAttached();
   const nav = useNavigate();
   // Comparison is meaningless with fewer than two systems. The early "not enough" verdict is
   // also given while the store is still attaching, which would otherwise flash misleadingly.
-  if (!svc.attached) return <Loading label="Loading comparison…" />;
+  if (!attached) return <Loading label="Loading comparison…" />;
   if (drones.length < 2)
     return (
       <div className="space-y-6">

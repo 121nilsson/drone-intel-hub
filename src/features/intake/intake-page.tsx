@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import { useCandidates, useDispatches, useServices } from "@/shared/infra/services";
+import {
+  useCandidates,
+  useDispatches,
+  useServices,
+  useAttached,
+} from "@/shared/infra/use-services";
 import { fetchIntakeArticle, isBareUrl } from "@/shared/infra/sources/intake-fetch.functions";
 import { Input, Textarea } from "@/shared/ui/fields";
 import { Btn, Loading, Panel, Tag } from "@/shared/ui/primitives";
@@ -17,6 +22,7 @@ export function IntakePage({
   draftSource,
 }: { draft?: string | undefined; draftSource?: string | undefined } = {}) {
   const svc = useServices();
+  const attached = useAttached();
   const candidates = useCandidates();
   const intakeFetch = useServerFn(fetchIntakeArticle);
   const [raw, setRaw] = useState("");
@@ -148,7 +154,7 @@ export function IntakePage({
     return dispatches.some((d) => d.url === url || d.text.includes(url));
   }, [raw, dispatches]);
 
-  if (!svc.attached) return <Loading label="Loading queue…" />;
+  if (!attached) return <Loading label="Loading queue…" />;
 
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">

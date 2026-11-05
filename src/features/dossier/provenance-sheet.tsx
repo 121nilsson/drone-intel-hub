@@ -1,7 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { ExternalSourceLink, SourceRef } from "@/shared/ui/links";
 import type { SpecAttribute } from "@/entities/drone/types";
-import { useDispatches, useServices, useSources } from "@/shared/infra/services";
+import { useDispatches, useServices, useSources } from "@/shared/infra/use-services";
 import {
   Sheet,
   SheetContent,

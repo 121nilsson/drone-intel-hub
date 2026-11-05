@@ -2,7 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { ExternalSourceLink, SystemChip } from "@/shared/ui/links";
 import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useMemo, useState } from "react";
-import { useDispatches, useServices, useSources } from "@/shared/infra/services";
+import { useDispatches, useServices, useSources, useAttached } from "@/shared/infra/use-services";
 import type { DispatchStatus } from "@/entities/dispatch/types";
 import { getSyncState, type SyncState } from "@/shared/infra/sources/source-sync.functions";
 import { fetchDispatchCounts } from "@/shared/infra/storage/store.functions";
@@ -178,6 +178,7 @@ export function DispatchesPage({
   setUrl: (next: Record<string, string>) => void;
 }) {
   const svc = useServices();
+  const attached = useAttached();
   const dispatches = useDispatches();
   const sources = useSources();
   const stateFn = useServerFn(getSyncState);
@@ -308,7 +309,7 @@ export function DispatchesPage({
 
       {/* A filtered view that matches nothing is not the same situation as an empty archive. */}
       {shown.length === 0 ? (
-        svc.attached ? (
+        attached ? (
           <Panel>
             {dispatches.length > 0 && q.trim() === "" && status === "all" && !sourceId ? (
               <p className="text-sm text-muted-foreground">

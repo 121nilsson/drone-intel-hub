@@ -56,6 +56,13 @@ export default tseslint.config(
       "@typescript-eslint/no-unused-vars": "off",
     },
   },
+  {
+    // shadcn/ui components export their `cva` variants next to the component (buttonVariants,
+    // badgeVariants, useSidebar). That is the library's own layout and `shadcn add` writes it back,
+    // so splitting it here would be undone on the next update. Same policy as src/integrations.
+    files: ["src/components/ui/**/*.{ts,tsx}"],
+    rules: { "react-refresh/only-export-components": "off" },
+  },
   eslintPluginPrettier,
   {
     // Formatting drift is a warning, not an error. The codebase is largely generated and
