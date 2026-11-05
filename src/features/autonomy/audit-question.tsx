@@ -6,6 +6,8 @@ import { TranslateButton } from "@/shared/ui/translate-button";
 import { AnswerGuide } from "./audit-answer-guide";
 import { PostWithQuote } from "./audit-post-quote";
 import { SPEED_NATURE_HINT } from "./speed-nature";
+import { liveReading } from "./audit-reading";
+import { useDrones } from "@/shared/infra/use-services";
 
 export function Question({
   item,
@@ -20,6 +22,8 @@ export function Question({
   ) => void;
   busy: boolean;
 }) {
+  const drones = useDrones();
+  const reading = liveReading(drones, item);
   const [obviouslyWrong, setObviouslyWrong] = useState(false);
   // Defaults to how a post in this language is likely read; the auditor corrects it.
   const [readVia, setReadVia] = useState<"original" | "translation">(
@@ -60,9 +64,15 @@ export function Question({
           <SystemChip id={item.droneId} name={item.droneName} />
           <span className="text-muted-foreground">·</span>
           <span>{item.specLabel}</span>
+          {reading?.nature && reading.nature !== item.specLabel && (
+            <span className="text-xs text-muted-foreground">({reading.nature.toLowerCase()})</span>
+          )}
           <span className="text-muted-foreground">=</span>
-          <span className="font-mono font-semibold">{item.value}</span>
+          <span className="font-mono font-semibold">{reading?.clean ?? item.value}</span>
         </p>
+        {reading && reading.clean !== item.value && (
+          <p className="font-mono text-xs text-muted-foreground">as stated: {item.value}</p>
+        )}
         <p className="text-xs text-muted-foreground">
           <SourceRef source={item.source} /> · {item.language} · {item.family}
         </p>
