@@ -1,5 +1,6 @@
 import type { Candidate, Drone } from "@/entities/drone/types";
 import type { IntelExtractor } from "@/shared/contracts/ai";
+import { canonicalPayload, fnv1a } from "@/shared/contracts/proposals";
 import { CUE_TARGETS, type RuleKind, type RuleLanguage } from "@/shared/contracts/rules";
 import { FILLER_WORDS } from "@/shared/lexicons/fillers";
 import { normalizeExtraction } from "@/entities/normalization/apply";
@@ -74,10 +75,7 @@ export function languageOf(s: string): RuleLanguage {
 
 /** Stable short id: FNV-1a over the canonical JSON of kind + payload. */
 export function hypothesisId(kind: string, payload: Record<string, unknown>): string {
-  const s = `${kind}:${JSON.stringify(payload, Object.keys(payload).sort())}`;
-  let h = 2166136261;
-  for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619) >>> 0;
-  return `hyp-${kind}-${h.toString(36)}`;
+  return `hyp-${kind}-${fnv1a(`${kind}:${canonicalPayload(payload)}`)}`;
 }
 
 /** Tokens in the same sentence, up to 24 characters before the claim's number. */
