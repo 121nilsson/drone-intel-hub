@@ -46,9 +46,10 @@ Shell navigation and ⌘K search live in `src/shared/ui/app-shell.tsx`.
   choice). The composition root never falls back from server storage to localStorage on its own.
 
 `procurements` is persisted and financial specs are split out of the drone specs at the pipeline
-boundary and written to the collection (`src/shared/infra/ingest/pipeline.ts`). The LLM extractor
-(`src/shared/infra/procurement-extractor.ts`, behind the `ProcurementExtractor` contract) is never
-called, the cron path does not supply a `procurements` repository, and there is no UI surface.
+boundary and written to the collection (`src/shared/infra/ingest/pipeline-run.ts`). The LLM extractor
+(`src/shared/infra/procurement-extractor.ts`, behind the `ProcurementExtractor` contract) runs in the
+pipeline when a provider is configured, the server-side sync supplies the `procurements` repository
+(`fetch-posts.server.ts`), and the Procurement page (`src/features/procurement`) shows the records.
 
 ---
 
@@ -73,7 +74,7 @@ Implemented in `src/shared/infra/sources/fetch-posts.server.ts`, `fetch-posts.ts
 
 ## Ingest — stage 2 (processing)
 
-Same pipeline as manual Queue paste: `runTwoTier` in `src/shared/infra/ingest/pipeline.ts`.
+Same pipeline as manual Queue paste: `runTwoTier` in `src/shared/infra/ingest/pipeline-run.ts`.
 
 1. Heuristic extractor (`src/shared/infra/heuristic-ai.ts`) when `heuristicFirst` is on.
 2. Tier 1 / tier 2 OpenAI-compatible models when configured (`openai-compatible-ai.ts`), with

@@ -80,7 +80,7 @@ Built with TanStack Start, React, TypeScript, Tailwind CSS, Nitro, and PostgreSQ
 Ingestion has two stages. **Collection** stores raw posts as `pending` dispatches with no AI
 involved, so it is fast and never blocked by a provider. **Processing** drains that queue in
 bounded batches, through the same pipeline the Queue page uses (`runTwoTier` in
-`src/features/intake/pipeline.ts`):
+`src/shared/infra/ingest/pipeline-run.ts`):
 
 1. **Relevance filter.** A post must match `DRONE_HINT` or a catalog name/alias pattern built from
    the current drones (`buildCatalogPattern` in `ingest/ingest-relevance.ts`). Otherwise it is stored as

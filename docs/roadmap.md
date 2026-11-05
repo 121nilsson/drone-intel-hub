@@ -18,14 +18,13 @@ Verified open work as of October 2026. Shipped behavior is documented in
 
 ## AI quality and cost
 
-| Priority | Item                                  | Notes                                                                                                                                                                                                                                                                                                                                    |
-| -------- | ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| High     | Wire extraction corpus tests          | Import `EXTRACTION_CORPUS` in vitest; optional live run via env flag for regression on prompt changes. The corpus already covers two systems in one report; Cyrillic, a no-system post and a counter-UAS system are still missing.                                                                                                       |
-| High     | Re-benchmark defaults                 | Run `scripts/benchmark-models.mjs` after provider/catalog changes; align `.env.local` / Settings with results ([modelbenchmark.md](./modelbenchmark.md)).                                                                                                                                                                                |
-| Medium   | Conditional pre-translate on extract  | Queue has Translate; pipeline could call Riva (or tier-1) for non-Latin posts before extraction when benchmark shows variance (not mandatory for Latin).                                                                                                                                                                                 |
-| Medium   | Surface provider/model drift in UI    | Settings already warns on namespaced models; extend Feed/Queue with last engine + degraded tier from persisted trace — `RawDispatch.analysis` has no degraded field yet.                                                                                                                                                                 |
-| Medium   | Evidence check covers more than specs | A spec's quote is checked against the post before merge or promote. The observation arrays (`components`, `payloads`, `sensors`) are not, and a spec with neither `evidence` nor `raw` passes the check.                                                                                                                                 |
-| Medium   | Procurement extraction                | Financial specs are already split out of drone specs at the pipeline boundary and written to the collection. What is missing: the LLM extractor (`openAIProcurementExtractor`) is never called, the cron path does not supply a `procurements` repository so server-side ingest drops the records, and there is no view or dossier link. |
+| Priority | Item                                  | Notes                                                                                                                                                                                                                              |
+| -------- | ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| High     | Wire extraction corpus tests          | Import `EXTRACTION_CORPUS` in vitest; optional live run via env flag for regression on prompt changes. The corpus already covers two systems in one report; Cyrillic, a no-system post and a counter-UAS system are still missing. |
+| High     | Re-benchmark defaults                 | Run `scripts/benchmark-models.mjs` after provider/catalog changes; align `.env.local` / Settings with results ([modelbenchmark.md](./modelbenchmark.md)).                                                                          |
+| Medium   | Conditional pre-translate on extract  | Queue has Translate; pipeline could call Riva (or tier-1) for non-Latin posts before extraction when benchmark shows variance (not mandatory for Latin).                                                                           |
+| Medium   | Surface provider/model drift in UI    | Settings already warns on namespaced models; extend Feed/Queue with last engine + degraded tier from persisted trace — `RawDispatch.analysis` has no degraded field yet.                                                           |
+| Medium   | Evidence check covers more than specs | A spec's quote is checked against the post before merge or promote. The observation arrays (`components`, `payloads`, `sensors`) are not, and a spec with neither `evidence` nor `raw` passes the check.                           |
 
 ---
 
@@ -65,13 +64,11 @@ Verified open work as of October 2026. Shipped behavior is documented in
 
 ## Code health
 
-| Priority | Item                              | Notes                                                                                                                                                                                             |
-| -------- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Medium   | React Query                       | `QueryClientProvider` in `__root.tsx` but server-fn calls use ad hoc `useEffect` — use queries for briefing/sync or drop the dependency.                                                          |
-| Medium   | Split `pipeline.ts`               | 922 lines. The auto-actions moved out to `ingest/auto-triage.ts`, `auto-correct.ts` and `contradictions.ts`; `runTwoTier`, `promote`, `mergeInto` and the trace assembly are still in one module. |
-| Low      | Shared UI helpers                 | e.g. duplicate `ExpandableText` in intake and dispatches → `shared/ui`.                                                                                                                           |
-| Low      | Duplicated `pct` and `workingIds` | `pct` is re-defined in four evaluation panels and some autonomy pages (use `evaluation-format.ts`); `workingIds` in `sources-page.tsx` is filled and never read.                                  |
-| Low      | Migration tooling                 | Single story for `migrations/` vs unused `drizzle/` tree (document-only today).                                                                                                                   |
+| Priority | Item              | Notes                                                                                                                                    |
+| -------- | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| Medium   | React Query       | `QueryClientProvider` in `__root.tsx` but server-fn calls use ad hoc `useEffect` — use queries for briefing/sync or drop the dependency. |
+| Low      | Shared UI helpers | e.g. duplicate `ExpandableText` in intake and dispatches → `shared/ui`.                                                                  |
+| Low      | Migration tooling | Single story for `migrations/` vs unused `drizzle/` tree (document-only today).                                                          |
 
 ---
 
@@ -91,7 +88,9 @@ These are **shipped**; do not re-open without a new regression:
 - Merge and remove confirmations with an impact preview
 - Catalog facets persisted in the URL
 - Feed rows linking to the dossier and the queue
-- A spec's evidence must occur in the post before it reaches the catalog (the "autonomy brake" in `ingest/pipeline.ts`)
+- A spec's evidence must occur in the post before it reaches the catalog (the "autonomy brake" in `ingest/pipeline-run.ts`)
+- Procurement extraction: the LLM extractor runs in ingest (`pipeline-run.ts`), the server-side sync supplies the `procurements` repository, and the data shows on the Procurement page and the dossier's Contracts panel
+- `pipeline.ts` split into `pipeline-run`, `-actions`, `-slice`, `-triage`, `-types` and `-internal` (the old file is a barrel)
 - Analyst verdicts on a claim, including moving a claim to the attribute it describes
 - Payload and sensor facts shown on the dossier from both the observations and the specs
 - Timestamped log lines, including the ones Docker prints

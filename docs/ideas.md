@@ -19,9 +19,8 @@ relevance, queue) and [Heuristics engine](#heuristics-engine--modular-multilingu
 2. **React Query or remove it** — `QueryClientProvider` is wired but features use
    `useSyncExternalStore` on repos. Use queries for briefing summary, sync state, and translate;
    otherwise remove the dependency.
-3. **Modular pipeline** — `pipeline.ts` is a change hotspot (922 lines: `runTwoTier`, `promote`,
-   `mergeInto`, the triage gates and the trace assembly). Split analyze, auto-merge/promote/discard,
-   and trace assembly; keep vitest as the contract.
+3. **Modular pipeline** — done: `pipeline.ts` is a barrel over `pipeline-run` (`runTwoTier`),
+   `pipeline-actions`, `pipeline-slice`, `pipeline-triage`, `pipeline-types` and `pipeline-internal`.
 4. **Single migration story** — Authoritative SQL is `migrations/`; `drizzle/` is unused at runtime.
    Either generate SQL from Drizzle or delete the stray tree to avoid drift.
 5. **Windowed collection reads** — `DocumentStore.load` returns the full array and
