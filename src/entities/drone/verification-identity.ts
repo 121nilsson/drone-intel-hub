@@ -1,0 +1,129 @@
+import { catalogNames } from "./catalog-names";
+import { mentionsName } from "./name-key";
+import type { Drone, SpecClaim, VerificationCheck } from "./types";
+import { check } from "./verification-check";
+import { evidencePassages, fold } from "./verification-evidence";
+
+/** A name distinctive enough to contradict this claim when it, and not the drone, is named. */
+const distinctive = (name: string) => name.trim().length >= 4 || /\d/.test(name);
+
+type Naming = { own: boolean; other?: Drone };
+
+/**
+ * Catalog systems a passage names by a distinctive name, per catalog and passage. The same
+ * sentence or post is checked for every claim it carries, often across several systems, and the
+ * scan over the whole catalog is the verifier's dominant cost. Bounded, since passages are
+ * unique per post; the catalog key lets a changed catalog start fresh.
+ */
+const scans = new WeakMap<readonly Drone[], Map<string, Drone[]>>();
+const MAX_SCANS = 5000;
+
+function distinctivelyNamed(passage: string, catalog: readonly Drone[]): Drone[] {
+  let byPassage = scans.get(catalog);
+  if (!byPassage) scans.set(catalog, (byPassage = new Map()));
+  const hit = byPassage.get(passage);
+  if (hit) return hit;
+  const found = catalog.filter((d) =>
+    catalogNames(d).some((name) => distinctive(name) && mentionsName(passage, name)),
+  );
+  if (byPassage.size >= MAX_SCANS) byPassage.clear();
+  byPassage.set(passage, found);
+  return found;
+}
+
+/** Whether a passage names this system, and which other distinctive catalog system it names. */
+function naming(passage: string, drone: Drone, catalog: readonly Drone[]): Naming {
+  const own = catalogNames(drone).some((name) => mentionsName(passage, name));
+  const other = distinctivelyNamed(passage, catalog).find((d) => d.id !== drone.id);
+  return other ? { own, other } : { own };
+}
+
+/**
+ * Does the passage this figure came from name the system it is filed under (plan §4.6)?
+ *
+ * Anchored to the evidence sentence, not the post: in a post about several systems the drone's
+ * own name appears somewhere almost by definition, so a whole-post match would pass exactly the
+ * misattribution this check exists to catch. When the sentence names no system the verdict is
+ * uncertain - including for a post about one system only, since such a post can still carry a
+ * sentence about something it never names. Uncertain is applicable, so it keeps the claim from
+ * reading as verified; that lowers the verified share, and the lower number is the honest one.
+ */
+export function identityCheck(
+  drone: Drone,
+  claim: SpecClaim,
+  text: string | undefined,
+  catalog: readonly Drone[],
+  at: string,
+): VerificationCheck {
+  const quote = claim.evidence?.trim() || claim.raw?.trim() || "";
+  const sourceId = claim.sourceId ? { sourceId: claim.sourceId } : {};
+  // Without the post, the quote is the only passage there is; a bare fragment then names nothing,
+  // and the evidence check has already made the claim uncertain for want of a source.
+  const passages = text ? evidencePassages(text, quote) : quote ? [fold(quote)] : [];
+  if (!passages.length && !text)
+    return check({
+      kind: "identity",
+      verdict: "uncertain",
+      applicable: false,
+      detail: "no evidence text to check identity against",
+      at,
+    });
+
+  // A sentence that names this system and another ("Unlike the Shahed-136, the Lancet-3 has a
+  // range of 40 km") is ambiguous, not a pass: which of the two the figure belongs to is the
+  // interpretation the AI judge exists for (plan §4.3 step 5).
+  const named = passages.map((p) => naming(p, drone, catalog));
+  const own = named.some((n) => n.own);
+  const other = named.find((n) => n.other)?.other;
+  const evidence = passages.join(" … ");
+  if (own && !other)
+    return check({
+      kind: "identity",
+      verdict: "pass",
+      applicable: true,
+      confidence: 0.8,
+      detail: "the evidence sentence names this system",
+      evidence,
+      ...sourceId,
+      at,
+    });
+  if (other && !own)
+    return check({
+      kind: "identity",
+      verdict: "fail",
+      applicable: true,
+      confidence: 0.7,
+      detail: `the evidence sentence names ${other.name}, not ${drone.name}`,
+      evidence,
+      ...sourceId,
+      at,
+    });
+  if (own && other)
+    return check({
+      kind: "identity",
+      verdict: "uncertain",
+      applicable: true,
+      confidence: 0.3,
+      detail: `the evidence names both ${drone.name} and ${other.name}`,
+      evidence,
+      ...sourceId,
+      at,
+    });
+
+  // The sentence names no system: fall back to the post, but never to a pass.
+  const post: Naming = text ? naming(fold(text), drone, catalog) : { own: false };
+  return check({
+    kind: "identity",
+    verdict: "uncertain",
+    applicable: true,
+    confidence: post.own ? 0.5 : 0.2,
+    detail: post.own
+      ? "the evidence sentence names no system; the post names this one"
+      : post.other
+        ? `the evidence sentence names no system; the post names ${post.other.name}`
+        : "the evidence sentence names no system",
+    ...(evidence ? { evidence } : {}),
+    ...sourceId,
+    at,
+  });
+}
