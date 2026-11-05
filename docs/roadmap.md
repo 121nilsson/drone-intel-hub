@@ -59,17 +59,19 @@ Verified open work as of October 2026. Shipped behavior is documented in
 | Gated    | Contradictions on the verified reference | `checkTrust` (`src/shared/infra/ingest/contradictions.ts`) still sets its confidence bar from analyst decisions. It moves to source quality plus evidence with the §7.3 rework, in Phase 3.                                                                                            |
 | Gated    | Uncertain → `unconfirmed`                | Decided 2026-11-04 (plan §14): from Phase 3, uncertain claims are shown as unconfirmed and never counted; a spec with only uncertain claims keeps its value under that label.                                                                                                          |
 | Gated    | Phase 3 gate removal                     | Low-risk promotion without analyst decisions, canary/auto-revert — not before audited verified precision is at or above the 5 % budget (plan §9).                                                                                                                                      |
+| Medium   | Proposal appliers                        | `admitProposal` checks and risk-tiers `rule` proposals only (`shared/infra/proposals`). Next: route mined hypotheses through it, then an apply/revert side with its ledger event kind, added in the same change as its first writer.                                                   |
 
 ---
 
 ## Code health
 
-| Priority | Item                | Notes                                                                                                                                                                                             |
-| -------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Medium   | React Query         | `QueryClientProvider` in `__root.tsx` but server-fn calls use ad hoc `useEffect` — use queries for briefing/sync or drop the dependency.                                                          |
-| Medium   | Split `pipeline.ts` | 922 lines. The auto-actions moved out to `ingest/auto-triage.ts`, `auto-correct.ts` and `contradictions.ts`; `runTwoTier`, `promote`, `mergeInto` and the trace assembly are still in one module. |
-| Low      | Shared UI helpers   | e.g. duplicate `ExpandableText` in intake and dispatches → `shared/ui`.                                                                                                                           |
-| Low      | Migration tooling   | Single story for `migrations/` vs unused `drizzle/` tree (document-only today).                                                                                                                   |
+| Priority | Item                              | Notes                                                                                                                                                                                             |
+| -------- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Medium   | React Query                       | `QueryClientProvider` in `__root.tsx` but server-fn calls use ad hoc `useEffect` — use queries for briefing/sync or drop the dependency.                                                          |
+| Medium   | Split `pipeline.ts`               | 922 lines. The auto-actions moved out to `ingest/auto-triage.ts`, `auto-correct.ts` and `contradictions.ts`; `runTwoTier`, `promote`, `mergeInto` and the trace assembly are still in one module. |
+| Low      | Shared UI helpers                 | e.g. duplicate `ExpandableText` in intake and dispatches → `shared/ui`.                                                                                                                           |
+| Low      | Duplicated `pct` and `workingIds` | `pct` is re-defined in four evaluation panels and some autonomy pages (use `evaluation-format.ts`); `workingIds` in `sources-page.tsx` is filled and never read.                                  |
+| Low      | Migration tooling                 | Single story for `migrations/` vs unused `drizzle/` tree (document-only today).                                                                                                                   |
 
 ---
 

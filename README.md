@@ -83,7 +83,7 @@ bounded batches, through the same pipeline the Queue page uses (`runTwoTier` in
 `src/features/intake/pipeline.ts`):
 
 1. **Relevance filter.** A post must match `DRONE_HINT` or a catalog name/alias pattern built from
-   the current drones (`buildCatalogPattern` in `auto-ingest.ts`). Otherwise it is stored as
+   the current drones (`buildCatalogPattern` in `ingest/ingest-relevance.ts`). Otherwise it is stored as
    `irrelevant` and never reaches a model.
 2. **Heuristics.** A deterministic extractor proposes systems, specs and RF bands at no cost. A
    complete, confident match to a known catalog entry needs no AI at all.
@@ -134,7 +134,7 @@ The extraction prompt (`src/shared/contracts/extraction-prompt.json`, currently
 **`drone-osint-v5`**) defines what counts as a system and tells the model to return nothing rather
 than invent one. Model output is validated by a deliberately tolerant schema
 (`extraction.schema.ts`): a malformed field or list item is dropped, not the whole reply. Processed
-posts record `PIPELINE_VERSION` (`${promptVersion}/2` in `auto-ingest.ts`) for re-analysis.
+posts record `PIPELINE_VERSION` (`${promptVersion}/2` in `ingest/pipeline-version.ts`) for re-analysis.
 
 **Matching across scripts.** Catalog names are matched by a spelling-insensitive key
 (`src/entities/drone/name-key.ts`): Cyrillic is transliterated and romanisation differences are
@@ -150,7 +150,7 @@ already discarded or deleted. Those go to the Queue instead.
 ### Re-analysis
 
 Every processed post records the pipeline version that analysed it (`PIPELINE_VERSION` in
-`src/features/sources/auto-ingest.ts`, which includes the prompt version). Posts from an older
+`src/shared/infra/ingest/pipeline-version.ts`, which includes the prompt version). Posts from an older
 version, and posts that failed for good, are re-analysed in the background: when an auto-sync run
 has emptied the live queue without a provider outage, it hands the 25 newest stale posts back to
 the queue for the next run. Sources → **Re-analyse older** queues the next batch at once.
@@ -252,14 +252,14 @@ a source with any drone-related post keeps the fast lane, a source whose records
 drops to hourly, and the manual **Sync all now** polls every source regardless. It runs **only in
 the built app**: Nitro is a build-time plugin here, so `npm run dev` schedules nothing.
 
-| Where                                    | What                                             |
-| ---------------------------------------- | ------------------------------------------------ |
-| `vite.config.ts`                         | Cron expression and the `sources:sync` task name |
-| `tasks/sources/sync.ts`                  | Task entry point; calls the shared `runAutoSync` |
-| `src/shared/infra/source-sync.server.ts` | Throttle, cooldown and stored run state          |
-| `src/shared/infra/fetch-posts.server.ts` | Server-side ingest body                          |
-| `src/shared/infra/fetch-posts.ts`        | Transport parsing, shared with the browser       |
-| `src/features/sources/auto-ingest.ts`    | Collection and the bounded queue processor       |
+| Where                                                      | What                                                                                       |
+| ---------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `vite.config.ts`                                           | Cron expression and the `sources:sync` task name                                           |
+| `tasks/sources/sync.ts`                                    | Task entry point; calls the shared `runAutoSync`                                           |
+| `src/shared/infra/source-sync.server.ts`                   | Throttle, cooldown and stored run state                                                    |
+| `src/shared/infra/fetch-posts.server.ts`                   | Server-side ingest body                                                                    |
+| `src/shared/infra/fetch-posts.ts`                          | Transport parsing, shared with the browser                                                 |
+| `src/shared/infra/ingest/collect.ts`, `process-pending.ts` | Collection and the bounded queue processor (`auto-ingest.ts` re-exports the stage modules) |
 
 **Collection.** Stage 1 fetches every monitored source in parallel: six lanes, with at most one
 in-flight request per host, so sources sharing a host do not trip its rate limit together. Each

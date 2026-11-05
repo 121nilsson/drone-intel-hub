@@ -55,7 +55,7 @@ called, the cron path does not supply a `procurements` repository, and there is 
 ## Ingest — stage 1 (collection)
 
 Implemented in `src/shared/infra/sources/fetch-posts.server.ts`, `fetch-posts.ts`, and
-`src/shared/infra/ingest/auto-ingest.ts` (`collectSource`).
+`src/shared/infra/ingest/collect.ts` (`collectSource`; `auto-ingest.ts` is a barrel over the stage modules).
 
 - Bounded parallel fetches with per-host pooling and `FETCH_TIMEOUT_MS`.
 - **Web / RSS bodies:** Mozilla Readability via `src/shared/infra/article.server.ts` (server-only;
@@ -94,7 +94,7 @@ Same pipeline as manual Queue paste: `runTwoTier` in `src/shared/infra/ingest/pi
 - Auto-triage (`auto-triage.ts`): corroboration, learned negatives, adjudication, age-out.
 - Contradiction checks on disputed specs (`contradictions.ts`).
 - Re-analysis of stale / failed posts when `PIPELINE_VERSION` or prompt version changes
-  (`reanalysis` helpers in `auto-ingest.ts`).
+  (`requeue.ts` and `retraction.ts`, re-exported by `auto-ingest.ts`).
 
 **Concurrency:** `sync_state` throttle; dispatch rows claimed with `FOR UPDATE SKIP LOCKED` when
 Postgres leases are available (`004_dispatch_lease.sql`).
@@ -193,7 +193,7 @@ Settings page shows resolved providers, models, and fallback order.
 ## Verified reference and evaluation
 
 The heuristic is scored against what the catalogue has judged, not just what the AI stored
-(`src/shared/infra/evaluation/evaluation.ts`, plan §4.4):
+(`src/shared/infra/evaluation/reference.ts`, re-exported by `evaluation.ts`; plan §4.4):
 
 - `verifiedReference(c, verifiedVerdicts(catalog))` maps each stored spec to its claim's verdict:
   machine-verified claims count as expected positives (even when the AI dropped them), rejected
