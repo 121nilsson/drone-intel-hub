@@ -1,45 +1,27 @@
-import { useEffect, useMemo, useState } from "react";
-import { toast } from "sonner";
-import { useCandidates, useDrones, useServices } from "@/shared/infra/services";
+import { useEffect, useState } from "react";
+import { useDrones, useServices } from "@/shared/infra/services";
+import { CardGrid, PageTitle, Panel, Sparkline, Tag } from "@/shared/ui/primitives";
+import type { EvalReport } from "@/shared/infra/evaluation/evaluation";
 import {
-  Btn,
-  Card,
-  CardGrid,
-  ListRow,
-  PageTitle,
-  Panel,
-  Segmented,
-  Sparkline,
-  Tag,
-} from "@/shared/ui/primitives";
-import {
-  analystCorpus,
-  evaluateHeuristic,
-  fixturesToCorpus,
-  mismatchesToFixtures,
-  type EvalReport,
-  type Prf,
-  type ReferenceCoverage,
-} from "@/shared/infra/evaluation/evaluation";
-import {
-  triggerEvaluation,
   fetchEvalReports,
   fetchEvalKeyTrends,
-  triggerGitImport,
-  triggerHarvest,
-  triggerAdjudication,
   fetchSeedAgreement,
 } from "@/shared/infra/evaluation/evaluation.functions";
 import type { EvalKeyTrend } from "@/shared/infra/evaluation/evaluation.server";
-import type { SeedAgreement } from "@/shared/infra/evaluation/seed-agreement";
 import { RulesPanel } from "./rules-panel";
 import { AnalystReviewPanel } from "./analyst-review-panel";
 import { CorrectionQueue } from "./correction-queue";
 import { PendingFixturesPanel } from "./pending-fixtures-panel";
-import { ActionList, Stage } from "./action-list";
+import { Stage } from "./action-list";
 import { JobStatusPanel } from "@/shared/ui/job-status-panel";
-
-const pct = (n: number) => `${Math.round(n * 100)}%`;
+import { Kpi } from "./evaluation-kpi";
+import { pct } from "./evaluation-format";
+import { RunEvaluationPanel } from "./run-evaluation-panel";
+import { ReferenceCoveragePanel } from "./reference-coverage-panel";
+import { SeedAgreementPanel, type SeedState } from "./seed-agreement-panel";
+import { RegressionTestsPanel } from "./regression-tests-panel";
+import { PerKeyPanel } from "./per-key-panel";
+import { TestCorpusPanel } from "./test-corpus-panel";
 
 const STAGES = [
   {
@@ -61,68 +43,16 @@ const STAGES = [
     when: "Review, test and activate rules, and keep the test corpus current. Work here when a weakness shows up in step 2.",
   },
 ];
-const SIZES = [50, 100, 250, 500];
-
-function Kpi({ label, v }: { label: string; v: Prf }) {
-  return (
-    <Card className="p-3">
-      <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-        {label}
-      </div>
-      <div className="mt-1 text-2xl font-semibold">F1 {v.f1.toFixed(2)}</div>
-      <div className="font-mono text-xs text-muted-foreground">
-        P {pct(v.precision)} · R {pct(v.recall)}
-      </div>
-    </Card>
-  );
-}
-
-/** Reference coverage beside a score: how much of what it was measured over is actually verified. */
-function Coverage({ c }: { c: ReferenceCoverage }) {
-  return (
-    <Tag tone={c.ratio >= 0.7 ? "success" : c.ratio >= 0.3 ? "warning" : "danger"} mono>
-      ref {pct(c.ratio)} of {c.scored}
-    </Tag>
-  );
-}
-
-function download(name: string, data: unknown) {
-  const url = URL.createObjectURL(
-    new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }),
-  );
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = name;
-  a.click();
-  URL.revokeObjectURL(url);
-}
 
 export function EvaluationPage() {
-  const candidates = useCandidates();
   const drones = useDrones();
-  const { heuristic } = useServices();
-  const [size, setSize] = useState(100);
-  const [discarded, setDiscarded] = useState(false);
-  const [running, setRunning] = useState(false);
-  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [report, setReport] = useState<EvalReport | null>(null);
   const [openKey, setOpenKey] = useState<string | null>(null);
   const [trend, setTrend] = useState<
     { generatedAt: string; f1: number; ref?: number | undefined }[]
   >([]);
   const [keyTrends, setKeyTrends] = useState<EvalKeyTrend[]>([]);
-  const [autoBusy, setAutoBusy] = useState<string | null>(null);
-  const [autoStartedAt, setAutoStartedAt] = useState<number | null>(null);
-  const [autoNow, setAutoNow] = useState(Date.now());
-  const [seed, setSeed] = useState<
-    (SeedAgreement & { available: boolean; reason?: string }) | null
-  >(null);
-
-  useEffect(() => {
-    if (!autoBusy || !autoStartedAt) return;
-    const id = setInterval(() => setAutoNow(Date.now()), 500);
-    return () => clearInterval(id);
-  }, [autoBusy, autoStartedAt]);
+  const [seed, setSeed] = useState<SeedState | null>(null);
 
   useEffect(() => {
     fetchEvalReports()
@@ -141,36 +71,6 @@ export function EvaluationPage() {
       .then((s) => setSeed(s))
       .catch(() => {});
   }, []);
-
-  const run = async () => {
-    setRunning(true);
-    try {
-      setProgress({ done: 0, total: size });
-      const r = await evaluateHeuristic(candidates, drones, heuristic, {
-        sampleSize: size,
-        includeDiscarded: discarded,
-        seed: Date.now() % 100000,
-        onProgress: (done, total) => setProgress({ done, total }),
-      });
-      setReport(r);
-      setOpenKey(null);
-    } catch (e) {
-      toast.error(`Evaluation failed: ${(e as Error).message}`);
-    } finally {
-      setRunning(false);
-      setProgress(null);
-    }
-  };
-
-  const keys = useMemo(
-    () =>
-      report
-        ? Object.entries(report.perKey)
-            .filter(([, v]) => v.tp + v.fp + v.fn > 0)
-            .sort(([, a], [, b]) => a.f1 - b.f1 || b.tp + b.fn - (a.tp + a.fn))
-        : [],
-    [report],
-  );
 
   return (
     <div className="space-y-8">
@@ -211,82 +111,12 @@ export function EvaluationPage() {
         title="Measure the heuristic"
         purpose="Run after the heuristic code changes or a rule is activated, to see where it reads reports wrongly. Read-only: it never writes to the catalogue and never calls AI."
       >
-        <Panel title="Run an evaluation">
-          <p className="mb-3 text-xs text-muted-foreground">
-            Picks a sample of processed reports, reads each again with the heuristic, and compares
-            the result with what the catalogue has verified (analyst verdicts first, then machine
-            verification, then the stored AI reading). Pick a sample size and run it here, or run it
-            on the server to keep the report for the trend.
-          </p>
-          <div className="flex flex-wrap items-center gap-2">
-            <Segmented
-              label="Sample size"
-              value={String(size)}
-              onChange={(n) => setSize(Number(n))}
-              options={SIZES.map((n) => ({ value: String(n), label: n }))}
-            />
-            <label className="flex items-center gap-2 font-mono text-xs text-muted-foreground">
-              <input
-                type="checkbox"
-                checked={discarded}
-                onChange={(e) => setDiscarded(e.target.checked)}
-              />
-              incl. discarded
-            </label>
-            <Btn onClick={run} disabled={running || candidates.length === 0}>
-              {running && progress
-                ? `Running… ${progress.done}/${progress.total}`
-                : running
-                  ? "Running…"
-                  : "Run evaluation"}
-            </Btn>
-            <Btn
-              variant="ghost"
-              disabled={running}
-              onClick={async () => {
-                setRunning(true);
-                try {
-                  const r = await triggerEvaluation();
-                  toast.success(`Server evaluation done: ${r.totalItems ?? 0} candidates`);
-                } catch (e) {
-                  toast.error(`Server evaluation failed: ${(e as Error).message}`);
-                } finally {
-                  setRunning(false);
-                }
-              }}
-            >
-              Run on server (save report)
-            </Btn>
-          </div>
-          <p className="mt-2 font-mono text-xs text-muted-foreground">
-            {candidates.length} candidates available · only texts ≥ 50 chars · contract values
-            excluded
-          </p>
-          <details className="mt-3 text-xs text-muted-foreground">
-            <summary className="cursor-pointer">How to read the results</summary>
-            <p className="mt-2">
-              <strong>P (precision)</strong> = share of the heuristic&apos;s values that the stored
-              reading also has (fewer false positives). <strong>R (recall)</strong> = share of
-              stored values the heuristic found (fewer misses). <strong>F1</strong> balances the two
-              (2·P·R/(P+R)); 1.0 is perfect.
-            </p>
-            <p className="mt-2">
-              <strong>tp</strong> = hits, <strong>fp</strong> = false positives, <strong>fn</strong>{" "}
-              = misses. Mismatch types: <em>exact/semantic</em> = match, <em>differentReading</em> =
-              same value read differently (&quot;up to 120 km&quot;), <em>wrongKey</em> = right
-              value under the wrong attribute, <em>falsePositive</em> = the heuristic found
-              something the stored reading does not have, <em>rejected</em> = AI saw the
-              heuristic&apos;s value and dropped it, <em>miss</em> = the stored reading has
-              something the heuristic missed.
-            </p>
-            <p className="mt-2">
-              <strong>Reference coverage</strong> is the share of the comparison that rests on a
-              verified claim (machine-verified, or an analyst's verdict). Claims the verifier could
-              not decide are excluded from the scores rather than counted as misses, and everything
-              else falls back to the stored reading — so an F1 on low coverage says little.
-            </p>
-          </details>
-        </Panel>
+        <RunEvaluationPanel
+          onReport={(r) => {
+            setReport(r);
+            setOpenKey(null);
+          }}
+        />
 
         {report && (
           <>
@@ -296,88 +126,9 @@ export function EvaluationPage() {
               <Kpi label="Catalog links" v={report.identity.matchId} />
             </CardGrid>
 
-            <Panel title="Reference coverage">
-              <div className="flex flex-wrap gap-1.5">
-                <Coverage c={report.reference} />
-                <Tag tone="success" mono>
-                  verified {report.reference.verified}
-                </Tag>
-                <Tag tone="danger" mono>
-                  rejected {report.reference.rejected}
-                </Tag>
-                <Tag tone="info" mono>
-                  analyst {report.reference.analyst}
-                </Tag>
-                <Tag tone="muted" mono>
-                  unverified {report.reference.unverified}
-                </Tag>
-                {report.reference.dropped > 0 && (
-                  <Tag tone="muted" mono>
-                    ai-dropped {report.reference.dropped}
-                  </Tag>
-                )}
-                {report.reference.uncertain > 0 && (
-                  <Tag tone="warning" mono>
-                    uncertain, left out {report.reference.uncertain}
-                  </Tag>
-                )}
-              </div>
-              <p className="mt-2 text-xs text-muted-foreground">
-                Scores are measured against verified catalogue claims. A claim the verifier could
-                not decide is left out of every score, and a claim nobody has judged still falls
-                back to the stored AI reading — so a score on low coverage is weak evidence, not a
-                regression.
-              </p>
-            </Panel>
+            <ReferenceCoveragePanel report={report} />
 
-            {seed && (
-              <Panel title="Seed set agreement">
-                {!seed.available || seed.scored === 0 ? (
-                  <p className="text-xs text-muted-foreground">
-                    {seed.reason ??
-                      "The seed set has no answered claims yet. It is filled by the first audit."}
-                  </p>
-                ) : (
-                  <>
-                    <div className="flex flex-wrap gap-1.5">
-                      <Tag tone="info" mono>
-                        agreement {pct(seed.agreement)} of {seed.scored}
-                      </Tag>
-                      <Tag tone="muted" mono>
-                        bound ≤ {pct(seed.upperBound)}
-                      </Tag>
-                      <Tag tone={seed.missed > 0 ? "warning" : "success"} mono>
-                        found {seed.found}/{seed.found + seed.missed}
-                      </Tag>
-                      <Tag tone={seed.invented > 0 ? "warning" : "success"} mono>
-                        avoided {seed.avoided}/{seed.avoided + seed.invented}
-                      </Tag>
-                      {seed.cannotTell > 0 && (
-                        <Tag tone="muted" mono>
-                          cannot tell {seed.cannotTell}
-                        </Tag>
-                      )}
-                      {seed.skipped > 0 && (
-                        <Tag tone="muted" mono>
-                          unreadable {seed.skipped}
-                        </Tag>
-                      )}
-                      {seed.obviouslyWrong > 0 && (
-                        <Tag tone="muted" mono>
-                          plainly wrong {seed.obviouslyWrong}
-                        </Tag>
-                      )}
-                    </div>
-                    <p className="mt-2 text-xs text-muted-foreground">
-                      The frozen seed set — claims a person answered — read once more by today's
-                      heuristic: a "yes" answer must be found, a "no" must not be produced, and
-                      "cannot tell" is left out. Measurement only: nothing that learns reads the
-                      seed set.
-                    </p>
-                  </>
-                )}
-              </Panel>
-            )}
+            {seed && <SeedAgreementPanel seed={seed} />}
 
             <Panel title={`Sample: ${report.totalItems} reports`}>
               <div className="flex flex-wrap gap-1.5">
@@ -404,144 +155,9 @@ export function EvaluationPage() {
               )}
             </Panel>
 
-            <Panel
-              title="Regression tests"
-              right={
-                <div className="flex flex-wrap gap-2">
-                  <Btn
-                    variant="ghost"
-                    disabled={report.fixtures.length === 0}
-                    onClick={async () => {
-                      const analyst = await analystCorpus(candidates, drones, heuristic);
-                      download(
-                        "eval-corpus.json",
-                        fixturesToCorpus([...analyst.positive, ...report.fixtures]),
-                      );
-                      toast.success(
-                        "Save the file in src/test/fixtures/ — tests run automatically",
-                      );
-                    }}
-                  >
-                    Download corpus
-                  </Btn>
-                  <Btn
-                    variant="ghost"
-                    disabled={report.mismatches.length === 0}
-                    onClick={async () => {
-                      const analyst = await analystCorpus(candidates, drones, heuristic);
-                      download("eval-mismatches.json", [
-                        ...analyst.negative,
-                        ...mismatchesToFixtures(report.mismatches),
-                      ]);
-                      toast.success(
-                        "Save the file in src/test/fixtures/ — negative tests run automatically",
-                      );
-                    }}
-                  >
-                    Download mismatch-corpus
-                  </Btn>
-                  <Btn
-                    variant="ghost"
-                    disabled={drones.length === 0}
-                    onClick={() => {
-                      download("eval-catalog.json", drones);
-                      toast.success(
-                        "Save the file in src/test/fixtures/ — same catalog used by the evaluation",
-                      );
-                    }}
-                  >
-                    Download catalog
-                  </Btn>
-                </div>
-              }
-            >
-              <p className="text-sm text-muted-foreground">
-                {report.fixtures.length} reports where heuristic and stored extraction agree become
-                test cases ({report.fixtures.reduce((n, f) => n + f.expect.length, 0)} expected
-                values). Replace{" "}
-                <code className="font-mono text-xs">src/test/fixtures/eval-corpus.json</code> with
-                the file and the test suite locks in today's correct behavior.
-              </p>
-            </Panel>
+            <RegressionTestsPanel report={report} />
 
-            <Panel title="Per spec key (worst first)" contentClassName="p-0">
-              {(report.unscoredMisses ?? 0) > 0 && (
-                <p className="border-b border-border px-3 py-2 text-xs text-muted-foreground">
-                  {report.unscoredMisses} stored figure{report.unscoredMisses === 1 ? "" : "s"} with
-                  no canonical meaning (role, status, container dimensions…) are not scored: the
-                  heuristic never tries to read them.
-                </p>
-              )}
-              <ul className="divide-y divide-border">
-                {keys.map(([k, v]) => {
-                  const mis = report.mismatches.filter((m) => m.specKey === k);
-                  return (
-                    // The key name is the toggle; a row cannot sit inside a button, since the
-                    // row is itself a list item.
-                    <ListRow
-                      key={k}
-                      className="px-3"
-                      title={
-                        <Btn
-                          variant="link"
-                          className="font-mono"
-                          aria-expanded={openKey === k}
-                          onClick={() => setOpenKey(openKey === k ? null : k)}
-                        >
-                          {openKey === k ? "▾" : "▸"} {k}
-                        </Btn>
-                      }
-                      subtitle={`tp ${v.tp} · fp ${v.fp} · fn ${v.fn}`}
-                      meta={
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          <Tag
-                            tone={v.f1 < 0.5 ? "danger" : v.f1 < 0.8 ? "warning" : "success"}
-                            mono
-                          >
-                            F1 {v.f1.toFixed(2)} · P {pct(v.precision)} · R {pct(v.recall)}
-                          </Tag>
-                          {report.perKeyReference[k] && <Coverage c={report.perKeyReference[k]!} />}
-                        </div>
-                      }
-                      below={
-                        openKey === k ? (
-                          <div className="space-y-2">
-                            {mis.length === 0 && (
-                              <p className="text-xs text-muted-foreground">No mismatches.</p>
-                            )}
-                            {mis.map((m, i) => (
-                              <Card key={i} className="text-xs">
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <Tag tone="warning" mono>
-                                    {m.matchType}
-                                  </Tag>
-                                  <span className="min-w-0 break-all font-mono text-muted-foreground">
-                                    {m.source}
-                                  </span>
-                                </div>
-                                <div className="mt-1 font-mono">
-                                  key: {m.specKey} · {m.matchType}
-                                </div>
-
-                                <div className="mt-1 font-mono">
-                                  heuristic: {m.heuristicValue ?? "—"} {m.heuristicUnit ?? ""} →
-                                  stored: {m.referenceValue ?? "—"} {m.referenceUnit ?? ""}
-                                </div>
-                                {m.evidence && (
-                                  <p className="mt-1 break-words italic text-muted-foreground">
-                                    “{m.evidence}”
-                                  </p>
-                                )}
-                              </Card>
-                            ))}
-                          </div>
-                        ) : undefined
-                      }
-                    />
-                  );
-                })}
-              </ul>
-            </Panel>
+            <PerKeyPanel report={report} openKey={openKey} setOpenKey={setOpenKey} />
           </>
         )}
         {trend.length > 1 && (
@@ -585,109 +201,7 @@ export function EvaluationPage() {
         purpose="Rules change what the heuristic reads; the test corpus is what every rule is checked against. Work here once the evaluation shows a weakness, or when shadow rules have had time to collect results."
       >
         <RulesPanel />
-
-        <Panel title="Test corpus (server)">
-          <p className="mb-3 text-xs text-muted-foreground">
-            The corpus is the set of reports with known right answers that every rule and every
-            evaluation is scored against. These run only when you press them.
-          </p>
-          <ActionList
-            items={[
-              {
-                button: (
-                  <Btn
-                    variant="ghost"
-                    disabled={!!autoBusy}
-                    onClick={async () => {
-                      setAutoBusy("import");
-                      setAutoStartedAt(Date.now());
-                      try {
-                        const r = await triggerGitImport();
-                        toast.success(`Import: ${r.imported} new, ${r.skipped} skipped`);
-                      } catch (e) {
-                        toast.error(`Import failed: ${(e as Error).message}`);
-                      } finally {
-                        setAutoBusy(null);
-                        setAutoStartedAt(null);
-                      }
-                    }}
-                  >
-                    {autoBusy === "import" && autoStartedAt
-                      ? `Importing… ${Math.max(1, Math.round((autoNow - autoStartedAt) / 1000))}s`
-                      : "Import git corpus"}
-                  </Btn>
-                ),
-                does: (
-                  <>
-                    Loads <code className="font-mono">src/test/fixtures/eval-corpus.json</code> into
-                    the database corpus. Press after that file changes in git.
-                  </>
-                ),
-              },
-              {
-                button: (
-                  <Btn
-                    variant="ghost"
-                    disabled={!!autoBusy}
-                    onClick={async () => {
-                      setAutoBusy("harvest");
-                      setAutoStartedAt(Date.now());
-                      try {
-                        const r = await triggerHarvest();
-                        toast.success(`Harvest: ${r.inserted} new, ${r.skipped} skipped`);
-                      } catch (e) {
-                        toast.error(`Harvest failed: ${(e as Error).message}`);
-                      } finally {
-                        setAutoBusy(null);
-                        setAutoStartedAt(null);
-                      }
-                    }}
-                  >
-                    {autoBusy === "harvest" && autoStartedAt
-                      ? `Harvesting… ${Math.max(1, Math.round((autoNow - autoStartedAt) / 1000))}s`
-                      : "Harvest corpus"}
-                  </Btn>
-                ),
-                does: "Runs a fresh evaluation and adds the reports where the heuristic and the stored reading agree as new test cases, so today's correct readings stay correct.",
-              },
-              {
-                button: (
-                  <Btn
-                    variant="ghost"
-                    disabled={!!autoBusy}
-                    onClick={async () => {
-                      setAutoBusy("adjudication");
-                      setAutoStartedAt(Date.now());
-                      try {
-                        const r = await triggerAdjudication();
-                        toast.success(`Adjudication: ${r.adjudicated} verdicts, ${r.inserted} new`);
-                      } catch (e) {
-                        toast.error(`Adjudication failed: ${(e as Error).message}`);
-                      } finally {
-                        setAutoBusy(null);
-                        setAutoStartedAt(null);
-                      }
-                    }}
-                  >
-                    {autoBusy === "adjudication" && autoStartedAt
-                      ? `Adjudicating… ${Math.max(1, Math.round((autoNow - autoStartedAt) / 1000))}s`
-                      : "Run adjudication"}
-                  </Btn>
-                ),
-                does: (
-                  <>
-                    Asks AI to settle up to 10 disagreements between the heuristic and the stored
-                    reading. Its answers wait under{" "}
-                    <a href="#decide" className="text-primary hover:underline">
-                      Pending test cases
-                    </a>{" "}
-                    until you approve them.
-                  </>
-                ),
-              },
-            ]}
-          />
-        </Panel>
+        <TestCorpusPanel />
       </Stage>
     </div>
   );

@@ -1,136 +1,40 @@
-import { Link, useNavigate } from "@tanstack/react-router";
-import { ExternalSourceLink } from "@/shared/ui/links";
+import { Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { toast } from "sonner";
-import { DOMAINS, type Domain } from "@/entities/drone/types";
-import { PLATFORMS, type MonitoredSource, type SourcePlatform } from "@/entities/source/types";
-import { sampleDispatch } from "@/entities/source/seed";
+import type { Domain } from "@/entities/drone/types";
+import type { MonitoredSource, SourcePlatform } from "@/entities/source/types";
 import { useDispatches, useServices, useSources } from "@/shared/infra/services";
 import type { DispatchStatus } from "@/entities/dispatch/types";
-import { outletRecords } from "@/entities/source/outlet-record";
 import { fetchSourcePosts } from "@/shared/infra/sources/source-fetch.functions";
 import { FETCH_CONCURRENCY, sourceHost } from "@/shared/infra/sources/fetch-posts";
 import { mapWithConcurrency } from "@/shared/infra/sources/pool";
-import {
-  FAILURES_BEFORE_PAUSE,
-  healthAfterFetch,
-  isCollectable,
-  isPaused,
-  reenable,
-  silenceNotice,
-} from "@/entities/source/health";
-import {
-  getSyncState,
-  triggerAutoSync,
-  type SyncState,
-} from "@/shared/infra/sources/source-sync.functions";
+import { healthAfterFetch, isCollectable } from "@/entities/source/health";
+import { getSyncState, type SyncState } from "@/shared/infra/sources/source-sync.functions";
 import { getStoreStatus } from "@/shared/infra/storage/store.functions";
-import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Input, Select, Textarea } from "@/shared/ui/fields";
-import { TimeAgo } from "@/shared/ui/time-ago";
-import { Btn, Loading, Panel, Tag } from "@/shared/ui/primitives";
+import { Input } from "@/shared/ui/fields";
+import { Btn, Loading, Panel } from "@/shared/ui/primitives";
 import {
   collectSource,
   fetchingProgress,
   isStale,
   processPending,
   progressFromItem,
-  REANALYSIS_BATCH,
-  requeueStale,
-  requeueFailed,
-  WORK_STALE_MS,
   type WorkProgress,
 } from "@/shared/infra/ingest/auto-ingest";
-
-/** Matches the cron in vite.config.ts. */
-const AUTO_MIN = 10;
-
-function progressAge(progress: WorkProgress): number | null {
-  const age = Date.now() - Date.parse(progress.updatedAt);
-  return Number.isFinite(age) ? age : null;
-}
-
-function isActive(progress: WorkProgress | null): progress is WorkProgress {
-  return !!progress && (progress.phase === "fetching" || progress.phase === "analysing");
-}
-
-/** A heartbeat still inside one provider attempt budget. */
-function isLive(progress: WorkProgress | null): progress is WorkProgress {
-  if (!isActive(progress)) return false;
-  const age = progressAge(progress);
-  return age !== null && age <= WORK_STALE_MS;
-}
-
-function isStalled(progress: WorkProgress | null): progress is WorkProgress {
-  if (!isActive(progress)) return false;
-  const age = progressAge(progress);
-  return age !== null && age > WORK_STALE_MS;
-}
-
-function formatWork(progress: WorkProgress): string {
-  if (progress.phase === "analysing")
-    return `Analysing · ${progress.current} · ${progress.index} of ${progress.total} · ${progress.remaining} waiting`;
-  return `Fetching · ${progress.current} · ${progress.index} of ${progress.total}`;
-}
-
-function WorkStatus({
-  local,
-  remote,
-  pending,
-  stopped,
-}: {
-  local: WorkProgress | null;
-  remote: WorkProgress | null;
-  pending: number;
-  stopped: string | null;
-}) {
-  const lines: { key: string; text: string; tone: "live" | "stalled" | "idle" }[] = [];
-  if (local && local.phase !== "done")
-    lines.push({ key: "local", text: formatWork(local), tone: "live" });
-  if (isLive(remote))
-    lines.push({ key: "remote", text: `Auto-sync · ${formatWork(remote)}`, tone: "live" });
-  else if (isStalled(remote))
-    lines.push({
-      key: "remote",
-      text: `Auto-sync stalled · ${formatWork(remote)}`,
-      tone: "stalled",
-    });
-  if (lines.length === 0)
-    lines.push(
-      stopped
-        ? {
-            key: "stopped",
-            text: `Stopped · ${stopped} · ${pending} waiting`,
-            tone: "stalled",
-          }
-        : { key: "idle", text: `Idle · ${pending} waiting`, tone: "idle" },
-    );
-  const toneClass = {
-    live: "text-primary",
-    stalled: "text-destructive",
-    idle: "text-muted-foreground",
-  } as const;
-  return (
-    <div className="mb-3 space-y-1 font-mono text-xs">
-      {lines.map((line) => (
-        <p key={line.key} className={toneClass[line.tone]}>
-          {line.text}
-        </p>
-      ))}
-    </div>
-  );
-}
+import { isLive } from "./sources-work";
+import { yieldBySourceOf } from "./sources-yield";
+import { SourceRow } from "./source-row";
+import { AddSourceForm, type SourceDraft } from "./source-add-form";
+import { OutletReliabilityPanel } from "./outlet-reliability-panel";
+import { CollectionPanel } from "./collection-panel";
 
 export function SourcesPage() {
   const svc = useServices();
   const sources = useSources();
-  const nav = useNavigate();
   const fetchFn = useServerFn(fetchSourcePosts);
   const stateFn = useServerFn(getSyncState);
-  const triggerFn = useServerFn(triggerAutoSync);
-  const [f, setF] = useState({
+  const [f, setF] = useState<SourceDraft>({
     name: "",
     platform: "Telegram" as SourcePlatform,
     handle: "",
@@ -227,6 +131,15 @@ export function SourcesPage() {
     [collectOne, processQueue],
   );
 
+  const syncRow = async (s: MonitoredSource) => {
+    setBusy(s.id);
+    try {
+      await syncOne(s);
+    } finally {
+      setBusy(null);
+    }
+  };
+
   const syncAll = useCallback(async () => {
     setBusy("all");
     // Same rule as auto-sync: off and paused sources are skipped; each still has its own Sync.
@@ -308,43 +221,7 @@ export function SourcesPage() {
   for (const d of dispatches) counts[d.status]++;
   const stale = dispatches.filter(isStale).length;
 
-  /**
-   * Per-source dispatch breakdown. Computed once for the whole archive rather than per source row,
-   * which would rescan every dispatch for each of ~79 sources on every render.
-   */
-  const yieldBySource = useMemo(() => {
-    type Yield = {
-      stored: number;
-      waiting: number;
-      analysed: number;
-      queued: number;
-      filtered: number;
-      duplicates: number;
-      failed: number;
-    };
-    const empty = (): Yield => ({
-      stored: 0,
-      waiting: 0,
-      analysed: 0,
-      queued: 0,
-      filtered: 0,
-      duplicates: 0,
-      failed: 0,
-    });
-    const bySource = new Map<string, Yield>();
-    for (const d of dispatches) {
-      const y = bySource.get(d.sourceId) ?? empty();
-      y.stored++;
-      if (d.status === "processed") y.analysed++;
-      else if (d.status === "irrelevant") y.filtered++;
-      else if (d.status === "duplicate") y.duplicates++;
-      else if (d.status === "failed") y.failed++;
-      else if (d.status === "pending") y.waiting++;
-      if (d.outcome === "queued") y.queued++;
-      bySource.set(d.sourceId, y);
-    }
-    return bySource;
-  }, [dispatches]);
+  const yieldBySource = useMemo(() => yieldBySourceOf(dispatches), [dispatches]);
 
   /** Sources that have produced at least one drone-related post - the "worth polling" answer. */
   const productiveSources = sources.filter((s) => {
@@ -361,8 +238,6 @@ export function SourcesPage() {
   if (work?.phase === "analysing" && work.currentId) workingIds.add(work.currentId);
   if (isLive(remote) && remote.phase === "analysing" && remote.currentId)
     workingIds.add(remote.currentId);
-  const sample = (s: MonitoredSource) =>
-    nav({ to: "/intake", search: { draft: sampleDispatch(s.domain), source: s.name } });
 
   // Until the store attaches, an empty watchlist would tell the analyst to add sources when
   // their sources are simply still loading.
@@ -386,188 +261,10 @@ export function SourcesPage() {
       )}
       <ul className="divide-y divide-border">
         {visibleSources.map((s) => (
-          <li
-            key={s.id}
-            className="flex min-w-0 flex-col gap-3 py-3 sm:flex-row sm:flex-wrap sm:items-start"
-          >
-            <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="font-medium">{s.name}</span>
-                <Tag tone="primary">{s.platform}</Tag>
-                <Tag>{s.domain}</Tag>
-                {isPaused(s) && (
-                  <Tag tone="warning" title="Paused after repeated fetch failures">
-                    paused
-                  </Tag>
-                )}
-                {s.autoSync === false && (
-                  <Tag tone="danger" title="Excluded from scheduled auto-sync">
-                    auto off
-                  </Tag>
-                )}
-                {(() => {
-                  // Collected plenty, produced nothing: the fetch works, the source is just
-                  // noise, and this is the only place that says so.
-                  const y = yieldBySource.get(s.id);
-                  return y && y.analysed + y.queued === 0 && y.stored >= 20 ? (
-                    <Tag
-                      tone="danger"
-                      title="Posts are collected but none turn out to be drone-related"
-                    >
-                      no signal
-                    </Tag>
-                  ) : null;
-                })()}
-              </div>
-              {/^https?:\/\//i.test(s.handle) ? (
-                <ExternalSourceLink href={s.handle} className="mt-1 flex font-mono text-xs" />
-              ) : (
-                <p className="mt-1 break-all font-mono text-xs text-muted-foreground">{s.handle}</p>
-              )}
-              {s.notes && <p className="mt-1 text-sm text-muted-foreground">{s.notes}</p>}
-              {s.lastFetched && (
-                <p className="mt-1 font-mono text-[11px] text-muted-foreground">
-                  Last synced <TimeAgo iso={s.lastFetched} /> ·{" "}
-                  {(() => {
-                    const y = yieldBySource.get(s.id);
-                    if (!y) return "0 posts stored";
-                    return [
-                      `${y.stored} stored`,
-                      y.waiting ? `${y.waiting} waiting` : "",
-                      `${y.analysed} analysed`,
-                      y.queued ? `${y.queued} queued` : "",
-                      y.filtered ? `${y.filtered} filtered` : "",
-                      y.duplicates ? `${y.duplicates} duplicates` : "",
-                      y.failed ? `${y.failed} failed` : "",
-                    ]
-                      .filter(Boolean)
-                      .join(" · ");
-                  })()}
-                </p>
-              )}
-              {s.lastError && (
-                <p className="mt-1 font-mono text-[11px] text-destructive">{s.lastError}</p>
-              )}
-              {silenceNotice(s) && (
-                <p className="mt-1 font-mono text-[11px] text-accent">{silenceNotice(s)}</p>
-              )}
-              {isPaused(s) && (
-                <p className="mt-1 font-mono text-[11px] text-accent">
-                  Paused after {FAILURES_BEFORE_PAUSE} failed fetches; retried automatically from{" "}
-                  {new Date(s.pausedUntil!).toLocaleDateString()}. A manual Sync that works resumes
-                  it now.
-                </p>
-              )}
-              {s.disabledReason && s.autoSync === false && (
-                <p className="mt-1 font-mono text-[11px] text-destructive">
-                  {s.disabledReason}. Tick Auto to turn it back on.
-                </p>
-              )}
-            </div>
-            <div className="grid grid-cols-4 items-center gap-2 sm:flex sm:flex-wrap">
-              <label
-                className="flex items-center gap-2 font-mono text-xs text-muted-foreground"
-                title="Include this source in the scheduled server-side auto-sync"
-              >
-                <Switch
-                  checked={s.autoSync !== false}
-                  onCheckedChange={(checked) =>
-                    svc.sources.update(
-                      s.id,
-                      checked ? reenable() : { autoSync: false, pausedUntil: undefined },
-                    )
-                  }
-                />
-                Auto
-              </label>
-              {/* Ninety rows of solid green Sync buttons drowned the page; the actions are
-                  quiet and the source name carries the row. */}
-              <Btn
-                size="sm"
-                variant="ghost"
-                disabled={!!busy}
-                onClick={async () => {
-                  setBusy(s.id);
-                  try {
-                    await syncOne(s);
-                  } finally {
-                    setBusy(null);
-                  }
-                }}
-              >
-                {busy === s.id ? "Syncing…" : "Sync"}
-              </Btn>
-              <Btn size="sm" variant="quiet" onClick={() => sample(s)}>
-                Sample
-              </Btn>
-              <Btn
-                size="sm"
-                variant="quiet"
-                className="hover:text-destructive"
-                onClick={() => {
-                  // Undo restores the exact pre-removal snapshot; nothing else depended on the
-                  // source between remove and undo in normal analyst reaction time.
-                  svc.sources.remove(s.id);
-                  toast("Source removed", {
-                    description: s.name,
-                    action: { label: "Undo", onClick: () => svc.sources.add(s) },
-                  });
-                }}
-              >
-                Remove
-              </Btn>
-            </div>
-          </li>
+          <SourceRow key={s.id} s={s} y={yieldBySource.get(s.id)} busy={busy} onSync={syncRow} />
         ))}
       </ul>
     </>
-  );
-
-  const addForm = (
-    <div className="min-w-0 space-y-3">
-      <Input
-        placeholder="Name"
-        value={f.name}
-        onChange={(e) => setF({ ...f, name: e.target.value })}
-        aria-label="Source name"
-      />
-      <div className="grid grid-cols-2 gap-2">
-        <Select
-          value={f.platform}
-          onChange={(e) => setF({ ...f, platform: e.target.value as SourcePlatform })}
-          aria-label="Platform"
-        >
-          {PLATFORMS.map((p) => (
-            <option key={p}>{p}</option>
-          ))}
-        </Select>
-        <Select
-          value={f.domain}
-          onChange={(e) => setF({ ...f, domain: e.target.value as Domain })}
-          aria-label="Domain"
-        >
-          {DOMAINS.map((d) => (
-            <option key={d}>{d}</option>
-          ))}
-        </Select>
-      </div>
-      <Input
-        placeholder="URL or @handle"
-        value={f.handle}
-        onChange={(e) => setF({ ...f, handle: e.target.value })}
-        aria-label="URL or @handle"
-      />
-      <Textarea
-        rows={3}
-        placeholder="Notes"
-        value={f.notes}
-        onChange={(e) => setF({ ...f, notes: e.target.value })}
-        aria-label="Notes"
-      />
-      <Btn onClick={add} disabled={!f.name.trim() || !f.handle.trim()}>
-        Add to watchlist
-      </Btn>
-    </div>
   );
 
   return (
@@ -623,171 +320,24 @@ export function SourcesPage() {
         </TabsContent>
 
         <TabsContent value="collection" className="mt-4 space-y-4">
-          <Panel title="Outlet reliability">
-            {(() => {
-              const rows = outletRecords(dispatches)
-                .filter((r) => r.stored >= 1)
-                .sort((a, b) => {
-                  if (Math.abs(b.weight - a.weight) > 0.001) return a.weight - b.weight;
-                  return b.stored - a.stored;
-                })
-                .slice(0, 12);
-              if (rows.length === 0) {
-                return (
-                  <p className="text-sm text-muted-foreground">
-                    Not enough dispatch history yet. Reliability appears once outlets have stored
-                    posts.
-                  </p>
-                );
-              }
-              return (
-                <div className="space-y-1 font-mono text-xs">
-                  {rows.map((r) => {
-                    const ratio = r.stored === 0 ? 0 : r.relevant / r.stored;
-                    const tone =
-                      r.weight < 1
-                        ? "text-destructive"
-                        : r.weight > 1
-                          ? "text-primary"
-                          : "text-muted-foreground";
-                    return (
-                      <div key={r.key} className="flex items-center justify-between">
-                        <div className="min-w-0">
-                          <div className="truncate">{r.name}</div>
-                          <div className="text-[11px] text-muted-foreground">
-                            {r.stored} stored · {r.relevant} relevant · {Math.round(ratio * 100)}%
-                            signal
-                          </div>
-                        </div>
-                        <div className={`text-[11px] ${tone}`}>{r.weight.toFixed(2)}</div>
-                      </div>
-                    );
-                  })}
-                  <p className="mt-2 text-[11px] text-muted-foreground">
-                    Weight 0.5–1.5 (neutral &lt; 5 posts). 100% relevant → 1.5, 0% → 0.5.
-                  </p>
-                </div>
-              );
-            })()}
-          </Panel>
-
-          <Panel title="Collection & analysis">
-            <div className="mb-3 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center sm:gap-3">
-              <Btn className="justify-center py-2.5" onClick={syncAll} disabled={!!busy}>
-                {busy === "all" ? "Fetching…" : "Fetch all feeds"}
-              </Btn>
-              <Btn
-                variant="ghost"
-                className="justify-center py-2.5"
-                disabled={!!busy || !postgres}
-                title={
-                  postgres
-                    ? "Runs the server-side pass now, past the throttle the cron respects, and polls every source rather than only those due"
-                    : "Needs PostgreSQL (DATABASE_URL)"
-                }
-                onClick={async () => {
-                  setBusy("sync");
-                  try {
-                    const r = await triggerFn({ data: { force: true } });
-                    say(
-                      r.ran ? `Sync all now: ${r.reason}` : `Sync all now did not run: ${r.reason}`,
-                    );
-                    try {
-                      setSyncState(await stateFn());
-                    } catch {
-                      /* the poll retries */
-                    }
-                  } finally {
-                    setBusy(null);
-                  }
-                }}
-              >
-                {busy === "sync" ? "Syncing…" : "Sync all now"}
-              </Btn>
-              <Btn
-                variant="ghost"
-                className="justify-center py-2.5"
-                disabled={!!busy || counts.pending === 0}
-                onClick={async () => {
-                  setBusy("queue");
-                  try {
-                    await processQueue();
-                  } finally {
-                    setBusy(null);
-                  }
-                }}
-              >
-                {busy === "queue" ? "Analysing…" : `Analyse queue (${counts.pending})`}
-              </Btn>
-              {stale > 0 && (
-                <Btn
-                  variant="ghost"
-                  className="justify-center py-2.5"
-                  disabled={!!busy}
-                  title="Posts analysed by an older pipeline. Auto-sync re-analyses them in batches once the live queue is empty; this queues the next batch now."
-                  onClick={() => {
-                    const n = requeueStale(svc.dispatches, REANALYSIS_BATCH);
-                    say(`Queued ${n} older post${n === 1 ? "" : "s"} for re-analysis.`);
-                  }}
-                >
-                  {`Re-analyse older (${stale})`}
-                </Btn>
-              )}
-              {counts.failed > 0 && (
-                <Btn
-                  variant="ghost"
-                  className="justify-center py-2.5"
-                  disabled={!!busy}
-                  title="Failed posts with text can be retried (transient provider failures reset the attempt budget)."
-                  onClick={() => {
-                    const n = requeueFailed(svc.dispatches);
-                    say(`Queued ${n} failed post${n === 1 ? "" : "s"} for retry.`);
-                  }}
-                >
-                  {`Retry failed (${counts.failed})`}
-                </Btn>
-              )}
-              <Btn variant="ghost" className="justify-center py-2.5" onClick={() => setTab("add")}>
-                + Add source
-              </Btn>
-              <Btn
-                variant="ghost"
-                className="justify-center py-2.5"
-                onClick={() => {
-                  const count = svc.sources.addMissingDefaults?.() ?? 0;
-                  if (count > 0) {
-                    say(`Added ${count} default sources`);
-                  }
-                }}
-              >
-                Load default sources
-              </Btn>
-              <span className="col-span-2 font-mono text-xs text-muted-foreground">
-                Auto-sync runs server-side every {AUTO_MIN} minutes
-                {!postgres
-                  ? " · needs PostgreSQL"
-                  : syncState?.lastSync
-                    ? ` · last run ${new Date(syncState.lastSync).toLocaleString()}`
-                    : " · not yet run"}
-              </span>
-              {syncState?.cooldownUntil && (
-                <span className="font-mono text-xs text-destructive">
-                  Rate-limited · AI analysis paused until{" "}
-                  {new Date(syncState.cooldownUntil).toLocaleTimeString()}
-                </span>
-              )}
-            </div>
-            <WorkStatus local={work} remote={remote} pending={counts.pending} stopped={stopped} />
-            <p className="mt-3 text-xs text-muted-foreground">
-              Fetching only saves new posts (public Telegram channels, RSS feeds, website headlines)
-              to the archive — no AI yet. Analysing then works through the waiting posts in small
-              batches: drone-related ones keep their full text and are linked to the systems they
-              mention; others are reduced to a stub so they are never fetched again. A post that
-              repeats a story already stored is kept as a stub too, so one story is analysed once
-              however many sources carried it. X needs a paid API or an RSS bridge (X_BRIDGE_BASE)
-              and is not supported by default.
-            </p>
-          </Panel>
+          <OutletReliabilityPanel dispatches={dispatches} />
+          <CollectionPanel
+            busy={busy}
+            setBusy={setBusy}
+            postgres={postgres}
+            syncState={syncState}
+            setSyncState={setSyncState}
+            work={work}
+            remote={remote}
+            stopped={stopped}
+            pending={counts.pending}
+            failed={counts.failed}
+            stale={stale}
+            say={say}
+            onSyncAll={syncAll}
+            onProcessQueue={processQueue}
+            onAddSource={() => setTab("add")}
+          />
           {log.length > 0 && (
             <Panel title="Activity log">
               <ul className="space-y-1 font-mono text-xs">
@@ -800,7 +350,9 @@ export function SourcesPage() {
         </TabsContent>
 
         <TabsContent value="add" className="mt-4">
-          <Panel title="Add source">{addForm}</Panel>
+          <Panel title="Add source">
+            <AddSourceForm f={f} setF={setF} onAdd={add} />
+          </Panel>
         </TabsContent>
       </Tabs>
     </div>
