@@ -1,6 +1,6 @@
 import { Card, Tag } from "@/shared/ui/primitives";
 import type { Prf, ReferenceCoverage } from "@/shared/infra/evaluation/evaluation";
-import { pct } from "./evaluation-format";
+import { pct } from "@/shared/ui/format";
 
 export function Kpi({ label, v }: { label: string; v: Prf }) {
   return (

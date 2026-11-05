@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { Btn, Card, ListRow, Panel, Tag } from "@/shared/ui/primitives";
 import type { EvalReport } from "@/shared/infra/evaluation/evaluation";
 import { Coverage } from "./evaluation-kpi";
-import { pct } from "./evaluation-format";
+import { pct } from "@/shared/ui/format";
 
 export function PerKeyPanel({
   report,

@@ -234,10 +234,6 @@ export function SourcesPage() {
       .includes(query.trim().toLowerCase()),
   );
   const remote = syncState?.progress ?? null;
-  const workingIds = new Set<string>();
-  if (work?.phase === "analysing" && work.currentId) workingIds.add(work.currentId);
-  if (isLive(remote) && remote.phase === "analysing" && remote.currentId)
-    workingIds.add(remote.currentId);
 
   // Until the store attaches, an empty watchlist would tell the analyst to add sources when
   // their sources are simply still loading.

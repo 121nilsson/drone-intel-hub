@@ -1,3 +1,4 @@
+import { pct } from "@/shared/ui/format";
 import { useMemo } from "react";
 import { claimKey } from "@/entities/drone/claim-review";
 import type { Drone } from "@/entities/drone/types";
@@ -17,8 +18,6 @@ const KIND_LABEL: Record<string, string> = {
   "unit:bounds": "Unit slip against physical bounds",
   "implausible:bounds": "Implausible figure",
 };
-
-const pct = (n: number) => `${Math.round(n * 100)}%`;
 
 /**
  * The corrector's findings nobody has answered yet, and how far each kind has come towards being

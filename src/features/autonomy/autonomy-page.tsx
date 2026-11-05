@@ -1,3 +1,4 @@
+import { pct } from "@/shared/ui/format";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
@@ -21,8 +22,6 @@ import type { AutonomyStatus } from "@/shared/infra/evaluation/rule-sandbox.serv
  * is sent to a human queue. The panel exists so the loop is visible and its coverage is honest: every score is
  * reported next to how many claims it was measured over.
  */
-
-const pct = (n: number) => `${Math.round(n * 100)}%`;
 
 /** A run's before/after coverage, so a verifier change that lowers the verified share is visible. */
 function coverageChange(before: unknown, after: unknown): string | undefined {

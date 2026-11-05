@@ -1,6 +1,6 @@
 import { Panel, Tag } from "@/shared/ui/primitives";
 import type { SeedAgreement } from "@/shared/infra/evaluation/seed-agreement";
-import { pct } from "./evaluation-format";
+import { pct } from "@/shared/ui/format";
 
 export type SeedState = SeedAgreement & { available: boolean; reason?: string };
 

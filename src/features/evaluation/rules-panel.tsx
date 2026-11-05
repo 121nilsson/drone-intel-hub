@@ -1,3 +1,4 @@
+import { pct } from "@/shared/ui/format";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Select, Textarea } from "@/shared/ui/fields";
@@ -51,7 +52,6 @@ const EXAMPLES: Record<RuleKind, string> = {
 };
 
 const f1 = (n: number) => (n >= 0 ? "+" : "") + n.toFixed(3);
-const pct = (n: number) => `${Math.round(n * 100)}%`;
 
 function Verdict({ r }: { r: SandboxResult & { evaluatedAt: string } }) {
   return (

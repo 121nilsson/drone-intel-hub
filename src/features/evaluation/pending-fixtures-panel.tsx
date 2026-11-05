@@ -1,3 +1,4 @@
+import { pct } from "@/shared/ui/format";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Btn, Card, Panel, Tag } from "@/shared/ui/primitives";
@@ -10,8 +11,6 @@ import type { PendingFixture } from "@/shared/infra/evaluation/evaluation.server
 import { TRUST_AGREEMENT, TRUST_MIN_REVIEWS } from "@/shared/infra/ingest/earned-trust";
 
 type Listing = Awaited<ReturnType<typeof fetchPendingFixtures>>;
-
-const pct = (n: number) => `${Math.round(n * 100)}%`;
 
 const expectation = (e: { semantic: string; value: number | string; unit?: string }) =>
   `${e.semantic} = ${e.value}${e.unit ? ` ${e.unit}` : ""}`;

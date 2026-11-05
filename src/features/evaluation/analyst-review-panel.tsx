@@ -1,3 +1,4 @@
+import { pct } from "@/shared/ui/format";
 import { useMemo } from "react";
 import type { ClaimIssue, Drone } from "@/entities/drone/types";
 import {
@@ -8,8 +9,6 @@ import {
   checkTrust,
 } from "@/shared/infra/ingest/contradictions";
 import { ListRow, Panel, Tag } from "@/shared/ui/primitives";
-
-const pct = (n: number) => `${Math.round(n * 100)}%`;
 
 function tally(drones: readonly Drone[]) {
   const t = { confirmed: 0, value: 0, unit: 0, system: 0, attribute: 0 };

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { useServices } from "@/shared/infra/services";
@@ -9,366 +9,20 @@ import {
   drawAuditFirstSession,
   fetchAuditStatus,
 } from "@/shared/infra/verification/verification.functions";
-import type {
-  AuditAnswer,
-  AuditFailedControl,
-  AuditItem,
-  AuditStatus,
-} from "@/shared/contracts/verification";
+import type { AuditAnswer, AuditStatus } from "@/shared/contracts/verification";
 import { Btn, CardGrid, EmptyNote, PageTitle, Panel, Tag } from "@/shared/ui/primitives";
+import { pctPrecise } from "@/shared/ui/format";
 import { Stat } from "./stat";
-import { CONTROL_WINDOW } from "@/entities/drone/audit";
-import { SourceRef, SystemChip } from "@/shared/ui/links";
-import { TranslateButton } from "@/shared/ui/translate-button";
+import { DECISION } from "./audit-decision";
+import { FailedControls } from "./audit-failed-controls";
+import { Question } from "./audit-question";
+import { Tally } from "./audit-tally";
 
 /**
  * The audit of `verified` claims (plan §9, Phase 2): the one measurement of how often "verified"
  * is right. The system draws; the person answers one question per claim. An answer measures the
  * verifier and never changes the claim, so nothing here is an approval.
  */
-
-const pct = (n: number) => `${(n * 100).toFixed(1)}%`;
-
-const DECISION: Record<
-  AuditStatus["decision"],
-  { label: string; tone: "success" | "danger" | "warning" | "muted"; says: string }
-> = {
-  pass: {
-    label: "pass",
-    tone: "success",
-    says: "Verified precision is proven within the budget.",
-  },
-  fail: {
-    label: "fail",
-    tone: "danger",
-    says: "Verified claims are proven to be wrong more often than the budget allows.",
-  },
-  not_proven: {
-    label: "not proven",
-    tone: "warning",
-    says: "The audit reached its maximum without proving precision within the budget.",
-  },
-  continue: {
-    label: "open",
-    tone: "muted",
-    says: "Not settled yet: the first decision is after 100 answers, then after every 50.",
-  },
-};
-
-/**
- * The post with the quote marked, matched the way the verifier matched it (entities/drone/
- * verification.ts): NFKC-folded, across whitespace and case. A looser or stricter match would
- * leave some verified claims unmarked, and an unmarked claim would stand out from the rest.
- */
-function PostWithQuote({ text: raw, quote }: { text: string; quote?: string | undefined }) {
-  const text = useMemo(() => raw.normalize("NFKC"), [raw]);
-  const parts = useMemo(() => {
-    const q = quote?.normalize("NFKC").trim();
-    if (!q) return null;
-    const pattern = q
-      .split(/\s+/)
-      .map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
-      .join("\\s+");
-    const m = new RegExp(pattern, "iu").exec(text);
-    return m
-      ? { before: text.slice(0, m.index), hit: m[0], after: text.slice(m.index + m[0].length) }
-      : null;
-  }, [text, quote]);
-  return (
-    <p className="max-h-[50vh] overflow-y-auto whitespace-pre-wrap break-words text-sm leading-relaxed">
-      {parts ? (
-        <>
-          {parts.before}
-          <mark className="bg-primary/25 text-foreground">{parts.hit}</mark>
-          {parts.after}
-        </>
-      ) : (
-        text
-      )}
-    </p>
-  );
-}
-
-function Question({
-  item,
-  translateModel,
-  onAnswer,
-  busy,
-}: {
-  item: AuditItem;
-  translateModel: string;
-  onAnswer: (
-    answer: AuditAnswer,
-    obviouslyWrong: boolean,
-    readVia: "original" | "translation",
-  ) => void;
-  busy: boolean;
-}) {
-  const [obviouslyWrong, setObviouslyWrong] = useState(false);
-  // Defaults to how a post in this language is likely read; the auditor corrects it.
-  const [readVia, setReadVia] = useState<"original" | "translation">(
-    item.language === "en" ? "original" : "translation",
-  );
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (busy || e.metaKey || e.ctrlKey || e.altKey) return;
-      // Only typing suppresses the shortcuts: a ticked checkbox keeps focus, and the auditor's
-      // next key is still an answer.
-      const t = e.target;
-      if (
-        (t instanceof HTMLInputElement && t.type !== "checkbox") ||
-        t instanceof HTMLTextAreaElement
-      )
-        return;
-      const k = e.key.toLowerCase();
-      if (k === "y") onAnswer("yes", obviouslyWrong, readVia);
-      else if (k === "n") onAnswer("no", obviouslyWrong, readVia);
-      else if (k === "c") onAnswer("cannot_tell", obviouslyWrong, readVia);
-      else if (k === "w") setObviouslyWrong((v) => !v);
-      else if (k === "t") setReadVia((v) => (v === "original" ? "translation" : "original"));
-      else return;
-      e.preventDefault();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [busy, obviouslyWrong, readVia, onAnswer]);
-
-  return (
-    <div className="space-y-4">
-      <div className="space-y-1">
-        <p className="text-sm text-muted-foreground">
-          Does the post state this value for this attribute of this system?
-        </p>
-        <p className="flex flex-wrap items-center gap-2 text-base">
-          <SystemChip id={item.droneId} name={item.droneName} />
-          <span className="text-muted-foreground">·</span>
-          <span>{item.specLabel}</span>
-          <span className="text-muted-foreground">=</span>
-          <span className="font-mono font-semibold">{item.value}</span>
-        </p>
-        <p className="text-xs text-muted-foreground">
-          <SourceRef source={item.source} /> · {item.language} · {item.family}
-        </p>
-      </div>
-
-      {item.postText ? (
-        <div className="border border-border p-3">
-          <PostWithQuote text={item.postText} quote={item.evidence} />
-          {item.language !== "en" && (
-            <div className="mt-2">
-              <TranslateButton key={item.id} text={item.postText} model={translateModel} />
-            </div>
-          )}
-        </div>
-      ) : (
-        <EmptyNote>
-          The post was not archived. Answer "can't tell" unless the quote alone settles it.
-        </EmptyNote>
-      )}
-      {item.evidence && (
-        <p className="text-xs text-muted-foreground">
-          Quoted evidence: <span className="italic">“{item.evidence}”</span>
-        </p>
-      )}
-
-      <div className="flex flex-wrap items-center gap-2">
-        <Btn disabled={busy} onClick={() => onAnswer("yes", obviouslyWrong, readVia)}>
-          Yes <kbd className="ml-1 opacity-60">Y</kbd>
-        </Btn>
-        <Btn
-          variant="danger"
-          disabled={busy}
-          onClick={() => onAnswer("no", obviouslyWrong, readVia)}
-        >
-          No <kbd className="ml-1 opacity-60">N</kbd>
-        </Btn>
-        <Btn
-          variant="ghost"
-          disabled={busy}
-          onClick={() => onAnswer("cannot_tell", obviouslyWrong, readVia)}
-        >
-          Can't tell <kbd className="ml-1 opacity-60">C</kbd>
-        </Btn>
-        <label className="ml-2 inline-flex items-center gap-1.5 text-xs">
-          <input
-            type="checkbox"
-            checked={obviouslyWrong}
-            onChange={(e) => setObviouslyWrong(e.target.checked)}
-          />
-          The post says it, but it is plainly wrong <kbd className="opacity-60">W</kbd>
-        </label>
-        <label className="inline-flex items-center gap-1.5 text-xs">
-          <input
-            type="checkbox"
-            checked={readVia === "translation"}
-            onChange={(e) => setReadVia(e.target.checked ? "translation" : "original")}
-          />
-          Read through a translation <kbd className="opacity-60">T</kbd>
-        </label>
-      </div>
-      <AnswerGuide />
-    </div>
-  );
-}
-
-/**
- * Worked cases for the judgements that come up again and again. The question is whether the
- * claim reads the post correctly, not whether the post is true - so the examples keep the two apart.
- */
-const ANSWER_EXAMPLES: { claim: string; post: string; answer: string; why: string }[] = [
-  {
-    claim: "Engagement speed = faster",
-    post: "…engages targets faster than its predecessor",
-    answer: "No",
-    why: "A comparison is not a value: no figure can be read, compared or converted from it. The same goes for “improved”, “high”, “long-range”.",
-  },
-  {
-    claim: "Cruise speed = (approximately 46 km/h",
-    post: "cruises at 25 knots (approximately 46 km/h)",
-    answer: "Yes",
-    why: "Same speed, the post's own conversion. A stray bracket is a clean-up slip, not a misread.",
-  },
-  {
-    claim: "Speed = 40",
-    post: "speeds around 40 knots",
-    answer: "Yes, if the reading shows knots",
-    why: "Judge the value with its unit. If the unit is missing or wrong (40 km/h for 40 knots), answer No.",
-  },
-  {
-    claim: "Endurance = 30 хвилин",
-    post: "(a Ukrainian post)",
-    answer: "Translate, then judge",
-    why: "Press Translate and tick “read through a translation”; can't tell only if the translation does not settle it. Units: хвилин/хв, минут/мин = minutes · годин/год, часов/ч = hours · км/год, км/ч = km/h · вузлів, узлов = knots.",
-  },
-  {
-    claim: "Contra · Radome = large circular radome",
-    post: "the KJ-3000 carries a large circular radome",
-    answer: "No",
-    why: "Right fact, wrong system. The claim is filed under the system the post names, or it is wrong.",
-  },
-  {
-    claim: "Max speed = 4,000 km/h (small quadcopter)",
-    post: "reaches 4,000 km/h",
-    answer: "Yes + “plainly wrong”",
-    why: "Read correctly, but the post itself cannot be right. The tick records that apart from the reading.",
-  },
-  {
-    claim: "Range = 300 km",
-    post: "(post not archived, no quote)",
-    answer: "Can't tell",
-    why: "Only when nothing in front of you settles it - not as a way to skip a hard one.",
-  },
-];
-
-function AnswerGuide() {
-  return (
-    <details className="border-t border-border pt-3 text-xs">
-      <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
-        How to answer - examples
-      </summary>
-      <p className="mt-2 text-muted-foreground">
-        You are judging the reading, not the post: Yes when the post states this value, with this
-        unit, for this attribute of this system.
-      </p>
-      <ul className="mt-2 space-y-2">
-        {ANSWER_EXAMPLES.map((ex) => (
-          <li key={ex.claim} className="space-y-0.5">
-            <p>
-              <span className="font-mono">{ex.claim}</span>{" "}
-              <span className="text-muted-foreground">← “{ex.post}”</span>
-            </p>
-            <p>
-              <span className="font-semibold">{ex.answer}.</span>{" "}
-              <span className="text-muted-foreground">{ex.why}</span>
-            </p>
-          </li>
-        ))}
-      </ul>
-    </details>
-  );
-}
-
-function Tally({
-  label,
-  t,
-}: {
-  label: string;
-  t: { answered: number; errors: number; cannotTell: number; upperBound: number };
-}) {
-  return (
-    <Stat
-      label={label}
-      value={`${t.errors} / ${t.answered}`}
-      hint={`errors · error rate ≤ ${t.answered ? pct(t.upperBound) : "—"} · ${t.cannotTell} can't tell`}
-    />
-  );
-}
-
-/**
- * The hidden controls answered "yes". Each voids the answers around it. A control from the first
- * sessions rested on the identity check, which misses "It builds on…", so the owner may say it was
- * wrong; an altered control showed a figure the post does not contain and stands.
- */
-function FailedControls({
-  controls,
-  voided,
-  busy,
-  onDispute,
-}: {
-  controls: AuditFailedControl[];
-  voided: number;
-  busy: boolean;
-  onDispute: (id: string, disputed: boolean) => void;
-}) {
-  if (!controls.length) return null;
-  const standing = controls.filter((c) => !c.disputed).length;
-  return (
-    <div className="mt-3 space-y-2 text-sm">
-      <p className={standing ? "text-destructive" : "text-muted-foreground"}>
-        {standing
-          ? `${voided} answer(s) not counted: ${standing} hidden control(s) were answered "yes", and each voids about ${2 * CONTROL_WINDOW + 1} answers around it.`
-          : "Every failed control has been disputed; no answers are voided."}
-      </p>
-      <ul className="space-y-2">
-        {controls.map((c) => (
-          <li key={c.id} className="rounded border border-border p-2">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="font-medium">{c.droneName}</span>
-              <span className="text-muted-foreground">
-                {c.specLabel}: {c.value}
-              </span>
-              <Tag tone="muted" mono>
-                {c.kind === "altered" ? "figure altered" : "identity check"}
-              </Tag>
-              {c.disputed && (
-                <Tag tone="muted" mono>
-                  disputed
-                </Tag>
-              )}
-            </div>
-            {c.evidence && <p className="mt-1 break-words text-muted-foreground">“{c.evidence}”</p>}
-            <div className="mt-1 flex flex-wrap items-center gap-2 text-muted-foreground">
-              <SourceRef source={c.source} />
-              {c.kind === "misread" && (
-                <Btn
-                  size="sm"
-                  variant="ghost"
-                  disabled={busy}
-                  onClick={() => onDispute(c.id, !c.disputed)}
-                >
-                  {c.disputed
-                    ? "Withdraw: the control was right"
-                    : "The control was wrong: the post states this for this system"}
-                </Btn>
-              )}
-            </div>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
 
 export function AuditPage() {
   const svc = useServices();
@@ -449,8 +103,8 @@ export function AuditPage() {
             }
           >
             <p className="mb-3 text-sm">
-              {d.says} Budget: at most {pct(status.budget)} of verified claims misread, at 95%
-              confidence.{" "}
+              {d.says} Budget: at most {pctPrecise(status.budget)} of verified claims misread, at
+              95% confidence.{" "}
               <Link to="/autonomy" className="underline">
                 Back to Autonomy
               </Link>
@@ -538,7 +192,7 @@ export function AuditPage() {
                   value={`${status.reader.agreement.supported.no} / ${
                     status.reader.agreement.supported.yes + status.reader.agreement.supported.no
                   }`}
-                  hint={`you said the post does not state it · wrong ≤ ${pct(status.reader.supportedErrorBound)}`}
+                  hint={`you said the post does not state it · wrong ≤ ${pctPrecise(status.reader.supportedErrorBound)}`}
                 />
                 <Stat
                   label="It said unsupported"

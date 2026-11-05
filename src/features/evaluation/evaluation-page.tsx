@@ -15,7 +15,7 @@ import { PendingFixturesPanel } from "./pending-fixtures-panel";
 import { Stage } from "./action-list";
 import { JobStatusPanel } from "@/shared/ui/job-status-panel";
 import { Kpi } from "./evaluation-kpi";
-import { pct } from "./evaluation-format";
+import { pct } from "@/shared/ui/format";
 import { RunEvaluationPanel } from "./run-evaluation-panel";
 import { ReferenceCoveragePanel } from "./reference-coverage-panel";
 import { SeedAgreementPanel, type SeedState } from "./seed-agreement-panel";
