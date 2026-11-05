@@ -1,3 +1,4 @@
+import type { QuantityQualifier } from "@/entities/normalization/numeric";
 import { displayScale } from "./consensus";
 import type { SpecAttribute, SpecClaim } from "./types";
 
@@ -46,4 +47,39 @@ export function claimReading(spec: Pick<SpecAttribute, "unit">, claim: SpecClaim
             ? `≤ ${v(r.max)}`
             : undefined;
   return canonical ? `${shown} (≈ ${canonical}${suffix})` : shown;
+}
+
+/** The words a qualifier reads as in English. "exact" and a span say nothing beyond the figure. */
+const QUALIFIER_WORD: Partial<Record<QuantityQualifier, string>> = {
+  up_to: "up to",
+  less_than: "less than",
+  at_least: "at least",
+  greater_than: "more than",
+  approximate: "approx.",
+};
+
+/**
+ * A claim's value as a single structured reading: the qualifier the post used, the figure and the
+ * unit the post used ("up to 500 km", "approx. 46 km/h", "170–180 km/h", "500 km"). Built from
+ * `normalized` only, so it says what the catalogue parsed and nothing about the raw clipping that
+ * `claimReading` shows. Without a usable figure it is `claimReading` as before.
+ */
+export function cleanReading(spec: Pick<SpecAttribute, "unit">, claim: SpecClaim): string {
+  const q = claim.normalized;
+  const r = q?.range;
+  const lo = r?.min;
+  const hi = r?.max;
+  const point = q?.value ?? r?.value ?? hi ?? lo;
+  let figure: string;
+  let word: string | undefined;
+  if (lo !== undefined && hi !== undefined) {
+    figure = `${round(lo)}–${round(hi)}`;
+  } else if (point !== undefined) {
+    figure = `${round(point)}`;
+    word = r?.qualifier ? QUALIFIER_WORD[r.qualifier] : undefined;
+  } else {
+    return claimReading(spec, claim);
+  }
+  const unit = q?.unit ?? spec.unit;
+  return [word, figure, unit].filter(Boolean).join(" ");
 }

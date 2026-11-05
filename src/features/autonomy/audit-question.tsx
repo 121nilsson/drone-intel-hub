@@ -5,6 +5,7 @@ import { SourceRef, SystemChip } from "@/shared/ui/links";
 import { TranslateButton } from "@/shared/ui/translate-button";
 import { AnswerGuide } from "./audit-answer-guide";
 import { PostWithQuote } from "./audit-post-quote";
+import { SPEED_NATURE_HINT } from "./speed-nature";
 
 export function Question({
   item,
@@ -65,6 +66,9 @@ export function Question({
         <p className="text-xs text-muted-foreground">
           <SourceRef source={item.source} /> · {item.language} · {item.family}
         </p>
+        {item.family === "speed" && (
+          <p className="text-xs text-muted-foreground">{SPEED_NATURE_HINT}</p>
+        )}
       </div>
 
       {item.postText ? (
