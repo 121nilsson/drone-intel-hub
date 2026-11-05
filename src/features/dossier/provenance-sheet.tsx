@@ -1,4 +1,5 @@
 import { Link } from "@tanstack/react-router";
+import { cleanReading } from "@/entities/drone/claim-reading";
 import { ExternalSourceLink, SourceRef } from "@/shared/ui/links";
 import type { SpecAttribute } from "@/entities/drone/types";
 import { useDispatches, useServices, useSources } from "@/shared/infra/use-services";
@@ -79,11 +80,16 @@ export function ProvenanceSheet({
                   Claimed value
                 </p>
                 <p className="mt-1 font-mono text-primary">
-                  {claim.raw ?? String(claim.value)}
+                  {cleanReading(selection.spec, claim)}
                   {n?.canonicalValue !== undefined && claim.raw
                     ? ` → ${n.canonicalValue} ${n.canonicalUnit ?? ""}`
                     : ""}
                 </p>
+                {claim.raw && claim.raw.trim() !== cleanReading(selection.spec, claim) && (
+                  <p className="mt-0.5 font-mono text-xs text-muted-foreground">
+                    as stated: {claim.raw}
+                  </p>
+                )}
               </div>
               {claim.evidence && (
                 <blockquote className="border border-border bg-secondary/40 p-3 italic">

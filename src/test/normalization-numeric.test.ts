@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { parseMagnitude, parseNumber, parseRange } from "@/entities/normalization/numeric";
+import {
+  parseMagnitude,
+  parseNumber,
+  parseRange,
+  qualifierBeforeFigure,
+} from "@/entities/normalization/numeric";
 
 describe("parseNumber", () => {
   it("treats a grouped comma as thousands and a short comma as a decimal", () => {
@@ -47,6 +52,38 @@ describe("parseRange", () => {
     expect(parseRange("не меньше чем 500")).toEqual({ min: 500, qualifier: "at_least" });
     expect(parseRange("не более чем 40")).toEqual({ max: 40, qualifier: "up_to" });
     expect(parseRange("не більше ніж 40")).toEqual({ max: 40, qualifier: "up_to" });
+  });
+});
+
+describe("qualifierBeforeFigure", () => {
+  it("reads a qualifier written directly before the figure", () => {
+    expect(qualifierBeforeFigure("up to 500")).toBe("up_to");
+    expect(qualifierBeforeFigure("range to at least 1,000")).toBe("at_least");
+    expect(qualifierBeforeFigure("targets up to 100")).toBe("up_to");
+    expect(qualifierBeforeFigure("speed of up to 500")).toBe("up_to");
+    expect(qualifierBeforeFigure("(approximately 100")).toBe("approximate");
+    expect(qualifierBeforeFigure("~80")).toBe("approximate");
+    expect(qualifierBeforeFigure("more than 100")).toBe("greater_than");
+  });
+
+  it("reads Russian and Ukrainian qualifiers before the figure", () => {
+    expect(qualifierBeforeFigure("не менее 500")).toBe("at_least");
+    expect(qualifierBeforeFigure("до 500")).toBe("up_to");
+    expect(qualifierBeforeFigure("понад 12")).toBe("greater_than");
+    expect(qualifierBeforeFigure("щонайменше 3,5")).toBe("at_least");
+  });
+
+  it("ignores a qualifier that is not the figure's neighbour", () => {
+    expect(
+      qualifierBeforeFigure("The system, which can fly up to a point, weighs 40"),
+    ).toBeUndefined();
+    expect(qualifierBeforeFigure("it flies over the mountains at 40")).toBeUndefined();
+  });
+
+  it("finds nothing for a plain figure or text without a figure", () => {
+    expect(qualifierBeforeFigure("500")).toBeUndefined();
+    expect(qualifierBeforeFigure("exact 480")).toBeUndefined();
+    expect(qualifierBeforeFigure("up to")).toBeUndefined();
   });
 });
 

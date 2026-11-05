@@ -139,7 +139,11 @@ system message as a language pair (`ru-en`, `uk-en`) and, given English and an i
 in a language of its own choosing. The route sends the pair for Russian and Ukrainian and the plain
 instruction for other languages, which Riva follows. The dossier summary shows one thing at a time
 (`summaryView`): the scraped text with a status line while a brief is generated, then the brief,
-with a translation only when no brief is coming.
+with a translation only when no brief is coming. A claim's value is shown as its reading
+(`cleanReading`: "up to 500 km", "approx. 46 km/h") with the stated phrase beside it, on the audit
+page, the provenance sheet and the claim timeline; the qualifier is read beside the figure
+(`qualifierBeforeFigure`). This is display only: what is stored, and what consensus and the
+verifier read, is unchanged.
 
 ---
 

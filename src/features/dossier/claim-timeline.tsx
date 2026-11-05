@@ -1,6 +1,6 @@
 import { Panel, EmptyNote } from "@/shared/ui/primitives";
 import { SourceRef } from "@/shared/ui/links";
-import { withUnit } from "@/shared/ui/link-text";
+import { cleanReading } from "@/entities/drone/claim-reading";
 import { type Drone } from "@/entities/drone/types";
 
 export function ClaimTimeline({ drone: d }: { drone: Drone }) {
@@ -18,7 +18,7 @@ export function ClaimTimeline({ drone: d }: { drone: Drone }) {
                 {(claim.date ?? "").slice(0, 10)} · {spec.label}
               </p>
               <p className="min-w-0 break-words text-sm [overflow-wrap:anywhere]">
-                {withUnit(claim.value, spec.unit)}{" "}
+                {cleanReading(spec, claim)}{" "}
                 <span className="font-mono text-xs text-muted-foreground">
                   —{" "}
                   <SourceRef

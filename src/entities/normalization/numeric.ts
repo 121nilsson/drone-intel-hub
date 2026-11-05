@@ -119,6 +119,34 @@ export function leadingQualifier(raw: string): { qualifier: QuantityQualifier; r
 }
 
 /**
+ * The bound or approximation written directly before the first figure: "up to 500", "(approximately
+ * 100", "range to at least 1,000". Only the last three words before the figure are read, so a
+ * qualifier further back in the sentence ("can fly up to a point, weighs 40") is not the figure's.
+ * Undefined when no qualifier stands there.
+ */
+export function qualifierBeforeFigure(text: string): QuantityQualifier | undefined {
+  const t = text.trim().replace(THIN_SPACE, " ");
+  const first = t.search(/\d/);
+  if (first <= 0) return undefined;
+  const words = t
+    .slice(0, first)
+    .replace(/[([{"'«“]/g, " ")
+    .split(/\s+/)
+    .filter((w) => w.length > 0)
+    .slice(-3);
+  for (let n = words.length; n > 0; n--) {
+    const phrase = words.slice(words.length - n).join(" ");
+    for (const [re, qualifier] of QUALIFIER_PREFIX) {
+      // The pattern takes a trailing space, so it is tested on the phrase plus one. The phrase
+      // must be consumed whole: a pattern that matches only the start of it does not count.
+      const m = (phrase + " ").match(re);
+      if (m && m[0].trim().toLowerCase() === phrase.toLowerCase()) return qualifier;
+    }
+  }
+  return undefined;
+}
+
+/**
  * Parse a qualifier and one number or a span. Units must already have been removed.
  * "up to 120" stays an upper bound and does not become an exact 120.
  */

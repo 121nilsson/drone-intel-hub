@@ -1,4 +1,5 @@
-import type { QuantityQualifier } from "@/entities/normalization/numeric";
+import { qualifierBeforeFigure, type QuantityQualifier } from "@/entities/normalization/numeric";
+import { normalizeQuantity } from "@/entities/normalization/units";
 import { displayScale } from "./consensus";
 import type { SpecAttribute, SpecClaim } from "./types";
 
@@ -65,7 +66,28 @@ const QUALIFIER_WORD: Partial<Record<QuantityQualifier, string>> = {
  * `claimReading` shows. Without a usable figure it is `claimReading` as before.
  */
 export function cleanReading(spec: Pick<SpecAttribute, "unit">, claim: SpecClaim): string {
-  const q = claim.normalized;
+  const stated = (claim.raw?.trim() || String(claim.value)).trim();
+  // The word the post put before the figure ("range to at least 1,000", "(approximately 100"),
+  // for the claims whose stored reading says "exact" because it never saw that word.
+  const written = qualifierBeforeFigure(stated);
+  return (
+    structuredReading(claim.normalized, written, spec.unit) ??
+    // A claim with no stored reading (a value kept as the post's phrase): read the figure and its
+    // unit out of the phrase for display only. Nothing is stored and consensus is not told.
+    structuredReading(
+      normalizeQuantity(stated.slice(Math.max(stated.search(/[0-9]/), 0))),
+      written,
+      spec.unit,
+    ) ??
+    claimReading(spec, claim)
+  );
+}
+
+function structuredReading(
+  q: SpecClaim["normalized"] | undefined,
+  written: QuantityQualifier | undefined,
+  unitFallback: string | undefined,
+): string | undefined {
   const r = q?.range;
   const lo = r?.min;
   const hi = r?.max;
@@ -76,10 +98,12 @@ export function cleanReading(spec: Pick<SpecAttribute, "unit">, claim: SpecClaim
     figure = `${round(lo)}–${round(hi)}`;
   } else if (point !== undefined) {
     figure = `${round(point)}`;
-    word = r?.qualifier ? QUALIFIER_WORD[r.qualifier] : undefined;
+    const stored = r?.qualifier && r.qualifier !== "exact" ? r.qualifier : undefined;
+    const qualifier = stored ?? written;
+    word = qualifier ? QUALIFIER_WORD[qualifier] : undefined;
   } else {
-    return claimReading(spec, claim);
+    return undefined;
   }
-  const unit = q?.unit ?? spec.unit;
+  const unit = q?.unit ?? unitFallback;
   return [word, figure, unit].filter(Boolean).join(" ");
 }
