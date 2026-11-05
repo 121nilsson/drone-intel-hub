@@ -7,7 +7,7 @@ import {
   queueFixtures,
   compareSpecs,
   comparableSpecs,
-  referenceSpecs,
+  verifiedReference,
 } from "@/shared/infra/evaluation/evaluation";
 import {
   CONTRADICTION_CONFIDENCE,
@@ -112,7 +112,7 @@ describe("the evaluation reference with analyst verdicts", () => {
 
     // Without the verdict the heuristic agrees with the stored extraction.
     expect(compareSpecs(heur, comparableSpecs(c.extraction)).pairs).toHaveLength(1);
-    const cmp = compareSpecs(heur, referenceSpecs(c, analystVerdicts(catalog)));
+    const cmp = compareSpecs(heur, verifiedReference(c, analystVerdicts(catalog)));
     expect(cmp.pairs).toHaveLength(0);
     expect(cmp.rejected).toHaveLength(1);
     expect(cmp.misses).toHaveLength(0);
@@ -123,7 +123,9 @@ describe("the evaluation reference with analyst verdicts", () => {
     const c = candidate("c1", "lancet-3", [range("40 km", { provenance: "heuristic" })]);
     const heur = comparableSpecs(normalizeExtraction(c.extraction).extraction);
     expect(compareSpecs(heur, comparableSpecs(c.extraction)).rejected).toHaveLength(1);
-    expect(compareSpecs(heur, referenceSpecs(c, analystVerdicts(catalog))).pairs).toHaveLength(1);
+    expect(compareSpecs(heur, verifiedReference(c, analystVerdicts(catalog))).pairs).toHaveLength(
+      1,
+    );
   });
 
   it("applies a verdict only to the candidate that fed that entry", () => {
@@ -134,9 +136,9 @@ describe("the evaluation reference with analyst verdicts", () => {
     ];
     const verdicts = analystVerdicts(catalog);
     const other = candidate("c2", "geran-2", [range("40 km")]);
-    expect(referenceSpecs(other, verdicts)[0]!.verdict).toBeUndefined();
+    expect(verifiedReference(other, verdicts)[0]!.verdict).toBeUndefined();
     expect(
-      referenceSpecs(candidate("c1", "lancet-3", [range("40 km")]), verdicts)[0]!.verdict,
+      verifiedReference(candidate("c1", "lancet-3", [range("40 km")]), verdicts)[0]!.verdict,
     ).toBe("rejected");
   });
 });
