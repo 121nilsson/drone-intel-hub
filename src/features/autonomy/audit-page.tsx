@@ -155,13 +155,7 @@ export function AuditPage() {
 
           <Panel title={current ? `Claim · ${status.openCount} waiting` : "Claims"}>
             {current ? (
-              <Question
-                key={current.id}
-                item={current}
-                translateModel={svc.settings.translateModel}
-                onAnswer={answer}
-                busy={busy}
-              />
+              <Question key={current.id} item={current} onAnswer={answer} busy={busy} />
             ) : (
               <EmptyNote>
                 {status.seed.frozen

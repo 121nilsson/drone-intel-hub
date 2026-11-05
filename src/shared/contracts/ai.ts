@@ -159,6 +159,8 @@ export interface ProviderEnvConfig {
   tier1Model?: string;
   tier2Model?: string;
   translateModel?: string;
+  /** The provider translation tries first (TRANSLATE_PROVIDER, else the highest priority one). */
+  translateProvider?: string;
   /** Absent when the server could not read the provider layer (see getStoreStatus). */
   routing?: ProviderRouting;
 }

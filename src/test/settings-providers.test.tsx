@@ -43,7 +43,6 @@ function buildServices(providerEnv: ProviderEnvConfig | null) {
       autoDiscardThreshold: 0.25,
       heuristicFirst: true,
     },
-    saveSettings: () => {},
     aiKeyFromEnv: false,
     aiFromEnv: true,
     providerEnv,

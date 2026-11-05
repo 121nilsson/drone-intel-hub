@@ -129,7 +129,11 @@ Design background: [normalization.md](./normalization.md).
 - Queue **Translate** uses `translateText` server function; extraction does not auto-translate
   non-Latin text before the model (see roadmap).
 
-Settings page shows resolved providers, models, and fallback order.
+Settings page is read-only: it shows the resolved providers, models, the translation route and
+fallback order, and the built-in thresholds. Nothing is typed in the browser, and a key never
+lives there (an old browser copy is removed on load). Translation runs on its own server-side
+route (`translateCompletion`: `TRANSLATE_PROVIDER`, `TRANSLATE_MODEL`, then each provider's
+translation model), so the browser's model setting is never sent.
 
 ---
 

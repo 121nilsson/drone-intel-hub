@@ -10,7 +10,7 @@ import { Btn } from "@/shared/ui/primitives";
  * both offer it, and a component that lives in one page's module makes the other slice depend
  * on that page.
  */
-export function TranslateButton({ text, model }: { text: string; model: string }) {
+export function TranslateButton({ text }: { text: string }) {
   const fn = useServerFn(translateText);
   const [busy, setBusy] = useState(false);
   const [out, setOut] = useState<string | null>(null);
@@ -33,7 +33,7 @@ export function TranslateButton({ text, model }: { text: string; model: string }
           setBusy(true);
           setErr(null);
           try {
-            const r = await fn({ data: { text, model } });
+            const r = await fn({ data: { text } });
             if (r.ok) setOut(r.translated);
             else setErr(r.error);
           } catch (e) {

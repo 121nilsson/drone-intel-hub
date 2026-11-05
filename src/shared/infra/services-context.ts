@@ -43,11 +43,14 @@ export interface Services {
   procurements: LocalProcurementRepository;
   taxonomies: LocalTaxonomyRepository;
   taxonomyCandidates: LocalTaxonomyCandidateRepository;
+  /**
+   * The built-in thresholds with the server's models laid over them. Read-only: the app is
+   * configured through the server environment (.env / .env.local), never from the browser.
+   */
   settings: AIProviderSettings;
-  saveSettings(s: AIProviderSettings): void;
-  /** True when a provider is reachable: an env key or one saved in this browser. */
+  /** True when a provider key is set on the server. */
   aiConfigured: boolean;
-  /** True when the credentials come from .env.local rather than this browser. */
+  /** Same as aiConfigured: a key lives on the server or nowhere. */
   aiKeyFromEnv: boolean;
   /** True when any inference field is supplied by the server environment. */
   aiFromEnv: boolean;

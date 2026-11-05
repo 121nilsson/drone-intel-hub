@@ -156,7 +156,7 @@ function DispatchItem({
         <RelatedInlineToast edges={relatedIntel.edges} sourceLabel={d.sourceName} maxVisible={2} />
       )}
       <div className="mt-3 flex flex-wrap items-center gap-3">
-        {d.text && <TranslateButton text={d.text} model={svc.settings.translateModel} />}
+        {d.text && <TranslateButton text={d.text} />}
         {d.status === "failed" && d.text && (
           <Btn variant="ghost" onClick={() => requeueFailed(svc.dispatches, [d.id])}>
             Retry

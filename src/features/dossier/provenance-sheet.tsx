@@ -125,9 +125,7 @@ export function ProvenanceSheet({
                     <p className="text-muted-foreground">Post text not kept.</p>
                   )}
                   <div className="flex flex-wrap items-center gap-2 pt-1">
-                    {dispatch.text && (
-                      <TranslateButton text={dispatch.text} model={svc.settings.translateModel} />
-                    )}
+                    {dispatch.text && <TranslateButton text={dispatch.text} />}
                     {dispatch.url && (
                       <ExternalSourceLink href={dispatch.url} className="font-mono text-xs">
                         Open original

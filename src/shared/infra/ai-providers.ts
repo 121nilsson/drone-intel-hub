@@ -181,6 +181,34 @@ export function getProviderTranslateModel(provider: AIProvider): string {
 }
 
 /**
+ * The providers translation tries, in order. Translation is routed on its own because a model
+ * built for it (NVIDIA's riva-translate) is a different choice from the extraction models, and the
+ * provider that answers extraction first need not be the one that translates best.
+ *
+ * `TRANSLATE_PROVIDER` names the provider that goes first; the rest follow in priority order as
+ * fallbacks, each with its own translation model. A name that is unknown or has no key is ignored
+ * and the usual priority order applies, so a typo costs the preference, not the translation.
+ */
+export function getTranslationProviders(): AIProvider[] {
+  const available = getEnabledProviders().filter(hasProviderApiKey);
+  const wanted = process.env["TRANSLATE_PROVIDER"]?.trim().toLowerCase();
+  const first = wanted ? available.find((p) => p.name.toLowerCase() === wanted) : undefined;
+  return first ? [first, ...available.filter((p) => p !== first)] : available;
+}
+
+/**
+ * The model `provider` translates with inside `chain`. `TRANSLATE_MODEL` applies to the first
+ * provider only: it is that provider's model id, and means nothing to the fallbacks behind it.
+ */
+export function getTranslationModel(
+  provider: AIProvider,
+  chain: readonly AIProvider[] = getTranslationProviders(),
+): string {
+  const override = chain[0] === provider ? process.env["TRANSLATE_MODEL"]?.trim() : undefined;
+  return override || getProviderTranslateModel(provider);
+}
+
+/**
  * Get all providers that have valid API keys configured
  */
 export function getAvailableProviders(): AIProvider[] {

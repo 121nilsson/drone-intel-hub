@@ -1,13 +1,10 @@
-import { useEffect, useState } from "react";
-import { toast } from "sonner";
-import { DEFAULT_SETTINGS } from "@/shared/infra/services";
+import type { ReactNode } from "react";
 import { useServices } from "@/shared/infra/use-services";
 import { DataTable, type Column } from "@/shared/ui/data-table";
-import { Input } from "@/shared/ui/fields";
-import { Btn, PageTitle, Panel, Tag } from "@/shared/ui/primitives";
+import { PageTitle, Panel, Tag } from "@/shared/ui/primitives";
 import { DensityToggle } from "@/shared/ui/density";
 import { ThemeToggle } from "@/shared/ui/theme";
-import type { ProviderEnvConfig, ProviderStatus } from "@/shared/contracts/ai";
+import type { AIProviderSettings, ProviderEnvConfig, ProviderStatus } from "@/shared/contracts/ai";
 
 /** A model id like `nvidia/nemotron-3-super-120b-a12b` or `meta/muse-glimmer-30b` is namespaced to
  * one provider's catalogue and does not exist on the others. Bare ids (`gpt-4o`, `mistral-large`)
@@ -143,6 +140,24 @@ function ProviderRouting({ env }: { env: ProviderEnvConfig }) {
               </div>
             );
           })}
+          {env.translateModel && (
+            <div>
+              <p>
+                Translation uses <span className="text-foreground">{env.translateModel}</span>
+                {env.translateProvider && (
+                  <>
+                    {" "}
+                    — first tried on{" "}
+                    <span className="text-foreground">{env.translateProvider}</span>
+                  </>
+                )}
+              </p>
+              <p className="pl-3">
+                set with TRANSLATE_PROVIDER and TRANSLATE_MODEL; every other provider translates
+                with its own {"<NAME>"}_TRANSLATE_MODEL
+              </p>
+            </div>
+          )}
           {r.routes.map((route) => (
             <p key={route.tier}>
               {route.tier} configured order (not used for routing): {route.primary}
@@ -172,30 +187,46 @@ function ProviderRouting({ env }: { env: ProviderEnvConfig }) {
   );
 }
 
-export function SettingsPage() {
-  const { settings, saveSettings, aiKeyFromEnv, aiFromEnv, providerEnv } = useServices();
-  const [s, setS] = useState(settings);
-  const [saved, setSaved] = useState(false);
-  useEffect(() => setS(settings), [settings]);
-  const field = (k: keyof typeof s, label: string, type = "text") => (
-    <label className="block">
-      <span className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
-        {label}
-      </span>
-      <Input
-        type={type}
-        step="0.05"
-        value={String(s[k])}
-        onChange={(e) =>
-          setS({ ...s, [k]: type === "number" ? Number(e.target.value) : e.target.value })
-        }
-        className="mt-1"
-      />
-    </label>
+/** One labelled fact. Values are monospace because they are ids, URLs and numbers. */
+function Fact({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="grid min-w-0 grid-cols-[9rem_1fr] items-baseline gap-3 py-2 text-xs">
+      <dt className="font-mono uppercase tracking-widest text-muted-foreground">{label}</dt>
+      <dd className="min-w-0 break-words font-mono text-foreground">{children}</dd>
+    </div>
   );
+}
+
+const THRESHOLDS: { key: keyof AIProviderSettings; label: string; meaning: string }[] = [
+  {
+    key: "escalationThreshold",
+    label: "Escalate below",
+    meaning: "confidence that sends a post to tier 2",
+  },
+  {
+    key: "autoMergeThreshold",
+    label: "Auto-merge above",
+    meaning: "confidence that merges into an existing system",
+  },
+  {
+    key: "autoPromoteThreshold",
+    label: "Auto-promote above",
+    meaning: "confidence that adds a new, uniquely named system",
+  },
+  {
+    key: "autoDiscardThreshold",
+    label: "Auto-discard below",
+    meaning: "confidence under which a post is dropped",
+  },
+];
+
+export function SettingsPage() {
+  const { settings, aiConfigured, providerEnv } = useServices();
   return (
     <div className="max-w-2xl space-y-6">
-      <PageTitle subtitle="Thresholds, models, providers, and display.">Settings</PageTitle>
+      <PageTitle subtitle="What the server is configured with. Nothing here is edited in the browser.">
+        Settings
+      </PageTitle>
       <Panel title="Display density">
         <div className="flex items-center gap-3">
           <DensityToggle />
@@ -210,60 +241,59 @@ export function SettingsPage() {
           <span className="text-xs text-muted-foreground">Switch between dark and light mode.</span>
         </div>
       </Panel>
-      {providerEnv && <ProviderRouting env={providerEnv} />}
-      <Panel title="Inference provider (NVIDIA NIM / OpenAI-compatible)">
-        <div className="space-y-4">
-          {field("baseUrl", "Base URL")}
-          {field("apiKey", "API key", "password")}
-          {field("tier1Model", "Tier 1 model (fast screening)")}
-          {field("tier2Model", "Tier 2 model (reasoning escalation)")}
-          {field("translateModel", "Translation model")}
-          <div className="grid grid-cols-2 gap-4">
-            {field("escalationThreshold", "Escalate below", "number")}
-            {field("autoMergeThreshold", "Auto-merge above", "number")}
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            {field("autoPromoteThreshold", "Auto-promote new system above", "number")}
-            {field("autoDiscardThreshold", "Auto-discard below", "number")}
-          </div>
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={s.heuristicFirst}
-              onChange={(e) => setS({ ...s, heuristicFirst: e.target.checked })}
-            />
-            Run local deterministic extraction before using AI quota
-          </label>
+      <Panel
+        title="Inference"
+        right={
+          <Tag tone={aiConfigured ? "accent" : "default"}>
+            {aiConfigured ? "provider key set" : "local engine only"}
+          </Tag>
+        }
+      >
+        <dl className="divide-y divide-border">
+          <Fact label="Tier 1">{providerEnv?.tier1Model ?? "built-in local extraction"}</Fact>
+          <Fact label="Tier 2">{providerEnv?.tier2Model ?? "built-in local extraction"}</Fact>
+          <Fact label="Translation">
+            {providerEnv?.translateModel ?? "none"}
+            {providerEnv?.translateProvider ? ` · ${providerEnv.translateProvider}` : ""}
+          </Fact>
+          <Fact label="Base URL">{providerEnv?.baseUrl ?? "none"}</Fact>
+          <Fact label="Local first">
+            {settings.heuristicFirst
+              ? "the deterministic engine runs before any AI call, to save quota"
+              : "AI runs on every post"}
+          </Fact>
+        </dl>
+        <p className="mt-3 text-xs text-muted-foreground">
+          Set in .env / .env.local on the server: a key per provider ({"<NAME>"}_API_KEY), models
+          with {"<NAME>"}_TIER1_MODEL, {"<NAME>"}_TIER2_MODEL and {"<NAME>"}_TRANSLATE_MODEL, and
+          the translation route with TRANSLATE_PROVIDER and TRANSLATE_MODEL. Keys never reach the
+          browser.
+        </p>
+      </Panel>
+      {providerEnv ? (
+        <ProviderRouting env={providerEnv} />
+      ) : (
+        <Panel title="Providers">
           <p className="text-xs text-muted-foreground">
-            {aiKeyFromEnv
-              ? "A provider key is set on the server (.env / .env.local) — it overrides the fields above and stays on the server. Remove every server key to fall back to a key saved in this browser."
-              : aiFromEnv
-                ? "Model and URL values above come from the server environment (.env / .env.local). Save a key in this browser or set a provider key (e.g. GROQ_API_KEY, NVIDIA_API_KEY) on the server to enable remote inference."
-                : "Key is kept in this browser only and forwarded per request. Leave empty to use the built-in local extraction engine."}
+            The server did not report its provider configuration. It reads environment variables
+            that are only available server-side, so the app has to be running with its environment
+            loaded.
           </p>
-          <div className="flex gap-2">
-            <Btn
-              onClick={() => {
-                saveSettings(s);
-                setSaved(true);
-                setTimeout(() => setSaved(false), 1500);
-              }}
-            >
-              {saved ? "Saved" : "Save"}
-            </Btn>
-            <Btn
-              variant="ghost"
-              onClick={() => {
-                setS(DEFAULT_SETTINGS);
-                // Refill only: nothing is saved until Save is pressed, and operators have to know
-                // or they will assume the provider config was already reverted.
-                toast("Form reset — press Save to apply");
-              }}
-            >
-              Reset
-            </Btn>
-          </div>
-        </div>
+        </Panel>
+      )}
+      <Panel title="Extraction thresholds">
+        <dl className="divide-y divide-border">
+          {THRESHOLDS.map((t) => (
+            <Fact key={t.key} label={t.label}>
+              {String(settings[t.key])}
+              <span className="ml-2 font-sans text-muted-foreground">{t.meaning}</span>
+            </Fact>
+          ))}
+        </dl>
+        <p className="mt-3 text-xs text-muted-foreground">
+          Built into the app (src/shared/infra/settings-defaults.ts) and the same for the server
+          sync and for manual intake.
+        </p>
       </Panel>
     </div>
   );

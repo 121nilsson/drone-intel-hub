@@ -24,7 +24,7 @@ export function CandidateRow({ c }: { c: Candidate }) {
     setTranslating(true);
     setTranslateError(null);
     try {
-      const res = await translateFn({ data: { text: c.raw, model: svc.settings.translateModel } });
+      const res = await translateFn({ data: { text: c.raw } });
       if (res.ok) {
         setTranslated(res.translated);
       } else {

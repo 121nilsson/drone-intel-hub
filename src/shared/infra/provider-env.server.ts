@@ -77,14 +77,24 @@ export async function readProviderEnvConfig(): Promise<ProviderEnvConfig> {
   const routing = await readProviderRouting();
   const primary = await firstAvailableProvider();
   if (primary) {
-    const { getProviderBaseUrl, getProviderModel, getProviderTranslateModel } =
-      await import("./ai-providers");
+    const {
+      getProviderBaseUrl,
+      getProviderModel,
+      getProviderTranslateModel,
+      getTranslationModel,
+      getTranslationProviders,
+    } = await import("./ai-providers");
+    const translation = getTranslationProviders();
+    const translator = translation[0];
     return {
       hasKey: true,
       baseUrl: getProviderBaseUrl(primary),
       tier1Model: getProviderModel(primary, "tier1"),
       tier2Model: getProviderModel(primary, "tier2"),
-      translateModel: getProviderTranslateModel(primary),
+      translateModel: translator
+        ? getTranslationModel(translator, translation)
+        : getProviderTranslateModel(primary),
+      ...(translator ? { translateProvider: translator.name } : {}),
       ...(routing ? { routing } : {}),
     };
   }

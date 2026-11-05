@@ -64,7 +64,6 @@ export function ServicesProvider({ children }: { children: ReactNode }) {
     taxonomies: taxonomies.terms(),
     taxonomyCandidates: taxonomyCandidates.list(),
   }));
-  const [settings, setSettings] = useState(DEFAULT_SETTINGS);
   const [envCfg, setEnvCfg] = useState<EnvProviderConfig | null>(null);
   const [attached, setAttached] = useState(false);
   const [verificationOnServer, setVerificationOnServer] = useState(false);
@@ -127,12 +126,13 @@ export function ServicesProvider({ children }: { children: ReactNode }) {
     }
   }, [repos, backfillVerification]);
 
+  // Settings used to be typed into the browser and kept here, API key included. They no longer
+  // are, so a leftover copy is removed rather than left behind in storage.
   useEffect(() => {
     try {
-      const s = localStorage.getItem(SETTINGS_KEY);
-      if (s) setSettings({ ...DEFAULT_SETTINGS, ...JSON.parse(s) });
+      localStorage.removeItem(SETTINGS_KEY);
     } catch {
-      /* ignore */
+      /* storage unavailable */
     }
   }, []);
 
@@ -250,12 +250,12 @@ export function ServicesProvider({ children }: { children: ReactNode }) {
     // Env wins per-field; anything it doesn't define falls back to saved/built-in settings.
     // apiKey is blanked when the env supplies one so the key never enters the browser.
     const resolved: AIProviderSettings = {
-      ...settings,
-      baseUrl: envCfg?.baseUrl ?? settings.baseUrl,
-      tier1Model: envCfg?.tier1Model ?? settings.tier1Model,
-      tier2Model: envCfg?.tier2Model ?? settings.tier2Model,
-      translateModel: envCfg?.translateModel ?? settings.translateModel,
-      apiKey: envCfg?.hasKey ? "" : settings.apiKey,
+      ...DEFAULT_SETTINGS,
+      baseUrl: envCfg?.baseUrl ?? DEFAULT_SETTINGS.baseUrl,
+      tier1Model: envCfg?.tier1Model ?? DEFAULT_SETTINGS.tier1Model,
+      tier2Model: envCfg?.tier2Model ?? DEFAULT_SETTINGS.tier2Model,
+      translateModel: envCfg?.translateModel ?? DEFAULT_SETTINGS.translateModel,
+      apiKey: "",
     };
     const aiFromEnv = !!(
       envCfg?.hasKey ||
@@ -264,7 +264,7 @@ export function ServicesProvider({ children }: { children: ReactNode }) {
       envCfg?.tier2Model ||
       envCfg?.translateModel
     );
-    const remote = envCfg?.hasKey === true || !!settings.apiKey;
+    const remote = envCfg?.hasKey === true;
     return {
       seed,
       drones,
@@ -275,16 +275,6 @@ export function ServicesProvider({ children }: { children: ReactNode }) {
       taxonomies,
       taxonomyCandidates,
       settings: resolved,
-      // When the env supplies the key, `s.apiKey` arrives blanked. Keep whatever this
-      // browser had stored so clearing NVIDIA_API_KEY later doesn't silently lose it.
-      saveSettings: (s) => {
-        const next: AIProviderSettings = {
-          ...s,
-          apiKey: envCfg?.hasKey && !s.apiKey ? settings.apiKey : s.apiKey,
-        };
-        setSettings(next);
-        localStorage.setItem(SETTINGS_KEY, JSON.stringify(next));
-      },
       aiConfigured: remote,
       aiKeyFromEnv: envCfg?.hasKey === true,
       aiFromEnv,
@@ -321,7 +311,6 @@ export function ServicesProvider({ children }: { children: ReactNode }) {
     procurements,
     taxonomies,
     taxonomyCandidates,
-    settings,
     envCfg,
     verification,
     attached,

@@ -15,6 +15,9 @@ import {
   getProviderApiKey,
   getProviderBaseUrl,
   getProviderModel,
+  getProviderTranslateModel,
+  getTranslationModel,
+  getTranslationProviders,
   getAvailableProviders,
   isMultiProviderEnabled,
   type AIProvider,
@@ -40,6 +43,11 @@ export interface ChatInput {
    * them for ordering yet.
    */
   tier?: "tier1" | "tier2";
+  /**
+   * Set for translation, so every provider after the first is asked for its own TRANSLATION model
+   * (getProviderTranslateModel) rather than its tier model.
+   */
+  purpose?: "translate";
 }
 
 export type ChatResult =
@@ -406,6 +414,30 @@ export async function chatCompletionOnce(d: ChatInput): Promise<ChatResult> {
   return callSingleProvider(d);
 }
 
+/**
+ * Translate on the server's own route (TRANSLATE_PROVIDER, TRANSLATE_MODEL), not on the tier route.
+ * The browser's model setting is never consulted: before the server's configuration reaches the
+ * browser it holds the Groq default, which the first provider rejects.
+ */
+export async function translateCompletion(
+  d: Pick<ChatInput, "system" | "prompt">,
+): Promise<ChatResult> {
+  const providers = getTranslationProviders();
+  const first = providers[0];
+  const input: ChatInput = {
+    ...d,
+    json: false,
+    tier: "tier1",
+    purpose: "translate",
+    model: first ? getTranslationModel(first, providers) : "nvidia/riva-translate-4b-instruct-v2",
+  };
+  // Nothing configured: let the usual path fail with the message that names the variable to set.
+  if (!first) return chatCompletionOnce(input);
+  return providers.length > 1
+    ? callWithProviders(input, providers)
+    : callSingleProvider(input, first);
+}
+
 /** Statuses that say "this provider cannot serve anyone right now", not "this request is bad". */
 const OUTAGE_STATUS = new Set([401, 402, 403, 425, 429, 500, 502, 503, 504]);
 
@@ -644,8 +676,9 @@ async function callWithProviders(d: ChatInput, providers: AIProvider[]): Promise
 
   // The configured model belongs to the highest-priority provider; every other provider is asked
   // for its own model for this tier. Resolved once, so the cooldown check and the call agree.
-  const modelFor = (p: AIProvider) =>
-    p === providers[0] ? d.model || getProviderModel(p, d.tier) : getProviderModel(p, d.tier);
+  const ownModel = (p: AIProvider) =>
+    d.purpose === "translate" ? getProviderTranslateModel(p) : getProviderModel(p, d.tier);
+  const modelFor = (p: AIProvider) => (p === providers[0] ? d.model || ownModel(p) : ownModel(p));
   const ready = providers.filter((p) => {
     const parked = cooling(p.name, modelFor(p));
     if (parked)
@@ -693,7 +726,7 @@ async function callWithProviders(d: ChatInput, providers: AIProvider[]): Promise
     if (hasNext) {
       const next = ready[index + 1]!;
       console.warn(
-        `[ai-proxy] falling through — ${provider.name} failed (${lastError}) — next: ${next.name} with its own ${d.tier ?? "tier"} model (${getProviderModel(next, d.tier)})`,
+        `[ai-proxy] falling through — ${provider.name} failed (${lastError}) — next: ${next.name} with its own ${d.purpose ?? d.tier ?? "tier"} model (${modelFor(next)})`,
       );
     }
   }

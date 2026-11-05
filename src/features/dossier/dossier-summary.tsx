@@ -76,6 +76,9 @@ export function DossierSummary({
   svc: ReturnType<typeof useServices>;
 }) {
   const translateFn = useServerFn(translateText);
+  // The repository is stable; `svc` itself changes whenever any setting does, and depending on it
+  // here sent a new translation request for every change while the page was opening.
+  const drones = svc.drones;
   const generateFn = useServerFn(generateSystemSummary);
   const generatedSummary = drone.llmSummary;
   const sourceSummary = drone.summary;
@@ -128,13 +131,13 @@ export function DossierSummary({
     let cancelled = false;
     setTranslating(true);
     setError(null);
-    void translateFn({ data: { text: sourceSummary, model: svc.settings.translateModel } })
+    void translateFn({ data: { text: sourceSummary } })
       .then((res) => {
         if (cancelled) return;
         if (res.ok) {
           setTranslated(res.translated);
           try {
-            svc.drones.upsert({ ...drone, summaryEnglish: res.translated }, (fresh) => ({
+            drones.upsert({ ...drone, summaryEnglish: res.translated }, (fresh) => ({
               ...fresh,
               summaryEnglish: res.translated,
             }));
@@ -153,16 +156,7 @@ export function DossierSummary({
     return () => {
       cancelled = true;
     };
-  }, [
-    drone,
-    generatedSummary,
-    likelyEnglish,
-    sourceSummary,
-    storageSummary,
-    svc,
-    svc.settings.translateModel,
-    translateFn,
-  ]);
+  }, [drone, generatedSummary, likelyEnglish, sourceSummary, storageSummary, drones, translateFn]);
 
   const runBriefGeneration = useCallback(
     async (force = false) => {

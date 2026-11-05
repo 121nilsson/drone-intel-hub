@@ -8,12 +8,10 @@ import { PostWithQuote } from "./audit-post-quote";
 
 export function Question({
   item,
-  translateModel,
   onAnswer,
   busy,
 }: {
   item: AuditItem;
-  translateModel: string;
   onAnswer: (
     answer: AuditAnswer,
     obviouslyWrong: boolean,
@@ -74,7 +72,7 @@ export function Question({
           <PostWithQuote text={item.postText} quote={item.evidence} />
           {item.language !== "en" && (
             <div className="mt-2">
-              <TranslateButton key={item.id} text={item.postText} model={translateModel} />
+              <TranslateButton key={item.id} text={item.postText} />
             </div>
           )}
         </div>

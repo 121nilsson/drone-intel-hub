@@ -1,5 +1,10 @@
 import { createServerFn } from "@tanstack/react-start";
-import { chatCompletionOnce, type ChatInput, type ChatResult } from "./ai-proxy.server";
+import {
+  chatCompletionOnce,
+  translateCompletion,
+  type ChatInput,
+  type ChatResult,
+} from "./ai-proxy.server";
 import { DEFAULT_SETTINGS } from "./settings-defaults";
 import type { Drone } from "@/entities/drone/types";
 import { sanitizeText } from "@/shared/infra/json-sanitize";
@@ -34,6 +39,9 @@ export const getEnvProviderConfig = createServerFn({ method: "POST" }).handler(a
 /**
  * Translate text to English using a small translation model.
  * Used by the Queue and Sources pages to make Russian/Ukrainian posts readable.
+ *
+ * The provider and model come from the server (TRANSLATE_PROVIDER, TRANSLATE_MODEL, then each
+ * provider's own translation model). `model` is accepted for older callers and not used.
  */
 export const translateText = createServerFn({ method: "POST" })
   .validator((d: { text: string; model?: string }) => {
@@ -42,13 +50,10 @@ export const translateText = createServerFn({ method: "POST" })
   })
   .handler(
     async ({ data }): Promise<{ ok: true; translated: string } | { ok: false; error: string }> => {
-      const result = await chatCompletionOnce({
-        model: data.model ?? "nvidia/riva-translate-4b-instruct-v2",
+      const result = await translateCompletion({
         system:
           "Translate the following text to English. If the text is already in English, return it unchanged. Preserve technical terms, numbers, and proper nouns.",
         prompt: data.text,
-        json: false,
-        tier: "tier1",
       });
       if (!result.ok) return { ok: false as const, error: result.error };
       return { ok: true as const, translated: result.content };
