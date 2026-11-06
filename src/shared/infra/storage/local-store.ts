@@ -1,5 +1,6 @@
 import {
   DocumentConflictError,
+  PermanentStoreError,
   type Collection,
   type CollectionMap,
   type DocumentStore,
@@ -71,7 +72,7 @@ export class LocalStorageStore implements DocumentStore {
       // A full (or blocked) localStorage used to make `put` resolve anyway. The repository then
       // updated its revision and the UI showed the edit as saved even though nothing was stored.
       // Fail loudly instead: the repository reports it and the shell shows the warning.
-      throw new Error(
+      throw new PermanentStoreError(
         `browser storage could not save ${c} (${e instanceof Error ? e.message : String(e)})`,
       );
     }
@@ -107,7 +108,7 @@ export class LocalStorageStore implements DocumentStore {
     try {
       localStorage.setItem(REV_KEYS[c], JSON.stringify(revs));
     } catch (e) {
-      throw new Error(
+      throw new PermanentStoreError(
         `browser storage could not save revisions for ${c} (${
           e instanceof Error ? e.message : String(e)
         })`,

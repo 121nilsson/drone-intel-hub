@@ -68,6 +68,7 @@ export class LocalDispatchRepository
   duplicateOfUrl(url: string | undefined | null, excludeId?: string): string | null {
     const key = canonicalUrl(url);
     if (!key) return null;
+    this.ensureUrlIndex();
     const hit = this.index.holderOfUrl(key);
     if (hit === undefined || hit === excludeId) return null;
     const doc = this.items.find((d) => d.id === hit);
@@ -101,6 +102,24 @@ export class LocalDispatchRepository
     // attach() replaces the whole working set (claim() relies on that), so the index is rebuilt
     // lazily against the new one rather than trusted across the swap.
     this.index.clear();
+    this.urlIndexed = false;
+  }
+
+  /** Whether the URL index has been built from `items` since the last attach(). */
+  private urlIndexed = false;
+
+  /**
+   * Index the stored posts' URLs the first time a URL is looked up after attach().
+   *
+   * Without it the index only held what this run had added: a tick builds a fresh repository, so a
+   * post whose article was already stored by an earlier tick was never found, and only a repost
+   * within one run was suppressed. `items` is newest first, so the oldest copy is indexed last and
+   * is the one a later copy points at.
+   */
+  private ensureUrlIndex() {
+    if (this.urlIndexed) return;
+    this.urlIndexed = true;
+    for (const d of this.items) this.index.indexUrl(d);
   }
   /**
    * Delegates the exclusive claim to storage. The lease deliberately lives in the store, not

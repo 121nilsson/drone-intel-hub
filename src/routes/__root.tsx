@@ -1,8 +1,7 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   Outlet,
   Link,
-  createRootRouteWithContext,
+  createRootRoute,
   useRouter,
   HeadContent,
   Scripts,
@@ -78,7 +77,7 @@ function ErrorComponent({ error, reset }: ErrorComponentProps) {
   );
 }
 
-export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
+export const Route = createRootRoute({
   head: () => ({
     meta: [
       { charSet: "utf-8" },
@@ -120,23 +119,19 @@ function RootShell({ children }: { children: ReactNode }) {
 }
 
 function RootComponent() {
-  const { queryClient } = Route.useRouteContext();
-
   return (
-    <QueryClientProvider client={queryClient}>
-      {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
-      <ServicesProvider>
-        <ThemeProvider>
-          <DensityProvider>
-            <AppShell>
-              <Outlet />
-            </AppShell>
-          </DensityProvider>
-          {/* Toasts are app-wide feedback for triage/merge/delete; actions carry Undo where the
-              repository can restore the previous state. */}
-          <ThemedToaster />
-        </ThemeProvider>
-      </ServicesProvider>
-    </QueryClientProvider>
+    // Required: nested routes render in the <Outlet />. Removing it breaks all child routes.
+    <ServicesProvider>
+      <ThemeProvider>
+        <DensityProvider>
+          <AppShell>
+            <Outlet />
+          </AppShell>
+        </DensityProvider>
+        {/* Toasts are app-wide feedback for triage/merge/delete; actions carry Undo where the
+            repository can restore the previous state. */}
+        <ThemedToaster />
+      </ThemeProvider>
+    </ServicesProvider>
   );
 }

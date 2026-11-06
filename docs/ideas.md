@@ -16,9 +16,8 @@ relevance, queue) and [Heuristics engine](#heuristics-engine--modular-multilingu
 1. **Global store refresh** — Only the Sources page reloads collections during sync. A composition-root
    hook (focus, interval, post-sync) should refresh drones, candidates, and taxonomies when
    `RemoteStore` is active.
-2. **React Query or remove it** — `QueryClientProvider` is wired but features use
-   `useSyncExternalStore` on repos. Use queries for briefing summary, sync state, and translate;
-   otherwise remove the dependency.
+2. **React Query or remove it** — removed (2026-11-06): nothing used it, features read repos through
+   `useSyncExternalStore`. Add it back only for a server call that needs caching or refetching.
 3. **Modular pipeline** — done: `pipeline.ts` is a barrel over `pipeline-run` (`runTwoTier`),
    `pipeline-actions`, `pipeline-slice`, `pipeline-triage`, `pipeline-types` and `pipeline-internal`.
 4. **Single migration story** — Authoritative SQL is `migrations/`; `drizzle/` is unused at runtime.

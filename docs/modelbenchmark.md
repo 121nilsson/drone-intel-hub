@@ -17,6 +17,26 @@ connection, so treat them as relative, not absolute.
 > therefore skips NVIDIA for extraction with `AI_SKIP_PROVIDERS=nvidia` and keeps it for translation
 > (`riva-translate-4b-instruct-v2` still works). The sections below are the October measurements.
 
+### 2026-11-06: the other providers' configured models
+
+`node scripts/benchmark-models.mjs --provider=NAME --models=...` now reads that provider's key and
+base URL from `.env.local`. Same four cases, same strict grading (`matchId` and each `systems[].matchId`
+must equal the catalogue id), one run each, so treat the scores as a floor, not a ranking.
+
+| Provider   | Model                           | Score | Median | What failed                                                       |
+| ---------- | ------------------------------- | ----- | ------ | ----------------------------------------------------------------- |
+| deeprelay  | `deeprelay/deepseek-v4.1-flash` | 1/4   | 6.0 s  | systems missed on three cases; the negative case passes           |
+| deeprelay  | `deeprelay/glm-5.3-flash`       | 2/4   | 24.3 s | systems missed on the first two; Cyrillic and negative pass       |
+| groq       | `qwen/qwen3.8-27b`              | 0/4   | -      | every call "Request too large" for the free plan's per-minute cap |
+| groq       | `openai/gpt-oss-120b`           | 0/4   | 3.5 s  | first case `matchId` null; the rest hit the rate limit            |
+| mistral    | `ministral-14b-2512`            | 0/4   | 14.8 s | returns JSON missing required keys                                |
+| openrouter | `openrouter/free`               | 1/4   | 26.6 s | passes the multi-system case only; negative case misses keys      |
+
+No configured model clears the bar, and none is clearly better than the current routing, so no
+default changed. In production a heuristic pass and the verifier run around the model, which is why
+the app works with these scores; the benchmark grades the model alone. Groq's free plan cannot take
+this prompt at all, so Groq answers only as a late fall-through.
+
 Reproduce with:
 
 ```bash

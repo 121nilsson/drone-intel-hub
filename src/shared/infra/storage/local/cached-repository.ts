@@ -1,6 +1,7 @@
 import type { Subscribable } from "@/shared/contracts/repository";
 import {
   DocumentConflictError,
+  PermanentStoreError,
   type Collection,
   type CollectionMap,
   type DocumentStore,
@@ -56,6 +57,33 @@ export abstract class CachedRepository<C extends Collection> implements Subscrib
       await this.reload();
     } catch (e) {
       this.problems.report(`could not reload ${this.collection}`, e);
+    }
+  }
+
+  /**
+   * Waits before each retry of a write that failed for a reason other than a conflict: a dropped
+   * connection or a server restart is gone in seconds, and without a retry the edit was lost until
+   * the analyst made it again. Three retries, then the failure is reported as before. A subclass or
+   * a test may shorten it; an empty list turns retrying off.
+   */
+  protected retryDelaysMs: readonly number[] = [500, 1500, 4000];
+
+  /**
+   * Run a store write, retrying a transient failure. A conflict is never retried here - it means
+   * the stored copy moved, which `persist` resolves by reloading and replaying - and a write that is
+   * retried must be safe to repeat: `put` carries its expected revision and `remove` is idempotent.
+   */
+  private async withRetry<T>(op: () => Promise<T>): Promise<T> {
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return await op();
+      } catch (e) {
+        const delay = this.retryDelaysMs[attempt];
+        // A full browser store stays full: waiting only delays the message that says so.
+        if (e instanceof DocumentConflictError || e instanceof PermanentStoreError) throw e;
+        if (delay === undefined) throw e;
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
     }
   }
 
@@ -157,9 +185,12 @@ export abstract class CachedRepository<C extends Collection> implements Subscrib
   ) {
     let candidate = doc;
     for (let attempt = 0; attempt < 3; attempt++) {
-      const expected = this.revs.get(candidate.id) ?? null;
       try {
-        const rev = await store.put(this.collection, candidate, expected);
+        // The revision is read per call: a retry after a dropped connection must not reuse one the
+        // first attempt's reload has since replaced.
+        const rev = await this.withRetry(() =>
+          store.put(this.collection, candidate, this.revs.get(candidate.id) ?? null),
+        );
         this.revs.set(candidate.id, rev);
         return;
       } catch (e) {
@@ -169,6 +200,9 @@ export abstract class CachedRepository<C extends Collection> implements Subscrib
         }
         await this.reload();
         const fresh = this.items.find((x) => x.id === candidate.id);
+        // A retry whose first attempt had landed (the reply was lost) conflicts with its own write.
+        // The stored copy is then the edit: nothing was lost, so nothing is reported.
+        if (fresh && JSON.stringify(fresh) === JSON.stringify(candidate)) return;
         if (!replay || !fresh) {
           this.problems.report(
             `${this.collection}/${candidate.id} changed in another session; your edit was reloaded, not saved`,
@@ -201,7 +235,7 @@ export abstract class CachedRepository<C extends Collection> implements Subscrib
     this.queue.enqueue(
       id,
       async () => {
-        await store.remove(this.collection, id);
+        await this.withRetry(() => store.remove(this.collection, id));
         // Keep the revision until the delete has actually run: a save queued before this drop
         // still has to update the existing document, and a save queued after it must insert.
         this.revs.delete(id);

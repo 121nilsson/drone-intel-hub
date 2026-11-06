@@ -61,6 +61,17 @@ export class DocumentConflictError extends Error {
   }
 }
 
+/**
+ * A write that waiting cannot fix: the browser's storage is full or blocked. Callers that retry a
+ * failed write must not retry this one - it only delays the message that tells the analyst.
+ */
+export class PermanentStoreError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "PermanentStoreError";
+  }
+}
+
 /** Documents without their revisions, for callers that only read the catalog. */
 export function documentsOf<T>(loaded: VersionedDoc<T>[] | null): T[] | null {
   return loaded ? loaded.map((entry) => entry.doc) : null;

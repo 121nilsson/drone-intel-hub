@@ -1,7 +1,8 @@
-// Benchmarks NVIDIA NIM models against the app's real extraction prompt.
+// Benchmarks a provider's models (NVIDIA NIM by default) against the app's real extraction prompt.
 // Reads the key from .env.local; never prints it.
 //
-//   node scripts/benchmark-models.mjs [--models=a,b] [--repeats=N] [--out=file.json]
+//   node scripts/benchmark-models.mjs [--provider=nvidia|groq|deeprelay|...] [--models=a,b]
+//                                     [--repeats=N] [--out=file.json]
 //
 // Emits JSON so results can be turned into modelbenchmark.md without re-running.
 
@@ -23,7 +24,15 @@ const env = Object.fromEntries(
     .filter((l) => l.includes("=") && !l.trim().startsWith("#"))
     .map((l) => [l.slice(0, l.indexOf("=")).trim(), l.slice(l.indexOf("=") + 1).trim()]),
 );
-const BASE = env.NVIDIA_BASE_URL.replace(/\/$/, "");
+// `--provider=groq` benchmarks that provider's models with its own key and base URL from .env.local;
+// the default stays NVIDIA, which is what this script was written for.
+const PROVIDER = String(args.provider ?? "nvidia").toUpperCase();
+const BASE = String(env[`${PROVIDER}_BASE_URL`] ?? "").replace(/\/$/, "");
+const API_KEY = env[`${PROVIDER}_API_KEY`];
+if (!BASE || !API_KEY) {
+  console.error(`Set ${PROVIDER}_BASE_URL and ${PROVIDER}_API_KEY in .env.local`);
+  process.exit(1);
+}
 const TIMEOUT_MS = Number(args.timeout ?? 75_000);
 
 // Shared with production so benchmark results cannot silently grade an obsolete prompt.
@@ -116,7 +125,7 @@ async function call(model, messages, json) {
       signal: ac.signal,
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${env.NVIDIA_API_KEY}`,
+        Authorization: `Bearer ${API_KEY}`,
       },
       body: JSON.stringify({
         model,
