@@ -14,8 +14,10 @@ import type { VerificationCheck, VerificationKind, VerificationVerdict } from ".
  * 10: a cruise speed whose words make it a top speed, or the reverse, fails (speed-check.ts).
  * 11: mm, cm and inches are units; a bare figure takes its attribute's unit; units compare by dimension.
  * 12: a count has no unit; "Number of missiles" was checked as a mass in kg and passed.
+ * 13: bounds follow the entry's flight profile (a ballistic missile), and 161 stored claims got a
+ * reading, so their unit and bounds checks can now run.
  */
-export const VERIFIER_VERSION = "deterministic-12";
+export const VERIFIER_VERSION = "deterministic-13";
 
 interface CheckInput {
   kind: VerificationKind;
