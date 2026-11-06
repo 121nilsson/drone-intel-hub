@@ -1,10 +1,10 @@
 import { canonicalUnitForSemantic } from "@/entities/normalization/semantic";
 import { canonicalUnitFor, convert, normalizeQuantityLoose } from "@/entities/normalization/units";
-import { PLAUSIBLE } from "./auto-correction";
+import { plausibleBounds } from "./auto-correction";
 import { correctedPoint } from "./claim-review";
 import { rawPoint } from "./consensus";
 import { attributeSemantic } from "./spec-engine";
-import type { SpecAttribute, SpecClaim, VerificationCheck } from "./types";
+import type { FlightProfile, SpecAttribute, SpecClaim, VerificationCheck } from "./types";
 import { check } from "./verification-check";
 
 const inBounds = (value: number, bounds: { min: number; max: number }) =>
@@ -108,9 +108,14 @@ function boundValues(spec: SpecAttribute, claim: SpecClaim, unit: string): numbe
   return values.length ? values : undefined;
 }
 
-export function boundsCheck(spec: SpecAttribute, claim: SpecClaim, at: string): VerificationCheck {
+export function boundsCheck(
+  spec: SpecAttribute,
+  claim: SpecClaim,
+  at: string,
+  profile?: FlightProfile,
+): VerificationCheck {
   const semantic = attributeSemantic(spec);
-  const bounds = PLAUSIBLE[semantic];
+  const bounds = plausibleBounds(semantic, profile);
   if (!bounds)
     return check({
       kind: "bounds",

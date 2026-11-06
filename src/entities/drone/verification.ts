@@ -17,7 +17,12 @@ export { VERIFIER_VERSION } from "./verification-check";
 export { evidencePassages, fold } from "./verification-evidence";
 export { independentSourceCount } from "./verification-sources";
 export { sameVerification, verifyClaim } from "./verification-claim";
-export { verifyDrone, verifyNewClaims, type ClaimTextResolver } from "./verification-drone";
+export {
+  recheckDroneBounds,
+  verifyDrone,
+  verifyNewClaims,
+  type ClaimTextResolver,
+} from "./verification-drone";
 export {
   verificationCoverage,
   verificationExceptions,

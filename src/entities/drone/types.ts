@@ -484,6 +484,11 @@ export interface Drone {
    * belongs to, and the one its variants point at.
    */
   systemClass?: SystemClass;
+  /**
+   * How the system flies, when that changes what a plausible figure is. Set by the analyst only:
+   * it loosens the verifier's bounds, so it is never inferred from a report's wording.
+   */
+  flightProfile?: FlightProfile;
   /** Typed, directed relations to other entries, each stated once (system-hierarchy.ts). */
   relations?: SystemRelationClaim[];
   /**
@@ -667,6 +672,9 @@ export interface ActivityRecord {
  */
 export type SystemClass =
   "platform" | "family" | "complex" | "subsystem" | "effector" | "payload_ew";
+
+/** A trajectory the general plausibility bounds do not fit (auto-correction.ts). */
+export type FlightProfile = "ballistic";
 
 /**
  * The relations that are stored, each in one direction only, from the entry that depends on the

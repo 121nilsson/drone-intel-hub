@@ -71,7 +71,7 @@ export function autoCorrect(
       const claims = s.claims.map((c, i) => {
         if (c.review) return c;
         const prev = c.autoCorrection;
-        const found = detectCorrection(s, i, at);
+        const found = detectCorrection(s, i, at, drone.flightProfile);
         if (!found) {
           if (!prev) return c;
           specChanged = true;

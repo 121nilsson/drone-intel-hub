@@ -1,4 +1,9 @@
-import type { RelationDisplayKind, RelationKind, SystemClass } from "@/entities/drone/types";
+import type {
+  FlightProfile,
+  RelationDisplayKind,
+  RelationKind,
+  SystemClass,
+} from "@/entities/drone/types";
 
 /**
  * How a relation reads from the entry being viewed, singular for one link and plural for the
@@ -27,6 +32,10 @@ export const STORED_KIND_HINT: Record<RelationKind, string> = {
   effector_for: "a missile or munition fired by a launcher or complex",
   carried_by: "a pod, jammer or optronic ball mounted on a carrier",
   counterpart_to: "a peer or adversary counterpart",
+};
+
+export const FLIGHT_PROFILE_LABEL: Record<FlightProfile, string> = {
+  ballistic: "Ballistic missile",
 };
 
 export const SYSTEM_CLASS_LABEL: Record<SystemClass, string> = {

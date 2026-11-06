@@ -174,6 +174,13 @@ verifier read, is unchanged.
   `operates_effector`, `carries`) is generated when read, never stored.
 - **System class** (`Drone.systemClass`): platform, family, complex, subsystem, effector,
   payload_ew. A family is the umbrella a generic mention ("Gerans") belongs to.
+- **Flight profile** (`Drone.flightProfile`, set from the dossier's Relations panel through
+  `setFlightProfile`): `ballistic` swaps the general plausibility bounds for ballistic ones
+  (`plausibleBounds` in `src/entities/drone/auto-correction.ts`) - Mach 1-25 speed, an apogee of
+  up to 2 000 km, a launch mass up to 250 t - for both the verifier's bounds check and the unit-slip
+  and implausible-figure detection. Only an analyst sets it, because it loosens a check; setting it
+  redoes the bounds check of the entry's verified claims at once (`recheckDroneBounds`) and keeps
+  every other check as it was. A merge keeps either entry's profile.
 - **One reader:** `resolveRelations`, `lineage`, `familyRoot` read typed relations and the legacy
   `variantOfId`/`variantIds`/`counterpartIds` together while the repair copies the legacy links
   over. Catalogue operations `linkSystems`, `unlinkSystems`, `reviewRelation`, `setSystemClass`

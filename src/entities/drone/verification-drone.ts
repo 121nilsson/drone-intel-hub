@@ -1,5 +1,5 @@
 import type { Drone, SpecClaim } from "./types";
-import { sameVerification, verifyClaim } from "./verification-claim";
+import { recheckBounds, sameVerification, verifyClaim } from "./verification-claim";
 
 export type ClaimTextResolver = (claim: SpecClaim) => string | undefined;
 
@@ -24,6 +24,25 @@ export function verifyDrone(
       if (!verification || sameVerification(claim.verification, verification)) return claim;
       specChanged = true;
       changed = true;
+      return { ...claim, verification };
+    });
+    return specChanged ? { ...spec, claims } : spec;
+  });
+  return changed ? { ...drone, specs } : drone;
+}
+
+/**
+ * Redo the bounds check of every verified claim, for an entry whose flight profile changed. The
+ * rest of each verdict is kept, so no post is needed and nothing else can move.
+ */
+export function recheckDroneBounds(drone: Drone, at = new Date().toISOString()): Drone {
+  let changed = false;
+  const specs = drone.specs.map((spec) => {
+    let specChanged = false;
+    const claims = spec.claims.map((claim) => {
+      const verification = recheckBounds(drone, spec, claim, at);
+      if (!verification) return claim;
+      specChanged = changed = true;
       return { ...claim, verification };
     });
     return specChanged ? { ...spec, claims } : spec;

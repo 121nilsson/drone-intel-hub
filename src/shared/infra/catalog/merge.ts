@@ -173,6 +173,9 @@ function mergeDronePair(keep: Drone, merge: Drone, reason?: string): Drone {
     ...(keep.systemClass || merge.systemClass
       ? { systemClass: keep.systemClass ?? merge.systemClass }
       : {}),
+    ...(keep.flightProfile || merge.flightProfile
+      ? { flightProfile: keep.flightProfile ?? merge.flightProfile }
+      : {}),
     // "Different systems" from either side still holds for the entry that remains.
     ...(keep.distinctFrom || merge.distinctFrom
       ? {

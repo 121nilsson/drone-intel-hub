@@ -2,7 +2,7 @@ import { ANALYST_SOURCE } from "./claim-review";
 import { rawPoint } from "./consensus";
 import { attributeSemantic } from "./spec-engine";
 import { convert, normalizeQuantityLoose } from "@/entities/normalization/units";
-import type { AutoCorrection, SpecAttribute, SpecClaim } from "./types";
+import type { AutoCorrection, FlightProfile, SpecAttribute, SpecClaim } from "./types";
 
 /**
  * Deterministic correction of single claims, without waiting for a dispute and without a model.
@@ -45,7 +45,7 @@ export const SLIP_TOLERANCE = 0.04;
 /** Distinct other sources that must agree before their figure can correct one claim. */
 export const MIN_AGREEING_SOURCES = 2;
 
-interface Bounds {
+export interface Bounds {
   min: number;
   max: number;
   unit: string;
@@ -89,6 +89,34 @@ export const PLAUSIBLE: Readonly<Record<string, Bounds>> = {
   endurance: ENDURANCE,
   "endurance.flight": ENDURANCE,
 };
+
+/**
+ * A ballistic missile is the one class the generous bounds above get wrong in both directions: it
+ * flies at Mach 5-25 and peaks at hundreds of kilometres (an RM-48U at Mach 4-6 is 4 900-7 400
+ * km/h), and it is never subsonic or a few hundred metres up. Only the analyst sets the profile
+ * (Drone.flightProfile), so a loosened bound is always a decision, never a guess from wording.
+ * Measurements not listed keep the general bound.
+ */
+const BALLISTIC: Readonly<Record<string, Bounds>> = {
+  "range.max": { min: 5, max: 25_000, unit: "km" },
+  "range.operational": { min: 5, max: 25_000, unit: "km" },
+  "speed.max": { min: 1_000, max: 35_000, unit: "km/h" },
+  "speed.cruise": { min: 1_000, max: 35_000, unit: "km/h" },
+  "speed.stated": { min: 1_000, max: 35_000, unit: "km/h" },
+  "speed.dive": { min: 1_000, max: 35_000, unit: "km/h" },
+  // Apogee: a sounding-rocket path, not an aircraft's ceiling.
+  "altitude.max": { min: 1, max: 2_000, unit: "km" },
+  "altitude.service_ceiling": { min: 1, max: 2_000, unit: "km" },
+  // A tactical missile to an ICBM with its throw weight (Sarmat launches at about 208 t).
+  "weight.mtow": { min: 100, max: 250_000, unit: "kg" },
+  "weight.launch": { min: 100, max: 250_000, unit: "kg" },
+  "weight.total": { min: 100, max: 250_000, unit: "kg" },
+};
+
+/** The bounds a measurement is held to: the profile's own when it has one, else the general. */
+export function plausibleBounds(semantic: string, profile?: FlightProfile): Bounds | undefined {
+  return (profile === "ballistic" ? BALLISTIC[semantic] : undefined) ?? PLAUSIBLE[semantic];
+}
 
 const clean = (n: number) => Number(n.toPrecision(6));
 
@@ -161,6 +189,7 @@ export function detectCorrection(
   spec: SpecAttribute,
   i: number,
   at: string,
+  profile?: FlightProfile,
 ): AutoCorrection | undefined {
   const c = spec.claims[i];
   if (!c || c.source === ANALYST_SOURCE || c.extractionEngine === "analyst") return undefined;
@@ -192,7 +221,7 @@ export function detectCorrection(
     }
   }
 
-  const bounds = PLAUSIBLE[attributeSemantic(spec)];
+  const bounds = plausibleBounds(attributeSemantic(spec), profile);
   if (!bounds || bounds.unit !== p.unit || within(p.value, bounds)) return undefined;
   // Out of range, but the number is one the report wrote: it is not a slipped unit.
   if (faithful) return { kind: "implausible", basis: "bounds", applied: false, at };

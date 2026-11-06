@@ -1,6 +1,7 @@
 import type {
   ClaimIssue,
   Drone,
+  FlightProfile,
   RelationKind,
   SpecClaim,
   SystemClass,
@@ -146,6 +147,11 @@ export interface CatalogMutations {
   ): Drone | undefined;
   /** What kind of system an entry is (a family, a platform, …), or null to clear it. */
   setSystemClass(droneId: string, systemClass: SystemClass | null): Drone | undefined;
+  /**
+   * How an entry flies (ballistic), or null to clear it. Changes which figures the verifier calls
+   * plausible, so only the analyst sets it.
+   */
+  setFlightProfile(droneId: string, profile: FlightProfile | null): Drone | undefined;
   /** Turn down a suggested relation, so it is not suggested again. */
   declineRelation(sourceId: string, targetId: string, kind: RelationKind): Drone | undefined;
   /** Record that two entries sharing names are different systems, on both. */

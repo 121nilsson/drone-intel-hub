@@ -8,12 +8,17 @@ import {
   relationProblem,
   resolveRelations,
 } from "@/entities/drone/system-hierarchy";
-import type { Drone, RelationKind, SystemClass } from "@/entities/drone/types";
+import type { Drone, FlightProfile, RelationKind, SystemClass } from "@/entities/drone/types";
 import { useServices } from "@/shared/infra/use-services";
 import { Btn, EmptyNote, Panel, Tag } from "@/shared/ui/primitives";
 import { SystemChip } from "@/shared/ui/links";
 import { Input, Select } from "@/shared/ui/fields";
-import { RELATION_LABEL, STORED_KIND_HINT, SYSTEM_CLASS_LABEL } from "@/shared/ui/relation-labels";
+import {
+  FLIGHT_PROFILE_LABEL,
+  RELATION_LABEL,
+  STORED_KIND_HINT,
+  SYSTEM_CLASS_LABEL,
+} from "@/shared/ui/relation-labels";
 
 /**
  * Every relation of an entry, read the one way the catalogue reads them (system-hierarchy.ts):
@@ -106,6 +111,31 @@ export function SystemRelationsPanel({
             {(Object.keys(SYSTEM_CLASS_LABEL) as SystemClass[]).map((c) => (
               <option key={c} value={c}>
                 {SYSTEM_CLASS_LABEL[c]}
+              </option>
+            ))}
+          </Select>
+          <span className="text-xs text-muted-foreground">Flight profile</span>
+          <Select
+            size="sm"
+            aria-label="Flight profile"
+            title="A ballistic missile is checked against ballistic speed, apogee and range bounds instead of the general ones."
+            value={drone.flightProfile ?? ""}
+            disabled={busy}
+            onChange={(e) =>
+              run(
+                () =>
+                  svc.catalog.setFlightProfile(
+                    drone.id,
+                    (e.target.value || null) as FlightProfile | null,
+                  ),
+                "Flight profile saved",
+              )
+            }
+          >
+            <option value="">General</option>
+            {(Object.keys(FLIGHT_PROFILE_LABEL) as FlightProfile[]).map((p) => (
+              <option key={p} value={p}>
+                {FLIGHT_PROFILE_LABEL[p]}
               </option>
             ))}
           </Select>

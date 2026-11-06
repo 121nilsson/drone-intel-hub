@@ -5,7 +5,7 @@ import { removalImpact, removeDrone } from "./removal";
 import { declineRelation, linkSystems, reviewRelation, unlinkSystems } from "./relations";
 import { setOrigin } from "./origin";
 import { splitVariant } from "./split";
-import { markDistinct, setSystemClass } from "./classification";
+import { markDistinct, setFlightProfile, setSystemClass } from "./classification";
 import {
   moveSpecClaim,
   moveSpecClaimToSystem,
@@ -51,6 +51,7 @@ export function createCatalogMutations(d: CatalogDeps): CatalogMutations {
     reviewRelation: (droneId, claimId, verdict, notes) =>
       reviewRelation(droneId, claimId, verdict, d, notes),
     setSystemClass: (droneId, systemClass) => setSystemClass(droneId, systemClass, d),
+    setFlightProfile: (droneId, profile) => setFlightProfile(droneId, profile, d),
     declineRelation: (sourceId, targetId, kind) => declineRelation(sourceId, targetId, kind, d),
     markDistinct: (aId, bId) => markDistinct(aId, bId, d),
     setOrigin: (droneId, origin) => setOrigin(droneId, origin, d),
