@@ -47,6 +47,7 @@ npm test                  # vitest
 npm run green             # typecheck, lint, format check, and tests (see scripts/green-check.mjs)
 npm run green:save        # save a baseline before a large change; green then diffs against it
 npm run lint              # eslint (prettier runs as a lint rule)
+npm run check:mobile      # open every page at 375 px in Chrome/Edge against the running app; fails on a page wider than the screen
 ```
 
 More detail on what is shipped vs planned: [docs/current-state.md](docs/current-state.md),

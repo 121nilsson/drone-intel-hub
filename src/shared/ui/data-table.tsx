@@ -50,15 +50,42 @@ function HeaderCell<T>({ c }: { c: Column<T> }) {
 }
 
 /**
- * A table on wide screens and, when `card` is given, a list of cards below md: a phone gets one
- * readable card per row instead of a table it has to scroll sideways. Pages describe columns and
- * a card; the layout, header style and row rules live here once.
+ * The card a row becomes on a phone when the page does not draw one: the first column as the
+ * title, every other column as a label and its value. Columns are the description of the row, so
+ * a table that only gave columns still reads on a narrow screen.
+ */
+function RowCard<T>({ columns, row }: { columns: readonly Column<T>[]; row: T }) {
+  const [first, ...rest] = columns;
+  return (
+    <div className="space-y-1.5">
+      {first && <div className="font-medium">{first.cell(row)}</div>}
+      <dl className="space-y-1 text-xs">
+        {rest.map((c) => (
+          <div key={c.id} className="flex items-baseline justify-between gap-3">
+            <dt className="shrink-0 font-mono text-2xs uppercase tracking-wider text-muted-foreground">
+              {c.header}
+            </dt>
+            <dd className="min-w-0 text-right">{c.cell(row)}</dd>
+          </div>
+        ))}
+      </dl>
+    </div>
+  );
+}
+
+/**
+ * A table on wide screens and a list of cards below md: a phone gets one readable card per row
+ * instead of a table it has to scroll sideways. Pages describe columns and may draw their own
+ * `card`; without one the columns become a label-and-value card (`RowCard`), and `cards={false}`
+ * keeps the table at every width for the rare table that is only meaningful as a grid. The layout,
+ * header style and row rules live here once.
  */
 export function DataTable<T>({
   columns,
   rows,
   rowKey,
   card,
+  cards = true,
   minWidth,
   label,
   testId,
@@ -75,6 +102,8 @@ export function DataTable<T>({
   sections?: readonly { id: string; label: string; rows: readonly T[] }[];
   rowKey: (row: T) => string;
   card?: (row: T) => ReactNode;
+  /** False keeps the table at every width, with no cards (for a grid that only reads as a grid). */
+  cards?: boolean;
   /** Below this width the table scrolls inside its frame rather than squeezing its columns. */
   minWidth?: string;
   label: string;
@@ -85,9 +114,11 @@ export function DataTable<T>({
 }) {
   const fixed = columns.some((c) => c.width);
   const groups = sections ?? [{ id: "", label: "", rows }];
+  const drawCard =
+    card ?? (cards ? (row: T) => <RowCard columns={columns} row={row} /> : undefined);
   return (
     <>
-      {card && (
+      {drawCard && (
         <ul
           className={cn("md:hidden", bare ? "divide-y divide-border" : "space-y-2")}
           aria-label={label}
@@ -107,7 +138,7 @@ export function DataTable<T>({
                   bare ? "py-3 first:pt-0" : "border border-border bg-card/80 p-3",
                 )}
               >
-                {card(row)}
+                {drawCard(row)}
               </li>
             )),
           ])}
@@ -117,7 +148,7 @@ export function DataTable<T>({
         className={cn(
           "overflow-x-auto",
           !bare && "border border-border bg-card/80",
-          card && "hidden md:block",
+          drawCard && "hidden md:block",
         )}
       >
         <table

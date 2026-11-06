@@ -207,7 +207,7 @@ export function CounterpartsPage({ a, b }: { a?: string | undefined; b?: string 
         )}
       </Panel>
       <Panel title="Specification delta">
-        {/* Long attribute names squeeze three live columns on phones without this. */}
+        {/* On a phone each attribute is a card (attribute, then one line per system), not three squeezed columns. */}
         <DataTable
           bare
           label="Specification delta"

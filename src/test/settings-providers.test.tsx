@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { SettingsPage } from "@/features/settings/settings-page";
 import { useServices } from "@/shared/infra/use-services";
@@ -78,15 +78,20 @@ const renderWith = (providerEnv: ProviderEnvConfig | null) => {
   return render(<SettingsPage />);
 };
 
+// The providers are a table on a desktop and a list of cards on a phone; both are in the document,
+// so a query that means "the row" is scoped to the table.
+const providerTable = () => within(screen.getByRole("table", { name: "Providers" }));
+
 describe("Settings: provider routing panel", () => {
   it("lists every provider with its base URL, default model and credential", () => {
     renderWith({ hasKey: true, routing: routing() });
 
-    expect(screen.getByText("nvidia")).toBeTruthy();
-    expect(screen.getByText("groq")).toBeTruthy();
-    expect(screen.getByText("https://nvidia.test/v1")).toBeTruthy();
-    expect(screen.getByText("nvidia/default-model")).toBeTruthy();
-    expect(screen.getByText("NVIDIA_API_KEY set")).toBeTruthy();
+    const table = providerTable();
+    expect(table.getByText("nvidia")).toBeTruthy();
+    expect(table.getByText("groq")).toBeTruthy();
+    expect(table.getByText("https://nvidia.test/v1")).toBeTruthy();
+    expect(table.getByText("nvidia/default-model")).toBeTruthy();
+    expect(table.getByText("NVIDIA_API_KEY set")).toBeTruthy();
   });
 
   it("shows the requested models and the configured order", () => {
@@ -155,7 +160,7 @@ describe("Settings: provider routing panel", () => {
     });
 
     expect(screen.getByText(/No provider has a key set/)).toBeTruthy();
-    expect(screen.getByText("no key")).toBeTruthy();
+    expect(providerTable().getByText("no key")).toBeTruthy();
   });
 
   it("explains itself when the server reported no provider table", () => {
@@ -176,7 +181,7 @@ describe("Settings: provider routing panel", () => {
       }),
     });
 
-    expect(screen.getByText("groq")).toBeTruthy();
-    expect(screen.getByText("no key")).toBeTruthy();
+    expect(providerTable().getByText("groq")).toBeTruthy();
+    expect(providerTable().getByText("no key")).toBeTruthy();
   });
 });

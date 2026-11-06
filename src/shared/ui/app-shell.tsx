@@ -7,6 +7,7 @@ import { CountryBadge } from "@/shared/ui/country-badge";
 import { buttonClass } from "@/shared/ui/button-class";
 import { CommandSearch } from "@/shared/ui/command-search";
 import { DesktopNav, MobileNav } from "@/shared/ui/main-nav";
+import { MobileDrawer } from "@/shared/ui/mobile-drawer";
 import { Btn } from "@/shared/ui/primitives";
 
 export function AppShell({ children }: { children: ReactNode }) {
@@ -76,31 +77,18 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </div>
       )}
-      {drawer && (
-        <div
-          className="fixed inset-0 z-50 bg-background/80 lg:hidden"
-          onClick={() => setDrawer(false)}
+      <MobileDrawer open={drawer} onOpenChange={setDrawer} title="Menu">
+        <button
+          onClick={() => {
+            setDrawer(false);
+            setCmd(true);
+          }}
+          className="flex items-center gap-2 border border-border px-2 py-2 font-mono text-xs"
         >
-          <aside
-            className="ml-auto flex h-full w-72 max-w-[85vw] flex-col gap-4 overflow-y-auto border-l border-border bg-card p-5"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <button className="self-end" onClick={() => setDrawer(false)} aria-label="Close menu">
-              <X className="h-5 w-5" />
-            </button>
-            <button
-              onClick={() => {
-                setDrawer(false);
-                setCmd(true);
-              }}
-              className="flex items-center gap-2 border border-border px-2 py-2 font-mono text-xs"
-            >
-              <Search className="h-4 w-4" /> Search
-            </button>
-            <MobileNav onNavigate={() => setDrawer(false)} />
-          </aside>
-        </div>
-      )}
+          <Search className="h-4 w-4" /> Search
+        </button>
+        <MobileNav onNavigate={() => setDrawer(false)} />
+      </MobileDrawer>
       <CommandSearch open={cmd} onClose={() => setCmd(false)} />
       {svc.storageError && !attached ? (
         <section role="alert" className="mx-auto max-w-2xl px-4 py-16">
