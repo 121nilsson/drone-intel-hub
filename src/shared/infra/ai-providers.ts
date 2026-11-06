@@ -209,10 +209,28 @@ export function getTranslationModel(
 }
 
 /**
- * Get all providers that have valid API keys configured
+ * Providers named in `AI_SKIP_PROVIDERS` (comma-separated) are left out of the extraction,
+ * briefing and verification chain. Their key stays, so translation (which has its own chain) can
+ * still use them: NVIDIA's `/models` lists nemotron-3-super but the account can no longer call it,
+ * so it only costs a 404 per fall-through there, while riva-translate on the same key works.
+ */
+function skippedProviders(): Set<string> {
+  return new Set(
+    (process.env["AI_SKIP_PROVIDERS"] ?? "")
+      .split(",")
+      .map((s) => s.trim().toLowerCase())
+      .filter(Boolean),
+  );
+}
+
+/**
+ * Get all providers that have valid API keys configured, minus `AI_SKIP_PROVIDERS`.
  */
 export function getAvailableProviders(): AIProvider[] {
-  return getEnabledProviders().filter(hasProviderApiKey);
+  const skip = skippedProviders();
+  return getEnabledProviders().filter(
+    (p) => hasProviderApiKey(p) && !skip.has(p.name.toLowerCase()),
+  );
 }
 
 /**

@@ -15,8 +15,13 @@ import { fold } from "./verification";
  * Bumping this asks the reader again about every claim it has answered. 2: claims numbered [n]
  * (a reader echoed "ref 1" and its answers were lost), and independence recorded per verdict.
  * 3: values asked with their unit (claimReading); "40" was asked where the post said 40 knots.
+ * 4: values asked as the catalogue's clean reading (cleanReading), not the raw clipping ("ssia
+ * Developing 800km/h"), and rules for the three mistakes the audit found: a neighbouring quantity
+ * taken for the attribute, a vague descriptor taken for a value, a bound taken for an exact figure.
+ * Measured on the audit before the change (human answer / reader verdict): no/supported 12,
+ * yes/unsupported 16, yes/supported 184, no/unsupported 14, uncertain 21.
  */
-export const ENTAILMENT_VERSION = "entailment-3";
+export const ENTAILMENT_VERSION = "entailment-4";
 
 /** A short stable hash of a post's text (FNV-1a): a changed post is read again. */
 export function textHash(text: string): string {
@@ -72,6 +77,14 @@ export function entailmentPrompt(
     "system, or does not state it.",
     'Answer "uncertain" if the text is ambiguous about it.',
     "A value in another unit or wording that means the same quantity is supported.",
+    "The figure must be that attribute of that system, not another quantity that sits near it:",
+    "the altitude of a target is not the system's own maximum altitude, a number of units struck or",
+    "lost in one event is not a quantity deployed, and a capacity planned over several years is not",
+    'a production timeline - answer "unsupported" for those.',
+    "A vague descriptor (high-speed, mid-range, long-range, lightweight) is not a stated value for a",
+    'measured attribute: answer "unsupported".',
+    'A qualifier in the claim ("up to", "at least", "approx.", a range) must match the text: "up to',
+    '500" is not "500", and "620-650" is not "650" - answer "uncertain" when they differ.',
     'Each claim is numbered [n]; answer with that number as "ref".',
     'Reply with JSON only: {"answers":[{"ref":"1","verdict":"supported|unsupported|uncertain","span":"..."}]}',
   ].join(" ");

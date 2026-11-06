@@ -26,6 +26,27 @@ describe("what the second reader is shown", () => {
   });
 });
 
+describe("the mistakes the audit found are named in the instruction", () => {
+  const { system } = entailmentPrompt(POST, []);
+
+  it("a neighbouring quantity is not the attribute", () => {
+    expect(system).toMatch(/altitude of a target is not the system's own maximum altitude/);
+    expect(system).toMatch(/units struck/);
+    expect(system).toMatch(/not\s+a production timeline/);
+  });
+
+  it("a vague descriptor is not a value, and a bound is not an exact figure", () => {
+    expect(system).toMatch(/vague descriptor \(high-speed, mid-range, long-range/);
+    expect(system).toMatch(/"up to\s+500" is not "500"/);
+  });
+
+  it("is a new reading round, so the answers given under the old wording are asked again", () => {
+    expect(ENTAILMENT_VERSION).toBe("entailment-4");
+    const claim = { entailment: { version: "entailment-3", textHash: "h" } } as SpecClaim;
+    expect(needsEntailment(claim, "h")).toBe(true);
+  });
+});
+
 describe("naming the system", () => {
   it("lists the other names the catalogue knows, so another script is not another system", () => {
     const { prompt } = entailmentPrompt("Герань-2 летит 2000 км.", [

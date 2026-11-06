@@ -9,6 +9,14 @@ Measured against the free-tier endpoint (`https://integrate.api.nvidia.com/v1`) 
 key from `.env.local`. All numbers are wall-clock from a single account on a residential
 connection, so treat them as relative, not absolute.
 
+> [!WARNING]
+> **Re-measured 2026-11-06.** `nvidia/nemotron-3-super-120b-a12b`, the recommendation below, now
+> answers 404 (`Function ... Not found for account`) for this key although `GET /models` still lists
+> it. The models that remain callable did worse on the extraction benchmark: `nemotron-3.5-super-vl-120b-a12b`
+> and `nemotron-3-ultra-550b-a55b` both 1/4 (missed systems, 30-37 s median, one timeout). The app
+> therefore skips NVIDIA for extraction with `AI_SKIP_PROVIDERS=nvidia` and keeps it for translation
+> (`riva-translate-4b-instruct-v2` still works). The sections below are the October measurements.
+
 Reproduce with:
 
 ```bash

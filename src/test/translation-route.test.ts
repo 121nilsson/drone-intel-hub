@@ -165,6 +165,22 @@ describe("which provider and model translate", () => {
   });
 });
 
+describe("AI_SKIP_PROVIDERS", () => {
+  it("leaves a provider out of the extraction chain but keeps it for translation", async () => {
+    const { getAvailableProviders } = await import("@/shared/infra/ai-providers");
+    process.env["DEEPRELAY_API_KEY"] = "k-dr";
+    process.env["NVIDIA_API_KEY"] = "k-nv";
+    process.env["AI_SKIP_PROVIDERS"] = " Nvidia ,nope";
+    try {
+      expect(getAvailableProviders().map((p) => p.name)).toEqual(["deeprelay"]);
+      expect(getTranslationProviders().map((p) => p.name)).toEqual(["deeprelay", "nvidia"]);
+    } finally {
+      delete process.env["AI_SKIP_PROVIDERS"];
+    }
+    expect(getAvailableProviders().map((p) => p.name)).toEqual(["deeprelay", "nvidia"]);
+  });
+});
+
 describe("Riva-Translate gets its language pair, not an instruction", () => {
   const riva = () => {
     process.env["NVIDIA_API_KEY"] = "k-nv";

@@ -12,7 +12,7 @@ import {
 import { ANALYST_SOURCE } from "@/entities/drone/claim-review";
 import { catalogNames } from "@/entities/drone/catalog-names";
 import type { ClaimEntailment, Drone, SpecAttribute, SpecClaim } from "@/entities/drone/types";
-import { claimReading } from "@/entities/drone/claim-reading";
+import { cleanReading } from "@/entities/drone/claim-reading";
 import type { SecondReaderRun, TokenUsageToday } from "@/shared/contracts/verification";
 import { chatCompletionOnce } from "@/shared/infra/ai-proxy.server";
 import { getAvailableProviders, getProviderModel } from "@/shared/infra/ai-providers";
@@ -226,7 +226,9 @@ export async function runEntailment(): Promise<SecondReaderRun> {
         system: t.drone.name,
         aliases: catalogNames(t.drone),
         attribute: t.attribute,
-        value: claimReading(t.spec, t.claim),
+        // The clean reading, not the raw clipping: a fragment like "ssia Developing 800km/h" made
+        // the reader say "unsupported" for a figure the post plainly states.
+        value: cleanReading(t.spec, t.claim),
       }));
       const { system, prompt, truncated } = entailmentPrompt(post.text, questions);
       const estimate = Math.ceil((system.length + prompt.length) / CHARS_PER_TOKEN);
