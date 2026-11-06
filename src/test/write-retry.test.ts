@@ -145,6 +145,18 @@ describe("a failed write is retried before it is reported", () => {
     expect(store.docs.has("src|1")).toBe(false);
   });
 
+  it("is busy from the edit until the store has it, so a background refresh waits", async () => {
+    const store = new FlakyStore();
+    const { repo } = await setup(store);
+    expect(repo.busy).toBe(false);
+
+    repo.update("src|1", { status: "processed" });
+    expect(repo.busy).toBe(true);
+
+    await repo.flush();
+    expect(repo.busy).toBe(false);
+  });
+
   it("waits between tries by the configured delays", async () => {
     const store = new FlakyStore();
     const { repo } = await setup(store, [30, 30]);

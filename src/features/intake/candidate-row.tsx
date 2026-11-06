@@ -5,7 +5,7 @@ import { translateText } from "@/shared/infra/ai-proxy.functions";
 import { Btn, ChipButton, Tag } from "@/shared/ui/primitives";
 import { runTwoTier } from "@/shared/infra/ingest/pipeline";
 import type { Candidate } from "@/entities/drone/types";
-import { ExpandableText } from "./expandable-text";
+import { ExpandableText } from "@/shared/ui/expandable-text";
 import { CandidateDecision } from "./candidate-decision";
 
 export function CandidateRow({ c }: { c: Candidate }) {

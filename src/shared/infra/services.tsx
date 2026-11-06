@@ -34,6 +34,7 @@ import {
 import { recordVerificationRun } from "./autonomy/autonomy.functions";
 import type { VerificationRunner } from "@/shared/contracts/verification";
 import { Ctx, type Services, type SeedSnapshots } from "./services-context";
+import { useStoreRefresh } from "./use-store-refresh";
 
 export { DEFAULT_SETTINGS } from "./settings-defaults";
 import { DEFAULT_SETTINGS } from "./settings-defaults";
@@ -67,6 +68,8 @@ export function ServicesProvider({ children }: { children: ReactNode }) {
   const [envCfg, setEnvCfg] = useState<EnvProviderConfig | null>(null);
   const [attached, setAttached] = useState(false);
   const [verificationOnServer, setVerificationOnServer] = useState(false);
+  /** The catalogue lives on the server, where other tabs, the sync and the verifier change it. */
+  const [sharedStore, setSharedStore] = useState(false);
   const [storageError, setStorageError] = useState<string | null>(null);
   const [storageWarning, setStorageWarning] = useState<string | null>(null);
 
@@ -74,6 +77,13 @@ export function ServicesProvider({ children }: { children: ReactNode }) {
     () => [drones, candidates, sources, dispatches, procurements, taxonomies, taxonomyCandidates],
     [drones, candidates, sources, dispatches, procurements, taxonomies, taxonomyCandidates],
   );
+
+  // The small collections only; see use-store-refresh.ts for why dispatches and sources are not here.
+  const refreshed = useMemo(
+    () => [drones, candidates, procurements, taxonomies, taxonomyCandidates],
+    [drones, candidates, procurements, taxonomies, taxonomyCandidates],
+  );
+  useStoreRefresh(refreshed, attached && sharedStore);
 
   /**
    * Verify stored claims once the catalogue is attached, so an entry ingested before the verifier
@@ -116,6 +126,7 @@ export function ServicesProvider({ children }: { children: ReactNode }) {
         return;
       }
       setAttached(true);
+      setSharedStore(false);
       setStorageWarning(
         "Using browser storage. Changes are saved in this browser and are not synced to the server.",
       );
@@ -188,6 +199,7 @@ export function ServicesProvider({ children }: { children: ReactNode }) {
         }
         setAttached(true);
         setVerificationOnServer(server && revisions);
+        setSharedStore(server);
         if (!server) backfillVerification(revisions);
       } catch (e) {
         if (cancelled) return;

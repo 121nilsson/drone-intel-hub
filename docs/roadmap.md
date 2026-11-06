@@ -21,6 +21,7 @@ Verified open work as of October 2026. Shipped behavior is documented in
 | Priority | Item                                  | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | -------- | ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Medium   | Heuristic gaps the corpus found       | `extractMoney` emits no `unit_cost` for a range ("$15,000-$20,000"); a single figure works. It also returns "Baba" and "Yaga" for the two-word name "Baba Yaga" (and splits "Silver Shield"). Found when the extraction corpus ran in vitest (`src/test/extraction-corpus.test.ts`, with `LIVE_EXTRACTION=1` for a live provider); its fixture uses one figure and asserts no system name for that post. `parseMoneyRange` in `entities/normalization/currency.ts` already reads ranges. |
+| Medium   | Apply the claim re-reading            | `scripts/renormalize-claims.ts` (dry run by default) gives 161 stored claims a parsed quantity; the dry run changes no consensus. Not applied yet: `verification-measure.ts` and `merge-intelligence.ts` also read `normalized`, so the next verification run may move some verdicts. Check that, then `--apply`.                                                                                                                                                                        |
 | High     | Find a better extraction model        | Re-benchmarked 2026-11-06 (`--provider=NAME`, results in [modelbenchmark.md](./modelbenchmark.md)): NVIDIA's recommended model is gone from the account, and no configured model scores above 2/4 on the strict `matchId` grading. Next: try new candidates per provider and re-run before changing a default.                                                                                                                                                                           |
 | Medium   | Conditional pre-translate on extract  | Queue has Translate; pipeline could call Riva (or tier-1) for non-Latin posts before extraction when benchmark shows variance (not mandatory for Latin).                                                                                                                                                                                                                                                                                                                                 |
 | Medium   | Surface provider/model drift in UI    | Settings already warns on namespaced models; extend Feed/Queue with last engine + degraded tier from persisted trace — `RawDispatch.analysis` has no degraded field yet.                                                                                                                                                                                                                                                                                                                 |
@@ -30,12 +31,10 @@ Verified open work as of October 2026. Shipped behavior is documented in
 
 ## UX and operations
 
-| Priority | Item                                | Notes                                                                                                                                                                 |
-| -------- | ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Medium   | Cross-tab / post-sync cache refresh | Sources page reloads dispatches/sources during live sync; drones/candidates/taxonomies do not — central `reload()` on focus or interval when `RemoteStore` is active. |
-| Medium   | Shareable queue pagination          | Catalog facets are in the URL (`catalog-state.ts`); Queue pagination is still component state.                                                                        |
-| Medium   | Feed → dossier deep links           | Done for the dossier and the queue link. The merge/promote outcome itself is still only inside the collapsed analysis panel.                                          |
-| Low      | Undo for catalog mutations          | Merge and remove confirm with an impact preview, but neither can be undone — only a Queue discard can.                                                                |
+| Priority | Item                       | Notes                                                                                                                        |
+| -------- | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| Medium   | Feed → dossier deep links  | Done for the dossier and the queue link. The merge/promote outcome itself is still only inside the collapsed analysis panel. |
+| Low      | Undo for catalog mutations | Merge and remove confirm with an impact preview, but neither can be undone — only a Queue discard can.                       |
 
 ---
 
@@ -65,7 +64,6 @@ Verified open work as of October 2026. Shipped behavior is documented in
 
 | Priority | Item              | Notes                                                                           |
 | -------- | ----------------- | ------------------------------------------------------------------------------- |
-| Low      | Shared UI helpers | e.g. duplicate `ExpandableText` in intake and dispatches → `shared/ui`.         |
 | Low      | Migration tooling | Single story for `migrations/` vs unused `drizzle/` tree (document-only today). |
 
 ---

@@ -144,8 +144,6 @@ relevance, queue) and [Heuristics engine](#heuristics-engine--modular-multilingu
 
 | Idea                                           | Touches                                      |
 | ---------------------------------------------- | -------------------------------------------- |
-| Wire extraction corpus tests                   | `src/test/`, prompt JSON                     |
-| `ExpandableText` shared component              | `intake-page`, `dispatches-page`             |
 | `PIPELINE_TRACE` summary in Feed UI            | `pipeline.ts` persistence, Feed              |
 | “AI not configured” banner                     | `services.tsx`, `app-shell` or Settings link |
 | Cap completion tokens per tier                 | `ai-proxy.server.ts`                         |

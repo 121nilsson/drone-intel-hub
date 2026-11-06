@@ -33,6 +33,11 @@ export class WriteQueue {
     });
   }
 
+  /** Whether any write or delete is queued or running. */
+  get busy() {
+    return this.inflight.size > 0;
+  }
+
   /** Wait until every queued write and delete has settled. */
   async flush() {
     while (this.inflight.size) await Promise.allSettled([...this.inflight]);

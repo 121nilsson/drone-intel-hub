@@ -9,6 +9,7 @@ import { fetchDispatchCounts } from "@/shared/infra/storage/store.functions";
 import { savedPostsLine, type ArchiveCounts } from "@/features/dispatches/saved-posts-line";
 import { Input, Select } from "@/shared/ui/fields";
 import { FilterChip } from "@/shared/ui/filters";
+import { ExpandableText } from "@/shared/ui/expandable-text";
 import { Btn, Loading, PageTitle, Panel, Tag, Card } from "@/shared/ui/primitives";
 import { formatProviderError, requeueFailed } from "@/shared/infra/ingest/auto-ingest";
 import { useRelatedIntel, RelatedInlineToast } from "@/shared/ui/intel-graph";
@@ -21,30 +22,6 @@ import {
 } from "@/features/dispatches/filters";
 
 const STATUSES = DISPATCH_FILTERS;
-
-function ExpandableText({ text }: { text: string }) {
-  const [expanded, setExpanded] = useState(false);
-  const isLong = text.length > 200;
-  return (
-    <div className="min-w-0">
-      <p
-        className={`mt-2 break-words text-sm leading-relaxed ${!expanded && isLong ? "line-clamp-4" : ""}`}
-      >
-        {text}
-      </p>
-      {isLong && (
-        <Btn
-          size="sm"
-          variant="quiet"
-          className="-ml-2 mt-1"
-          onClick={() => setExpanded(!expanded)}
-        >
-          {expanded ? "Show less" : "Show more"}
-        </Btn>
-      )}
-    </div>
-  );
-}
 
 import type { RawDispatch } from "@/entities/dispatch/types";
 
@@ -145,7 +122,9 @@ function DispatchItem({
           )}
         </div>
       )}
-      {d.text && <ExpandableText text={d.text} />}
+      {d.text && (
+        <ExpandableText text={d.text} className="mt-2 text-sm leading-relaxed" clamp={4} />
+      )}
       {d.error && (
         <p className="mt-2 font-mono text-[11px] text-destructive">
           {formatProviderError(d.error)}

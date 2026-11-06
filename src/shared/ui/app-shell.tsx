@@ -1,7 +1,7 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState, type ReactNode } from "react";
 import { Menu, Plus, Search, X, Radar } from "lucide-react";
-import { useDrones, useServices } from "@/shared/infra/use-services";
+import { useAttached, useDrones, useServices } from "@/shared/infra/use-services";
 import { droneHaystack } from "@/shared/infra/storage/local-repository";
 import { CountryBadge } from "@/shared/ui/country-badge";
 import { buttonClass } from "@/shared/ui/button-class";
@@ -11,6 +11,7 @@ import { Btn } from "@/shared/ui/primitives";
 
 export function AppShell({ children }: { children: ReactNode }) {
   const svc = useServices();
+  const attached = useAttached();
   const [cmd, setCmd] = useState(false);
   const [drawer, setDrawer] = useState(false);
   useEffect(() => {
@@ -101,7 +102,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
       )}
       <CommandSearch open={cmd} onClose={() => setCmd(false)} />
-      {svc.storageError && !svc.attached ? (
+      {svc.storageError && !attached ? (
         <section role="alert" className="mx-auto max-w-2xl px-4 py-16">
           <div className="border border-destructive/40 bg-destructive/5 p-6">
             <h1 className="font-mono text-sm uppercase tracking-widest text-destructive">

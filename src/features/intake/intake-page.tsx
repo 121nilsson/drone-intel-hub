@@ -12,15 +12,22 @@ import { Btn, Loading, Panel, Tag } from "@/shared/ui/primitives";
 import { runTwoTier } from "@/shared/infra/ingest/pipeline";
 import type { Candidate } from "@/entities/drone/types";
 import { CandidateRow } from "./candidate-row";
+import { INTAKE_PAGE_SIZE } from "./intake-search";
 
 const SAMPLE = `Telegram dispatch: Russia launched Geran-5 jet drones, one intercepted by a STING S interceptor. 4 jammers onboard and new 1575 MHz CRPA. Cruise 600 km/h, range 1000 km, 90 kg warhead. Unit cost $15,000-$20,000.`;
-
-const PAGE = 20;
 
 export function IntakePage({
   draft,
   draftSource,
-}: { draft?: string | undefined; draftSource?: string | undefined } = {}) {
+  page = 1,
+  onPageChange,
+}: {
+  draft?: string | undefined;
+  draftSource?: string | undefined;
+  /** The queue's page, from the URL; each page reveals one more block of pending candidates. */
+  page?: number;
+  onPageChange: (page: number) => void;
+}) {
   const svc = useServices();
   const attached = useAttached();
   const candidates = useCandidates();
@@ -30,7 +37,7 @@ export function IntakePage({
   const [busy, setBusy] = useState(false);
   const [deep, setDeep] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
-  const [visible, setVisible] = useState(PAGE);
+  const visible = page * INTAKE_PAGE_SIZE;
   const [dragOver, setDragOver] = useState(false);
   const [startedAt, setStartedAt] = useState<number | null>(null);
   const [nowTick, setNowTick] = useState(Date.now());
@@ -286,8 +293,8 @@ export function IntakePage({
           {!pending.length && <p className="text-sm text-muted-foreground">Queue clear.</p>}
           {ungroupedPending.length > visible && (
             <div className="mt-4 flex items-center gap-3">
-              <Btn variant="ghost" onClick={() => setVisible((v) => v + PAGE)}>
-                Show {Math.min(PAGE, ungroupedPending.length - visible)} more
+              <Btn variant="ghost" onClick={() => onPageChange(page + 1)}>
+                Show {Math.min(INTAKE_PAGE_SIZE, ungroupedPending.length - visible)} more
               </Btn>
               <span className="font-mono text-xs text-muted-foreground">
                 {visible} of {ungroupedPending.length}

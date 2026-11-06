@@ -144,6 +144,14 @@ export abstract class CachedRepository<C extends Collection> implements Subscrib
     return fresh.length;
   }
 
+  /**
+   * Whether a write or delete is still on its way to the store. A reload then would put the stored
+   * copy over an edit the store has not seen yet, so a background refresh waits (use-store-refresh).
+   */
+  get busy() {
+    return this.queue.busy;
+  }
+
   /** Wait until every queued write and delete for this repository has settled. */
   async flush() {
     await this.queue.flush();
