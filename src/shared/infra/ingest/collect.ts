@@ -40,6 +40,9 @@ export async function collectSource(
   const now = new Date().toISOString();
   let stored = 0;
   let duplicates = 0;
+  // A feed re-serves posts older than the cache window; without this they look new, are inserted,
+  // and storage rejects every one of them as a conflict.
+  await dispatches.preload?.(res.posts.map((p) => dispatchId(s.id, p.id)));
   for (const p of res.posts) {
     const id = dispatchId(s.id, p.id);
     // URL identity first: the same article republished by another source is one story regardless

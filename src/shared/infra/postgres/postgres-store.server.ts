@@ -38,6 +38,18 @@ export class PostgresStore implements DocumentStore {
     return rows.map((r) => ({ doc: r.data, rev: Number(r.rev) }));
   }
 
+  async loadByIds<C extends Collection>(
+    c: C,
+    ids: string[],
+  ): Promise<VersionedDoc<CollectionMap[C]>[]> {
+    if (!ids.length) return [];
+    const rows = await db().unsafe<{ data: CollectionMap[C]; rev: string | number }[]>(
+      `select data, rev from ${c} where id = any($1::text[])`,
+      [ids],
+    );
+    return rows.map((r) => ({ doc: r.data, rev: Number(r.rev) }));
+  }
+
   async loadPage<C extends Collection>(
     c: C,
     opts: StorePageOptions,

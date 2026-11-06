@@ -93,6 +93,29 @@ export abstract class CachedRepository<C extends Collection> implements Subscrib
     this.emit();
   }
 
+  /**
+   * Bring stored documents the capped window left out into the cache, so `has` and `list` can see
+   * them. Documents already cached are left as they are (they may carry a pending local edit);
+   * the rest are appended, since the window is ordered newest first and these are older. Returns
+   * the number brought in.
+   */
+  async hydrate(ids: string[]): Promise<number> {
+    const store = this.store;
+    if (!store?.loadByIds) return 0;
+    const have = new Set(this.items.map((x) => x.id));
+    const missing = [...new Set(ids)].filter((id) => !have.has(id));
+    if (!missing.length) return 0;
+    const found = await store.loadByIds(this.collection, missing);
+    // Collection lanes run in parallel: another hydrate may have landed while this one waited.
+    const nowHave = new Set(this.items.map((x) => x.id));
+    const fresh = found.filter((entry) => !nowHave.has(entry.doc.id));
+    if (!fresh.length) return 0;
+    this.items = [...this.items, ...fresh.map((entry) => entry.doc)];
+    for (const entry of fresh) this.revs.set(entry.doc.id, entry.rev);
+    this.emit();
+    return fresh.length;
+  }
+
   /** Wait until every queued write and delete for this repository has settled. */
   async flush() {
     await this.queue.flush();

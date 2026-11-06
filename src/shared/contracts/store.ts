@@ -103,6 +103,15 @@ export interface DocumentStore {
     c: C,
     opts: StorePageOptions,
   ): Promise<StorePage<CollectionMap[C]> | null>;
+  /**
+   * The stored documents among `ids`, wherever they sit in the collection's order.
+   *
+   * `load` returns a capped window (the newest dispatches), but posts older than the window are
+   * still stored, still re-served by feeds, and still claimed for analysis. A caller that needs to
+   * know whether an id exists, or needs the document behind a leased id, asks for it by id.
+   * Optional: a store without it leaves the caller with the window it loaded.
+   */
+  loadByIds?<C extends Collection>(c: C, ids: string[]): Promise<VersionedDoc<CollectionMap[C]>[]>;
   /** Initialise an empty collection with seed data. */
   seed<C extends Collection>(c: C, items: CollectionMap[C][]): Promise<void>;
   /**

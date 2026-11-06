@@ -147,6 +147,26 @@ export class CloudStore implements DocumentStore {
     return rows.map((r) => ({ doc: r.data, rev: 0 }));
   }
 
+  async loadByIds<C extends Collection>(
+    c: C,
+    ids: string[],
+  ): Promise<VersionedDoc<CollectionMap[C]>[]> {
+    if (!ids.length) return [];
+    const db = await client();
+    const found: VersionedDoc<CollectionMap[C]>[] = [];
+    // Chunked: the ids travel in the request URL, which has a length ceiling.
+    for (let i = 0; i < ids.length; i += 100) {
+      const rows = check<{ data: CollectionMap[C] }[]>(
+        await db
+          .from(c)
+          .select("data")
+          .in("id", ids.slice(i, i + 100)),
+      );
+      for (const r of rows) found.push({ doc: r.data, rev: 0 });
+    }
+    return found;
+  }
+
   async loadPage<C extends Collection>(
     c: C,
     opts: StorePageOptions,

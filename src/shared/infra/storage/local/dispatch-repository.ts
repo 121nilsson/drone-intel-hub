@@ -113,7 +113,18 @@ export class LocalDispatchRepository
     // Re-read so the claimed documents come back with the values just written by any other
     // worker, rather than from a cache that may predate their change.
     await this.attach(this.store);
+    // The re-read is the capped window of newest posts. A leased post older than it is still
+    // pending in storage and must come back with the lease, or it is skipped and re-leased forever.
+    await this.hydrate(ids);
     return ids;
+  }
+  /**
+   * Bring the posts behind these ids into the cache when they are stored but older than the window.
+   * Without it `has` answers "no" for a re-served old post, which is then inserted as new and
+   * rejected by storage as a conflict.
+   */
+  async preload(ids: string[]) {
+    await this.hydrate(ids);
   }
   async release(ids: string[], owner: string) {
     await this.store?.release?.("dispatches", ids, owner);

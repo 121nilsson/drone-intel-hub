@@ -66,6 +66,11 @@ export interface DispatchRepository {
   has(id: string): boolean;
   /** Returns false when the dispatch already exists (dedupe). */
   add(d: RawDispatch): boolean;
+  /**
+   * Make `has` and `add` aware of stored dispatches with these ids, including ones older than
+   * the cache window. Call before adding a batch of re-served posts. Optional, like `claim`.
+   */
+  preload?(ids: string[]): Promise<void>;
   update(id: string, patch: Partial<RawDispatch>): void;
   /** Oldest pending first. */
   pending(limit: number): RawDispatch[];
