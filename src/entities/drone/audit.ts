@@ -108,6 +108,46 @@ export function controlPositions(length: number, count: number, seed: number): n
 export const CONTROL_EVERY = 25;
 
 /**
+ * The hidden controls of a batch of `size` claims, by kind. An altered control tests whether the
+ * figure is read; a misread control (a rejected claim whose sentence names another system) tests
+ * the other thing the first sessions showed to be at risk - accepting a statement about a parent or
+ * a sibling variant as one about this system. Without a misread control in every batch that habit
+ * is not measured at all, so a batch of CONTROL_EVERY or more always carries one.
+ */
+export function controlMix(size: number): { altered: number; misread: number } {
+  return {
+    altered: Math.max(1, Math.round(size / CONTROL_EVERY)),
+    misread: size >= CONTROL_EVERY ? 1 : 0,
+  };
+}
+
+/**
+ * `items` with `controls` placed among them at seeded positions, so a control is not always the
+ * first or last claim the auditor sees. Positions count the claims, not the controls, and are laid
+ * from the last back so the claims keep the order they were drawn in.
+ */
+export function insertControls<T>(items: readonly T[], controls: readonly T[], seed: number): T[] {
+  const out = [...items];
+  const positions = controlPositions(items.length, controls.length, seed).reverse();
+  positions.forEach((p, i) => out.splice(p, 0, controls[i]!));
+  return out;
+}
+
+/**
+ * Whether the second reader contradicts the person: it called the claim unsupported where they
+ * said the post states it, or supported where they said it does not. "Uncertain" contradicts
+ * nothing, and a claim the reader has not read has no verdict to compare.
+ */
+export function readerDisagrees(
+  answer: "yes" | "no" | "cannot_tell" | null | undefined,
+  reader: "supported" | "unsupported" | "uncertain" | null | undefined,
+): boolean {
+  return (
+    (answer === "yes" && reader === "unsupported") || (answer === "no" && reader === "supported")
+  );
+}
+
+/**
  * How a hidden control is known to be wrong.
  * - altered: a verified claim shown with its figure changed to one the post does not contain. Wrong
  *   by construction, whatever any check says, so a "yes" on it is the auditor's slip.

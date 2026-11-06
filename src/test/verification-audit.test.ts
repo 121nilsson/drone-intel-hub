@@ -3,9 +3,12 @@ import {
   CONTROL_WINDOW,
   alteredReading,
   auditDecision,
+  controlMix,
   controlPositions,
   drawAuditSample,
   errorRateUpperBound,
+  insertControls,
+  readerDisagrees,
   textLanguage,
   type AuditCandidate,
 } from "@/entities/drone/audit";
@@ -254,5 +257,43 @@ describe("a verification run on the server", () => {
     });
     expect(recorded).toHaveLength(1);
     expect(recorded[0]).toMatchObject({ checked: 0, before: { verified: 0 } });
+  });
+});
+
+describe("the controls of a batch", () => {
+  it("carries a misread control in every batch of a normal size, so the variant habit is measured", () => {
+    expect(controlMix(50)).toEqual({ altered: 2, misread: 1 });
+    expect(controlMix(25)).toEqual({ altered: 1, misread: 1 });
+    expect(controlMix(100)).toEqual({ altered: 4, misread: 1 });
+  });
+
+  it("keeps a tiny batch to one altered control and no misread one", () => {
+    expect(controlMix(10)).toEqual({ altered: 1, misread: 0 });
+  });
+
+  it("places controls among the claims without reordering the claims", () => {
+    const items = Array.from({ length: 20 }, (_, i) => `claim-${i}`);
+    const out = insertControls(items, ["control-a", "control-b"], 7);
+    expect(out).toHaveLength(22);
+    expect(out.filter((x) => x.startsWith("claim-"))).toEqual(items);
+    expect(out.filter((x) => x.startsWith("control-")).sort()).toEqual(["control-a", "control-b"]);
+    // The same seed puts them in the same places.
+    expect(insertControls(items, ["control-a", "control-b"], 7)).toEqual(out);
+  });
+});
+
+describe("where the reader contradicts the person", () => {
+  it("is a yes against unsupported, or a no against supported", () => {
+    expect(readerDisagrees("yes", "unsupported")).toBe(true);
+    expect(readerDisagrees("no", "supported")).toBe(true);
+  });
+
+  it("is not agreement, an uncertain reader, no reading, or a can't-tell", () => {
+    expect(readerDisagrees("yes", "supported")).toBe(false);
+    expect(readerDisagrees("no", "unsupported")).toBe(false);
+    expect(readerDisagrees("yes", "uncertain")).toBe(false);
+    expect(readerDisagrees("no", null)).toBe(false);
+    expect(readerDisagrees("cannot_tell", "supported")).toBe(false);
+    expect(readerDisagrees(null, "unsupported")).toBe(false);
   });
 });

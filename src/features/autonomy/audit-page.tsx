@@ -14,6 +14,7 @@ import { Btn, CardGrid, EmptyNote, PageTitle, Panel, Tag } from "@/shared/ui/pri
 import { pctPrecise } from "@/shared/ui/format";
 import { Stat } from "./stat";
 import { DECISION } from "./audit-decision";
+import { AuditDisagreements } from "./audit-disagreements";
 import { FailedControls } from "./audit-failed-controls";
 import { Question } from "./audit-question";
 import { Tally } from "./audit-tally";
@@ -199,6 +200,8 @@ export function AuditPage() {
               </CardGrid>
             </Panel>
           )}
+
+          {status.reader && <AuditDisagreements />}
 
           {status.byFamily.length > 0 && (
             <Panel title="By language and family">

@@ -34,6 +34,37 @@ const ANSWER_EXAMPLES: { claim: string; post: string; answer: string; why: strin
     why: "Right fact, wrong system. The claim is filed under the system the post names, or it is wrong.",
   },
   {
+    claim: "PAC-3 Edge · New seeker",
+    post: "PAC-3 MSE incorporates a new seeker",
+    answer: "No",
+    why: "A parent, a sibling variant and the variant itself are three systems here. A statement about PAC-3 MSE is not one about PAC-3 Edge or PAC-3 ACE unless the sentence says it covers them (“MSE, Edge and ACE share…”). Same for a pod and the aircraft that carries it.",
+  },
+  {
+    claim: "Detection range = 12 km",
+    post: "detects light vehicles at more than 12 km",
+    answer: "No",
+    why: "A bound is not a point. Yes only when the reading keeps it (“more than 12 km”, “up to 7 hours”) and the post says it of this attribute - here it is also another target than the attribute names.",
+  },
+  {
+    claim:
+      "Unit cost = “…less than $1 million per unit, range up to 1,500 km, warhead up to 200 kg”",
+    post: "declared a cost of less than $1 million per unit, range up to 1,500 km…",
+    answer: "No",
+    why: "A value carrying other attributes' figures cannot be read. With only “less than $1 million per unit” the same fact is a Yes - a stray bracket or word is a clean-up slip, other figures are a misread.",
+  },
+  {
+    claim: "Maximum altitude = 100 km",
+    post: "engages targets up to 100 km",
+    answer: "No",
+    why: "A distance or height of the target, or an engagement range, is not the system's own altitude. Check whose figure it is and what it measures.",
+  },
+  {
+    claim: "Quantity deployed = 2 · Missiles received = 800 · Unit price = $2.1 billion",
+    post: "two UAVs struck the town · fired more than 800 · approves a $2.1 billion sale",
+    answer: "No",
+    why: "An event or a total is not the property: strikes are not deployments, fired is not received, a deal's total is not a unit price.",
+  },
+  {
     claim: "Max speed = 4,000 km/h (small quadcopter)",
     post: "reaches 4,000 km/h",
     answer: "Yes + “plainly wrong”",

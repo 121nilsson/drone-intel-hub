@@ -163,6 +163,11 @@ verifier read, is unchanged.
   drawn with a recorded seed, hidden controls, the binomial stopping rule against the 5 % budget,
   and the second reader's agreement with the person's answers. The frozen seed set lives only in
   `verification_audit`; nothing that learns may read it.
+  Every batch of 25 or more carries two kinds of hidden control (`controlMix`): altered figures,
+  which test whether the figure is read, and a rejected claim whose sentence names another system
+  (`misread`), which tests whether a parent or sibling variant is accepted as this system. A
+  panel lists the answers the second reader contradicted (`readerDisagrees`) for a second look,
+  kept beside the answer (`second_look`, migration 023) and never replacing it.
 
 ---
 

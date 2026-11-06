@@ -178,6 +178,33 @@ export interface AuditFailedControl {
   disputed: boolean;
 }
 
+/**
+ * A claim the person answered and the second reader contradicted: "yes" against its "unsupported",
+ * or "no" against its "supported". Shown so the person can look again and say who was right; the
+ * first answer is never replaced.
+ */
+export interface AuditDisagreement {
+  id: string;
+  droneId: string;
+  droneName: string;
+  specLabel: string;
+  value: string;
+  evidence?: string;
+  source: string;
+  /** The post as it was when drawn. */
+  postText?: string;
+  answer: "yes" | "no";
+  reader: "supported" | "unsupported";
+  /** The passage the reader gave as its reason, when it was found in the post. */
+  readerSpan?: string;
+  /** Why the reader's verdict was downgraded or could not be given. */
+  readerNote?: string;
+  secondLook?: AuditSecondLook;
+}
+
+/** stands: the first answer was right. reader_right: the reader caught what it missed. */
+export type AuditSecondLook = "stands" | "reader_right";
+
 /** Answers counted for one slice of the audit (overall, a language, a family). */
 export interface AuditTally {
   /** Answered yes or no; "cannot tell" is excluded. */

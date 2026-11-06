@@ -9,8 +9,10 @@ import {
   failedControl,
   voidedByControls,
   sequentialDecision,
-  controlPositions,
+  controlMix,
   drawAuditSample,
+  insertControls,
+  readerDisagrees,
   errorRateUpperBound,
   seededRandom,
   textLanguage,
@@ -25,8 +27,10 @@ import type { Drone, EntailmentVerdict, SpecAttribute, SpecClaim } from "@/entit
 import { entailmentAgreement } from "@/entities/drone/entailment";
 import type {
   AuditAnswer,
+  AuditDisagreement,
   AuditFailedControl,
   AuditItem,
+  AuditSecondLook,
   AuditStatus,
   AuditTally,
 } from "@/shared/contracts/verification";
@@ -56,6 +60,8 @@ interface Drawable extends AuditCandidate {
    * its real quote, so the highlight is there and the mismatch is what the auditor must catch.
    */
   altered?: string;
+  /** The identity check failed: the quote's sentence names another system than the claim's. */
+  identityFailed: boolean;
 }
 
 /** Every machine-verified claim with a stable id, with its post's text and language. */
@@ -103,6 +109,9 @@ async function drawable(): Promise<Drawable[]> {
       language: textLanguage(postText ?? claim.evidence ?? claim.raw ?? String(claim.value)),
       family: attributeFamily(attributeSemantic(spec)),
       ...(altered ? { altered } : {}),
+      identityFailed: verification.checks.some(
+        (c) => c.kind === "identity" && c.verdict === "fail",
+      ),
     };
   });
 }
@@ -156,16 +165,26 @@ async function insertBatch(
   return batchId;
 }
 
-/** Hidden controls among `items`, at seeded positions: one per CONTROL_EVERY audited claims. */
-function withControls(items: Placed[], controls: Drawable[], seed: number): Placed[] {
-  const count = Math.min(controls.length, Math.max(1, Math.round(items.length / CONTROL_EVERY)));
-  const out = [...items];
-  // Inserted from the last position back, so earlier positions stay where they were drawn.
-  const positions = controlPositions(items.length, count, seed).reverse();
-  positions.forEach((p, i) =>
-    out.splice(p, 0, { item: controls[i]!, role: "control", controlKind: "altered" }),
-  );
-  return out;
+/**
+ * Hidden controls among `items`, at seeded positions: how many of each kind is controlMix's call
+ * (one altered per CONTROL_EVERY audited claims, and a misread one in every batch of that size).
+ */
+function withControls(
+  items: Placed[],
+  altered: Drawable[],
+  misread: Drawable[],
+  seed: number,
+): Placed[] {
+  const mix = controlMix(items.length);
+  const controls: Placed[] = [
+    ...altered
+      .slice(0, mix.altered)
+      .map((item): Placed => ({ item, role: "control", controlKind: "altered" })),
+    ...misread
+      .slice(0, mix.misread)
+      .map((item): Placed => ({ item, role: "control", controlKind: "misread" })),
+  ];
+  return insertControls(items, controls, seed);
 }
 
 const newSeed = () => Math.floor(Math.random() * 2 ** 31);
@@ -239,7 +258,9 @@ export async function drawFirstSession(): Promise<{ batchId: string; size: numbe
       .map((p) => ({ p, k: random() }))
       .sort((a, b) => a.k - b.k)
       .map(({ p }) => p);
-    const placed = withControls(mixed, controls, seed);
+    // The first session keeps its own kind of control: the seed set it freezes was built without
+    // misread ones, and a later batch carries them (drawMore).
+    const placed = withControls(mixed, controls, [], seed);
     const batchId = await insertBatch(sql, placed, seed, true);
     return { batchId, size: placed.length };
   });
@@ -260,15 +281,26 @@ export async function drawMore(size = AUDIT_BATCH): Promise<{ batchId: string; s
     ).map((c) => byId.get(c.claimId)!);
     if (!verified.length) throw new Error("Every verified claim with a post has been audited.");
     // A control is a verified claim too, so it is drawn from the claims this batch did not take.
-    const controls = drawAuditSample(
+    const mix = controlMix(size);
+    const taken = new Set([...audited, ...verified.map((d) => d.claimId)]);
+    const altered = drawAuditSample(
       all.filter((d) => d.altered),
-      Math.ceil(size / CONTROL_EVERY),
+      mix.altered,
       seed + 1,
-      new Set([...audited, ...verified.map((d) => d.claimId)]),
+      taken,
+    ).map((c) => byId.get(c.claimId)!);
+    // A misread control is a rejected claim whose sentence names another system, with a post to
+    // read: the person must say "no" to it, and a "yes" shows the system-versus-variant habit.
+    const misread = drawAuditSample(
+      all.filter((d) => d.state === "rejected" && d.identityFailed && d.postText),
+      mix.misread,
+      seed + 2,
+      new Set([...taken, ...altered.map((d) => d.claimId)]),
     ).map((c) => byId.get(c.claimId)!);
     const placed = withControls(
       verified.map((item) => ({ item, role: "audit" as const })),
-      controls,
+      altered,
+      misread,
       seed,
     );
     const batchId = await insertBatch(sql, placed, seed, false);
@@ -522,6 +554,84 @@ async function countUndrawn(): Promise<number> {
        and c->>'id' is not null
        and not exists (select 1 from verification_audit a where a.claim_id = c->>'id')`;
   return counted?.undrawn ?? 0;
+}
+
+/**
+ * The claims the person answered and the second reader contradicted, with the post each was drawn
+ * with. Controls are left out (they test the person, not the claim) and so are answers a failed
+ * control voided: nothing there counts, so there is nothing to second-guess.
+ */
+export async function auditDisagreements(): Promise<AuditDisagreement[]> {
+  if (!dbConfigured()) return [];
+  const sql = db();
+  const rows = await sql<
+    (AuditRow & {
+      post_text: string | null;
+      second_look: AuditSecondLook | null;
+      control_kind: "altered" | "misread" | null;
+    })[]
+  >`select id, batch_id, position, role, in_seed, drone_id, drone_name, spec_label, claim_id,
+      language, family, value, evidence, source, source_id, post_text, answer, obviously_wrong,
+      read_via, drawn_at, control_kind, control_disputed_at, second_look
+    from verification_audit where answer is not null`;
+  const voided = voidedByControls(rows);
+  const answered = rows.filter(
+    (r) => r.role !== "control" && !voided.has(r.id) && (r.answer === "yes" || r.answer === "no"),
+  );
+  if (!answered.length) return [];
+  const ids = answered.map((r) => r.claim_id);
+  const readings = new Map(
+    (
+      await sql<
+        {
+          id: string;
+          verdict: EntailmentVerdict | null;
+          span: string | null;
+          note: string | null;
+        }[]
+      >`select c->>'id' as id, c->'entailment'->>'verdict' as verdict,
+               c->'entailment'->>'span' as span, c->'entailment'->>'note' as note
+          from drones d,
+               jsonb_array_elements(d.data->'specs') s,
+               jsonb_array_elements(s->'claims') c
+         where d.id = any(${[...new Set(answered.map((r) => r.drone_id))]})
+           and c->>'id' = any(${ids}) and c ? 'entailment'`
+    ).map((r) => [r.id, r] as const),
+  );
+  return answered.flatMap((r) => {
+    const reading = readings.get(r.claim_id);
+    if (!reading || !readerDisagrees(r.answer, reading.verdict)) return [];
+    return [
+      {
+        id: r.id,
+        droneId: r.drone_id,
+        droneName: r.drone_name,
+        specLabel: r.spec_label,
+        value: r.value,
+        ...(r.evidence ? { evidence: r.evidence } : {}),
+        source: r.source,
+        ...(r.post_text ? { postText: r.post_text } : {}),
+        answer: r.answer as "yes" | "no",
+        reader: reading.verdict as "supported" | "unsupported",
+        ...(reading.span ? { readerSpan: reading.span } : {}),
+        ...(reading.note ? { readerNote: reading.note } : {}),
+        ...(r.second_look ? { secondLook: r.second_look } : {}),
+      },
+    ];
+  });
+}
+
+/**
+ * The person's second look at a contradicted answer, or null to clear it. A note about the reader
+ * and about the person's own habits: it does not change `answer`, which is what the audit counts.
+ */
+export async function setSecondLook(input: {
+  id: string;
+  look: AuditSecondLook | null;
+}): Promise<void> {
+  const rows = await db()`update verification_audit set second_look = ${input.look}
+     where id = ${input.id} and role <> 'control' and answer in ('yes', 'no') returning id`;
+  if (!rows.length) throw new Error("No such answered audit item");
 }
 
 export type { AuditRow };

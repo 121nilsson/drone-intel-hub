@@ -2,6 +2,8 @@ import { createServerFn } from "@tanstack/react-start";
 import type {
   TokenUsageToday,
   AuditAnswer,
+  AuditDisagreement,
+  AuditSecondLook,
   AuditStatus,
   VerificationRunReport,
 } from "@/shared/contracts/verification";
@@ -73,6 +75,28 @@ export const disputeAuditControl = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const { disputeControl } = await import("./audit.server");
     await disputeControl(data);
+    return { ok: true };
+  });
+
+export const fetchAuditDisagreements = createServerFn({ method: "POST" }).handler(
+  async (): Promise<AuditDisagreement[]> => {
+    const { auditDisagreements } = await import("./audit.server");
+    return await auditDisagreements();
+  },
+);
+
+export const recordSecondLook = createServerFn({ method: "POST" })
+  .validator((d: unknown) => {
+    const o = d && typeof d === "object" ? (d as Record<string, unknown>) : {};
+    const id = typeof o["id"] === "string" ? o["id"].slice(0, 100) : "";
+    const look = o["look"];
+    if (!id || (look !== null && look !== "stands" && look !== "reader_right"))
+      throw new Error("Invalid second look");
+    return { id, look: look as AuditSecondLook | null };
+  })
+  .handler(async ({ data }) => {
+    const { setSecondLook } = await import("./audit.server");
+    await setSecondLook(data);
     return { ok: true };
   });
 
