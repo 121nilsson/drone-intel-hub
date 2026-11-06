@@ -15,8 +15,9 @@
  *
  * Idempotent: a claim that has a reading is left alone, an analyst's claim is never touched.
  */
-import type { Drone } from "@/entities/drone/types";
+import type { Drone, SpecAttribute, SpecClaim } from "@/entities/drone/types";
 import { consensus } from "@/entities/drone/consensus";
+import { verifyClaim } from "@/entities/drone/verification";
 import { renormalizeClaim, renormalizeSpec } from "@/entities/normalization/renormalize";
 import { DocumentConflictError } from "@/shared/contracts/store";
 
@@ -32,6 +33,7 @@ async function main() {
   const byKey = new Map<string, number>();
   const shifts: string[] = [];
   const writes: { drone: Drone; rev: number }[] = [];
+  const pairs: { drone: Drone; spec: SpecAttribute; before: SpecClaim; after: SpecClaim }[] = [];
 
   for (const { doc, rev } of loaded) {
     let touched = false;
@@ -43,6 +45,7 @@ async function main() {
       for (let i = 0; i < spec.claims.length; i++) {
         if (renormalizeClaim(spec, spec.claims[i]!) !== spec.claims[i]) {
           claims++;
+          pairs.push({ drone: doc, spec, before: spec.claims[i]!, after: next.claims[i]! });
           byKey.set(spec.key, (byKey.get(spec.key) ?? 0) + 1);
         }
       }
@@ -59,6 +62,45 @@ async function main() {
     if (touched) writes.push({ drone: { ...doc, specs }, rev });
   }
 
+  // Verification also reads `normalized`: ask it about each changed claim before and after, against
+  // the post the claim came from, so a verdict that would move shows up here and not after --apply.
+  const { db } = await import("@/shared/infra/postgres/db.server");
+  const ids = [...new Set(pairs.flatMap((p) => (p.before.sourceId ? [p.before.sourceId] : [])))];
+  const texts = new Map(
+    ids.length
+      ? (
+          await db()<{ id: string; text: string | null }[]>`
+            select id, data->>'text' as text from dispatches where id = any(${ids})`
+        ).map((r) => [r.id, r.text ?? undefined] as const)
+      : [],
+  );
+  const catalog = loaded.map((l) => l.doc);
+  const at = new Date().toISOString();
+  const verdict = (p: (typeof pairs)[number], claim: SpecClaim) => {
+    const v = verifyClaim({
+      drone: p.drone,
+      spec: p.spec,
+      claim,
+      text: claim.sourceId ? texts.get(claim.sourceId) : undefined,
+      catalog,
+      at,
+    });
+    return v ? `${v.state} [${v.checks.map((c) => `${c.kind}:${c.verdict}`).join(" ")}]` : "none";
+  };
+  const verdictMoves: string[] = [];
+  for (const p of pairs) {
+    const was = verdict(p, p.before);
+    const now = verdict(p, p.after);
+    if (was !== now)
+      verdictMoves.push(
+        `  ${p.drone.name} | ${p.spec.label} = ${p.before.raw ?? p.before.value}: ${was} -> ${now}`,
+      );
+  }
+  console.log(
+    `Verification verdicts that would move (state or any check) in ${verdictMoves.length} of ${pairs.length} claim(s):`,
+  );
+  for (const line of verdictMoves.slice(0, 60)) console.log(line);
+  console.log();
   console.log(
     `${claims} claim(s) in ${specsChanged} spec(s) of ${writes.length} system(s) would get a reading.`,
   );
