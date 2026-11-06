@@ -13,8 +13,9 @@ import type { VerificationCheck, VerificationKind, VerificationVerdict } from ".
  * 9: a figure whose reading is a whole sentence is uncertain (value-in-quote.ts readsAsSentence).
  * 10: a cruise speed whose words make it a top speed, or the reverse, fails (speed-check.ts).
  * 11: mm, cm and inches are units; a bare figure takes its attribute's unit; units compare by dimension.
+ * 12: a count has no unit; "Number of missiles" was checked as a mass in kg and passed.
  */
-export const VERIFIER_VERSION = "deterministic-11";
+export const VERIFIER_VERSION = "deterministic-12";
 
 interface CheckInput {
   kind: VerificationKind;

@@ -6,6 +6,7 @@ import { useServices } from "@/shared/infra/use-services";
 import { aliasFold, isFamilyAlias, isGenericAlias } from "@/entities/drone/alias-policy";
 import { buildConflictMap, conflictOwners } from "@/entities/drone/alias-claims";
 import type { AliasClaim, Drone } from "@/entities/drone/types";
+import { VariantSplitPanel } from "./variant-split-panel";
 
 /**
  * The alias registry as an active workflow: intake suggestions arrive as candidates that
@@ -30,6 +31,7 @@ function ClaimSource({ source }: { source: string }) {
 }
 
 function AliasRow({
+  drone,
   claim,
   targets,
   conflictNames,
@@ -38,6 +40,7 @@ function AliasRow({
   onMove,
   onUndoMove,
 }: {
+  drone: Drone;
   claim: AliasClaim;
   /** Other entries, for the "file under…" picker. */
   targets: { id: string; name: string }[];
@@ -48,7 +51,7 @@ function AliasRow({
   onMove: (claimId: string, targetId: string) => void;
   onUndoMove: (claimId: string) => void;
 }) {
-  const [below, setBelow] = useState<"none" | "move">("none");
+  const [below, setBelow] = useState<"none" | "move" | "split">("none");
   const [target, setTarget] = useState("");
   const verified = claim.status === "verified";
   const candidate = claim.status === "candidate";
@@ -69,6 +72,14 @@ function AliasRow({
       <>
         <Btn size="sm" variant="ghost" onClick={() => setBelow(below === "move" ? "none" : "move")}>
           File under…
+        </Btn>
+        <Btn
+          size="sm"
+          variant="ghost"
+          title="Make this name its own entry, a variant of this one, and move what belongs to it"
+          onClick={() => setBelow(below === "split" ? "none" : "split")}
+        >
+          Split into variant…
         </Btn>
         {undoable && (
           <Btn size="sm" variant="ghost" onClick={() => onSetVerdict(claim.id, null)}>
@@ -182,6 +193,8 @@ function AliasRow({
               Cancel
             </Btn>
           </div>
+        ) : below === "split" ? (
+          <VariantSplitPanel drone={drone} claim={claim} onClose={() => setBelow("none")} />
         ) : undefined
       }
     />
@@ -276,6 +289,7 @@ export function AliasRegistry({ drone, catalog }: { drone: Drone; catalog: Drone
               {[...candidates, ...verified].map((claim) => (
                 <AliasRow
                   key={claim.id}
+                  drone={drone}
                   claim={claim}
                   targets={others}
                   conflictNames={conflictNames(claim)}
@@ -302,6 +316,7 @@ export function AliasRegistry({ drone, catalog }: { drone: Drone; catalog: Drone
                     {rejected.map((claim) => (
                       <AliasRow
                         key={claim.id}
+                        drone={drone}
                         claim={claim}
                         targets={others}
                         conflictNames={conflictNames(claim)}

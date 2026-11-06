@@ -67,3 +67,43 @@ describe("a bare calibre figure", () => {
     expect(repairDrone(out).changes).toEqual([]);
   });
 });
+
+describe("a count of carried missiles", () => {
+  const claim: SpecClaim = {
+    id: "m",
+    value: 650,
+    raw: "650 missiles",
+    source: "Defense Express",
+    date: "2026-10-31T00:00:00.000Z",
+    evidence: "650 missiles",
+  };
+  const spec: SpecAttribute = {
+    key: "missiles",
+    label: "Number of missiles",
+    unit: "kg",
+    semantic: "payload.missile.count",
+    canonicalUnit: "kg",
+    discoveredBy: "ai",
+    claims: [claim],
+  };
+  const drone = { id: "p", name: "PAC-3", aliases: [], specs: [spec] } as unknown as Drone;
+
+  it("has no unit, though its semantic sits under payload", () => {
+    expect(canonicalUnitForSemantic("payload.missile.count")).toBeUndefined();
+    expect(canonicalUnitForSemantic("payload.bomb.count")).toBeUndefined();
+    expect(canonicalUnitForSemantic("payload.capacity")).toBe("kg");
+  });
+
+  it("has the stored kilogram dropped by the repair, so it is not checked as a mass", () => {
+    const { drone: out } = repairDrone({ ...drone, operators: [] } as Drone);
+    const fixed = out.specs[0]!;
+    expect(fixed.canonicalUnit).toBeUndefined();
+    expect(fixed.unit).toBeUndefined();
+    expect(repairDrone(out).changes).toEqual([]);
+    const v = verifyClaim({ drone: out, spec: fixed, claim })!;
+    expect(v.checks.find((c) => c.kind === "unit_dimension")).toMatchObject({
+      verdict: "uncertain",
+      applicable: false,
+    });
+  });
+});

@@ -219,6 +219,9 @@ export function semanticKeyFor(key: string, label = ""): string {
 }
 
 export function canonicalUnitForSemantic(semantic: string): string | undefined {
+  // A count has no unit. "payload.missile.count" took the kilogram of every other "payload."
+  // semantic, and the verifier then passed "650 missiles" as a mass.
+  if (semantic.endsWith(".count")) return undefined;
   // A calibre is written in millimetres; "0.24 m" for a 240 mm mortar reads as nobody writes it.
   if (semantic === "dimension.caliber") return "mm";
   if (semantic.startsWith("dimension.")) return "m";

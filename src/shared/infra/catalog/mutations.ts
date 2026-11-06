@@ -4,6 +4,7 @@ import { mergeDrones } from "./merge";
 import { removalImpact, removeDrone } from "./removal";
 import { declineRelation, linkSystems, reviewRelation, unlinkSystems } from "./relations";
 import { setOrigin } from "./origin";
+import { splitVariant } from "./split";
 import { markDistinct, setSystemClass } from "./classification";
 import {
   moveSpecClaim,
@@ -53,5 +54,7 @@ export function createCatalogMutations(d: CatalogDeps): CatalogMutations {
     declineRelation: (sourceId, targetId, kind) => declineRelation(sourceId, targetId, kind, d),
     markDistinct: (aId, bId) => markDistinct(aId, bId, d),
     setOrigin: (droneId, origin) => setOrigin(droneId, origin, d),
+    splitVariant: (droneId, aliasClaimIds, claims) =>
+      splitVariant(droneId, aliasClaimIds, claims, d),
   };
 }

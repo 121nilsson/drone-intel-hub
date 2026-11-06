@@ -5,6 +5,7 @@ import type {
   SpecClaim,
   SystemClass,
 } from "@/entities/drone/types";
+import type { SplitClaim } from "@/entities/drone/variant-split";
 
 /**
  * What removing a catalog entry would touch, without changing anything.
@@ -155,6 +156,17 @@ export interface CatalogMutations {
    * a proposal and correcting a wrong origin are the same call.
    */
   setOrigin(droneId: string, origin: string): Drone | undefined;
+  /**
+   * Split a variant out of an entry that has been carrying it: a new entry named by the first of
+   * `aliasClaimIds`, those aliases and `claims` moved onto it the way a single move does, and the
+   * new entry linked as a variant of this one. Returns the new entry, or undefined when the entry
+   * or the naming alias is gone.
+   */
+  splitVariant(
+    droneId: string,
+    aliasClaimIds: readonly string[],
+    claims: readonly SplitClaim[],
+  ): Drone | undefined;
 }
 
 export type ClaimVerdict =

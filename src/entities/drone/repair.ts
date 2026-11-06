@@ -93,8 +93,16 @@ function resolved(s: SpecAttribute): SpecAttribute {
  * dimension, or one normalization set for money ("USD"), is not this rule's to change.
  */
 function unitResolved(s: SpecAttribute): SpecAttribute {
-  const want = canonicalUnitForSemantic(attributeSemantic(s));
+  const semantic = attributeSemantic(s);
   const have = s.canonicalUnit;
+  // A count stored with the kilogram its "payload." prefix once implied ("Number of missiles",
+  // kg). Only that unit is dropped: one the source gave ("engines", hp) says the attribute is
+  // something else, which is not this rule's to decide.
+  if (semantic.endsWith(".count") && have === "kg") {
+    const { canonicalUnit: _dropped, unit, ...rest } = s;
+    return unit && canonicalUnitFor(unit) !== "kg" ? { ...rest, unit } : rest;
+  }
+  const want = canonicalUnitForSemantic(semantic);
   if (!want || !have || have === want) return s;
   const dim = canonicalUnitFor(have);
   if (!dim || dim !== canonicalUnitFor(want)) return s;
@@ -188,7 +196,7 @@ export function repairDrone(
     if (u !== r)
       changes.push({
         kind: "semantic",
-        detail: `${s.label} (${s.key}): canonical unit ${r.canonicalUnit} → ${u.canonicalUnit}`,
+        detail: `${s.label} (${s.key}): canonical unit ${r.canonicalUnit} → ${u.canonicalUnit ?? "none"}`,
       });
     specs.push(u);
   }

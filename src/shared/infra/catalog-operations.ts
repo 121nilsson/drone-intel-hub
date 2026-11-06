@@ -7,6 +7,7 @@ export { mergeDrones } from "./catalog/merge";
 export { removalImpact, removeDrone } from "./catalog/removal";
 export { declineRelation, linkSystems, reviewRelation, unlinkSystems } from "./catalog/relations";
 export { setOrigin } from "./catalog/origin";
+export { splitVariant } from "./catalog/split";
 export { markDistinct, setSystemClass } from "./catalog/classification";
 export {
   moveSpecClaim,
