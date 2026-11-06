@@ -1,4 +1,5 @@
 import { Fragment } from "react";
+import { Prose } from "./prose";
 import { parseSummary, type SummaryInline } from "./summary-markdown";
 
 function Inline({ parts }: { parts: SummaryInline[] }) {
@@ -20,7 +21,7 @@ function Inline({ parts }: { parts: SummaryInline[] }) {
 /** A generated summary as headed sections, bullets and paragraphs. */
 export function SummaryText({ text }: { text: string }) {
   return (
-    <div className="space-y-3 text-sm leading-relaxed text-foreground/90">
+    <Prose>
       {parseSummary(text).map((block, i) => {
         if (block.type === "heading")
           return (
@@ -47,6 +48,6 @@ export function SummaryText({ text }: { text: string }) {
           </p>
         );
       })}
-    </div>
+    </Prose>
   );
 }

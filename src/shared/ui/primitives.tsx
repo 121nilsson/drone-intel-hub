@@ -67,7 +67,7 @@ export function Tag({
     <span
       title={title}
       className={cn(
-        "inline-flex max-w-full items-center gap-1 border px-1.5 py-0.5 text-[11px]",
+        "inline-flex max-w-full items-center gap-1 border px-1.5 py-0.5 text-[11px] [overflow-wrap:anywhere]",
         mono ? "font-mono" : "font-sans",
         caps && "uppercase",
         tones[tone],

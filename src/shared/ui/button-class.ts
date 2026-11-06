@@ -30,7 +30,9 @@ export function buttonClass({
   };
   // Size before variant, so a variant that resets padding wins the merge.
   return cn(
-    "inline-flex shrink-0 cursor-pointer items-center font-mono transition-colors disabled:cursor-not-allowed disabled:opacity-50",
+    // shrink-0 keeps a button from being squeezed by its row; max-w-full and the wrapping keep a
+    // long label ("The control was wrong: the post states this...") from outgrowing the screen.
+    "inline-flex max-w-full shrink-0 cursor-pointer items-center text-left font-mono transition-colors [overflow-wrap:anywhere] disabled:cursor-not-allowed disabled:opacity-50",
     s[size],
     v[variant],
     className,

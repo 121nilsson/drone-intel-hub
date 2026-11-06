@@ -120,7 +120,10 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </section>
       ) : (
-        <main className="mx-auto max-w-7xl px-4 py-6">{children}</main>
+        // overflow-x-clip is the safety net: one wide element cannot make the whole page wider,
+        // which on a phone widens the layout the fixed menu is placed in and pushes it off screen.
+        // Clip, unlike hidden, makes no scroll container, so the sticky bars inside still stick.
+        <main className="mx-auto max-w-7xl overflow-x-clip px-4 py-6">{children}</main>
       )}
     </div>
   );

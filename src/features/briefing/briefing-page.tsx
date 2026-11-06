@@ -19,7 +19,11 @@ import {
 import { Btn, Loading, Num, Panel, Tag, Card, EmptyNote } from "@/shared/ui/primitives";
 import { TimeAgo } from "@/shared/ui/time-ago";
 import { useRelatedIntel, RelatedChips } from "@/shared/ui/intel-graph";
+import { Collapsible } from "@/shared/ui/collapsible";
 import { SummaryText } from "@/shared/ui/summary-text";
+
+/** Lines of the executive summary shown before "Show more". */
+const BRIEFING_LINES = 12;
 
 export function BriefingPage() {
   const [mounted, setMounted] = useState(false);
@@ -230,7 +234,7 @@ function Briefing() {
       <Panel
         title="Executive summary"
         right={
-          <div className="flex items-center gap-2">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
             <Tag tone={aiConfigured ? "primary" : "default"}>
               {aiConfigured ? settings.tier2Model : "local engine"}
             </Tag>
@@ -267,7 +271,9 @@ function Briefing() {
           <p className="text-sm text-destructive">{err}</p>
         ) : summary ? (
           <>
-            <SummaryText text={summary} />
+            <Collapsible lines={BRIEFING_LINES} className="text-sm leading-relaxed">
+              <SummaryText text={summary} />
+            </Collapsible>
             {summaryAt && (
               <p className="mt-3 font-mono text-[11px] text-muted-foreground">
                 {summaryShared ? "Shared summary" : "Summary"} generated{" "}

@@ -6,6 +6,8 @@ import { useAttached, useServices } from "@/shared/infra/use-services";
 import { detectLanguage } from "@/entities/normalization/language";
 import { awaitingBrief, summaryView } from "./summary-view";
 import { type Drone } from "@/entities/drone/types";
+import { Collapsible } from "@/shared/ui/collapsible";
+import { Prose } from "@/shared/ui/prose";
 import { Btn } from "@/shared/ui/primitives";
 import { SummaryText } from "@/shared/ui/summary-text";
 
@@ -16,7 +18,7 @@ import { SummaryText } from "@/shared/ui/summary-text";
  */
 function SystemBrief({ brief }: { brief: NonNullable<Drone["llmBrief"]> }) {
   return (
-    <div className="max-w-3xl space-y-3 text-sm leading-relaxed text-foreground/90">
+    <Prose className="max-w-3xl">
       <SummaryText text={brief.overview} />
       {brief.verified.length ? (
         <section>
@@ -66,9 +68,12 @@ function SystemBrief({ brief }: { brief: NonNullable<Drone["llmBrief"]> }) {
           </ul>
         </section>
       ) : null}
-    </div>
+    </Prose>
   );
 }
+
+/** Lines of a dossier's brief or summary shown before "Show more". */
+const BRIEF_LINES = 10;
 
 export function DossierSummary({
   drone,
@@ -244,12 +249,16 @@ export function DossierSummary({
   if (view === "translated") {
     return (
       <div className="space-y-2">
-        <p className="max-w-3xl text-base leading-relaxed">{translated}</p>
+        <Collapsible lines={BRIEF_LINES} className="max-w-3xl text-base leading-relaxed">
+          <p className="[overflow-wrap:anywhere]">{translated}</p>
+        </Collapsible>
         <details className="font-mono text-xs text-muted-foreground">
           <summary className="cursor-pointer">
             Original ({likelyEnglish ? "English" : "source language"})
           </summary>
-          <p className="mt-1 max-w-3xl leading-relaxed text-muted-foreground">{summary}</p>
+          <p className="mt-1 max-w-3xl leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">
+            {summary}
+          </p>
         </details>
       </div>
     );
@@ -262,7 +271,9 @@ export function DossierSummary({
           Translating summary...
         </p>
       )}
-      {drone.llmBrief ? <SystemBrief brief={drone.llmBrief} /> : <SummaryText text={summary} />}
+      <Collapsible lines={BRIEF_LINES} className="text-sm leading-relaxed">
+        {drone.llmBrief ? <SystemBrief brief={drone.llmBrief} /> : <SummaryText text={summary} />}
+      </Collapsible>
       {(view === "generating" || briefGenerating) && (
         <p className="animate-pulse font-mono text-xs text-muted-foreground">
           Generating intelligence summary...

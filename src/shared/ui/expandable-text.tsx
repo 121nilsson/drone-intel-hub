@@ -1,9 +1,8 @@
-import { useState } from "react";
-import { Btn } from "@/shared/ui/primitives";
+import { Collapsible } from "@/shared/ui/collapsible";
 
 /**
- * Text clamped to a few lines, with a toggle when it is long. `clamp` is the line count shown
- * while collapsed; the classes are literal so Tailwind's scanner sees them.
+ * Plain text clamped to a few lines, with a toggle when it is longer: `Collapsible` around one
+ * paragraph. `className` styles the text and sets the line height the clamp counts in.
  */
 export function ExpandableText({
   text,
@@ -12,24 +11,11 @@ export function ExpandableText({
 }: {
   text: string;
   className?: string;
-  clamp?: 3 | 4;
+  clamp?: number;
 }) {
-  const [expanded, setExpanded] = useState(false);
-  const isLong = text.length > 200;
-  const clampClass = clamp === 4 ? "line-clamp-4" : "line-clamp-3";
   return (
-    <div className="min-w-0">
-      <p className={`break-words ${className} ${!expanded && isLong ? clampClass : ""}`}>{text}</p>
-      {isLong && (
-        <Btn
-          size="sm"
-          variant="quiet"
-          className="-ml-2 mt-1"
-          onClick={() => setExpanded(!expanded)}
-        >
-          {expanded ? "Show less" : "Show more"}
-        </Btn>
-      )}
-    </div>
+    <Collapsible lines={clamp} className={className}>
+      <p className="[overflow-wrap:anywhere]">{text}</p>
+    </Collapsible>
   );
 }
