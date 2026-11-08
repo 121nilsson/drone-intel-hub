@@ -71,6 +71,12 @@ const ANSWER_EXAMPLES: { claim: string; post: string; answer: string; why: strin
     why: "“Quantity” alone reads as a property of the system, and the post states a deal. Yes only when the attribute says what is counted (“Quantity approved for sale”, “Quantity ordered”). It is also the interceptors, not the Patriot complex. A No here is the extractor not naming what it counted, not a wrong figure.",
   },
   {
+    claim: "Motor power = 1.5 kW",
+    post: "(Ukrainian) equipped with four electric motors of 1.5 kW each",
+    answer: "Yes",
+    why: "“Each” makes it a per-motor figure, and the claim does not say total, so it reads as one. A No would need a reading that claims the total (“Total power = 1.5 kW”). That the motor count is missing is a gap, not an error.",
+  },
+  {
     claim: "Max speed = 4,000 km/h (small quadcopter)",
     post: "reaches 4,000 km/h",
     answer: "Yes + “plainly wrong”",
