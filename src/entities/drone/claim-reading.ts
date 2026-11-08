@@ -1,5 +1,5 @@
 import { qualifierBeforeFigure, type QuantityQualifier } from "@/entities/normalization/numeric";
-import { normalizeQuantity } from "@/entities/normalization/units";
+import { normalizeQuantity, rebaseQuantity } from "@/entities/normalization/units";
 import { displayScale } from "./consensus";
 import type { SpecAttribute, SpecClaim } from "./types";
 
@@ -88,10 +88,17 @@ function structuredReading(
   written: QuantityQualifier | undefined,
   unitFallback: string | undefined,
 ): string | undefined {
-  const r = q?.range;
+  // `range` holds canonical values while `unit` is the token the post used, so a span must be
+  // re-expressed in the post's unit: "20–35 kW" is stored as 20000–35000 W.
+  const targetUnit = q?.unit ?? unitFallback;
+  const reading =
+    q && q.canonicalUnit && targetUnit && q.canonicalUnit !== targetUnit
+      ? rebaseQuantity(q, targetUnit)
+      : q;
+  const r = reading?.range;
   const lo = r?.min;
   const hi = r?.max;
-  const point = q?.value ?? r?.value ?? hi ?? lo;
+  const point = reading?.value ?? r?.value ?? hi ?? lo;
   let figure: string;
   let word: string | undefined;
   if (lo !== undefined && hi !== undefined) {
@@ -104,6 +111,6 @@ function structuredReading(
   } else {
     return undefined;
   }
-  const unit = q?.unit ?? unitFallback;
+  const unit = reading?.unit ?? unitFallback;
   return [word, figure, unit].filter(Boolean).join(" ");
 }

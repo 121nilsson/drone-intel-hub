@@ -104,11 +104,26 @@ describe("a claim's clean reading", () => {
         raw: "щонайменше 3,5 години",
         unit: "h",
         canonicalUnit: "min",
-        range: { min: 3.5, qualifier: "at_least" },
+        // normalizeQuantity stores a range's bounds in the canonical unit (3.5 h = 210 min).
+        range: { min: 210, qualifier: "at_least" },
         confidence: 1,
       },
     });
     expect(cleanReading({ unit: "min" }, c)).toBe("at least 3.5 h");
+  });
+
+  it("reads a span in the post's unit when the range is stored in a smaller unit", () => {
+    // The LOCUST laser: the post says 20–35 kW, stored as 20000–35000 W.
+    const c = claim({
+      normalized: {
+        raw: "20–35 kW",
+        unit: "kW",
+        canonicalUnit: "W",
+        range: { min: 20000, max: 35000, qualifier: "range" },
+        confidence: 1,
+      },
+    });
+    expect(cleanReading({ unit: "W" }, c)).toBe("20–35 kW");
   });
 
   it("reads greater than as more than", () => {
