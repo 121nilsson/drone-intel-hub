@@ -65,6 +65,12 @@ const ANSWER_EXAMPLES: { claim: string; post: string; answer: string; why: strin
     why: "An event or a total is not the property: strikes are not deployments, fired is not received, a deal's total is not a unit price.",
   },
   {
+    claim: "Patriot · Quantity = 500",
+    post: "The US has approved selling Ukraine 500 PAC-3 interceptors for $2.1 billion",
+    answer: "No",
+    why: "“Quantity” alone reads as a property of the system, and the post states a deal. Yes only when the attribute says what is counted (“Quantity approved for sale”, “Quantity ordered”). It is also the interceptors, not the Patriot complex. A No here is the extractor not naming what it counted, not a wrong figure.",
+  },
+  {
     claim: "Max speed = 4,000 km/h (small quadcopter)",
     post: "reaches 4,000 km/h",
     answer: "Yes + “plainly wrong”",
