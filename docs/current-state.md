@@ -58,7 +58,14 @@ pipeline when a provider is configured, the server-side sync supplies the `procu
 Implemented in `src/shared/infra/sources/fetch-posts.server.ts`, `fetch-posts.ts`, and
 `src/shared/infra/ingest/collect.ts` (`collectSource`; `auto-ingest.ts` is a barrel over the stage modules).
 
-- Bounded parallel fetches with per-host pooling and `FETCH_TIMEOUT_MS`.
+- Bounded parallel fetches with per-host pooling and `FETCH_TIMEOUT_MS`. A fetch that times out,
+  hits a network error, or gets a 429 or 5xx is retried once after 500 ms; another 4xx is not.
+- **Fetch history:** every fetch of a source writes a row to `source_fetch_log`
+  (`migrations/024_source_fetch_log.sql`, `src/shared/infra/sources/fetch-log.server.ts`), kept 90
+  days and pruned once per sync. `yieldDrift` (`src/entities/source/health.ts`) reads a source's own
+  history: `failing` after five failed fetches in a row, `quiet` when ten successful fetches
+  returned nothing from a source that used to yield. The row's relevant count is always 0, because
+  relevance is counted per batch in stage 2, not per source.
 - **Web / RSS bodies:** Mozilla Readability via `src/shared/infra/article.server.ts` (server-only;
   `linkedom` + `@mozilla/readability`). Index pages follow top links; RSS teasers can be expanded.
   Disable with `FETCH_ARTICLE_BODIES=0`.
@@ -82,8 +89,13 @@ Same pipeline as manual Queue paste: `runTwoTier` in `src/shared/infra/ingest/pi
 3. Provider outage → heuristic fallback for interactive paste; queue processor can defer
    (`deferOnOutage`) so posts stay `pending`.
 4. Outcomes: auto-merge, auto-promote, auto-discard, or queue candidate for analyst review.
-5. **Evidence brake:** a spec whose quoted evidence is not in the post (whitespace-folded) is
-   dropped before the merge and promote gates; the identity decision is untouched.
+5. **Evidence brake** (`src/shared/infra/ingest/evidence-brake.ts`): a spec whose quoted evidence
+   is not in the post is dropped before the merge and promote gates; the identity decision is
+   untouched. The text is folded the way the verifier folds it (NFKC), so the two agree. A figure
+   an AI tier produced gets one repair call per post, at most twelve items (`requote` on the
+   extractor): the reply is kept only when the passage is in the post and carries the figure's
+   digits, and any failure of the call drops the figure as before. Drops and repairs are counted on
+   the dispatch's `analysis` (`droppedForEvidence`, `requoted`).
 6. **Activity split:** figures that count events (launched, intercepted, delivered, produced,
    kills, ordered) leave the specs in `mergeSpecs` and become `Drone.activity` records with
    quantity, bound, counted unit and period (`src/entities/drone/activity.ts`). The catalogue
@@ -96,6 +108,8 @@ Same pipeline as manual Queue paste: `runTwoTier` in `src/shared/infra/ingest/pi
 - Contradiction checks on disputed specs (`contradictions.ts`).
 - Re-analysis of stale / failed posts when `PIPELINE_VERSION` or prompt version changes
   (`requeue.ts` and `retraction.ts`, re-exported by `auto-ingest.ts`).
+- Re-analysis after a rule is quarantined: the posts behind the claims the rule shaped are set
+  back to pending, so they are read again without it (see Claim lineage and self-repair).
 
 **Concurrency:** `sync_state` throttle; dispatch rows claimed with `FOR UPDATE SKIP LOCKED` when
 Postgres leases are available (`004_dispatch_lease.sql`).
@@ -123,8 +137,10 @@ Design background: [normalization.md](./normalization.md).
   (`ai-proxy.server.ts`).
 - Multi-provider fallback: NVIDIA, Groq, OpenRouter, Mistral (`ai-providers.ts`) with cooldowns,
   pacing (`PROVIDER_RPM`), and per-tier model ids.
-- Extraction prompt version: **`drone-osint-v7`** in `src/shared/contracts/extraction-prompt.json`;
-  validated with `AIExtractionSchema` (tolerant Zod).
+- Extraction prompt version: **`drone-osint-v8`** in `src/shared/contracts/extraction-prompt.json`,
+  which also carries a hash of the prompt text; `src/test/prompt-guard.test.ts` pins the pair, so
+  the text cannot change without both being bumped. Replies are validated with
+  `AIExtractionSchema` (tolerant Zod).
 - Briefing executive summary: tier-2 summarizer + shared row in `sync_state` (see README).
 - Queue **Translate** uses `translateText` server function; extraction does not auto-translate
   non-Latin text before the model (see roadmap).
@@ -159,6 +175,11 @@ verifier read, is unchanged.
 - **Autonomy (`/autonomy`):** deterministic verification coverage (verified / uncertain /
   rejected / not yet checked), the claims worth a look, the `autonomy_events` decision ledger
   (migration 018) and rule decisions. Verification is measured only; it does not change consensus.
+  Three more panels read through the `AutonomyInsights` contract
+  (`src/shared/contracts/autonomy-insights.ts`): the second reader's false supports on injected
+  errors, the verified share per prompt version, and the sources whose fetches are failing, quiet
+  or unsteady. Ledger rows carry a readable label per event kind
+  (`src/features/autonomy/event-labels.ts`).
 - **Audit (`/audit`):** the stratified human audit of `verified` claims (migrations 019/020) —
   drawn with a recorded seed, hidden controls, the binomial stopping rule against the 5 % budget,
   and the second reader's agreement with the person's answers. The frozen seed set lives only in
@@ -217,6 +238,48 @@ verifier read, is unchanged.
 
 ---
 
+## Claim lineage and self-repair
+
+First slices of ten improvements to `get_human_out_of_the_loop_plan.md` (its §17). Everything here
+is either bookkeeping, measurement, or a loop with its own switch; consensus reads none of it, and
+`AUTO_APPLY_TIERS` is still empty.
+
+- **Lineage** (`SpecClaim.lineage`, `src/entities/drone/claim-lineage.ts`): a new claim records the
+  prompt version and hash, the pipeline version, the rule-set version, the ids of generated cue and
+  context-filter rules that shaped its spec, the name or alias that resolved the post to the system
+  (`name`, `alias` or `rule_alias`), and the post's content hash on auto-merged claims. A claim
+  without lineage means unknown; only the content hash is backfilled. Unit-scale rules do not
+  record their id yet.
+- **Replay after quarantine** (`src/shared/infra/evaluation/rule-sandbox-replay.server.ts`,
+  `RULE_REPLAY`): when an active rule is quarantined, by the circuit breaker or an analyst, the
+  posts behind the claims it shaped are set to pending with `reanalyze`, at most 200 per
+  quarantine, and the ledger gets `rule_replay_requested`. Stopword and unit-scale rules leave no
+  lineage and replay nothing.
+- **Probation** (`src/shared/infra/evaluation/rule-sandbox-probation.server.ts`, `RULE_PROBATION`):
+  a generated rule the circuit breaker quarantined at least seven days ago returns to shadow once
+  (`rule_probation_started`) and must pass the unchanged promotion policy again. Aliases and
+  stopwords never return, an analyst's quarantine is never undone, and a second quarantine is
+  final.
+- **Source probe** (`runSourceProbes` in `src/shared/infra/sources/fetch-posts.server.ts`,
+  `SOURCE_PROBE`): a source the health check turned off gets one probe fetch a week, at most two
+  probes per sync and eight per source. A probe that returns posts re-enables it
+  (`source_reenabled`). A source an analyst turned off is never probed.
+- **Identity follows "It …"** (`src/entities/drone/verification-identity.ts`): an evidence sentence
+  that names no system and opens with a continuation word passes at 0.6 when the sentence before
+  names this system and no other, and every passage carrying the quote is such a sentence.
+- **Reposts are one source** (`src/entities/drone/verification-sources.ts`): two outlets whose
+  posts have near-identical content hashes count as one independent source for a claim.
+- **Injected controls** (`src/shared/infra/verification/controls.server.ts`, `verification:controls`
+  hourly, `migrations/025_verifier_controls.sql`): the second reader is shown verified claims whose
+  figure was changed to one the post does not contain. A "supported" is a false support, reported
+  overall and per attribute family and language against the 5 % budget
+  (`src/entities/drone/verifier-controls.ts`). It shares the second reader's token ceiling and
+  switch, never reads `verification_audit`, and writes nothing to the catalogue.
+- **Verified share per prompt version** (`verificationByPromptVersion`,
+  `src/entities/drone/verification-coverage.ts`).
+
+---
+
 ## Verified reference and evaluation
 
 The heuristic is scored against what the catalogue has judged, not just what the AI stored
@@ -256,12 +319,12 @@ On-demand Wikipedia/Wikidata catalog import from the Catalog page (`src/shared/i
 
 - Runner: `vitest` — suites under `src/test/` (normalization, pipeline, ingest, providers, etc.).
 - Quality gate script: `npm run green` / `green:save`.
-- Fixture corpus `src/test/fixtures/extraction-corpus.ts` is defined but **not imported by any test
-  yet** (roadmap item).
+- Fixture corpus `src/test/fixtures/extraction-corpus.ts` is replayed by
+  `src/test/extraction-corpus.test.ts`.
 
 ---
 
 ## Schema
 
-Authoritative SQL: `migrations/001_init.sql`–`022_repair_double_encoded_documents.sql` (see README PostgreSQL table). `drizzle/` is not used at
+Authoritative SQL: `migrations/001_init.sql`–`025_verifier_controls.sql` (see README PostgreSQL table). `drizzle/` is not used at
 application runtime.
