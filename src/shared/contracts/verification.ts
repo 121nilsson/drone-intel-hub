@@ -1,4 +1,5 @@
 import type { EntailmentAgreement } from "@/entities/drone/entailment";
+import type { ControlStratum, ControlSummary } from "@/entities/drone/verifier-controls";
 import type { VerificationCoverage } from "@/entities/drone/verification";
 import type { VerificationKind, VerificationState } from "@/entities/drone/types";
 
@@ -119,6 +120,7 @@ export const AUTONOMY_EVENT_KINDS = [
   "verification_run",
   "rule_probation_started",
   "rule_replay_requested",
+  "verifier_control_run",
 ] as const;
 export type AutonomyEventKind = (typeof AUTONOMY_EVENT_KINDS)[number];
 
@@ -126,7 +128,10 @@ export type AutonomyEventKind = (typeof AUTONOMY_EVENT_KINDS)[number];
  * Kinds that only say a loop ran. They are pruned; every other kind is a decision and kept
  * forever, because a later event's `reversed_by` may point at it.
  */
-export const HEARTBEAT_EVENT_KINDS: readonly AutonomyEventKind[] = ["verification_run"];
+export const HEARTBEAT_EVENT_KINDS: readonly AutonomyEventKind[] = [
+  "verification_run",
+  "verifier_control_run",
+];
 
 /** Mirrors the actor_kind check constraint in migrations/018. */
 export const AUTONOMY_ACTOR_KINDS = [
@@ -291,6 +296,23 @@ export interface SecondReaderRun {
   /** Posts left for a later run: the per-run cap, the ceiling, or no independent reader. */
   deferred: number;
   tokens: { input: number; output: number };
+}
+
+/** What one run of the verifier controls did (shared/infra/verification/controls.server.ts). */
+export interface VerifierControlRun {
+  ran: boolean;
+  reason: string;
+  asked: number;
+  supported: number;
+  unsupported: number;
+  uncertain: number;
+  tokens: { input: number; output: number };
+}
+
+/** The verifier controls' record for the current entailment version, overall and per stratum. */
+export interface VerifierControlsStatus {
+  summary: ControlSummary;
+  strata: ControlStratum[];
 }
 
 /** Tokens the verifier and its judges used today, against the daily ceiling (plan §14). */

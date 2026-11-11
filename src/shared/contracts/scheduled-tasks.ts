@@ -52,6 +52,14 @@ export const SCHEDULED_TASKS: readonly ScheduledTask[] = [
     switch: "ai_verifier",
   },
   {
+    name: "verification:controls",
+    cron: "25 * * * *",
+    label: "Verifier controls",
+    every: "hourly at :25",
+    does: "Shows the second reader claims that are wrong by construction (a verified figure changed to one its post does not contain) and records its answers, within the same daily token ceiling. Measures how often it says supported when it should not. Changes no claim.",
+    switch: "ai_verifier",
+  },
+  {
     name: "evaluation:run",
     cron: "15 3 * * *",
     label: "Heuristic evaluation",

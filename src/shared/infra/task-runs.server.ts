@@ -1,6 +1,6 @@
 import { db, dbConfigured } from "@/shared/infra/postgres/db.server";
 import { SCHEDULED_TASKS } from "@/shared/contracts/scheduled-tasks";
-import type { SecondReaderRun } from "@/shared/contracts/verification";
+import type { SecondReaderRun, VerifierControlRun } from "@/shared/contracts/verification";
 import { nextCronRun } from "@/shared/infra/cron";
 
 export type TaskTrigger = "schedule" | "manual";
@@ -104,6 +104,15 @@ export const entailmentOutcome = (r: SecondReaderRun): TaskOutcome => ({
   summary: r.ran
     ? `${r.posts} post(s), ${r.claims} claim(s): ${r.supported} supported, ${r.unsupported} unsupported, ${r.uncertain} uncertain; ${r.deferred} post(s) deferred (${r.reason}); ${r.tokens.input} in / ${r.tokens.output} out tokens`
     : r.reason,
+});
+
+/** The verifier controls: wrong claims shown to the reader, and how often it called them supported. */
+export const controlsOutcome = (r: VerifierControlRun): TaskOutcome => ({
+  status: r.ran && r.asked > 0 ? "ok" : "skipped",
+  summary:
+    r.ran && r.asked > 0
+      ? `${r.asked} control(s): ${r.supported} supported (false support), ${r.unsupported} unsupported, ${r.uncertain} uncertain; ${r.tokens.input} in / ${r.tokens.output} out tokens (${r.reason})`
+      : r.reason,
 });
 
 /** Supervision and mining run as one job; a tripped breaker is what a person must see first. */

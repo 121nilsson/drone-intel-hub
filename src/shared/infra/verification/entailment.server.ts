@@ -1,6 +1,7 @@
 import { parseModelJson } from "@/shared/infra/model-json";
 import {
   entailmentPrompt,
+  entailmentQuestion,
   independentReader,
   needsEntailment,
   readEntailmentReply,
@@ -48,25 +49,28 @@ function positiveFromEnv(name: string, fallback: number): number {
 }
 
 /** Plan §14, set by the project owner. Overridable for a self-hosted model with no such cost. */
-const CEILING = {
+export const CEILING = {
   input: positiveFromEnv("VERIFIER_DAILY_INPUT_TOKENS", 5_000_000),
   output: positiveFromEnv("VERIFIER_DAILY_OUTPUT_TOKENS", 500_000),
 };
-/** The purposes the ceiling covers: the reader now, the challenger when it exists. */
-const BUDGETED = ["verifier", "challenger"];
+/**
+ * The purposes the ceiling covers: the reader now, the challenger when it exists, and the verifier
+ * controls, which spend the same reader's tokens and must not get a ceiling of their own.
+ */
+const BUDGETED = ["verifier", "challenger", "controls"];
 /** Posts read per run: the backlog spreads over a few hourly runs instead of one long one. */
 const POSTS_PER_RUN = positiveFromEnv("VERIFIER_POSTS_PER_RUN", 40);
 /** A reasoning model's thinking counts as output, so a call is budgeted at this before it runs. */
-const OUTPUT_RESERVE = 2500;
+export const OUTPUT_RESERVE = 2500;
 /** Characters per token, for a provider that reports no usage. Conservative for Cyrillic. */
-const CHARS_PER_TOKEN = 3;
+export const CHARS_PER_TOKEN = 3;
 
 /**
  * Reader order: VERIFIER_PROVIDERS (comma list), else the readers that answered when this was
  * built first (2026-11-01: NVIDIA's nemotron-super returned 404, deeprelay 403). A provider reads
  * with VERIFIER_<NAME>_MODEL, else its tier-2 model.
  */
-function readerOptions(): ReaderOption[] {
+export function readerOptions(): ReaderOption[] {
   const order = (process.env["VERIFIER_PROVIDERS"] ?? "groq,mistral,nvidia,deeprelay,openrouter")
     .split(",")
     .map((s) => s.trim())
@@ -88,14 +92,14 @@ function readerOptions(): ReaderOption[] {
 const isAiExtracted = (c: SpecClaim) =>
   c.extractionEngine !== "heuristic" && c.extractionEngine !== "reference";
 
-async function usedToday(): Promise<{ input: number; output: number }> {
+export async function usedToday(): Promise<{ input: number; output: number }> {
   const [row] = await db()<{ input: string | null; output: string | null }[]>`
     select sum(input) as input, sum(output) as output from ai_token_usage
      where day = current_date and purpose = any(${BUDGETED})`;
   return { input: Number(row?.input ?? 0), output: Number(row?.output ?? 0) };
 }
 
-async function recordUsage(purpose: string, used: { input: number; output: number }) {
+export async function recordUsage(purpose: string, used: { input: number; output: number }) {
   await db()`insert into ai_token_usage (day, purpose, input, output, calls)
     values (current_date, ${purpose}, ${used.input}, ${used.output}, 1)
     on conflict (day, purpose) do update
@@ -130,7 +134,7 @@ type Attempt =
  * base URL or a body that stalls; a throw here would end the run and lose every verdict it had
  * already paid for, so it counts as a failed attempt like any other.
  */
-async function ask(reader: ReaderOption, system: string, prompt: string): Promise<Attempt> {
+export async function ask(reader: ReaderOption, system: string, prompt: string): Promise<Attempt> {
   try {
     const res = await chatCompletionOnce({
       provider: reader.provider,
@@ -221,15 +225,11 @@ export async function runEntailment(): Promise<SecondReaderRun> {
         stop = `tried ${POSTS_PER_RUN} posts, the per-run cap`;
         break;
       }
-      const questions: EntailmentQuestion[] = post.due.map((t, i) => ({
-        ref: String(i + 1),
-        system: t.drone.name,
-        aliases: catalogNames(t.drone),
-        attribute: t.attribute,
-        // The clean reading, not the raw clipping: a fragment like "ssia Developing 800km/h" made
-        // the reader say "unsupported" for a figure the post plainly states.
-        value: cleanReading(t.spec, t.claim),
-      }));
+      // entailmentQuestion uses the clean reading, not the raw clipping: a fragment like "ssia
+      // Developing 800km/h" made the reader say "unsupported" for a figure the post plainly states.
+      const questions: EntailmentQuestion[] = post.due.map((t, i) =>
+        entailmentQuestion(String(i + 1), t.drone, t.spec, t.claim),
+      );
       const { system, prompt, truncated } = entailmentPrompt(post.text, questions);
       const estimate = Math.ceil((system.length + prompt.length) / CHARS_PER_TOKEN);
       const used = await usedToday();

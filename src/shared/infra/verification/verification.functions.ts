@@ -6,6 +6,7 @@ import type {
   AuditSecondLook,
   AuditStatus,
   VerificationRunReport,
+  VerifierControlsStatus,
 } from "@/shared/contracts/verification";
 
 /**
@@ -105,6 +106,13 @@ export const triggerEntailment = createServerFn({ method: "POST" }).handler(asyn
   const { recordTaskRun, entailmentOutcome } = await import("@/shared/infra/task-runs.server");
   return await recordTaskRun("verification:ai", "manual", runEntailment, entailmentOutcome);
 });
+
+export const fetchVerifierControls = createServerFn({ method: "GET" }).handler(
+  async (): Promise<VerifierControlsStatus> => {
+    const { verifierControlsStatus } = await import("./controls.server");
+    return await verifierControlsStatus();
+  },
+);
 
 export const fetchTokenUsage = createServerFn({ method: "GET" }).handler(
   async (): Promise<TokenUsageToday> => {

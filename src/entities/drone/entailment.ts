@@ -1,4 +1,6 @@
-import type { ClaimEntailment, EntailmentVerdict, SpecClaim } from "./types";
+import { catalogNames } from "./catalog-names";
+import { cleanReading } from "./claim-reading";
+import type { ClaimEntailment, Drone, EntailmentVerdict, SpecAttribute, SpecClaim } from "./types";
 import { fold } from "./verification";
 
 /**
@@ -46,6 +48,28 @@ export interface EntailmentQuestion {
   aliases?: readonly string[];
   attribute: string;
   value: string;
+}
+
+/**
+ * The question one claim is asked as. The real path and the verifier controls both build their
+ * questions here, so a control differs from a real question in its value and nothing else.
+ * `value` is the claim's clean reading unless a control passes its altered version, which it builds
+ * from that same clean reading (verifier-controls.ts).
+ */
+export function entailmentQuestion(
+  ref: string,
+  drone: Drone,
+  spec: SpecAttribute,
+  claim: SpecClaim,
+  value?: string,
+): EntailmentQuestion {
+  return {
+    ref,
+    system: drone.name,
+    aliases: catalogNames(drone),
+    attribute: spec.label,
+    value: value ?? cleanReading(spec, claim),
+  };
 }
 
 /** What one answer becomes once checked against the post. */

@@ -95,6 +95,7 @@ describe("scheduled jobs and their switches", () => {
       "evaluation:shadow",
       "sources:sync",
       "verification:ai",
+      "verification:controls",
     ]);
     for (const t of switched)
       expect(AUTONOMY_SWITCH_NAMES).toContain(t.switch as (typeof AUTONOMY_SWITCH_NAMES)[number]);
