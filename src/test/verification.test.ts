@@ -17,6 +17,7 @@ import type {
   SpecClaim,
   VerificationKind,
 } from "@/entities/drone/types";
+import { evidencePassagesWithContext } from "@/entities/drone/verification-evidence";
 import {
   backfillCatalogue,
   backfillDrones,
@@ -214,6 +215,135 @@ describe("verifyClaim", () => {
     const v = verdict({ drone: held, spec: s, claim, text, catalog: [held, lancet], at: AT });
     expect(check(v, "identity")).toMatchObject({ verdict: "uncertain", applicable: true });
     expect(v.state).toBe("uncertain");
+  });
+
+  it('passes an "It ..." evidence sentence that follows a sentence naming this system', () => {
+    // Real evidence sentences from the eval catalog fixture, given a post that names the system.
+    const quote = "It features four AESA radar panels";
+    const claim = point(4, "count", "a", { evidence: quote, sourceId: "p1" });
+    const s = spec("sensor.count", "count", [claim]);
+    const d = drone("shahed", "Shahed-136", [s]);
+    const text = `The Shahed-136 is a loitering munition. ${quote}.`;
+    const v = verdict({ drone: d, spec: s, claim, text, catalog: [d], at: AT });
+    expect(check(v, "identity")).toMatchObject({ verdict: "pass", confidence: 0.6 });
+    expect(check(v, "identity")?.detail).toContain("continues it");
+  });
+
+  it('is not a pass when the sentence before an "It ..." sentence names another system', () => {
+    const quote =
+      "It is already compact and lightweight, operated by a rugged laptop, and weighs less than 150 kilograms";
+    const claim = point(150, "kg", "a", { evidence: quote, sourceId: "p1" });
+    const s = spec("mass.max", "kg", [claim]);
+    const held = drone("shahed", "Shahed-136", [s]);
+    const lancet = drone("lancet", "Lancet-3", []);
+    const text = `The Lancet-3 is a loitering munition. ${quote}.`;
+    const v = verdict({ drone: held, spec: s, claim, text, catalog: [held, lancet], at: AT });
+    expect(check(v, "identity")).toMatchObject({ verdict: "uncertain", confidence: 0.2 });
+    expect(check(v, "identity")?.detail).toContain("Lancet-3");
+    expect(v.state).toBe("uncertain");
+  });
+
+  it('is uncertain when the sentence before an "It ..." sentence names this system and another', () => {
+    const quote = "It also incorporates protections against electronic jamming";
+    const claim = point(1, "count", "a", { evidence: quote, sourceId: "p1" });
+    const s = spec("sensor.count", "count", [claim]);
+    const held = drone("shahed", "Shahed-136", [s]);
+    const lancet = drone("lancet", "Lancet-3", []);
+    const text = `Unlike the Shahed-136, the Lancet-3 is a loitering munition. ${quote}.`;
+    const v = verdict({ drone: held, spec: s, claim, text, catalog: [held, lancet], at: AT });
+    expect(check(v, "identity")).toMatchObject({ verdict: "uncertain", applicable: true });
+    expect(check(v, "identity")?.detail).toContain("Shahed-136 and Lancet-3");
+    expect(v.state).toBe("uncertain");
+  });
+
+  it('is uncertain, not a pass, when the quote also sits in a sentence that is not an "It ..." one', () => {
+    const claim = point(40, "km", "a", { evidence: "a range of 40 km", sourceId: "p1" });
+    const s = spec("range.max", "km", [claim]);
+    const d = drone("shahed", "Shahed-136", [s]);
+    const text =
+      "The Shahed-136 is a loitering munition. It has a range of 40 km. Tests showed a range of 40 km.";
+    const v = verdict({ drone: d, spec: s, claim, text, catalog: [d], at: AT });
+    expect(check(v, "identity")).toMatchObject({ verdict: "uncertain", applicable: true });
+    expect(v.state).toBe("uncertain");
+  });
+
+  it('leaves an "Item ..." or "Italy ..." sentence unchanged', () => {
+    for (const opener of ["Item four has a range of 40 km.", "Italy has a range of 40 km."]) {
+      const claim = point(40, "km", "a", { evidence: "a range of 40 km", sourceId: "p1" });
+      const s = spec("range.max", "km", [claim]);
+      const d = drone("shahed", "Shahed-136", [s]);
+      const text = `The Shahed-136 is a loitering munition. ${opener}`;
+      const v = verdict({ drone: d, spec: s, claim, text, catalog: [d], at: AT });
+      expect(check(v, "identity")).toMatchObject({ verdict: "uncertain", confidence: 0.5 });
+      expect(check(v, "identity")?.detail).toBe(
+        "the evidence sentence names no system; the post names this one",
+      );
+    }
+  });
+
+  it("follows Ukrainian and Russian continuation words back to the sentence before", () => {
+    const uk = point(40, "km", "a", { evidence: "дальність 40 км", sourceId: "p1" });
+    const ukSpec = spec("range.max", "km", [uk]);
+    const ukDrone = drone("shahed", "Shahed-136", [ukSpec]);
+    const ukText = "Shahed-136 є ударним дроном. Він має дальність 40 км.";
+    const ukVerdict = verdict({
+      drone: ukDrone,
+      spec: ukSpec,
+      claim: uk,
+      text: ukText,
+      catalog: [ukDrone],
+      at: AT,
+    });
+    expect(check(ukVerdict, "identity")).toMatchObject({ verdict: "pass", confidence: 0.6 });
+
+    const ru = point(40, "km", "a", { evidence: "дальность 40 км", sourceId: "p1" });
+    const ruSpec = spec("range.max", "km", [ru]);
+    const ruDrone = drone("shahed", "Shahed-136", [ruSpec]);
+    const ruText = "Shahed-136 — ударный дрон. Он имеет дальность 40 км.";
+    const ruVerdict = verdict({
+      drone: ruDrone,
+      spec: ruSpec,
+      claim: ru,
+      text: ruText,
+      catalog: [ruDrone],
+      at: AT,
+    });
+    expect(check(ruVerdict, "identity")).toMatchObject({ verdict: "pass", confidence: 0.6 });
+  });
+
+  it('leaves an "It ..." sentence that opens the post unchanged', () => {
+    const claim = point(40, "km", "a", { evidence: "It has a range of 40 km", sourceId: "p1" });
+    const s = spec("range.max", "km", [claim]);
+    const d = drone("shahed", "Shahed-136", [s]);
+    const text = "It has a range of 40 km.";
+    const v = verdict({ drone: d, spec: s, claim, text, catalog: [d], at: AT });
+    expect(check(v, "identity")).toMatchObject({ verdict: "uncertain", confidence: 0.2 });
+    expect(check(v, "identity")?.detail).toBe("the evidence sentence names no system");
+  });
+
+  it('follows a quote that spans two sentences, the first beginning with "It", to the sentence before', () => {
+    const quote = "It has a range of 40 km. It carries";
+    const claim = point(40, "km", "a", { evidence: quote, sourceId: "p1" });
+    const s = spec("range.max", "km", [claim]);
+    const d = drone("shahed", "Shahed-136", [s]);
+    const text =
+      "The Shahed-136 is a loitering munition. It has a range of 40 km. It carries a warhead.";
+    const v = verdict({ drone: d, spec: s, claim, text, catalog: [d], at: AT });
+    expect(check(v, "identity")).toMatchObject({ verdict: "pass", confidence: 0.6 });
+  });
+
+  it("gives the sentence before a passage in evidencePassagesWithContext", () => {
+    expect(
+      evidencePassagesWithContext(
+        "The Shahed-136 is a loitering munition. It has a range of 40 km.",
+        "a range of 40 km",
+      ),
+    ).toEqual([
+      { passage: "it has a range of 40 km.", before: "the shahed-136 is a loitering munition." },
+    ]);
+    expect(evidencePassagesWithContext("It has a range of 40 km.", "a range of 40 km")).toEqual([
+      { passage: "it has a range of 40 km." },
+    ]);
   });
 
   it("does not cut a sentence at an abbreviation", () => {

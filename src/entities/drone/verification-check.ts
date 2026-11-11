@@ -16,8 +16,10 @@ import type { VerificationCheck, VerificationKind, VerificationVerdict } from ".
  * 12: a count has no unit; "Number of missiles" was checked as a mass in kg and passed.
  * 13: bounds follow the entry's flight profile (a ballistic missile), and 161 stored claims got a
  * reading, so their unit and bounds checks can now run.
+ * 14: an "It ..." evidence sentence is identified by the sentence before it, so a figure that
+ * follows a sentence naming the system is no longer uncertain for want of a name.
  */
-export const VERIFIER_VERSION = "deterministic-13";
+export const VERIFIER_VERSION = "deterministic-14";
 
 interface CheckInput {
   kind: VerificationKind;

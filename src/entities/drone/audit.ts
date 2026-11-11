@@ -152,7 +152,8 @@ export function readerDisagrees(
  * - altered: a verified claim shown with its figure changed to one the post does not contain. Wrong
  *   by construction, whatever any check says, so a "yes" on it is the auditor's slip.
  * - misread: the first sessions' kind - a claim whose quote's sentence names another system. That
- *   was an inference of the identity check, and the check misses "It builds on…" and a system
+ *   was an inference of the identity check, and the check follows "It" back one sentence only (since
+ *   deterministic-14), so it still misses "It builds on…" and a system
  *   named as part of another, so the owner may dispute one; an altered control cannot be disputed.
  */
 export type ControlKind = "altered" | "misread";

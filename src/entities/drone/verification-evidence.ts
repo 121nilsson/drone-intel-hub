@@ -66,23 +66,35 @@ const sentences = (text: string) =>
 /** The longest run of consecutive sentences a quote is looked for in (a spec list over lines). */
 const MAX_WINDOW = 4;
 
+/** A passage of the post that carries the quote, and the folded sentence right before it. */
+export interface PassageWithContext {
+  passage: string;
+  /** Absent when the passage opens the post. */
+  before?: string;
+}
+
 /**
  * The passages of the post that carry the quote, found by containment on folded text - never by
  * character offsets, which folding shifts. A quote crossing a sentence or line boundary
  * ("...range of" / "2,000 km.") is looked for in the smallest run of consecutive sentences that
  * holds it. Empty when the quote is not in the post.
  */
-export function evidencePassages(text: string, quote: string): string[] {
+export function evidencePassagesWithContext(text: string, quote: string): PassageWithContext[] {
   const needle = fold(quote);
   if (!needle) return [];
   const parts = sentences(text);
   for (let size = 1; size <= Math.min(MAX_WINDOW, parts.length); size++) {
-    const found: string[] = [];
+    const found: PassageWithContext[] = [];
     for (let i = 0; i + size <= parts.length; i++) {
       const window = parts.slice(i, i + size).join(" ");
-      if (window.includes(needle)) found.push(window);
+      if (window.includes(needle))
+        found.push({ passage: window, ...(i > 0 ? { before: parts[i - 1] } : {}) });
     }
     if (found.length) return found;
   }
   return [];
+}
+
+export function evidencePassages(text: string, quote: string): string[] {
+  return evidencePassagesWithContext(text, quote).map((p) => p.passage);
 }
