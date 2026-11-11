@@ -115,12 +115,14 @@ export const rulesOutcome = (r: {
     quarantined: string[];
   };
   mine: { ran: boolean; reason: string; proposed: number; passed: number; sandboxed: number };
+  probation?: string[];
 }): TaskOutcome => {
   const { supervise: s, mine: m } = r;
+  const probed = r.probation?.length ? `, ${r.probation.length} on probation` : "";
   const sup = s.breaker.tripped
     ? `breaker TRIPPED (${s.breaker.reasons.join("; ")})`
     : s.ran
-      ? `supervision ok, ${s.quarantined.length} quarantined`
+      ? `supervision ok, ${s.quarantined.length} quarantined${probed}`
       : `supervision skipped: ${s.reason}`;
   const mined = m.ran
     ? `${m.proposed} proposed, ${m.passed}/${m.sandboxed} passed sandbox`

@@ -23,6 +23,12 @@ export const AUTONOMY_SWITCHES = {
     description:
       "Lets unit slips and impossible figures be applied to the catalogue once analysts have earned that trust. Off keeps every finding a proposal.",
   },
+  rule_probation: {
+    env: "RULE_PROBATION",
+    default: true,
+    description:
+      "Returns a quarantined generated rule to shadow after seven days, so it can earn promotion again. Off leaves every quarantine in place until an analyst acts.",
+  },
   ai_verifier: {
     env: "AI_VERIFIER",
     default: true,

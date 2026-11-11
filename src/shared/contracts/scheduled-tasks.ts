@@ -70,6 +70,7 @@ export const SCHEDULED_TASKS: readonly ScheduledTask[] = [
     cron: "15 4 * * *",
     label: "Rule supervision and mining",
     every: "daily 04:15",
-    does: "Circuit breaker over recently activated rules, then mines new rule hypotheses and sandboxes them.",
+    does: "Circuit breaker over recently activated rules, then returns rules quarantined a week ago to shadow for another chance, then mines new rule hypotheses and sandboxes them.",
+    switch: "rule_probation",
   },
 ];

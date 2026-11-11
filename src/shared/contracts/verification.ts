@@ -115,7 +115,7 @@ export interface AutonomyEvent {
  * The kinds something actually writes. A kind is added in the same change as its writer: a kind
  * nothing emits makes "nothing was rejected" indistinguishable from "no one wrote the event".
  */
-export const AUTONOMY_EVENT_KINDS = ["verification_run"] as const;
+export const AUTONOMY_EVENT_KINDS = ["verification_run", "rule_probation_started"] as const;
 export type AutonomyEventKind = (typeof AUTONOMY_EVENT_KINDS)[number];
 
 /**

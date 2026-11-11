@@ -24,3 +24,4 @@ export { mineAndSandbox, type MineRunResult } from "./rule-sandbox-mine.server";
 export { getAutonomyStatus, type AutonomyStatus } from "./rule-sandbox-autonomy.server";
 export { runShadow, type ShadowRunResult } from "./rule-sandbox-shadow.server";
 export { superviseActiveRules, type SuperviseResult } from "./rule-sandbox-supervise.server";
+export { startProbation } from "./rule-sandbox-probation.server";

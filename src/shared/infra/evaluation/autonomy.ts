@@ -1,5 +1,7 @@
 import type { Candidate, Drone, Extraction } from "@/entities/drone/types";
 import type { IntelExtractor } from "@/shared/contracts/ai";
+import type { RuleKind } from "@/shared/contracts/rules";
+import { RULE_RISK } from "@/shared/infra/proposals/rule-applier";
 import { normalizeExtraction } from "@/entities/normalization/apply";
 import {
   compareSpecs,
@@ -215,4 +217,38 @@ export function breakerTrips(r: SandboxResult): { trips: boolean; reasons: strin
     if (d < -BREAKER_F1_DROP) reasons.push(`${k} F1 ${d.toFixed(3)}`);
   }
   return { trips: reasons.length > 0, reasons };
+}
+
+/** Days a breaker-quarantined generated rule stays out of the engine before probation. */
+export const PROBATION_AFTER_DAYS = 7;
+
+/** One of a rule's own rule_decisions rows, reduced to what probation needs. */
+export interface ProbationDecision {
+  decision: DecisionKind;
+  actor: DecisionActor;
+  /** ISO time the decision was recorded. */
+  decidedAt: string;
+}
+
+/**
+ * Whether a quarantined rule may return to shadow. Probation only re-opens the shadow queue: the
+ * rule must still earn promotion through shadow scoring and promotionVerdict. Only the circuit
+ * breaker's single quarantine qualifies - an analyst's quarantine is a verdict automation does
+ * not overturn, and a rule quarantined twice has failed its probation. High-risk kinds (aliases,
+ * stopwords) never come back unattended. `decisions` are this rule's own rows only.
+ */
+export function probationDue(
+  rule: { kind: string; origin: string; status: string },
+  decisions: readonly ProbationDecision[],
+  now: Date,
+): boolean {
+  if (rule.status !== "quarantined" || rule.origin !== "autonomous_sandbox") return false;
+  if (!Object.hasOwn(RULE_RISK, rule.kind)) return false;
+  if (RULE_RISK[rule.kind as RuleKind] === "high") return false;
+  const quarantines = decisions.filter((d) => d.decision === "quarantined");
+  if (quarantines.length !== 1) return false;
+  const only = quarantines[0]!;
+  if (only.actor !== "circuit_breaker") return false;
+  const days = (now.getTime() - Date.parse(only.decidedAt)) / 86_400_000;
+  return days >= PROBATION_AFTER_DAYS;
 }

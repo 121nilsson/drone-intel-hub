@@ -6,7 +6,7 @@ import { compileRuleSnapshot, type DynamicRuleRow, type RuleKind } from "@/share
  * An alias decides which system a passage is filed under and removing it does not re-file the
  * claims it carried; a stopword decides what is never a name. A unit scale stays on one claim.
  */
-const RULE_RISK: Record<RuleKind, RiskTier> = {
+export const RULE_RISK: Record<RuleKind, RiskTier> = {
   add_unit_scale: "low",
   add_cue: "medium",
   context_filter: "medium",

@@ -69,6 +69,7 @@ describe("autonomy switch definitions", () => {
     expect([...AUTONOMY_SWITCH_NAMES].sort()).toEqual([
       "ai_verifier",
       "autocorrect",
+      "rule_probation",
       "rules_autopromote",
     ]);
     for (const name of AUTONOMY_SWITCH_NAMES) {
@@ -89,6 +90,7 @@ describe("scheduled jobs and their switches", () => {
   it("points every switched job at a defined switch", () => {
     const switched = SCHEDULED_TASKS.filter((t) => t.switch !== undefined);
     expect(switched.map((t) => t.name).sort()).toEqual([
+      "evaluation:rules",
       "evaluation:shadow",
       "sources:sync",
       "verification:ai",
