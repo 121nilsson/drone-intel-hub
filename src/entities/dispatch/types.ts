@@ -63,6 +63,10 @@ export interface RawDispatch {
     promptVersion?: string;
     analyzedAt: string;
     escalationReasons?: string[];
+    /** Specs the evidence brake dropped for this post (quote not found in it). Written only when non-zero. */
+    droppedForEvidence?: number;
+    /** Dropped specs a repair call re-quoted and kept. Written only when non-zero. */
+    requoted?: number;
   };
 }
 

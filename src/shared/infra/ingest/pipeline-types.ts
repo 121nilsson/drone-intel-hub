@@ -93,6 +93,10 @@ export interface PipelineTrace {
   specsMerged?: number;
   /** Extraction rejected as not a system name before the promote gate. */
   rejected?: boolean;
+  /** Specs the evidence brake dropped because their quote is not in the post. Written only when non-zero. */
+  droppedForEvidence?: number;
+  /** Dropped specs a repair call re-quoted and kept. Written only when non-zero. */
+  requoted?: number;
 }
 
 export type PipelineResult = PipelinePrimaryResult & {

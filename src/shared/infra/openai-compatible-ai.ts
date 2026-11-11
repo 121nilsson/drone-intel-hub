@@ -16,6 +16,8 @@ import {
   type BriefingSummarizer,
   type ContradictionAdjudicator,
   type IntelExtractor,
+  type RequoteItem,
+  type RequoteReply,
 } from "@/shared/contracts/ai";
 import { chatCompletion } from "./ai-proxy.functions";
 import type { ChatResult, ChatTransport } from "./ai-proxy.server";
@@ -37,6 +39,14 @@ const EXTRACT_SYS = extractionPrompt.system;
  * escalated call. The pipeline's evidence check still searches the full stored text.
  */
 const EXTRACT_PROMPT_CHARS = 30_000;
+
+/**
+ * The repair call (see `requote` and the evidence brake). Constant here, not in
+ * extraction-prompt.json: the extraction prompt is versioned and hashed, and a repair is not an
+ * extraction.
+ */
+const REQUOTE_SYS =
+  'You copy passages from a report. You get TEXT and numbered ITEMS. Each item names an attribute and a value that the report may state, with a quote that did NOT match the TEXT. For each item, find the passage in TEXT that states that value for that attribute and copy it character for character, exactly as written in TEXT: no edits, no translation, no added words. If TEXT does not state the value, answer null. Reply in json: {"quotes":[{"ref":"<item ref>","quote":"<exact passage copied from TEXT>" | null}]} with one entry per item.';
 
 /** A failed call as an exception, typed so a queue can tell a provider outage from a bad post. */
 function failure(r: Extract<ChatResult, { ok: false }>): Error {
@@ -148,6 +158,40 @@ export class OpenAICompatibleExtractor implements IntelExtractor {
         analyzedAt: new Date().toISOString(),
       },
     };
+  }
+
+  /** Repair call for figures whose quote did not match the post. Throws on any failure. */
+  async requote(raw: string, items: RequoteItem[]): Promise<RequoteReply[]> {
+    const list = items
+      .map((it) => `[${it.ref}] ${it.label}: ${it.value} (quote that did not match: "${it.quote}")`)
+      .join("\n");
+    const r = await this.chat({
+      baseUrl: this.cfg.baseUrl,
+      apiKey: this.cfg.apiKey,
+      model: this.tier === 1 ? this.cfg.tier1Model : this.cfg.tier2Model,
+      system: REQUOTE_SYS,
+      prompt: `TEXT:\n${raw.slice(0, EXTRACT_PROMPT_CHARS)}\n\nITEMS:\n${list}`,
+      json: true,
+      tier: this.tier === 1 ? "tier1" : "tier2",
+    });
+    if (!r.ok) throw failure(r);
+    const decoded = parseModelJson(r.content);
+    if (!decoded) throw new Error("Invalid requote JSON: no JSON object in the reply");
+    const quotes = decoded["quotes"];
+    if (!Array.isArray(quotes)) throw new Error("Invalid requote JSON: no quotes array");
+    return quotes.flatMap((q: unknown) => {
+      if (!q || typeof q !== "object") return [];
+      const entry = q as Record<string, unknown>;
+      const ref = entry["ref"];
+      if (typeof ref !== "string" && typeof ref !== "number") return [];
+      const quote = entry["quote"];
+      return [
+        {
+          ref: String(ref),
+          quote: typeof quote === "string" && quote.trim() ? quote : null,
+        },
+      ];
+    });
   }
 }
 

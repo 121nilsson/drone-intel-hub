@@ -155,7 +155,17 @@ export async function processPending(
             r.candidate.extraction.metadata?.promptVersion ?? "legacy",
             r.candidate.extraction.metadata?.model ?? "local",
           ].join(":"),
-          ...(r.candidate.extraction.metadata ? { analysis: r.candidate.extraction.metadata } : {}),
+          ...(r.candidate.extraction.metadata
+            ? {
+                analysis: {
+                  ...r.candidate.extraction.metadata,
+                  ...(r.trace?.droppedForEvidence
+                    ? { droppedForEvidence: r.trace.droppedForEvidence }
+                    : {}),
+                  ...(r.trace?.requoted ? { requoted: r.trace.requoted } : {}),
+                },
+              }
+            : {}),
         });
         rep.processed++;
         if (r.candidate.extraction.metadata?.engine === "heuristic") rep.heuristicOnly!++;

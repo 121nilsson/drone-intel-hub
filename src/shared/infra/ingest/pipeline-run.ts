@@ -1,4 +1,4 @@
-import type { Candidate, Drone, Extraction, ExtractedSpec } from "@/entities/drone/types";
+import type { Candidate, Drone, Extraction } from "@/entities/drone/types";
 import { ProviderOutageError } from "@/shared/contracts/ai";
 import type { PipelineDeps } from "./pipeline-types";
 import {
@@ -28,6 +28,7 @@ import {
 import { collidesWithCatalog, learnedNegativeKeys, notASystemName } from "./pipeline-triage";
 import { applyRelatedSystems, extractionForSystem } from "./pipeline-slice";
 import { claimIdsOf, promote, recordOrigin } from "./pipeline-actions";
+import { applyEvidenceBrake } from "./evidence-brake";
 
 export async function runTwoTier(
   raw: string,
@@ -168,20 +169,12 @@ export async function runTwoTier(
       for (const p of records) d.procurements.add(p);
     }
   }
-  // Autonomy brake: a model-produced figure is only actionable if its evidence actually
-  // appears in the original post. Identity fields are untouched.
-  const fold = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase();
-  const hasEvidence = (spec: ExtractedSpec) => {
-    const proof = spec.evidence ?? spec.raw;
-    if (!proof) return true;
-    return fold(raw).includes(fold(String(proof)));
-  };
-  if (extraction.specs) extraction.specs = extraction.specs.filter(hasEvidence);
-  if (extraction.systemExtractions)
-    extraction.systemExtractions = extraction.systemExtractions.map((s) => ({
-      ...s,
-      specs: s.specs.filter(hasEvidence),
-    }));
+  // Autonomy brake: a model-produced figure is only actionable if its evidence appears in the
+  // original post; one AI repair attempt may re-quote it. Counted, so a drop is visible.
+  const requoter = tier === 2 ? d.tier2 : d.tier1;
+  const brake = await applyEvidenceBrake(raw, extraction, extraction.metadata?.engine, requoter);
+  if (brake.dropped) trace.droppedForEvidence = brake.dropped;
+  if (brake.requoted) trace.requoted = brake.requoted;
   for (const unknown of normalized.unknowns) {
     d.taxonomyCandidates?.record(unknown.rawTerm, unknown.taxonomy, { source });
   }

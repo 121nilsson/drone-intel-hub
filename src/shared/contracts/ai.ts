@@ -12,6 +12,25 @@ export interface IntelExtractor {
     context?: Extraction,
     options?: { rules?: RuleSnapshot },
   ): Promise<Extraction>;
+  /**
+   * Optional repair: asks the model to copy, from the post, the exact passage that states each
+   * figure whose quote did not match. Only an AI extractor implements it; the evidence brake
+   * calls it at most once per post and treats any failure as "no repair".
+   */
+  requote?(raw: string, items: RequoteItem[]): Promise<RequoteReply[]>;
+}
+
+/** One figure the evidence brake could not find in the post. `quote` is the model's own, unmatched quote. */
+export interface RequoteItem {
+  ref: string;
+  label: string;
+  value: string;
+  quote: string;
+}
+
+export interface RequoteReply {
+  ref: string;
+  quote: string | null;
 }
 
 /**
