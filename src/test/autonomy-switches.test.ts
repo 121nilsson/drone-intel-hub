@@ -70,6 +70,7 @@ describe("autonomy switch definitions", () => {
       "ai_verifier",
       "autocorrect",
       "rule_probation",
+      "rule_replay",
       "rules_autopromote",
     ]);
     for (const name of AUTONOMY_SWITCH_NAMES) {

@@ -5,6 +5,7 @@ import {
   json,
   recordDecision,
 } from "@/shared/infra/evaluation/rule-sandbox-store.server";
+import { replayRule } from "@/shared/infra/evaluation/rule-sandbox-replay.server";
 
 /** Analyst: send a passed rule to shadow so it earns metrics before going live. */
 export async function shadowRule(id: string) {
@@ -28,16 +29,26 @@ export async function rejectRule(id: string) {
     returning status`;
   const status = rows[0]?.["status"] as "rejected" | "quarantined" | undefined;
   if (status) await recordDecision(id, status, "analyst");
-  if (status === "quarantined") await bumpRuleVersion(`quarantine ${id}`);
+  if (status === "quarantined") {
+    await bumpRuleVersion(`quarantine ${id}`);
+    // After the bump, so the posts are read again without the rule.
+    await replayRule(id);
+  }
   return { ok: rows.length > 0 };
 }
 
 export async function quarantine(ids: string[], note: string) {
+  const moved: string[] = [];
   for (const id of ids) {
     const [r] = await db()`
       update dynamic_rules set status = 'quarantined', decided_by = 'circuit_breaker'
       where id = ${id} and status = 'active' returning id`;
-    if (r) await recordDecision(id, "quarantined", "circuit_breaker", note);
+    if (r) {
+      await recordDecision(id, "quarantined", "circuit_breaker", note);
+      moved.push(id);
+    }
   }
   if (ids.length) await bumpRuleVersion(`circuit breaker: ${ids.join(", ")}`);
+  // Only a rule that was active and is now quarantined; replayRule never throws.
+  for (const id of moved) await replayRule(id);
 }

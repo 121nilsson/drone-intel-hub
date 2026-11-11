@@ -29,6 +29,12 @@ export const AUTONOMY_SWITCHES = {
     description:
       "Returns a quarantined generated rule to shadow after seven days, so it can earn promotion again. Off leaves every quarantine in place until an analyst acts.",
   },
+  rule_replay: {
+    env: "RULE_REPLAY",
+    default: true,
+    description:
+      "Hands the posts a quarantined rule shaped back to the pipeline, to be read again without it. Off leaves those posts' claims in place until an analyst or a later re-analysis changes them.",
+  },
   ai_verifier: {
     env: "AI_VERIFIER",
     default: true,

@@ -19,6 +19,7 @@ export { proposeRule } from "./rule-sandbox-propose.server";
 export { sandboxRule } from "./rule-sandbox-sandbox.server";
 export { activateRule } from "./rule-sandbox-activation.server";
 export { shadowRule, rejectRule } from "./rule-sandbox-lifecycle.server";
+export { replayRule, type ReplayResult } from "./rule-sandbox-replay.server";
 export { listRules } from "./rule-sandbox-list.server";
 export { mineAndSandbox, type MineRunResult } from "./rule-sandbox-mine.server";
 export { getAutonomyStatus, type AutonomyStatus } from "./rule-sandbox-autonomy.server";
