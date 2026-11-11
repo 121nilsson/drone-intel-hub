@@ -7,7 +7,8 @@ export const DOMAINS: Domain[] = ["Air", "Land", "Sea", "Multi"];
 
 /**
  * What produced a claim: the prompt, pipeline, rule set and name that were in force. A claim
- * without lineage means "unknown", not "none"; it is never backfilled.
+ * without lineage means "unknown", not "none"; it is never backfilled, except contentHash, which
+ * the verification backfill reads from the claim's own post.
  */
 export interface ClaimLineage {
   promptVersion?: string;

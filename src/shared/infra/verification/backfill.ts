@@ -18,7 +18,42 @@ import type { DispatchRepository, DroneRepository } from "@/shared/contracts/rep
 /** Resolve a claim's own source text from the dispatch archive, by the id stored on the claim. */
 export function dispatchTextResolver(dispatches: readonly RawDispatch[]): ClaimTextResolver {
   const byId = new Map(dispatches.map((d) => [d.id, d]));
-  return (claim) => (claim.sourceId ? byId.get(claim.sourceId)?.text : undefined);
+  // An emptied post (irrelevant, or a duplicate stub) has no text to check against: undefined.
+  return (claim) => (claim.sourceId ? byId.get(claim.sourceId)?.text || undefined : undefined);
+}
+
+/** The content hash of a claim's own post, from the post id stored on the claim. */
+export function dispatchHashResolver(
+  dispatches: readonly RawDispatch[],
+): (claim: SpecClaim) => string | undefined {
+  const byId = new Map(
+    dispatches.flatMap((d) => (d.contentHash ? [[d.id, d.contentHash] as const] : [])),
+  );
+  return (claim) => (claim.sourceId ? byId.get(claim.sourceId) : undefined);
+}
+
+/**
+ * Give each claim its post's content hash, where the claim has none yet. Only `lineage.contentHash`
+ * is written: the rest of `lineage` is left as it is. Run before verification, so the source count
+ * of a claim sees the hashes of its peers as well as its own.
+ */
+export function stampContentHashes(
+  drone: Drone,
+  hashFor: (claim: SpecClaim) => string | undefined,
+): Drone {
+  let changed = false;
+  const specs = drone.specs.map((spec) => {
+    let specChanged = false;
+    const claims = spec.claims.map((claim) => {
+      if (claim.lineage?.contentHash) return claim;
+      const contentHash = hashFor(claim);
+      if (!contentHash) return claim;
+      specChanged = changed = true;
+      return { ...claim, lineage: { ...claim.lineage, contentHash } };
+    });
+    return specChanged ? { ...spec, claims } : spec;
+  });
+  return changed ? { ...drone, specs } : drone;
 }
 
 /** The source string ingestion writes on a claim from an archived post (see auto-ingest). */
@@ -97,6 +132,7 @@ export interface BackfillResult {
  * Pure: verify every outdated claim of every entry against its own source text. `catalog` is the
  * set the identity check compares against; it defaults to the entries being verified. `postFor`
  * links claims written without a post id to their post first, so they are checked against it.
+ * `hashFor` stamps each claim with its post's content hash before anything is verified.
  */
 export function backfillDrones(
   drones: readonly Drone[],
@@ -104,13 +140,14 @@ export function backfillDrones(
   catalog: readonly Drone[] = drones,
   at = new Date().toISOString(),
   postFor: (claim: SpecClaim) => string | undefined = () => undefined,
+  hashFor: (claim: SpecClaim) => string | undefined = () => undefined,
 ): BackfillResult {
   let checked = 0;
   let missingText = 0;
   const changed: Drone[] = [];
   const shouldVerify = reverifiable(textFor);
   const next = drones.map((stored) => {
-    const drone = linkSourcePosts(stored, postFor);
+    const drone = stampContentHashes(linkSourcePosts(stored, postFor), hashFor);
     for (const spec of drone.specs)
       for (const claim of spec.claims) {
         if (!needsVerification(claim)) continue;
@@ -146,10 +183,11 @@ export async function backfillCatalogue(deps: {
   const posts = deps.dispatches.list();
   const textFor = dispatchTextResolver(posts);
   const postFor = sourcePostLinker(posts);
+  const hashFor = dispatchHashResolver(posts);
   const catalog = deps.drones.list();
   const replay = (fresh: Drone) =>
     verifyDrone(
-      linkSourcePosts(fresh, postFor),
+      stampContentHashes(linkSourcePosts(fresh, postFor), hashFor),
       textFor,
       catalog,
       undefined,
@@ -168,7 +206,7 @@ export async function backfillCatalogue(deps: {
       const d = live.get(id);
       return d ? [d] : [];
     });
-    const part = backfillDrones(chunk, textFor, catalog, at, postFor);
+    const part = backfillDrones(chunk, textFor, catalog, at, postFor, hashFor);
     for (const drone of part.changed) deps.drones.upsert(drone, replay);
     total.drones.push(...part.drones);
     total.changed.push(...part.changed);

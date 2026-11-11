@@ -18,8 +18,10 @@ import type { VerificationCheck, VerificationKind, VerificationVerdict } from ".
  * reading, so their unit and bounds checks can now run.
  * 14: an "It ..." evidence sentence is identified by the sentence before it, so a figure that
  * follows a sentence naming the system is no longer uncertain for want of a name.
+ * 15: reposts of one text count as one independent source (verification-sources.ts); the backfill
+ * stamps each claim's contentHash from its post first, so that count can see it.
  */
-export const VERIFIER_VERSION = "deterministic-14";
+export const VERIFIER_VERSION = "deterministic-15";
 
 interface CheckInput {
   kind: VerificationKind;
