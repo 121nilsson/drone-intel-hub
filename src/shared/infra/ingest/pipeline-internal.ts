@@ -1,7 +1,9 @@
-import type { Drone, Extraction, SystemExtraction } from "@/entities/drone/types";
+import type { ClaimLineage, Drone, Extraction, SystemExtraction } from "@/entities/drone/types";
 import { phoneticKey, phoneticText } from "@/entities/drone/name-key";
 import { linkVariant } from "@/entities/drone/merge-intelligence";
 import { mergeLinks, normalizeExtraction, toRFLink } from "@/entities/normalization/apply";
+import { getActiveRuleSnapshot } from "@/shared/contracts/rules";
+import { PIPELINE_VERSION } from "./pipeline-version";
 
 /** Collision keys strip punctuation and spacing, not just case: to a source document
  * "Shahed-136" and "Shahed 136" are the same system, and auto-promotion must not create a
@@ -18,6 +20,34 @@ export const readBy = (extraction: Pick<Extraction, "metadata">) => ({
   ...(extraction.metadata?.engine ? { extractionEngine: extraction.metadata.engine } : {}),
   ...(extraction.metadata?.model ? { model: extraction.metadata.model } : {}),
 });
+
+/**
+ * What produced the claims of one extraction, for ClaimLineage. The rule version is read at merge
+ * time, so it names the rules that were active when the claim was written, which is the set a
+ * later audit needs; a rule edit made between reading a post and merging it is not visible here.
+ */
+export function lineageOf(
+  extraction: Pick<Extraction, "metadata" | "name" | "matchId" | "systems">,
+  opts: { contentHash?: string | undefined } = {},
+): ClaimLineage {
+  const system = extraction.systems?.find(
+    (s) =>
+      (extraction.matchId && s.matchId === extraction.matchId) ||
+      (extraction.name && s.name === extraction.name),
+  );
+  const matchedName = system?.name ?? extraction.name;
+  return {
+    ...(extraction.metadata?.promptVersion
+      ? { promptVersion: extraction.metadata.promptVersion }
+      : {}),
+    ...(extraction.metadata?.promptHash ? { promptHash: extraction.metadata.promptHash } : {}),
+    pipelineVersion: PIPELINE_VERSION,
+    rulesVersion: getActiveRuleSnapshot().version,
+    ...(matchedName ? { matchedName } : {}),
+    ...(system?.matchedVia ? { matchedVia: system.matchedVia } : {}),
+    ...(opts.contentHash ? { contentHash: opts.contentHash } : {}),
+  };
+}
 
 /** Mark an extraction with why it came from a degraded tier, visible to the analyst in triage. */
 export function annotate(extraction: Extraction, note: string): Extraction {

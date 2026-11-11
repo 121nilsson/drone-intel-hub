@@ -60,6 +60,8 @@ export interface AnalysisContext {
   dispatchId?: string;
   url?: string;
   publishedAt?: string;
+  /** SimHash of the post text (RawDispatch.contentHash), carried onto each claim's lineage. */
+  contentHash?: string;
 }
 
 export type PipelinePrimaryResult =

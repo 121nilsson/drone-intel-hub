@@ -62,7 +62,7 @@ function scan(raw: string, catalog: Drone[], deep: boolean, rules?: RuleSnapshot
               ? "IL"
               : undefined;
 
-  const systems = resolveSystems(raw, catalog, rules?.stopwords);
+  const systems = resolveSystems(raw, catalog, rules?.stopwords, rules?.aliases);
   const matched = systems.filter((s) => s.matchId);
   const novel = systems.filter((s) => !s.matchId);
   // Single unambiguous catalog match only when no new/variant system is the subject

@@ -11,6 +11,7 @@ import {
   applyNormalization,
   collisionKey,
   linkVariantReplay,
+  lineageOf,
   withNormalizedRf,
   readBy,
 } from "./pipeline-internal";
@@ -56,6 +57,7 @@ function sliceExtraction(parent: Extraction, s: SystemExtraction): Extraction {
         name: s.name,
         ...(s.matchId ? { matchId: s.matchId } : {}),
         ...(s.variantOf ? { variantOf: s.variantOf } : {}),
+        ...(s.matchedVia ? { matchedVia: s.matchedVia } : {}),
       },
     ],
     components: s.components ?? [],
@@ -168,6 +170,7 @@ export function applyRelatedSystems(
                     ...(context.publishedAt ? { publishedAt: context.publishedAt } : {}),
                     extractionConfidence: extraction.confidence,
                     ...readBy(extraction),
+                    lineage: lineageOf(extraction, { contentHash: context.contentHash }),
                   }),
                   extraction,
                 ),

@@ -5,10 +5,30 @@ import type { NormalizedQuantity } from "@/entities/normalization/units";
 export type Domain = "Air" | "Land" | "Sea" | "Multi";
 export const DOMAINS: Domain[] = ["Air", "Land", "Sea", "Multi"];
 
+/**
+ * What produced a claim: the prompt, pipeline, rule set and name that were in force. A claim
+ * without lineage means "unknown", not "none"; it is never backfilled.
+ */
+export interface ClaimLineage {
+  promptVersion?: string;
+  promptHash?: string;
+  pipelineVersion?: string;
+  rulesVersion?: number;
+  /** Ids of generated rules (cue, context filter, unit scale) that shaped this spec. */
+  ruleIds?: string[];
+  /** The catalogue name or alias string that resolved the passage to this system. */
+  matchedName?: string;
+  matchedVia?: "name" | "alias" | "rule_alias";
+  /** SimHash of the post the claim came from (the dispatch's contentHash), when known. */
+  contentHash?: string;
+}
+
 export interface SpecClaim {
   /** Stable identity assigned at creation. Older claims without one fall back to a composite key. */
   id?: string;
   value: number | string;
+  /** How this claim was produced. Absent on claims written before lineage existed. */
+  lineage?: ClaimLineage;
   /** Verbatim text when the value was parsed from a string. */
   raw?: string;
   /** Parsed measurement in canonical units. Absent means not parsed. */
@@ -521,6 +541,8 @@ export interface ExtractedSpec {
    * Absent on heuristic-only extractions and on candidates stored before provenance existed.
    */
   provenance?: SpecProvenance;
+  /** Generated rules (cue, context filter, unit scale) that shaped this observation. */
+  ruleIds?: string[];
 }
 
 export type SpecProvenance = "heuristic" | "ai" | "both";
@@ -529,6 +551,8 @@ export interface DetectedSystem {
   name: string;
   matchId?: string;
   variantOf?: string;
+  /** How the passage was tied to this system: its name, one of its aliases, or a rule-added alias. */
+  matchedVia?: "name" | "alias" | "rule_alias";
 }
 
 export interface SystemExtraction extends DetectedSystem {
@@ -555,6 +579,7 @@ export interface ExtractionMetadata {
   engine: "heuristic" | "ai" | "combined";
   model?: string;
   promptVersion?: string;
+  promptHash?: string;
   escalationReasons?: string[];
   analyzedAt: string;
 }

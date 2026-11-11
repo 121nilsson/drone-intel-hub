@@ -124,6 +124,8 @@ export function resolveSystems(
   raw: string,
   catalog: Drone[],
   extraStop?: ReadonlySet<string>,
+  /** Aliases the active rule snapshot adds per catalog id, to tell them from stored aliases. */
+  ruleAliases?: ReadonlyMap<string, readonly string[]>,
 ): DetectedSystem[] {
   const systems: DetectedSystem[] = [];
   const seen = new Set<string>();
@@ -132,7 +134,13 @@ export function resolveSystems(
     const hit = catalogNames(d).find((n) => mentionsName(raw, n));
     if (hit && !seen.has(d.id)) {
       seen.add(d.id);
-      systems.push({ name: hit, matchId: d.id });
+      const nameForms = [d.name, d.cyrillic, ...d.name.split(/\s*\/\s*/)];
+      const matchedVia = nameForms.includes(hit)
+        ? "name"
+        : ruleAliases?.get(d.id)?.includes(hit)
+          ? "rule_alias"
+          : "alias";
+      systems.push({ name: hit, matchId: d.id, matchedVia });
     }
   }
   // 2. Detected names not already covered — check for variant-of relations

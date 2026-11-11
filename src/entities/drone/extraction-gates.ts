@@ -178,6 +178,7 @@ export function combineExtractions(base: Extraction, refinement: Extraction): Ex
       ...(refinement.metadata?.promptVersion
         ? { promptVersion: refinement.metadata.promptVersion }
         : {}),
+      ...(refinement.metadata?.promptHash ? { promptHash: refinement.metadata.promptHash } : {}),
       escalationReasons: [
         ...(base.metadata?.escalationReasons ?? []),
         ...(refinement.metadata?.escalationReasons ?? []),

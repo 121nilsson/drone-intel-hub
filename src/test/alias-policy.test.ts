@@ -289,6 +289,6 @@ describe("resolveSystems ignores generic aliases at match time", () => {
       "Ukraine already has Bars interceptor drones capable of countering jets.",
       catalog,
     ).filter((s) => s.matchId === "bars-b3ed");
-    expect(hits).toEqual([{ name: "Bars", matchId: "bars-b3ed" }]);
+    expect(hits).toEqual([{ name: "Bars", matchId: "bars-b3ed", matchedVia: "name" }]);
   });
 });

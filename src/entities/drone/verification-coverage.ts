@@ -13,11 +13,13 @@ export interface VerificationCoverage {
   checked: number;
 }
 
+const isAnalystClaim = (c: SpecClaim) =>
+  c.source === ANALYST_SOURCE || c.extractionEngine === "analyst";
+
 /** Coverage across the catalogue, for the Autonomy page. */
 export function verificationCoverage(
   drones: readonly Drone[],
-  isAnalyst: (claim: SpecClaim) => boolean = (c) =>
-    c.source === ANALYST_SOURCE || c.extractionEngine === "analyst",
+  isAnalyst: (claim: SpecClaim) => boolean = isAnalystClaim,
 ): VerificationCoverage {
   const out: VerificationCoverage = {
     total: 0,
@@ -44,6 +46,44 @@ export function verificationCoverage(
         out[claim.verification.state]++;
       }
   return out;
+}
+
+export interface PromptVerificationRow {
+  promptVersion: string | "unknown";
+  verified: number;
+  uncertain: number;
+  rejected: number;
+  unverified: number;
+  total: number;
+}
+
+/**
+ * Machine claims counted by the prompt that produced them, so a prompt change can be judged by
+ * what the verifier later said about its claims. A claim without lineage is "unknown", not zero.
+ */
+export function verificationByPromptVersion(drones: readonly Drone[]): PromptVerificationRow[] {
+  const rows = new Map<string, PromptVerificationRow>();
+  for (const drone of drones)
+    for (const spec of drone.specs)
+      for (const claim of spec.claims) {
+        if (isAnalystClaim(claim)) continue;
+        const promptVersion = claim.lineage?.promptVersion ?? "unknown";
+        let row = rows.get(promptVersion);
+        if (!row) {
+          row = { promptVersion, verified: 0, uncertain: 0, rejected: 0, unverified: 0, total: 0 };
+          rows.set(promptVersion, row);
+        }
+        row.total++;
+        if (!claim.verification) row.unverified++;
+        else row[claim.verification.state]++;
+      }
+  return [...rows.values()].sort((a, b) =>
+    a.promptVersion === "unknown"
+      ? 1
+      : b.promptVersion === "unknown"
+        ? -1
+        : a.promptVersion.localeCompare(b.promptVersion),
+  );
 }
 
 /** Claims a reader should look at first: rejected, then uncertain. */

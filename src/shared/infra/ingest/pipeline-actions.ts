@@ -4,6 +4,7 @@ import type { PipelineDeps } from "./pipeline-types";
 import {
   applyNormalization,
   linkVariantReplay,
+  lineageOf,
   withCounterparts,
   withNormalizedRf,
   readBy,
@@ -49,6 +50,8 @@ const provenanceOf = (c: Candidate) => ({
   ...(c.dispatchId ? { sourceId: c.dispatchId } : {}),
   ...(c.publishedAt ? { publishedAt: c.publishedAt } : {}),
   ...readBy(c.extraction),
+  // No contentHash here: a queued candidate does not carry its dispatch's fingerprint.
+  lineage: lineageOf(c.extraction),
 });
 
 export function promote(

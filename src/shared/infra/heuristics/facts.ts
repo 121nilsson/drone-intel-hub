@@ -118,13 +118,18 @@ export function extractFacts(raw: string, rules?: RuleSnapshot): Facts {
     // A dynamic cue only fills gaps: a figure a static cue already read is not restated.
     const known = (key: string, value: number | string, unit?: string) =>
       facts.specs.some((s) => s.key === key && s.value === value && s.unit === unit);
-    extractDynamicCues(
-      raw,
-      (key, label, value, unit, evidence) => {
-        if (!known(key, value, unit)) add(key, label, value, unit, evidence);
-      },
-      rules.cues,
-    );
+    // One cue at a time, so the specs it adds are the ones tagged with its id.
+    for (const c of rules.cues) {
+      const before = facts.specs.length;
+      extractDynamicCues(
+        raw,
+        (key, label, value, unit, evidence) => {
+          if (!known(key, value, unit)) add(key, label, value, unit, evidence);
+        },
+        [c],
+      );
+      for (const s of facts.specs.slice(before)) s.ruleIds = [c.id];
+    }
   }
   extractCountedEquipment(raw, add, facts);
   extractSensors(raw, facts);

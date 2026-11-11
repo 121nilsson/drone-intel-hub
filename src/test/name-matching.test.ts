@@ -67,8 +67,8 @@ describe("resolveSystems across scripts", () => {
 
   it("matches a Cyrillic mention to the catalog entry without proposing a new system", () => {
     expect(resolveSystems("ВС РФ применили Ланцет-3 и Герань-2.", catalog)).toEqual([
-      { name: "Lancet-3", matchId: "lancet-3" },
-      { name: "Geran-2", matchId: "geran-2" },
+      { name: "Lancet-3", matchId: "lancet-3", matchedVia: "name" },
+      { name: "Geran-2", matchId: "geran-2", matchedVia: "name" },
     ]);
   });
 

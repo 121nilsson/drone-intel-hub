@@ -125,6 +125,7 @@ export async function processPending(
           dispatchId: d.id,
           url: d.url,
           ...(d.publishedAt ? { publishedAt: d.publishedAt } : {}),
+          ...(d.contentHash ? { contentHash: d.contentHash } : {}),
         });
         if (d.reanalyze)
           supersedeCandidates(

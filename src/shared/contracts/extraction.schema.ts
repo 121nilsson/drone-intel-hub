@@ -73,6 +73,8 @@ const normalizeSpecKey = (v: unknown) => {
   return cleaned || v.trim();
 };
 
+// Parses model output only (AIExtractionSchema in openai-compatible-ai.ts): a reply cannot supply
+// ruleIds or matchedVia, which only the heuristic path sets.
 export const ExtractedSpecSchema = z.preprocess(
   // `label` is display text; a model that gives only `key` has still reported the fact.
   (v) => {
@@ -183,6 +185,8 @@ export const AIExtractionSchema = z.object({
 
 export const EXTRACTION_SCHEMA_VERSION = 2;
 export const EXTRACTION_PROMPT_VERSION = extractionPrompt.version;
+/** fnv1a of the system prompt. A prompt edit must bump both version and hash (prompt guard test). */
+export const EXTRACTION_PROMPT_HASH = extractionPrompt.hash;
 
 export const ProcurementExtractionSchema = z.object({
   company: z.string().trim().min(1).max(200),

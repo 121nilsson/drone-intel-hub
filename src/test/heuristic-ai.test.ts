@@ -200,7 +200,7 @@ describe("price magnitudes across languages", () => {
 describe("resolveSystems", () => {
   it("matches a catalog entry exactly", () => {
     const s = resolveSystems("two Geran-2 units", CATALOG);
-    expect(s).toContainEqual({ name: "Geran-2", matchId: "geran-2" });
+    expect(s).toContainEqual({ name: "Geran-2", matchId: "geran-2", matchedVia: "name" });
   });
 
   it("marks a new variant as variantOf its parent", () => {

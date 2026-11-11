@@ -141,7 +141,11 @@ export function applyContextFilters(
         ...(f.position === "anywhere_in_scope" ? after.slice(0, f.maxTokenDistance) : []),
       ];
       if (!f.triggers.some((t) => hit(window, t))) continue;
-      s = f.action === "reroute" && f.targetKey ? relabel(s, f.targetKey) : null;
+      // relabel builds a new object, so the spec's earlier rule ids are carried over by hand.
+      s =
+        f.action === "reroute" && f.targetKey
+          ? { ...relabel(s, f.targetKey), ruleIds: [...(s.ruleIds ?? []), f.id] }
+          : null;
     }
     if (!s) continue;
     // A rerouted claim may restate one the target's own extractor already made.

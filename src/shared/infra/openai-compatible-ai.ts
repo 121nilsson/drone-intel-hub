@@ -22,6 +22,7 @@ import type { ChatResult, ChatTransport } from "./ai-proxy.server";
 import { parseModelJson } from "./model-json";
 import {
   AIExtractionSchema,
+  EXTRACTION_PROMPT_HASH,
   EXTRACTION_PROMPT_VERSION,
   EXTRACTION_SCHEMA_VERSION,
 } from "@/shared/contracts/extraction.schema";
@@ -143,6 +144,7 @@ export class OpenAICompatibleExtractor implements IntelExtractor {
         // report what answered.
         model: r.model ?? (this.tier === 1 ? this.cfg.tier1Model : this.cfg.tier2Model),
         promptVersion: EXTRACTION_PROMPT_VERSION,
+        promptHash: EXTRACTION_PROMPT_HASH,
         analyzedAt: new Date().toISOString(),
       },
     };

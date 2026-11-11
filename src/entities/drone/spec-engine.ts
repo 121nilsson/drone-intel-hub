@@ -1,4 +1,10 @@
-import type { Drone, ExtractedSpec, SpecAttribute, SpecClaim } from "@/entities/drone/types";
+import type {
+  ClaimLineage,
+  Drone,
+  ExtractedSpec,
+  SpecAttribute,
+  SpecClaim,
+} from "@/entities/drone/types";
 import { consensus } from "@/entities/drone/consensus";
 import { canonicalUnitForSemantic, semanticKeyFor } from "@/entities/normalization/semantic";
 import { isActivitySpec, toActivity, withActivity } from "./activity";
@@ -11,6 +17,7 @@ export interface SpecSourceRef {
   evidence?: string;
   extractionEngine?: string;
   model?: string;
+  lineage?: ClaimLineage;
 }
 
 export function attributeSemantic(spec: { key: string; label: string; semantic?: string }): string {
@@ -87,7 +94,20 @@ function claimFor(
       : {}),
     ...(ref?.extractionEngine ? { extractionEngine: ref.extractionEngine } : {}),
     ...(ref?.model ? { model: ref.model } : {}),
+    ...lineageFor(spec, ref),
   };
+}
+
+/**
+ * The claim's lineage: the ref's lineage plus the generated rules that shaped this spec. Omitted
+ * entirely when empty, so a claim without lineage stays "unknown" rather than an empty record.
+ */
+function lineageFor(spec: ExtractedSpec, ref?: SpecSourceRef): { lineage?: ClaimLineage } {
+  const ruleIds = [...new Set([...(ref?.lineage?.ruleIds ?? []), ...(spec.ruleIds ?? [])])];
+  const lineage: ClaimLineage = { ...ref?.lineage };
+  if (ruleIds.length) lineage.ruleIds = ruleIds;
+  else delete lineage.ruleIds;
+  return Object.keys(lineage).length ? { lineage } : {};
 }
 
 /** Merge extracted key-values. Attributes that measure the same thing share a semantic id; the first key and label stay. */
