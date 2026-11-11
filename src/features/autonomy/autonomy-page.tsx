@@ -10,6 +10,10 @@ import { fetchAutonomyEvents } from "@/shared/infra/autonomy/autonomy.functions"
 import { fetchAutonomy } from "@/shared/infra/evaluation/evaluation.functions";
 import { verificationReport } from "@/shared/infra/verification/run";
 import { SecondReaderPanel } from "./second-reader-panel";
+import { VerifierControlsPanel } from "./verifier-controls-panel";
+import { PromptVersionPanel } from "./prompt-version-panel";
+import { SourceHealthPanel } from "./source-health-panel";
+import { eventLabel } from "./event-labels";
 import type { AutonomyEvent, VerificationRunReport } from "@/shared/contracts/verification";
 import type { AutonomyStatus } from "@/shared/infra/evaluation/rule-sandbox.server";
 
@@ -176,6 +180,12 @@ export function AutonomyPage() {
 
       <SecondReaderPanel />
 
+      <VerifierControlsPanel />
+
+      <PromptVersionPanel />
+
+      <SourceHealthPanel />
+
       <Panel
         title={`Claims to look at (${view.exceptionCount})`}
         right={
@@ -238,8 +248,8 @@ export function AutonomyPage() {
               <ListRow
                 key={e.id}
                 title={
-                  <span className="font-mono text-xs">
-                    {e.action}{" "}
+                  <span className="text-xs">
+                    {eventLabel(e.action)}{" "}
                     <span className="text-muted-foreground">
                       · {e.targetCollection}/{e.targetId}
                     </span>

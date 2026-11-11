@@ -8,6 +8,7 @@ import type {
 } from "@/shared/contracts/ai";
 import type { CatalogMutations } from "@/shared/contracts/catalog";
 import type { VerificationRunner } from "@/shared/contracts/verification";
+import type { AutonomyInsights } from "@/shared/contracts/autonomy-insights";
 import type {
   LocalCandidateRepository,
   LocalDispatchRepository,
@@ -78,6 +79,11 @@ export interface Services {
   catalog: CatalogMutations;
   /** Runs claim verification where the storage in use says it must run. */
   verification: VerificationRunner;
+  /**
+   * Read-only measurements of the autonomous machinery for the Autonomy page: the second reader on
+   * the injected controls, and source fetch health. Empty where the server has no database.
+   */
+  autonomyInsights: AutonomyInsights;
   /**
    * False until the repositories have attached their store. Until then every list reads empty,
    * which is indistinguishable from "no data" and would render false empty states (dossier

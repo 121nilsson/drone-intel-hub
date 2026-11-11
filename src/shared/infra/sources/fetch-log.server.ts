@@ -1,5 +1,6 @@
 import { db, dbConfigured } from "@/shared/infra/postgres/db.server";
 import { yieldDrift, type FetchHistoryEntry } from "@/entities/source/health";
+import type { SourceFetchHealth } from "@/shared/contracts/autonomy-insights";
 
 export interface SourceFetchEntry {
   sourceId: string;
@@ -7,17 +8,6 @@ export interface SourceFetchEntry {
   fetched: number;
   duplicates: number;
   error?: string | undefined;
-}
-
-export interface SourceFetchHealth {
-  sourceId: string;
-  fetches: number;
-  failures: number;
-  fetched: number;
-  relevant: number;
-  lastOkAt?: string | undefined;
-  lastError?: string | undefined;
-  drift?: "quiet" | "failing" | undefined;
 }
 
 /** Rows older than this are dropped once per sync; a source is fetched every ~10 minutes. */

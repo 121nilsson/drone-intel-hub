@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { fetchOne } from "./fetch-posts";
 import type { MonitoredSource } from "@/entities/source/types";
+import type { SourceFetchHealth } from "@/shared/contracts/autonomy-insights";
 
 export type { FetchedPost } from "./fetch-posts";
 
@@ -38,4 +39,20 @@ export const fetchSourcePosts = createServerFn({ method: "POST" })
       ...(process.env["X_JINA_READER"] === "1" ? { xJinaReader: true } : {}),
       articleText: extractArticleText,
     });
+  });
+
+/**
+ * Per-source fetch health for the Autonomy page. The window is clamped to the log's retention, so
+ * a page cannot ask for history the log no longer keeps.
+ */
+export const fetchSourceFetchHealth = createServerFn({ method: "GET" })
+  .validator((d: { days?: number } | undefined) => ({
+    days:
+      typeof d?.days === "number" && Number.isFinite(d.days)
+        ? Math.min(Math.max(Math.floor(d.days), 1), 90)
+        : 30,
+  }))
+  .handler(async ({ data }): Promise<SourceFetchHealth[]> => {
+    const { listSourceFetchHealth } = await import("./fetch-log.server");
+    return await listSourceFetchHealth(data.days);
   });

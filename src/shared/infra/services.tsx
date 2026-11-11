@@ -32,7 +32,10 @@ import {
   triggerServerVerification,
 } from "./verification/verification.functions";
 import { recordVerificationRun } from "./autonomy/autonomy.functions";
+import { fetchVerifierControls } from "./verification/verification.functions";
+import { fetchSourceFetchHealth } from "./sources/source-fetch.functions";
 import type { VerificationRunner } from "@/shared/contracts/verification";
+import type { AutonomyInsights } from "@/shared/contracts/autonomy-insights";
 import { Ctx, type Services, type SeedSnapshots } from "./services-context";
 import { useStoreRefresh } from "./use-store-refresh";
 
@@ -40,6 +43,15 @@ export { DEFAULT_SETTINGS } from "./settings-defaults";
 import { DEFAULT_SETTINGS } from "./settings-defaults";
 
 const SETTINGS_KEY = "dti.settings.v1";
+
+/** The controls record of a store with no server database: nothing asked, nothing measured. */
+const EMPTY_CONTROL_SUMMARY = {
+  asked: 0,
+  supported: 0,
+  unsupported: 0,
+  uncertain: 0,
+  falseSupportBound: 0,
+} as const;
 
 /** Non-secret provider config from .env.local; null when the server has none. */
 type EnvProviderConfig = ProviderEnvConfig;
@@ -258,6 +270,24 @@ export function ServicesProvider({ children }: { children: ReactNode }) {
     [verificationOnServer, drones, dispatches],
   );
 
+  /**
+   * Read-only insights for the Autonomy page. Like the verifier they need the server database, so
+   * without it the answers are empty rather than fetched from a store that has no such history.
+   */
+  const autonomyInsights = useMemo<AutonomyInsights>(
+    () => ({
+      controls: async () =>
+        verificationOnServer
+          ? await fetchVerifierControls()
+          : { summary: EMPTY_CONTROL_SUMMARY, strata: [] },
+      sourceHealth: async (days) =>
+        verificationOnServer
+          ? await fetchSourceFetchHealth({ data: days === undefined ? {} : { days } })
+          : [],
+    }),
+    [verificationOnServer],
+  );
+
   const value = useMemo<Services>(() => {
     // Env wins per-field; anything it doesn't define falls back to saved/built-in settings.
     // apiKey is blanked when the env supplies one so the key never enters the browser.
@@ -307,6 +337,7 @@ export function ServicesProvider({ children }: { children: ReactNode }) {
         : {}),
       catalog,
       verification,
+      autonomyInsights,
       attached,
       verificationOnServer,
       storageError,
@@ -325,6 +356,7 @@ export function ServicesProvider({ children }: { children: ReactNode }) {
     taxonomyCandidates,
     envCfg,
     verification,
+    autonomyInsights,
     attached,
     verificationOnServer,
     storageError,
