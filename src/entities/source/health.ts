@@ -129,3 +129,51 @@ export function platformDrift(sources: DriftInput[], now = Date.now()): string[]
   }
   return out;
 }
+
+export interface FetchHistoryEntry {
+  at: string;
+  ok: boolean;
+  fetched: number;
+  relevant: number;
+}
+
+/** How far back yieldDrift looks; older fetches say nothing about the source as it is now. */
+export const DRIFT_WINDOW_MS = 30 * 86_400_000;
+const DRIFT_RECENT = 10;
+const DRIFT_FAILS = 5;
+
+/**
+ * A source that has quietly stopped yielding, or one that keeps failing, read from its own fetch
+ * history. Both are per-source signals the streak counters cannot give on their own: `failing` is
+ * the same five-in-a-row the pause uses, seen over history rather than the live counter, and
+ * `quiet` is the case SILENT_RUNS only approximates - it needs a source that used to yield.
+ *
+ * `failing` wins when both hold: a source that failed its last five fetches has no recent
+ * successes to judge `quiet` by. Returns undefined when the history is too short to say.
+ */
+export function yieldDrift(
+  history: FetchHistoryEntry[],
+  now = Date.now(),
+): "quiet" | "failing" | undefined {
+  const recent = history
+    .filter((h) => {
+      const t = Date.parse(h.at);
+      return Number.isFinite(t) && now - t <= DRIFT_WINDOW_MS;
+    })
+    .sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
+
+  const lastFive = recent.slice(0, DRIFT_FAILS);
+  if (lastFive.length === DRIFT_FAILS && lastFive.every((h) => !h.ok)) return "failing";
+
+  const successes = recent.filter((h) => h.ok);
+  const lastTen = successes.slice(0, DRIFT_RECENT);
+  const earlier = successes.slice(DRIFT_RECENT);
+  if (
+    lastTen.length === DRIFT_RECENT &&
+    lastTen.every((h) => h.fetched === 0) &&
+    earlier.filter((h) => h.fetched > 0).length >= DRIFT_RECENT
+  )
+    return "quiet";
+
+  return undefined;
+}

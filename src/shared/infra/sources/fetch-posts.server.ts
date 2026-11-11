@@ -40,6 +40,7 @@ import {
 import { fetchOne, FETCH_CONCURRENCY, sourceHost } from "./fetch-posts";
 import { mapWithConcurrency } from "./pool";
 import { healthAfterFetch, isCollectable, platformDrift } from "@/entities/source/health";
+import { pruneSourceFetchLog, recordSourceFetch } from "./fetch-log.server";
 import { isDue, yieldBySource } from "@/entities/source/cadence";
 
 /** AI time per run. Under the 10-minute cron period so a run never overlaps the next tick. */
@@ -193,6 +194,16 @@ export async function fetchAllSources(
         lastError: c.error,
         ...healthAfterFetch(s, c.error, Date.now(), c.fetched),
       });
+      // Not awaited: the history row is bookkeeping, and recordSourceFetch never rejects, so the
+      // worker's result and the sync's pace are the same with or without it. Relevance is not
+      // known here (stage 2 counts it per batch, not per source), so the row carries 0 for it.
+      void recordSourceFetch({
+        sourceId: s.id,
+        ok: !c.error,
+        fetched: c.fetched,
+        duplicates: c.duplicates,
+        error: c.error,
+      });
       return c;
     },
     {
@@ -203,6 +214,9 @@ export async function fetchAllSources(
       },
     },
   );
+
+  // Once per sync, after collection, so the age-based delete is one statement, not one per source.
+  void pruneSourceFetchLog();
 
   // Every source on one platform answering 200 with no posts in the same run is what a parser
   // change looks like - one silent source reads as a quiet day, the fleet pattern does not.

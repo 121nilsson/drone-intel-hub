@@ -149,7 +149,24 @@ const RSS_TEASER_CHARS = 500;
 type TextResult =
   { ok: true; body: string; status: number } | { ok: false; error: string; status: number };
 
+/** One short pause before the single retry: long enough for a blip or a 503 to clear, not a stall. */
+const RETRY_DELAY_MS = 500;
+
+/**
+ * Retry once on what a second try can fix: a timeout or network error (status 0), a 5xx, or a 429.
+ * A 4xx is the source's answer (gone, forbidden, wrong URL) and repeating it only costs a request.
+ */
+const retryable = (r: TextResult) =>
+  !r.ok && (r.status === 0 || r.status === 429 || r.status >= 500);
+
 async function getText(url: string, timeoutMs: number): Promise<TextResult> {
+  const first = await getTextOnce(url, timeoutMs);
+  if (!retryable(first)) return first;
+  await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
+  return getTextOnce(url, timeoutMs);
+}
+
+async function getTextOnce(url: string, timeoutMs: number): Promise<TextResult> {
   const signal = timeoutMs > 0 ? AbortSignal.timeout(timeoutMs) : undefined;
   try {
     const r = await fetch(url, { headers: UA, ...(signal ? { signal } : {}) });

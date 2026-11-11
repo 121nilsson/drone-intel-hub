@@ -355,6 +355,7 @@ at runtime). Applied in order on a fresh volume:
 | `020_ai_token_usage.sql`                  | Daily token counter for the second reader    |
 | `021_audit_controls.sql`                  | Audit control kinds and disputes             |
 | `022_repair_double_encoded_documents.sql` | Repairs documents stored as a JSON string    |
+| `024_source_fetch_log.sql`                | Per-fetch history of each monitored source   |
 
 To start from an empty database, drop the volume: `docker compose down -v`.
 
