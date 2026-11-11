@@ -121,6 +121,7 @@ export const AUTONOMY_EVENT_KINDS = [
   "rule_probation_started",
   "rule_replay_requested",
   "verifier_control_run",
+  "source_reenabled",
 ] as const;
 export type AutonomyEventKind = (typeof AUTONOMY_EVENT_KINDS)[number];
 

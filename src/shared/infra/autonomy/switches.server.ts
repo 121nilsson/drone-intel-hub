@@ -35,6 +35,12 @@ export const AUTONOMY_SWITCHES = {
     description:
       "Hands the posts a quarantined rule shaped back to the pipeline, to be read again without it. Off leaves those posts' claims in place until an analyst or a later re-analysis changes them.",
   },
+  source_probe: {
+    env: "SOURCE_PROBE",
+    default: true,
+    description:
+      "Fetches a system-disabled source once a week, and turns it back on when it returns posts. Off leaves every system-disabled source off until an analyst re-enables it.",
+  },
   ai_verifier: {
     env: "AI_VERIFIER",
     default: true,

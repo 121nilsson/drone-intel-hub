@@ -87,7 +87,43 @@ export function reenable(): Partial<MonitoredSource> {
     pausedUntil: undefined,
     pausedOnce: false,
     emptyStreak: 0,
+    // Cleared so a later turn-off by an analyst is not mistaken for a system one (see probeDue).
+    disabledReason: undefined,
   };
+}
+
+/**
+ * A source the system turned off gets one probe fetch a week, so a site that came back is
+ * re-enabled by itself. Only a system disable is probed: it always writes `disabledReason`, and an
+ * analyst's toggle (features/sources/source-row.tsx) never does, nor does reenable() above.
+ * After MAX_PROBES failed probes the source is left for a person.
+ */
+export const PROBE_EVERY_MS = 7 * 86_400_000;
+export const MAX_PROBES = 8;
+
+export function probeDue(s: MonitoredSource, now = Date.now()): boolean {
+  if (s.autoSync !== false) return false;
+  if (!s.disabledReason) return false;
+  if ((s.probes ?? 0) >= MAX_PROBES) return false;
+  if (s.lastProbeAt) {
+    const last = Date.parse(s.lastProbeAt);
+    if (Number.isFinite(last) && now - last < PROBE_EVERY_MS) return false;
+  }
+  return true;
+}
+
+/**
+ * The patch to store after one probe of a system-disabled source. A success is a re-enable (the
+ * same patch as reenable()) with the probe count cleared; a failure only counts, so the source
+ * stays off and the next probe comes a week later.
+ */
+export function afterProbe(
+  s: MonitoredSource,
+  ok: boolean,
+  now = Date.now(),
+): Partial<MonitoredSource> {
+  if (ok) return { ...reenable(), lastProbeAt: undefined, probes: 0 };
+  return { lastProbeAt: new Date(now).toISOString(), probes: (s.probes ?? 0) + 1 };
 }
 
 /** Shown next to a source that keeps answering 200 with no posts; null while it is within bounds. */

@@ -39,9 +39,22 @@ import {
 } from "@/shared/infra/ingest/auto-ingest";
 import { fetchOne, FETCH_CONCURRENCY, sourceHost } from "./fetch-posts";
 import { mapWithConcurrency } from "./pool";
-import { healthAfterFetch, isCollectable, platformDrift } from "@/entities/source/health";
-import { pruneSourceFetchLog, recordSourceFetch } from "./fetch-log.server";
+import {
+  afterProbe,
+  healthAfterFetch,
+  isCollectable,
+  platformDrift,
+  probeDue,
+} from "@/entities/source/health";
+import { pruneSourceFetchLog, recordSourceFetch, type SourceFetchEntry } from "./fetch-log.server";
 import { isDue, yieldBySource } from "@/entities/source/cadence";
+import type { MonitoredSource } from "@/entities/source/types";
+import type { DispatchRepository, SourceRepository } from "@/shared/contracts/repository";
+import type { Fetcher } from "@/shared/infra/ingest/collect";
+import {
+  recordAutonomyEvent,
+  type AutonomyEventInput,
+} from "@/shared/infra/autonomy/ledger.server";
 
 /** AI time per run. Under the 10-minute cron period so a run never overlaps the next tick. */
 const AI_WINDOW_MS = 8 * 60_000;
@@ -53,6 +66,84 @@ const MAX_BATCH = 400;
  * the README; the default lives in fetch-posts.ts so the browser button shares it.
  */
 const FETCH_TIMEOUT_MS = Number(process.env["FETCH_TIMEOUT_MS"] ?? 15_000);
+
+/** Probes per sync. Two a run keeps the cost of the weekly check to a trickle beside the list. */
+export const PROBES_PER_RUN = 2;
+
+export interface ProbeDeps {
+  sources: Pick<SourceRepository, "list" | "update">;
+  dispatches: DispatchRepository;
+  fetcher: Fetcher;
+  record: (entry: SourceFetchEntry) => Promise<void>;
+  recordEvent: (input: AutonomyEventInput) => Promise<void>;
+}
+
+/**
+ * One probe fetch for up to PROBES_PER_RUN sources the system turned off (see probeDue). It runs
+ * the same collection as the normal path, so posts it finds are stored like any others. A probe
+ * that finds posts re-enables the source and writes one ledger event; a failed one only counts.
+ * Returns how many were probed. Never throws: a probe must not change the sync's own result.
+ */
+export async function runSourceProbes(deps: ProbeDeps, now = Date.now()): Promise<number> {
+  if (!autonomySwitchEnabled("source_probe")) return 0;
+  let due: MonitoredSource[];
+  try {
+    due = deps.sources
+      .list()
+      .filter((s) => s.platform !== "X" && probeDue(s, now))
+      .slice(0, PROBES_PER_RUN);
+  } catch (e) {
+    console.error("[sources:probe] could not list sources", e);
+    return 0;
+  }
+  for (const s of due) {
+    let ok = false;
+    let fetched = 0;
+    let duplicates = 0;
+    let error: string | undefined;
+    try {
+      const c = await collectSource(s, deps.fetcher, deps.dispatches);
+      fetched = c.fetched;
+      duplicates = c.duplicates;
+      error = c.error;
+      ok = !c.error && c.fetched > 0;
+    } catch (e) {
+      // A thrown probe is a failed probe: left uncounted, it would be retried on every tick.
+      error = e instanceof Error ? e.message : String(e);
+    }
+    try {
+      const at = new Date(now).toISOString();
+      deps.sources.update(s.id, {
+        lastFetched: at,
+        lastError: error,
+        ...afterProbe(s, ok, now),
+        ...(ok ? { lastPostAt: at } : {}),
+      });
+      void deps.record({
+        sourceId: s.id,
+        ok,
+        fetched,
+        duplicates,
+        error: error ?? (ok ? undefined : "probe found no posts"),
+      });
+      if (ok)
+        await deps.recordEvent({
+          action: "source_reenabled",
+          actor: "sources:probe",
+          actorKind: "system",
+          targetCollection: "sources",
+          targetId: s.id,
+          before: { autoSync: false, disabledReason: s.disabledReason },
+          after: { autoSync: true },
+          reason: `weekly probe fetched ${fetched} post(s)`,
+          reversible: true,
+        });
+    } catch (e) {
+      console.error(`[sources:probe] could not record probe of ${s.id}`, e);
+    }
+  }
+  return due.length;
+}
 
 /**
  * Server-side auto-ingest: the body the scheduled task invokes.
@@ -250,6 +341,19 @@ export async function fetchAllSources(
       durationMs: c?.durationMs ?? 0,
       ...(c ? (c.error ? { error: c.error } : {}) : { error: "Collection failed" }),
     });
+  }
+  // Weekly probes of system-disabled sources, after the normal collection and kept out of its
+  // reports. runSourceProbes never throws; the catch is for a bug in it, not an expected path.
+  try {
+    await runSourceProbes({
+      sources,
+      dispatches,
+      fetcher,
+      record: recordSourceFetch,
+      recordEvent: recordAutonomyEvent,
+    });
+  } catch (e) {
+    console.error("[sources:probe] probe step failed", e);
   }
   if (opts.cooldownUntil) {
     const pending = dispatches.pending(Number.MAX_SAFE_INTEGER).length;

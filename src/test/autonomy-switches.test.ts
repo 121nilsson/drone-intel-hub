@@ -72,6 +72,7 @@ describe("autonomy switch definitions", () => {
       "rule_probation",
       "rule_replay",
       "rules_autopromote",
+      "source_probe",
     ]);
     for (const name of AUTONOMY_SWITCH_NAMES) {
       const s = AUTONOMY_SWITCHES[name];

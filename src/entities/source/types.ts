@@ -32,4 +32,8 @@ export interface MonitoredSource {
   emptyStreak?: number | undefined;
   /** Last fetch that returned at least one post: proof this source's parser still works. */
   lastPostAt?: string | undefined;
+  /** Last probe fetch of a system-disabled source. See probeDue in entities/source/health.ts. */
+  lastProbeAt?: string | undefined;
+  /** Failed probes since the source was turned off; eight and it is left for a person. */
+  probes?: number | undefined;
 }
