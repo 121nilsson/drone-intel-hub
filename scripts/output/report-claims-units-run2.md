@@ -234,7 +234,6 @@ claims that step B will not actually touch.
 5. **Keep step B in shadow** until the 207 have been read. The held set is small enough to review,
    and 14 of them are held for reasons that are not about the source text at all.
 
-
 ### writers note
 
 Done. The updated script ran cleanly and the report is at scripts/output/report-claims-units-run2.md.
@@ -244,14 +243,15 @@ Layer 1 — what the text shows (identical to run 1): 1,809 numeric claims, 1,23
 Layer 2 — what step B will actually do (new): 1,602 (88.6 %) keep feeding numbers, 207 (11.4 %) held back as "unit unknown". The biggest addition is 32 declared claims from analyst/seed/reference sources that carry a legitimate unit nobody read off a post.
 The finding worth your attention
 Run 1's headline of 337 "read through the attribute's unit" is not the number step B acts on — 207 is. I traced the gap rather than reporting both side by side:
+
 - 103 of the 337 are not_needed: the attribute has a display unit but no canonical unit, so there is nothing that could be wrong. Not at risk.
 - 30 are declared.
 - 204 are genuinely held, plus 3 with no spec.unit at all = 207.
-So run 1 overstated the cost exposure. unit_cost is a good example: 21 in run 1's list, but only 2 actually held — its 68 claims are not_needed because cost.unit has no canonical unit by design.
-One real defect surfaced
-PAC-3 / unit_cost stores canonicalUnit: "km" on a price. Because expectedUnit() falls back to spec.canonicalUnit when the semantic has no canonical unit, a price gets measured in kilometres — which is why those two claims land in unknown instead of not_needed. They're held for the wrong reason. Measured scope: 93 specs carry a stale canonicalUnit, 14 claims are forced to unknown by it.
-I also flagged a second, softer issue: ~24 held claims have a unit word in normalized.raw ("15 miles", "200 pounds") that the sourceNormalizedRaw guard discards as "built". That may be intended, so I reported it as a policy decision rather than a bug.
-Verification
+  So run 1 overstated the cost exposure. unit_cost is a good example: 21 in run 1's list, but only 2 actually held — its 68 claims are not_needed because cost.unit has no canonical unit by design.
+  One real defect surfaced
+  PAC-3 / unit_cost stores canonicalUnit: "km" on a price. Because expectedUnit() falls back to spec.canonicalUnit when the semantic has no canonical unit, a price gets measured in kilometres — which is why those two claims land in unknown instead of not_needed. They're held for the wrong reason. Measured scope: 93 specs carry a stale canonicalUnit, 14 claims are forced to unknown by it.
+  I also flagged a second, softer issue: ~24 held claims have a unit word in normalized.raw ("15 miles", "200 pounds") that the sourceNormalizedRaw guard discards as "built". That may be intended, so I reported it as a policy decision rather than a bug.
+  Verification
 - Totals reconcile exactly with SQL (1,809 claims / 989 systems) and all six unitStanding buckets sum to 1,809.
 - Re-captured the run with UTF-8 (chcp 65001) after the first pass mangled Cyrillic example text — the quotes in the report are now exact.
 - Prettier-clean, docs-paths.test.ts passes 15/15.

@@ -237,7 +237,8 @@ const UNITS: UnitDef[] = [
     token: "km",
     dimension: "distance",
     toCanonical: 1,
-    pattern: /(?:km|kilometers?|kilometres?|км)(?![\p{L}\p{N}])/iu,
+    pattern:
+      /(?:km|kilometers?|kilometres?|км|кілометр[а-яіїєґ]*|километр[а-яё]*)(?![\p{L}\p{N}])/iu,
   },
   // Calibre and small dimensions. Before "m": "мм" and "см" end in "м", "mm" in "m". The hyphen
   // is the adjectival form - "a 155-mm howitzer", "2.75‑inch rockets" (a non-breaking hyphen).
@@ -308,7 +309,8 @@ const UNITS: UnitDef[] = [
     token: "kg",
     dimension: "mass",
     toCanonical: 1,
-    pattern: /(?:kg|kilograms?|kilogrammes?|kilos?|кг)(?![\p{L}\p{N}])/iu,
+    pattern:
+      /(?:kg|kilograms?|kilogrammes?|kilos?|кг|кілограм[а-яіїєґ]*|килограмм[а-яё]*)(?![\p{L}\p{N}])/iu,
   },
   {
     // Metric tonnes only: a bare "ton" is ambiguous (short ton is 907 kg), and the catalogue

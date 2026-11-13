@@ -33,8 +33,13 @@ function semanticOf(spec: Pick<SpecAttribute, "key" | "label" | "semantic">): st
 
 /** The unit an attribute is measured in, as the catalogue normalizes it. */
 export function expectedUnit(spec: SpecAttribute): string | undefined {
+  const semantic = semanticOf(spec);
+  // A semantic the catalogue knows ("cost.unit", "launcher.count") decides for itself: when it has
+  // no unit, a canonicalUnit stored on the spec is a leftover (a price once stored as "km"), not
+  // the attribute's unit. Only a raw, unresolved key falls back to what the spec says.
+  if (semantic.includes(".")) return canonicalUnitForSemantic(semantic);
   return (
-    canonicalUnitForSemantic(semanticOf(spec)) ??
+    canonicalUnitForSemantic(semantic) ??
     spec.canonicalUnit ??
     (spec.unit ? canonicalUnitFor(spec.unit) : undefined)
   );

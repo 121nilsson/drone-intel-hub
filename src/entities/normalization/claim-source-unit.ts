@@ -36,9 +36,21 @@ function figureOf(value: number | string): number | undefined {
  * further along the sentence is not taken for the figure's.
  */
 function unitBeside(figure: string, rest: string): string | undefined {
-  const words = rest.match(/^\s*(\S+)(?:\s+(\S+))?/);
+  // What can sit between a figure and its unit without being the unit: "600+ km", "10-plus",
+  // "150 to 200 meters", "50 and 100 kg", "16.3m-long", "20-meter-long".
+  const after = rest
+    .replace(/^\s*(?:\+|-?plus\b)/iu, "")
+    .replace(/^\s*(?:to|and|or|до|і|и|–|—|-)\s*\d[\d.,]*/iu, "")
+    .replace(/^-(?=\p{L})/u, " ");
+  const words = after.match(/^\s*(\S+)(?:\s+(\S+))?/u);
   if (!words?.[1]) return undefined;
-  const candidates = [words[1], words[2] ? `${words[1]} ${words[2]}` : undefined];
+  // A unit that opens a hyphenated compound: the "m" of "m-long", the "meter" of "meter-long".
+  const stem = words[1].match(/^\p{L}+/u)?.[0];
+  const candidates = [
+    words[1],
+    words[2] ? `${words[1]} ${words[2]}` : undefined,
+    stem && stem !== words[1] ? stem : undefined,
+  ];
   for (const candidate of candidates) {
     if (!candidate) continue;
     const unit = normalizeQuantityLoose(`${figure} ${candidate}`)?.unit;

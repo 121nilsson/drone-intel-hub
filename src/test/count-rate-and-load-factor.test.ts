@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { normalizeQuantity } from "@/entities/normalization/units";
 import { claimSourceUnit, sourceUnitFor } from "@/entities/normalization/claim-source-unit";
 import { unitCheck } from "@/entities/drone/verification-measure";
+import { unitStanding } from "@/entities/drone/unit-policy";
 import type { SpecAttribute, SpecClaim } from "@/entities/drone/types";
 
 describe("count rates", () => {
@@ -123,5 +124,50 @@ describe("a normalized reading is never taken for the source's words", () => {
     };
     expect(claim.normalized?.raw).toBe("105 nautical miles");
     expect(claimSourceUnit(claim)).toEqual({ basis: "unknown" });
+  });
+});
+
+describe("a unit that is not right after the figure", () => {
+  const unit = (value: number | string, evidence: string) => sourceUnitFor({ value, evidence });
+  it("is found past a plus, a range continuation and a hyphenated compound", () => {
+    expect(unit(600, "Air-Launchable at 600+ km Combined Range")).toMatchObject({
+      unit: "km",
+      basis: "quote",
+    });
+    expect(unit(25, "Flight time\t25+ min")).toMatchObject({ unit: "min", basis: "quote" });
+    expect(unit("150 to 200", "at ranges of 150 to 200 meters")).toMatchObject({
+      unit: "m",
+      basis: "quote",
+    });
+    expect(unit(16.3, "16.3m-long")).toMatchObject({ unit: "m", basis: "quote" });
+    expect(unit(20, "Saildrone’s 20-meter-long Surveyor")).toMatchObject({
+      unit: "m",
+      basis: "quote",
+    });
+  });
+
+  it("reads inflected Ukrainian and Russian unit words", () => {
+    expect(normalizeQuantity("150 кілометрів")?.unit).toBe("km");
+    expect(normalizeQuantity("550 километров")?.unit).toBe("km");
+    expect(normalizeQuantity("50 кілограмів")?.unit).toBe("kg");
+  });
+
+  it("does not guess a unit that is ambiguous: 'tons' stays unread", () => {
+    expect(unit(10, "a 10-Ton payload capacity").basis).toBe("unknown");
+  });
+});
+
+describe("a price is not measured in kilometres", () => {
+  it("has no unit to get wrong, whatever canonicalUnit the spec once stored", () => {
+    const spec: SpecAttribute = {
+      key: "unit_cost",
+      label: "Unit cost",
+      semantic: "cost.unit",
+      canonicalUnit: "km",
+      discoveredBy: "ai",
+      claims: [],
+    };
+    const claim: SpecClaim = { value: 3800000, source: "s", date: "2026-01-01" };
+    expect(unitStanding(spec, claim)).toBe("not_needed");
   });
 });

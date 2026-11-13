@@ -307,7 +307,9 @@ describe("the extractor declares its tier, so a fallback serves a tier-appropria
     expect(seen).toHaveLength(2);
     expect(seen[0]).toEqual({ host: "integrate.api.nvidia.com", model: "meta/muse-glimmer-30b" });
     expect(seen[1]).toEqual({ host: "api.groq.com", model: "openai/gpt-oss-20b" });
-  });
+    // The first call imports the whole extractor module; on a loaded machine that alone can pass the
+    // default 5 s, which failed this test in a full run and never alone.
+  }, 30_000);
 
   it("records the model that actually served, not the configured one, in the metadata", async () => {
     process.env["NVIDIA_API_KEY"] = "k-nv";
