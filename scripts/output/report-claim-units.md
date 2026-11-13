@@ -139,19 +139,18 @@ planned change, not a re-measurement of the audit.
    `105 lbs` and whose attribute says `kg` is exactly the ERAM class in the audit RCA, and those 106
    are candidate duplicates of a known real error rather than noise.
 
-
 ### writers notes:
 
 The output
 Numeric claims: 1809 in 1363 attribute(s) of 989 system(s).
 By source-unit basis:
-  value_text: 497
-  quote: 741
-  extractor_unverified: 0
-  conflict: 0
-  unknown: 571
+value_text: 497
+quote: 741
+extractor_unverified: 0
+conflict: 0
+unknown: 571
 Read through the attribute's unit only ...: 337
-  by attribute: range 40, unit_cost 21, speed 20, payload_capacity 16, payload 16, ...
+by attribute: range 40, unit_cost 21, speed 20, payload_capacity 16, payload 16, ...
 
 What I checked rather than assumed
 
