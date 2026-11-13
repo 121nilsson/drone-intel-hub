@@ -32,11 +32,13 @@ export function claimFingerprint(
   const unit = claimSourceUnit(claim, spec);
   return sha256(
     claimFingerprintInput({
+      fingerprintVersion: 1,
       claimId: claim.id,
       droneId: drone.id,
       semantic: attributeSemantic(spec),
       rawValue: claim.value,
-      rawUnit: unit.unit ?? null,
+      // Only an evidenced unit: the extractor's unconfirmed one is a claim about the text, not in it.
+      rawUnit: unit.basis === "value_text" || unit.basis === "quote" ? (unit.unit ?? null) : null,
       rawUnitBasis: unit.basis,
       quantityQualifier: claim.normalized?.range?.qualifier ?? null,
       evidenceHash: sha256(claim.evidence?.trim() || claim.raw?.trim() || ""),

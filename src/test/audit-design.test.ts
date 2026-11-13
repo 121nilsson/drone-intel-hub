@@ -194,6 +194,7 @@ describe("the claim fingerprint", () => {
 
   it("changes with the claim's figures or unit, and not with how the identity was assembled", () => {
     const base = {
+      fingerprintVersion: 1 as const,
       claimId: "c1",
       droneId: "d1",
       semantic: "range.max",
@@ -207,6 +208,7 @@ describe("the claim fingerprint", () => {
     // The same identity written with its members in another order.
     const same = {
       sourceTextHash: base.sourceTextHash,
+      fingerprintVersion: base.fingerprintVersion,
       evidenceHash: base.evidenceHash,
       quantityQualifier: base.quantityQualifier,
       rawUnitBasis: base.rawUnitBasis,

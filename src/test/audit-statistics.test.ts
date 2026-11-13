@@ -260,3 +260,12 @@ describe("realistic catalogue sizes", () => {
     expect(r.kind).toBe("incomplete");
   });
 });
+
+describe("no claims at all", () => {
+  it("is its own state, not a share or an error", () => {
+    expect(stratifiedUpperBound([])).toEqual({ kind: "no_population" });
+    expect(stratifiedUpperBound([{ name: "en", population: 0, sampled: 0, errors: 0 }])).toEqual({
+      kind: "no_population",
+    });
+  });
+});

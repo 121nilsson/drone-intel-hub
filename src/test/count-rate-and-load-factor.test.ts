@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { normalizeQuantity } from "@/entities/normalization/units";
-import { sourceUnitFor } from "@/entities/normalization/claim-source-unit";
+import { claimSourceUnit, sourceUnitFor } from "@/entities/normalization/claim-source-unit";
 import { unitCheck } from "@/entities/drone/verification-measure";
 import type { SpecAttribute, SpecClaim } from "@/entities/drone/types";
 
@@ -68,5 +68,47 @@ describe("a figure stated twice in a quote with different units", () => {
   it("still calls it a conflict when no occurrence carries the extractor's unit", () => {
     const r = sourceUnitFor({ value: 150, unit: "kg", evidence: "a range of 150 km" });
     expect(r.basis).toBe("conflict");
+  });
+});
+
+describe("an older claim whose normalized reading was built from a unit nobody wrote", () => {
+  const spec: SpecAttribute = {
+    key: "payload_mass",
+    label: "Payload",
+    semantic: "payload.mass",
+    unit: "kg",
+    discoveredBy: "ai",
+    claims: [],
+  };
+  const built = normalizeQuantity("105 kg")!;
+
+  it("is not kg when the quote says pounds", () => {
+    const claim: SpecClaim = {
+      value: 105,
+      source: "s",
+      date: "2026-01-01",
+      evidence: "The payload weighed 105 lbs",
+      normalized: built,
+    };
+    const r = claimSourceUnit(claim, spec);
+    expect(r.unit).not.toBe("kg");
+    expect(r).toMatchObject({ unit: "lb", basis: "quote" });
+  });
+
+  it("is unknown when the text names no unit, even though normalized says kg", () => {
+    const claim: SpecClaim = { value: 105, source: "s", date: "2026-01-01", normalized: built };
+    expect(claimSourceUnit(claim, spec)).toEqual({ basis: "unknown" });
+  });
+
+  it("is the stated unit when the source wrote one", () => {
+    const claim: SpecClaim = {
+      value: "105 lbs",
+      raw: "105 lbs",
+      source: "s",
+      date: "2026-01-01",
+      evidence: "The payload weighed 105 lbs",
+      normalized: normalizeQuantity("105 lbs")!,
+    };
+    expect(claimSourceUnit(claim, spec)).toMatchObject({ unit: "lb", basis: "value_text" });
   });
 });

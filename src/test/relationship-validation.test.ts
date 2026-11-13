@@ -33,8 +33,8 @@ const TYPES: ReadonlySet<EntityType> = new Set<EntityType>([
   "unknown",
 ]);
 
-const real = RELATIONSHIP_FIXTURES.filter((f) => f.status !== "awaiting_source_text");
-const placeholders = RELATIONSHIP_FIXTURES.filter((f) => f.status === "awaiting_source_text");
+const real = RELATIONSHIP_FIXTURES.filter((f) => f.status !== "pending_source");
+const placeholders = RELATIONSHIP_FIXTURES.filter((f) => f.status === "pending_source");
 
 /** A frame from a fixture's expectation, with the run-time fields filled in for the validator. */
 function frameFrom(f: RelationshipFixture, index: number): AssertionFrame {
@@ -78,7 +78,7 @@ const entity = (
 });
 
 describe("relationship fixtures: schema and references", () => {
-  it("holds fifteen fixtures with unique ids", () => {
+  it("holds fifteen slots with unique ids: four with a source text, eleven pending one", () => {
     const ids = RELATIONSHIP_FIXTURES.map((f) => f.id);
     expect(ids).toHaveLength(15);
     expect(new Set(ids).size).toBe(15);
@@ -133,7 +133,7 @@ describe("relationship fixtures: specified cases", () => {
     },
   );
 
-  it("the placeholder slots are exactly rca-05 to rca-15, awaiting source text", () => {
+  it("the pending slots are exactly rca-05 to rca-15: not verified, and covering no failure class yet", () => {
     expect(placeholders.map((f) => f.id)).toEqual([
       "rca-05",
       "rca-06",
@@ -147,7 +147,9 @@ describe("relationship fixtures: specified cases", () => {
       "rca-14",
       "rca-15",
     ]);
-    // Eleven is asserted so that nobody drops a slot and quietly leaves the count at fifteen.
+    // Only the four fixtures with a real source text count as coverage; a pending slot is not a
+    // passing regression, and this count keeps anyone from letting fifteen read as fifteen covered.
+    expect(real).toHaveLength(4);
     expect(placeholders).toHaveLength(11);
     for (const f of placeholders) {
       expect(f.sourceText).toBe("");

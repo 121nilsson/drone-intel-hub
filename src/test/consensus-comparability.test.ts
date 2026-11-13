@@ -370,3 +370,54 @@ describe("what a consensus shows is something a source said or a central figure"
     expect(c.disputed).toBe(true);
   });
 });
+
+describe("what a source is, and which figure speaks for it", () => {
+  it("lists a stated range with its evidenced unit, and leaves out one whose unit is only an extractor's", () => {
+    const wrote = consensus(
+      attribute("power.max", [stated("20–35 kW", "Outlet A · https://a", 0)], "W"),
+    );
+    expect(wrote.explicitRanges?.[0]).toMatchObject({ unitBasis: "value_text" });
+    expect(wrote.explicitRanges?.[0]?.rawUnit).toBeDefined();
+
+    // Read from "20–35" plus the attribute's "kW": the normalized reading holds a unit nobody wrote.
+    const built: SpecClaim = {
+      value: "20–35",
+      source: "Outlet B · https://b",
+      date: at(1),
+      normalized: normalizeQuantityLoose("20–35 kW")!,
+    };
+    const c = consensus(attribute("power.max", [built], "W"));
+    expect(c.explicitRanges).toBeUndefined();
+  });
+
+  it("does not aggregate a figure whose extractor unit and source text disagree", () => {
+    const conflicted: SpecClaim = {
+      value: 105,
+      source: "Outlet A · https://a",
+      date: at(0),
+      sourceUnit: "kg",
+      sourceUnitBasis: "conflict",
+      normalized: normalizeQuantityLoose("105 kg")!,
+    };
+    const ok = stated("40 kg", "Outlet B · https://b", 1);
+    const c = consensus(attribute("weight.mtow", [conflicted, ok], "kg"));
+    expect(c.display).toBe("40 kg");
+    expect(c.sources).toBe(1);
+  });
+
+  it("does not make every claim without a source name one source", () => {
+    const c = consensus(
+      attribute("range.max", [stated("40 km", "", 0), stated("41 km", "", 1)], "km"),
+    );
+    expect(c.sources).toBe(2);
+  });
+
+  it("lets the same claims speak the same way whatever order they are stored in", () => {
+    const a = stated("40 km", "Outlet · https://x/1", 0, { id: "a" });
+    const b = stated("60 km", "Outlet · https://x/2", 0, { id: "b" });
+    const one = consensus(attribute("range.max", [a, b], "km"));
+    const two = consensus(attribute("range.max", [b, a], "km"));
+    expect(one.display).toBe(two.display);
+    expect(one.sources).toBe(1);
+  });
+});

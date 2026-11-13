@@ -17,6 +17,8 @@ export function renormalizeClaim(
   claim: SpecClaim,
 ): SpecClaim {
   if (claim.normalized) return claim;
+  // A figure whose extractor unit and source text disagree is not given a reading from either.
+  if (claim.sourceUnitBasis === "conflict") return claim;
   if (claim.source === ANALYST_SOURCE || claim.extractionEngine === "analyst") return claim;
   const stated = claim.value;
   const semantic = semanticKeyFor(spec.key, spec.label);

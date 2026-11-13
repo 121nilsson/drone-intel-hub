@@ -22,7 +22,7 @@ import {
  * would be larger than the 5 % the bound claims. Interim figures are shown, and never decide.
  */
 
-/** Valid, adjudicated units the formal sample is made of. */
+/** Units with a valid reference answer (the first human reader's) that the formal sample is made of. */
 export const FORMAL_SAMPLE_SIZE = 200;
 
 /**
@@ -46,6 +46,10 @@ export interface FormalDesign {
   allocation: Record<string, number>;
   size: number;
   seed: number;
+  /** sha256 over the sorted (claim, stratum) list the draw was made from; set by the server. */
+  populationFrameHash?: string;
+  /** When the eligible claims were listed; set by the server. */
+  eligibilityCutoff?: string;
 }
 
 /** One claim the design selected: the unit the statistics count, however often it is shown. */
@@ -196,6 +200,8 @@ export function formalGate(
   const samples: StratumSample[] = strata;
   const point = errorPointEstimate(samples);
   const worst = cachedBound(samples);
+  // No claims at all, or a bound too close to call: neither is ever a pass.
+  if (worst.kind === "no_population") return { ...base, decision: "incomplete" };
   if (worst.kind === "census")
     return {
       ...base,
@@ -221,6 +227,8 @@ export function formalGate(
     decision: worst.upper <= budget ? "pass" : "not_proven",
     pointEstimate: point,
     upper: worst.upper,
-    ...(best && best.kind !== "incomplete" ? { bestCaseUpper: best.upper } : {}),
+    ...(best && (best.kind === "bound" || best.kind === "census")
+      ? { bestCaseUpper: best.upper }
+      : {}),
   };
 }

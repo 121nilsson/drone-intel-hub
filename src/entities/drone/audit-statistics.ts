@@ -22,7 +22,10 @@ export interface StratumSample {
 export type UpperBound =
   | { kind: "bound"; wrongMax: number; upper: number; evaluated: number }
   | { kind: "census"; upper: number }
-  | { kind: "incomplete"; evaluated: number };
+  /** Not computable within the limit, or too close to the threshold to classify safely. Never a pass. */
+  | { kind: "incomplete"; evaluated: number }
+  /** There are no claims at all: no share to speak of, and nothing a bound could be a bound on. */
+  | { kind: "no_population" };
 
 /**
  * The significance level. A total of wrong claims is rejected only when the observed result
@@ -42,6 +45,13 @@ const DEFAULT_CAP = 5_000_000;
  * Without it a total equal to the observed one could be dropped because of rounding.
  */
 const TOLERANCE = 1e-9;
+
+/**
+ * A probability this close to alpha cannot be called above or below it: the log-space arithmetic is
+ * only good to about 1e-12, and a verdict that flips on rounding is not one to pass on. Such a
+ * result is "incomplete".
+ */
+const BORDERLINE = 1e-9;
 
 /** Thrown inside the search when the allocation cap is reached; turned into "incomplete". */
 class CapExceeded extends Error {}
@@ -240,7 +250,7 @@ export function stratifiedUpperBound(
   assertCount(cap, "cap");
 
   const active = activeStrata(strata);
-  if (active.length === 0) throw new RangeError("stratifiedUpperBound: no claims to audit");
+  if (active.length === 0) return { kind: "no_population" };
 
   // Every claim was inspected: the population is known, so there is nothing to bound.
   if (active.every((s) => s.sampled === s.population)) {
@@ -251,7 +261,7 @@ export function stratifiedUpperBound(
   // Horvitz-Thompson weight: each draw from a stratum stands for population / sampled claims.
   const weights = active.map((s) => s.population / s.sampled);
   const observed = active.reduce((sum, s, h) => sum + weights[h]! * s.errors, 0);
-  const work = { evaluated: 0 };
+  const work = { evaluated: 0, borderline: false };
 
   // With no errors observed, the only outcome at or below the observed total is "no errors in
   // any stratum", whose probability factors over strata. That lets the sup be found exactly by
@@ -262,6 +272,7 @@ export function stratifiedUpperBound(
 
   try {
     const wrongMax = largestNotRejected(total, notRejected);
+    if (work.borderline) return { kind: "incomplete", evaluated: work.evaluated };
     return { kind: "bound", wrongMax, upper: wrongMax / total, evaluated: work.evaluated };
   } catch (error) {
     if (error instanceof CapExceeded) return { kind: "incomplete", evaluated: work.evaluated };
@@ -271,6 +282,14 @@ export function stratifiedUpperBound(
 
 /**
  * The largest d for which `notRejected` holds. It holds at 0 and fails at `total` or beyond.
+ *
+ * Invariant the search rests on: p_sup(d) never increases with d. Take any spread of d + 1 wrong
+ * claims over the strata and remove one wrong claim from some stratum: that is a spread of d. A
+ * stratum with fewer wrong claims has a hypergeometric count that is stochastically smaller, so
+ * the chance of seeing at most the observed weighted total can only be as large or larger. Hence
+ * every spread of d + 1 is matched by a spread of d with at least its probability, and the
+ * supremum cannot rise. (A brute-force comparison over every outcome of small designs checks this
+ * in the tests.)
  *
  * The search gallops up from 0 before it bisects. Testing a rejected d costs one pass over every
  * way to spread d wrong claims over the strata, which grows with the cube of d; bisecting from
@@ -301,7 +320,7 @@ function largestNotRejected(total: number, notRejected: (d: number) => boolean):
 function zeroErrorTester(
   active: readonly StratumSample[],
   alpha: number,
-  work: { evaluated: number },
+  work: { evaluated: number; borderline: boolean },
 ): (d: number) => boolean {
   const logNone = active.map((s) => {
     const row = new Float64Array(s.population + 1);
@@ -311,14 +330,18 @@ function zeroErrorTester(
     }
     return row;
   });
-  return (d) => Math.exp(zeroErrorLogSup(logNone, d, work)) > alpha;
+  return (d) => {
+    const p = Math.exp(zeroErrorLogSup(logNone, d, work));
+    if (Math.abs(p - alpha) <= BORDERLINE) work.borderline = true;
+    return p > alpha;
+  };
 }
 
 /** The largest sum of per-stratum log terms over allocations whose draws total exactly d. */
 function zeroErrorLogSup(
   logNone: readonly Float64Array[],
   d: number,
-  work: { evaluated: number },
+  work: { evaluated: number; borderline: boolean },
 ): number {
   let prev = new Float64Array(d + 1).fill(-Infinity);
   prev[0] = 0;
@@ -367,7 +390,7 @@ function generalTester(
   bound: number,
   alpha: number,
   cap: number,
-  work: { evaluated: number },
+  work: { evaluated: number; borderline: boolean },
 ): (d: number) => boolean {
   const H = active.length;
   const suffixCap = new Array<number>(H + 1).fill(0);
@@ -395,8 +418,9 @@ function generalTester(
         work.evaluated += 1;
         if (work.evaluated > cap) throw new CapExceeded("allocation cap reached");
         for (let g = 0; g < H; g++) current[g] = rowOf(g, allocation[g]!);
-        if (allocationProbability(current as readonly PmfRow[], weights, bound) > alpha)
-          found = true;
+        const p = allocationProbability(current as readonly PmfRow[], weights, bound);
+        if (Math.abs(p - alpha) <= BORDERLINE) work.borderline = true;
+        if (p > alpha) found = true;
         return;
       }
       const lo = Math.max(0, remaining - suffixCap[h + 1]!);

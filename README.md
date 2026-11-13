@@ -359,6 +359,7 @@ at runtime). Applied in order on a fresh volume:
 | `024_source_fetch_log.sql`                | Per-fetch history of each monitored source   |
 | `025_verifier_controls.sql`               | Injected wrong claims for the second reader  |
 | `026_claim_governance_and_audit.sql`      | Audit design, sample units, reader history   |
+| `027_audit_integrity.sql`                 | Sample-unit keys, retry rule, answer log     |
 
 To start from an empty database, drop the volume: `docker compose down -v`.
 

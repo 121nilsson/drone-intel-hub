@@ -4,6 +4,12 @@ import { CANONICAL_UNIT, displayUnit, type Dimension } from "./units";
  * The register core: which physical quantity an attribute measures, the unit it is stored in, and
  * how far two readings may differ before they count as disagreeing. Code only and frozen - a
  * runtime layer may add aliases, never change a dimension, base unit or factor.
+ *
+ * Who owns what: units.ts owns the physical units - the dimensions, their canonical units
+ * (CANONICAL_UNIT) and the conversion factors - together with parsing and conversion. This file
+ * owns the attribute metadata laid over them: domain, tolerance, and which dimension an attribute
+ * is. It reads CANONICAL_UNIT and defines no unit or factor of its own, so there is one place a
+ * factor can be wrong.
  */
 
 /** Who the attribute is for. Used to group and label; it never changes a parse. */

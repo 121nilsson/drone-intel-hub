@@ -7,7 +7,7 @@
  * cannot see from aggregate counts. Each fixture names what must NOT come out, because the wrong
  * reading is usually a plausible one.
  *
- * Fixtures with status "awaiting_source_text" are slots. Their source text has not been supplied,
+ * Fixtures with status "pending_source" are slots. Their source text has not been supplied,
  * so they carry no invented sentence and count as nothing: they are not passing regressions.
  */
 
@@ -39,7 +39,7 @@ export interface RelationshipFixture {
   expectedClaims: ExpectedClaim[];
   mustNotProduce: string[];
   activeFrom: FixtureActivePhase;
-  status?: "awaiting_source_text";
+  status?: "pending_source";
   /** Why a slot has no text yet, or what it guards; shown next to the id in test output. */
   note?: string;
 }
@@ -274,7 +274,7 @@ function awaiting(id: string, title: string, activeFrom: FixtureActivePhase): Re
     expectedClaims: [],
     mustNotProduce: [],
     activeFrom,
-    status: "awaiting_source_text",
+    status: "pending_source",
     note: "Placeholder slot. Source text not supplied; not a regression.",
   };
 }

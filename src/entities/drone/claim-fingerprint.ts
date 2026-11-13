@@ -25,6 +25,11 @@ export function canonicalJsonStringify(value: unknown): string {
 
 /** What identifies a claim: the figures and words it stands on, not when it was last touched. */
 export interface ClaimIdentity {
+  /**
+   * Version of what this identity contains. A change to the members below is a new version, so two
+   * code paths can never produce different fingerprints for the same claim without it showing.
+   */
+  fingerprintVersion: 1;
   claimId: string;
   droneId: string;
   semantic: string;

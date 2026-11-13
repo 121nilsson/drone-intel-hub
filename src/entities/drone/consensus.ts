@@ -11,6 +11,7 @@ import {
   parseRange,
   type QuantityQualifier,
 } from "@/entities/normalization/numeric";
+import { claimSourceUnit } from "@/entities/normalization/claim-source-unit";
 import { toleranceFor, type AttributeTolerance } from "@/entities/normalization/core-registry";
 import { claimCounts, claimKey, correctedPoint } from "./claim-review";
 import { clusterObservations } from "./verification-sources";
@@ -280,6 +281,10 @@ interface Interval {
 }
 
 function intervalOf(m: Point | Bound): Interval {
+  // "Approximately 40" is read as the point 40, the same as "40": a source's "about" carries no
+  // stated width, and inventing one would be a range no source wrote. The attribute's tolerance is
+  // what absorbs the looseness, so an approximate figure disagrees with another only as far as an
+  // exact one would. If a width is ever wanted it belongs in the tolerance, not here.
   if (isPoint(m)) return { lo: m.value, hi: m.value };
   return { lo: m.min ?? -Infinity, hi: m.max ?? Infinity };
 }
@@ -335,13 +340,19 @@ function explicitRangeOf(reading: Reading, semantic: string): ExplicitSourceRang
     normalizeQuantityLoose(rawValue, { semantic })?.unit !== undefined ||
     parseMoney(rawValue) !== undefined ||
     parseMoneyRange(rawValue) !== undefined;
-  const unitBasis = textCarriesUnit
-    ? "value_text"
-    : claim.sourceUnitBasis === "quote" && claim.sourceUnit
-      ? "quote"
-      : undefined;
+  // The unit is the one evidenced for this claim, from its value text or its quote. A unit that is
+  // only on `normalized` may have been put there from the extractor's or the attribute's unit, so
+  // it is never offered as what the source wrote, and a range without an evidenced unit is not
+  // listed with canonical figures at all.
+  const evidenced = claimSourceUnit(claim);
+  const unitBasis =
+    evidenced.basis === "value_text" || evidenced.basis === "quote"
+      ? evidenced.basis
+      : textCarriesUnit
+        ? ("value_text" as const)
+        : undefined;
   if (!unitBasis) return undefined;
-  const rawUnit = claim.sourceUnit ?? claim.normalized?.unit;
+  const rawUnit = evidenced.basis === unitBasis ? evidenced.unit : undefined;
   return {
     claimId: claimKey(claim),
     ...(claim.sourceId ? { sourceId: claim.sourceId } : {}),
@@ -356,18 +367,34 @@ function explicitRangeOf(reading: Reading, semantic: string): ExplicitSourceRang
   };
 }
 
+/**
+ * Whether `a` speaks for its cluster instead of `b`: the later claim, and for the same date a
+ * fixed order (key, then source), so the representative never depends on the order claims are stored.
+ */
+function supersedes(a: SpecClaim, b: SpecClaim): boolean {
+  if (a.date !== b.date) return a.date > b.date;
+  const ka = claimKey(a);
+  const kb = claimKey(b);
+  if (ka !== kb) return ka > kb;
+  return a.source > b.source;
+}
+
 export function consensus(spec: SpecAttribute): Consensus {
   // An adjudicated "outlier" or an analyst-rejected claim stays on the record (the report said
   // what it said) but no longer feeds the aggregate: one rejected figure must not drag the
   // median into a dispute. Kept claims carry their original index, so consensus().outliers
   // still points into spec.claims.
-  const kept = spec.claims.flatMap((claim, i) => (claimCounts(claim) ? [{ claim, i }] : []));
+  // A claim whose extractor unit and source text name different units has no trustworthy figure:
+  // it stays on the record (and fails the unit check) but is never aggregated.
+  const kept = spec.claims.flatMap((claim, i) =>
+    claimCounts(claim) && claimSourceUnit(claim).basis !== "conflict" ? [{ claim, i }] : [],
+  );
   const indexOf = new Map<SpecClaim, number>(kept.map(({ claim, i }) => [claim, i]));
   // One observation per outlet or repost cluster, stated by the cluster's latest claim. An outlet
   // that restated its figure counts once, with the restated figure; a wire text carried by two
   // outlets counts once, whatever figure each of them printed.
   const observed = clusterObservations(kept.map(({ claim }) => claim)).map((cluster) => {
-    const claim = cluster.reduce((latest, c) => (c.date > latest.date ? c : latest));
+    const claim = cluster.reduce((latest, c) => (supersedes(c, latest) ? c : latest));
     return { claim, index: indexOf.get(claim)! };
   });
   const sources = observed.length;

@@ -20,6 +20,7 @@ import {
   type AuditLanguage,
   type ControlKind,
 } from "@/entities/drone/audit";
+import { randomInt } from "node:crypto";
 import {
   FORMAL_SAMPLE_SIZE,
   drawFormalSample,
@@ -152,6 +153,8 @@ interface Placed {
 const quoteOf = (claim: SpecClaim) => claim.evidence?.trim() || claim.raw?.trim() || null;
 
 interface BatchOptions {
+  /** Verified claims with a post at the draw, recorded on the batch (required for a new draw). */
+  populationSize: number;
   inSeed: boolean;
   /** formal_eval: the probability sample the gate is computed over. diagnostic: never in the bound. */
   purpose: "formal_eval" | "diagnostic";
@@ -180,9 +183,10 @@ async function insertBatch(
   let auditBatchId = opts.auditBatchId;
   if (!auditBatchId) {
     const [created] = await sql<{ id: string }[]>`
-      insert into audit_batches (purpose, sampling_design, sample_size, seed, legacy_batch_id)
-      values (${opts.purpose}, ${sql.json({ draw: "round_robin", batchId })}, ${placed.length},
-              ${seed}, null)
+      insert into audit_batches
+        (purpose, sampling_design, population_size, sample_size, seed, legacy_batch_id)
+      values (${opts.purpose}, ${sql.json({ draw: "round_robin", batchId })},
+              ${opts.populationSize}, ${placed.length}, ${seed}, null)
       returning id`;
     auditBatchId = created!.id;
   }
@@ -268,7 +272,11 @@ function withControls(
   return insertControls(items, controls, seed);
 }
 
-const newSeed = () => Math.floor(Math.random() * 2 ** 31);
+/**
+ * A seed from the system's secure source, stored with the draw and then only used to make the draw
+ * repeatable. A sample whose seed could be guessed beforehand could be steered.
+ */
+const newSeed = () => randomInt(0, 2 ** 31);
 
 /**
  * Run a draw under one lock, in one transaction: two tabs or a double click must not both see "no
@@ -342,7 +350,11 @@ export async function drawFirstSession(): Promise<{ batchId: string; size: numbe
     // The first session keeps its own kind of control: the seed set it freezes was built without
     // misread ones, and a later batch carries them (drawMore).
     const placed = withControls(mixed, controls, [], seed);
-    const batchId = await insertBatch(sql, placed, seed, { inSeed: true, purpose: "diagnostic" });
+    const batchId = await insertBatch(sql, placed, seed, {
+      inSeed: true,
+      purpose: "diagnostic",
+      populationSize: all.filter((d) => d.state === "verified" && d.postText).length,
+    });
     return { batchId, size: placed.length };
   });
 }
@@ -384,7 +396,11 @@ export async function drawMore(size = AUDIT_BATCH): Promise<{ batchId: string; s
       misread,
       seed,
     );
-    const batchId = await insertBatch(sql, placed, seed, { inSeed: false, purpose: "diagnostic" });
+    const batchId = await insertBatch(sql, placed, seed, {
+      inSeed: false,
+      purpose: "diagnostic",
+      populationSize: all.filter((d) => d.state === "verified" && d.postText).length,
+    });
     return { batchId, size: placed.length };
   });
 }
@@ -425,9 +441,18 @@ export async function drawFormalEvaluation(): Promise<{ batchId: string; size: n
     const seed = newSeed();
     const { design, units } = drawFormalSample(candidates, seed);
     if (!units.length) throw new Error("There are no verified claims with a post to sample yet.");
+    // The frame the sample was drawn from, so the draw can be checked against it later: the same
+    // seed over another list of eligible claims would give another sample.
+    const frozenDesign = {
+      ...design,
+      eligibilityCutoff: new Date().toISOString(),
+      populationFrameHash: sha256(
+        candidates.map((c) => `${c.claimId}|${formalStratum(c.language)}`).join("\n"),
+      ),
+    };
     const [created] = await sql<{ id: string }[]>`
       insert into audit_batches (purpose, sampling_design, population_size, sample_size, seed)
-      values ('formal_eval', ${sql.json(design as unknown as Record<string, never>)},
+      values ('formal_eval', ${sql.json(frozenDesign as unknown as Record<string, never>)},
               ${Object.values(design.populations).reduce((s, n) => s + n, 0)},
               ${units.length}, ${seed})
       returning id`;
@@ -465,6 +490,7 @@ export async function drawFormalEvaluation(): Promise<{ batchId: string; size: n
     const batchId = await insertBatch(sql, placed, seed, {
       inSeed: false,
       purpose: "formal_eval",
+      populationSize: candidates.length,
       auditBatchId,
       units: unitIds,
     });
