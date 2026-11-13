@@ -19,15 +19,17 @@ export function renormalizeClaim(
   if (claim.normalized) return claim;
   if (claim.source === ANALYST_SOURCE || claim.extractionEngine === "analyst") return claim;
   const stated = claim.value;
+  const semantic = semanticKeyFor(spec.key, spec.label);
+  const ctx = { semantic };
   let measured =
     typeof stated === "string"
-      ? (normalizeQuantityLoose(stated) ??
-        (spec.unit ? normalizeQuantityLoose(`${stated} ${spec.unit}`) : undefined))
+      ? (normalizeQuantityLoose(stated, ctx) ??
+        (spec.unit ? normalizeQuantityLoose(`${stated} ${spec.unit}`, ctx) : undefined))
       : spec.unit
-        ? normalizeQuantityLoose(`${stated} ${spec.unit}`)
+        ? normalizeQuantityLoose(`${stated} ${spec.unit}`, ctx)
         : undefined;
   if (!measured) return claim;
-  const target = canonicalUnitForSemantic(semanticKeyFor(spec.key, spec.label));
+  const target = canonicalUnitForSemantic(semantic);
   if (target) measured = rebaseQuantity(measured, target);
   return { ...claim, normalized: measured };
 }

@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { normalizeQuantity } from "@/entities/normalization/units";
+import {
+  canonicalUnitFor,
+  convert,
+  displayUnit,
+  normalizeQuantity,
+} from "@/entities/normalization/units";
+
+const LOAD = { semantic: "maneuver.load_factor_max" };
 
 describe("normalizeQuantity", () => {
   it("converts distance, speed, mass, and duration into canonical units", () => {
@@ -80,5 +87,80 @@ describe("normalizeQuantity", () => {
     // "8 кгс" is not 8 kg, and a lowercase "kn" is still knots.
     expect(normalizeQuantity("8 кг")?.canonicalUnit).toBe("kg");
     expect(normalizeQuantity("50 kn")?.canonicalUnit).toBe("km/h");
+  });
+
+  it("reads a load factor only where the attribute is one", () => {
+    // Without a context "g" is still grams: the load factor must not leak into the global list.
+    expect(normalizeQuantity("4g")).toMatchObject({ unit: "g", canonicalUnit: "kg" });
+    expect(normalizeQuantity("4g")?.canonicalValue).toBeCloseTo(0.004, 6);
+    expect(canonicalUnitFor("g")).toBe("kg");
+
+    const g = normalizeQuantity("4g", LOAD);
+    expect(g).toMatchObject({ unit: "g_load", canonicalUnit: "g_load", canonicalValue: 4 });
+    expect(normalizeQuantity("4 G", LOAD)?.canonicalValue).toBe(4);
+    expect(normalizeQuantity("4 g-load", LOAD)?.unit).toBe("g_load");
+    expect(normalizeQuantity("4 g's", LOAD)?.unit).toBe("g_load");
+    // An unrelated attribute keeps the mass reading even when the figure is written the same way.
+    expect(normalizeQuantity("4g", { semantic: "payload.mass" })?.canonicalUnit).toBe("kg");
+  });
+
+  it("does not turn a load factor into a mass, a force or an acceleration", () => {
+    // 4g vs 500 g: the same letter, two different measurements.
+    expect(normalizeQuantity("500 g", { semantic: "payload.mass" })).toMatchObject({
+      canonicalUnit: "kg",
+    });
+    expect(normalizeQuantity("500 g", { semantic: "payload.mass" })?.canonicalValue).toBe(0.5);
+    expect(normalizeQuantity("500 g", LOAD)?.canonicalValue).toBe(500);
+    expect(normalizeQuantity("500 g", LOAD)?.canonicalUnit).toBe("g_load");
+
+    expect(convert(4, "g_load", "g_load")).toBe(4);
+    expect(convert(4, "g_load", "g")).toBeUndefined();
+    expect(convert(4, "g_load", "kg")).toBeUndefined();
+    expect(convert(4, "g_load", "m/s2")).toBeUndefined();
+    expect(convert(4, "g", "g_load")).toBeUndefined();
+    expect(canonicalUnitFor("g_load")).toBe("g_load");
+  });
+
+  it("shows the load factor as g and leaves every other unit as it is", () => {
+    expect(displayUnit("g_load")).toBe("g");
+    expect(displayUnit("km")).toBe("km");
+    expect(displayUnit("units/month")).toBe("units/month");
+  });
+
+  it("reads count rates over every time unit", () => {
+    expect(normalizeQuantity("50 units/month")).toMatchObject({
+      unit: "units/month",
+      canonicalUnit: "units/month",
+      canonicalValue: 50,
+    });
+    expect(normalizeQuantity("50 systems/month")?.canonicalValue).toBe(50);
+    expect(normalizeQuantity("50 per month")?.canonicalValue).toBe(50);
+    expect(normalizeQuantity("50/month")?.canonicalValue).toBe(50);
+    // A week is 365.25 / 12 / 7 of a month, so twelve a week is about 52 a month.
+    expect(normalizeQuantity("12 per week")?.canonicalValue).toBeCloseTo(52.18, 2);
+    expect(normalizeQuantity("12 units/week")?.canonicalUnit).toBe("units/month");
+    expect(normalizeQuantity("30 per day")?.canonicalValue).toBeCloseTo(913.125, 3);
+    expect(normalizeQuantity("2 per year")?.canonicalValue).toBeCloseTo(1 / 6, 4);
+    expect(normalizeQuantity("50 шт. в месяц")?.canonicalUnit).toBe("units/month");
+    expect(normalizeQuantity("50 шт. в месяц")?.canonicalValue).toBe(50);
+    expect(convert(12, "units/week", "units/month")).toBeCloseTo(52.18, 2);
+  });
+
+  it("does not read a bare count or a noun-only phrase as a rate", () => {
+    expect(normalizeQuantity("50 a month")).toBeUndefined();
+    expect(normalizeQuantity("50 units")).toBeUndefined();
+    // Hours stay out: "km/h" is a speed and a rate per hour is not a supported unit.
+    expect(normalizeQuantity("50 per hour")).toBeUndefined();
+  });
+
+  it("parses the simple units exactly as before the count rates", () => {
+    expect(normalizeQuantity("100 m")?.canonicalValue).toBe(0.1);
+    expect(normalizeQuantity("100 m")?.canonicalUnit).toBe("km");
+    expect(normalizeQuantity("5 min")).toMatchObject({ unit: "min", canonicalValue: 5 });
+    expect(normalizeQuantity("120 km/h")).toMatchObject({ unit: "km/h", canonicalValue: 120 });
+    expect(normalizeQuantity("30 m/s")?.canonicalValue).toBe(108);
+    // A bare "d" was never a unit; the day unit is "days" or the local words for it.
+    expect(normalizeQuantity("3 d")).toBeUndefined();
+    expect(normalizeQuantity("3 days")?.canonicalValue).toBe(4320);
   });
 });

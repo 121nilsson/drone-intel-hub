@@ -1,4 +1,5 @@
 import type { ExtractedSpec, Extraction, RFLink, RFRole } from "@/entities/drone/types";
+import { sourceUnitFor } from "./claim-source-unit";
 import { parseMoney, parseMoneyRange } from "./currency";
 import { normalizeDate } from "./dates";
 import { normalizeRF, intersectBands, type NormalizedRFLink, type NormalizedRFRole } from "./rf";
@@ -97,14 +98,21 @@ function normalizeSpec(spec: ExtractedSpec): ExtractedSpec {
   // stays in `raw`.
   const day = typeof spec.value === "string" ? normalizeDate(spec.value) : undefined;
   const targetUnit = canonicalUnitForSemantic(semantic);
+  const ctx = { semantic };
   let measured =
     typeof spec.value === "string"
-      ? (normalizeQuantityLoose(spec.value) ??
-        (spec.unit ? normalizeQuantityLoose(`${spec.value} ${spec.unit}`) : undefined))
+      ? (normalizeQuantityLoose(spec.value, ctx) ??
+        (spec.unit ? normalizeQuantityLoose(`${spec.value} ${spec.unit}`, ctx) : undefined))
       : spec.unit
-        ? normalizeQuantityLoose(`${spec.value} ${spec.unit}`)
+        ? normalizeQuantityLoose(`${spec.value} ${spec.unit}`, ctx)
         : undefined;
   if (measured && targetUnit) measured = rebaseQuantity(measured, targetUnit);
+  const source = sourceUnitFor({
+    value: spec.value,
+    unit: spec.unit,
+    evidence: spec.evidence,
+    raw: typeof spec.value === "string" ? spec.value : spec.raw,
+  });
   return {
     ...spec,
     semantic,
@@ -118,6 +126,8 @@ function normalizeSpec(spec: ExtractedSpec): ExtractedSpec {
     ...(measured ? { normalized: measured } : {}),
     ...(money ? { money } : {}),
     ...(moneyRange ? { moneyRange } : {}),
+    ...(source.unit ? { sourceUnit: source.unit } : {}),
+    sourceUnitBasis: source.basis,
   };
 }
 

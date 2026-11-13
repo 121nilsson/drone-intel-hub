@@ -132,7 +132,7 @@ export function addAnalystClaim(
   const raw = input.trim();
   const spec = drone.specs.find((s) => s.key === specKey);
   if (!raw || !spec) return undefined;
-  const normalized = normalizeQuantity(raw);
+  const normalized = normalizeQuantity(raw, { semantic: attributeSemantic(spec) });
   const numeric = Number(raw);
   const claim: SpecClaim = {
     id: crypto.randomUUID(),
@@ -166,9 +166,10 @@ function filedClaim(
   figure: string,
   at: string,
   moveId: string,
+  semantic?: string,
 ): SpecClaim {
   const raw = figure.trim();
-  const normalized = raw ? normalizeQuantity(raw) : undefined;
+  const normalized = raw ? normalizeQuantity(raw, semantic ? { semantic } : undefined) : undefined;
   // Number("") is 0, so an empty reading has to be ruled out before it is tried.
   const numeric = raw ? Number(raw) : Number.NaN;
   return {
@@ -215,7 +216,7 @@ export function moveClaim(
   if (!spec.claims.some((c) => claimKey(c) === key)) return undefined;
 
   const moveId = attributeMoveId(key, targetKey);
-  const moved = filedClaim(claim, key, figure, at, moveId);
+  const moved = filedClaim(claim, key, figure, at, moveId, attributeSemantic(target));
   const claims = spec.claims.map((c) =>
     claimKey(c) === key
       ? {
@@ -334,7 +335,7 @@ export function fileMovedClaim(
     };
   }
   const moved = {
-    ...filedClaim(claim, sourceKey, figure, at, moveId),
+    ...filedClaim(claim, sourceKey, figure, at, moveId, attributeSemantic(spec)),
     movedFromDroneId: sourceDroneId,
   };
   return {

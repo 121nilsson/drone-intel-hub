@@ -8,6 +8,7 @@ export const EVENT_LABELS: Partial<Record<string, string>> = {
   rule_replay_requested: "Posts re-analysed after quarantine",
   verifier_control_run: "Verifier controls asked",
   source_reenabled: "Source re-enabled by probe",
+  assertion_frame_check: "Assertion frame check",
 };
 
 export function eventLabel(kind: string): string {

@@ -41,8 +41,17 @@ function Case({
       </p>
       <p className="flex flex-wrap items-center gap-2">
         <Tag tone={d.answer === "yes" ? "primary" : "danger"}>You: {d.answer}</Tag>
-        <Tag tone="accent">Reader: {d.reader}</Tag>
+        <Tag tone="accent">
+          Reader at draw: {d.reader === "unsupported" ? "unsupported (legacy)" : d.reader}
+        </Tag>
       </p>
+      {d.readerAfterDraw?.map((r) => (
+        <p key={r.evaluatedAt} className="text-xs text-muted-foreground">
+          Later reading ({new Date(r.evaluatedAt).toLocaleString()}): {r.verdict}
+          {r.beforeHumanAnswer ? ", before you answered" : ", after you answered"}. Not the reading
+          at draw.
+        </p>
+      ))}
       {d.evidence && (
         <p className="text-xs text-muted-foreground [overflow-wrap:anywhere]">
           Quoted evidence: <span className="italic">“{d.evidence}”</span>
@@ -137,9 +146,10 @@ export function AuditDisagreements() {
       ) : (
         <>
           <p className="mb-2 text-xs text-muted-foreground">
-            You said yes where it said unsupported, or no where it said supported. Read the post
-            again and say who was right. Your first answer is what the audit counts; this is a note
-            beside it.
+            You said yes where it said contradicted or not found, or no where it said supported.
+            This is the reading it had when the claim was drawn; a later one is shown beside it with
+            its time. Read the post again and say who was right. Your first answer is what the audit
+            counts; this is a note beside it.
             {looked.length > 0 &&
               ` So far the reader was right in ${readerRight} of ${looked.length}.`}
           </p>

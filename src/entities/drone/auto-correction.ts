@@ -170,9 +170,13 @@ const within = (v: number, b: Bounds) => v >= b.min && v <= b.max;
  * The unit is what tells the two apart: a report saying "25 miles" that the entry recorded as
  * 25 km read the number right and the unit wrong - which is exactly a unit slip.
  */
-function statesRecordedFigure(c: SpecClaim, p: { value: number; unit?: string }): boolean {
+function statesRecordedFigure(
+  c: SpecClaim,
+  p: { value: number; unit?: string },
+  semantic?: string,
+): boolean {
   if (!c.raw) return false;
-  const q = normalizeQuantityLoose(c.raw);
+  const q = normalizeQuantityLoose(c.raw, semantic ? { semantic } : undefined);
   if (!q || q.canonicalValue === undefined || !q.canonicalUnit) return true;
   if (!p.unit) return false;
   const stated = convert(q.canonicalValue, q.canonicalUnit, p.unit);
@@ -200,7 +204,7 @@ export function detectCorrection(
   // A figure the report states verbatim was read right. If it does not fit this attribute,
   // that is a figure that does not belong here - not a slipped unit - so it is flagged, never
   // rewritten.
-  const faithful = statesRecordedFigure(c, p);
+  const faithful = statesRecordedFigure(c, p, attributeSemantic(spec));
   if (agreed !== undefined) {
     const ratio = p.value / agreed;
     if (Math.abs(ratio - 1) <= AGREEMENT_SPREAD) return undefined;

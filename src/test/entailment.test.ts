@@ -9,6 +9,7 @@ import {
   textHash,
   toEntailment,
 } from "@/entities/drone/entailment";
+import { readerOpposes, readerStance } from "@/entities/drone/entailment-verdict";
 import { verifyDrone } from "@/entities/drone/verification";
 import type { Drone, SpecClaim } from "@/entities/drone/types";
 import { summarizeAudit, type AuditRow } from "@/shared/infra/verification/audit.server";
@@ -41,9 +42,9 @@ describe("the mistakes the audit found are named in the instruction", () => {
   });
 
   it("is a new reading round, so the answers given under the old wording are asked again", () => {
-    expect(ENTAILMENT_VERSION).toBe("entailment-4");
+    expect(ENTAILMENT_VERSION).toBe("entailment-5");
     const claim = { entailment: { version: "entailment-3", textHash: "h" } } as SpecClaim;
-    expect(needsEntailment(claim, "h")).toBe(true);
+    expect(needsEntailment(claim, "h", "fp")).toBe(true);
   });
 });
 
@@ -103,7 +104,7 @@ describe("reading its reply", () => {
     expect(read([{ ref: "ref 1", verdict: "supported", span: "range of 40 km" }]).verdict).toBe(
       "supported",
     );
-    expect(read([{ ref: "[1]", verdict: "unsupported" }]).verdict).toBe("unsupported");
+    expect(read([{ ref: "[1]", verdict: "contradicted" }]).verdict).toBe("contradicted");
   });
 
   it("takes only the first number of a ref, so two refs never run together", () => {
@@ -116,9 +117,9 @@ describe("reading its reply", () => {
     expect(r.get("113")?.verdict).toBe("uncertain");
   });
 
-  it("does not take 'unsupported' on a post the reader saw only part of", () => {
+  it("does not take 'not_found' on a post the reader saw only part of", () => {
     const r = readEntailmentReply(
-      { answers: [{ ref: "1", verdict: "unsupported" }] },
+      { answers: [{ ref: "1", verdict: "not_found" }] },
       ["1"],
       POST,
       true,
@@ -126,6 +127,23 @@ describe("reading its reply", () => {
     expect(r.get("1")).toMatchObject({
       verdict: "uncertain",
       note: "the post was longer than the reader was shown",
+    });
+  });
+
+  it("keeps 'contradicted' on a cut post: what the reader did see already gave another value", () => {
+    const r = readEntailmentReply(
+      { answers: [{ ref: "1", verdict: "contradicted" }] },
+      ["1"],
+      POST,
+      true,
+    );
+    expect(r.get("1")?.verdict).toBe("contradicted");
+  });
+
+  it("does not take the legacy 'unsupported' from a model: it no longer says which mistake it was", () => {
+    expect(read([{ ref: "1", verdict: "unsupported" }])).toMatchObject({
+      verdict: "uncertain",
+      note: "the reader gave no valid verdict",
     });
   });
 
@@ -137,9 +155,12 @@ describe("reading its reply", () => {
     );
   });
 
-  it("keeps an unsupported answer, with its passage only when the post has it", () => {
-    expect(read([{ ref: "1", verdict: "unsupported", span: "invented" }])).toEqual({
-      verdict: "unsupported",
+  it("keeps a contradicted or not_found answer, with its passage only when the post has it", () => {
+    expect(read([{ ref: "1", verdict: "contradicted", span: "invented" }])).toEqual({
+      verdict: "contradicted",
+    });
+    expect(read([{ ref: "1", verdict: "not_found", span: "invented" }])).toEqual({
+      verdict: "not_found",
     });
   });
 });
@@ -161,10 +182,17 @@ describe("choosing the reader", () => {
       value: 40,
       source: "s",
       date: "2026-11-01",
-      entailment: toEntailment({ verdict: "supported", span: "40 km" }, options[0]!, hash, "t"),
+      entailment: toEntailment(
+        { verdict: "supported", span: "40 km" },
+        options[0]!,
+        hash,
+        "t",
+        true,
+        { claimFingerprint: "fp", readerInputHash: "in", truncated: false },
+      ),
     } as SpecClaim;
-    expect(needsEntailment(claim, hash)).toBe(false);
-    expect(needsEntailment(claim, textHash(`${POST} Updated.`))).toBe(true);
+    expect(needsEntailment(claim, hash, "fp")).toBe(false);
+    expect(needsEntailment(claim, textHash(`${POST} Updated.`), "fp")).toBe(true);
     expect(claim.entailment?.version).toBe(ENTAILMENT_VERSION);
   });
 });
@@ -213,7 +241,55 @@ describe("measuring it against the person", () => {
         { human: "no", reader: "unsupported" },
         { human: "yes", reader: "uncertain" },
       ]),
-    ).toEqual({ supported: { yes: 1, no: 1 }, unsupported: { yes: 0, no: 1 }, uncertain: 1 });
+    ).toEqual({
+      supported: { yes: 1, no: 1 },
+      unsupported: { yes: 0, no: 1 },
+      contradicted: { yes: 0, no: 0 },
+      notFound: { yes: 0, no: 0 },
+      legacyUnsupported: { yes: 0, no: 1 },
+      uncertain: 1,
+    });
+  });
+
+  it("keeps contradicted, not found and the legacy verdict apart, and sums them as opposed", () => {
+    const a = entailmentAgreement([
+      { human: "yes", reader: "contradicted" },
+      { human: "no", reader: "not_found" },
+      { human: "no", reader: "not_found" },
+      { human: "yes", reader: "unsupported" },
+    ]);
+    expect(a.contradicted).toEqual({ yes: 1, no: 0 });
+    expect(a.notFound).toEqual({ yes: 0, no: 2 });
+    expect(a.legacyUnsupported).toEqual({ yes: 1, no: 0 });
+    expect(a.unsupported).toEqual({ yes: 2, no: 2 });
+  });
+
+  it("never re-reads the legacy verdict as either of the two it was split into", () => {
+    expect(readerStance("unsupported")).toBe("legacy_opposes");
+    expect(readerStance("contradicted")).toBe("contradicts");
+    expect(readerStance("not_found")).toBe("absent");
+    expect(readerOpposes("unsupported")).toBe(true);
+    expect(readerOpposes("uncertain")).toBe(false);
+  });
+
+  it("asks again when the claim changed under an unchanged post, or was read without a fingerprint", () => {
+    const base = toEntailment(
+      { verdict: "supported" },
+      { provider: "p", model: "m" },
+      "h",
+      "t",
+      true,
+      {
+        claimFingerprint: "fp-1",
+        readerInputHash: "in",
+        truncated: false,
+      },
+    );
+    const claim = { entailment: base } as SpecClaim;
+    expect(needsEntailment(claim, "h", "fp-1")).toBe(false);
+    expect(needsEntailment(claim, "h", "fp-2")).toBe(true);
+    const { claimFingerprint: _dropped, ...legacy } = base;
+    expect(needsEntailment({ entailment: legacy } as SpecClaim, "h", "fp-1")).toBe(true);
   });
 
   let n = 0;

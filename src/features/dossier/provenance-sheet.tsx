@@ -1,7 +1,9 @@
 import { Link } from "@tanstack/react-router";
 import { cleanReading } from "@/entities/drone/claim-reading";
+import { claimSourceUnit } from "@/entities/normalization/claim-source-unit";
+import { displayUnit } from "@/entities/normalization/units";
 import { ExternalSourceLink, SourceRef } from "@/shared/ui/links";
-import type { SpecAttribute } from "@/entities/drone/types";
+import type { SpecAttribute, SpecClaim } from "@/entities/drone/types";
 import { useDispatches, useServices, useSources } from "@/shared/infra/use-services";
 import {
   Sheet,
@@ -82,9 +84,10 @@ export function ProvenanceSheet({
                 <p className="mt-1 font-mono text-primary">
                   {cleanReading(selection.spec, claim)}
                   {n?.canonicalValue !== undefined && claim.raw
-                    ? ` → ${n.canonicalValue} ${n.canonicalUnit ?? ""}`
+                    ? ` → ${n.canonicalValue} ${displayUnit(n.canonicalUnit ?? "")}`
                     : ""}
                 </p>
+                <SourceUnitLine claim={claim} />
                 {claim.raw && claim.raw.trim() !== cleanReading(selection.spec, claim) && (
                   <p className="mt-0.5 font-mono text-xs text-muted-foreground">
                     as stated: {claim.raw}
@@ -158,5 +161,26 @@ export function ProvenanceSheet({
         )}
       </SheetContent>
     </Sheet>
+  );
+}
+
+/**
+ * The unit this claim's source wrote, and what shows it. The attribute's own unit is the
+ * catalogue's canonical one and is never offered as the source's.
+ */
+const BASIS_WORDS = {
+  value_text: "in the stated value",
+  quote: "in the quote",
+  extractor_unverified: "given by the extractor, not found in the text",
+  conflict: "the extractor and the text disagree",
+  unknown: "not evidenced",
+} as const;
+
+function SourceUnitLine({ claim }: { claim: SpecClaim }) {
+  const u = claimSourceUnit(claim);
+  return (
+    <p className="mt-0.5 font-mono text-xs text-muted-foreground">
+      source unit: {u.unit ? displayUnit(u.unit) : "unknown"} ({BASIS_WORDS[u.basis]})
+    </p>
   );
 }

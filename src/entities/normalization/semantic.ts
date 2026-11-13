@@ -41,6 +41,21 @@ export function semanticKeyFor(key: string, label = ""): string {
     .replace(/_(km|m|kmh|kg|min|w|l)$/, "");
   const lab = label.trim();
 
+  // A load factor is a ratio of acceleration to gravity, not a mass. Its labels are narrow on
+  // purpose: a bare "g" or "max G" anywhere else would be read as the load factor.
+  if (
+    k === "g_load" ||
+    k === "g_max" ||
+    k === "max_g" ||
+    k === "g_limit" ||
+    k === "load_factor" ||
+    k === "max_load_factor" ||
+    /\bg[- ]load\b|\bload factor\b|\bmax(?:imum)? g\b|\bg[- ]limit\b|normal acceleration limit/i.test(
+      lab,
+    )
+  )
+    return "maneuver.load_factor_max";
+
   // Counter-drone envelopes first: "effective range" / "target speed" must not fall into the
   // vehicle's own range or speed.
   if (
@@ -199,6 +214,31 @@ export function semanticKeyFor(key: string, label = ""): string {
   const counted = countSemantic(k, lab);
   if (counted) return counted;
 
+  // Production is a rate per month, not a stock. "Deployed" is a stock: a plain count of units.
+  if (
+    k === "production_rate" ||
+    k === "production_rate_monthly" ||
+    k === "monthly_production" ||
+    k === "production_per_month" ||
+    k === "units_per_month" ||
+    k === "output_per_month" ||
+    /\b(?:production|output) rate\b|\bmonthly production\b|\b(?:units|output|production) per month\b/i.test(
+      lab,
+    )
+  )
+    return "production.rate_monthly";
+  if (
+    k === "deployed_units" ||
+    k === "units_deployed" ||
+    k === "deployed_systems" ||
+    k === "systems_deployed" ||
+    k === "deployed_count" ||
+    /^(?:number of )?deployed (?:units|systems|airframes|drones)$|^(?:units|systems|airframes|drones) deployed$/i.test(
+      lab,
+    )
+  )
+    return "inventory.deployed_count";
+
   if (k === "length" || k === "loa" || /^length$/i.test(lab) || /overall length/i.test(lab))
     return "dimension.length";
   if (k === "diameter" || /^diameter$/i.test(lab)) return "dimension.diameter";
@@ -222,6 +262,11 @@ export function canonicalUnitForSemantic(semantic: string): string | undefined {
   // A count has no unit. "payload.missile.count" took the kilogram of every other "payload."
   // semantic, and the verifier then passed "650 missiles" as a mass.
   if (semantic.endsWith(".count")) return undefined;
+  // A load factor is in g of acceleration, its own token (see LOAD_FACTOR_UNIT in units.ts).
+  if (semantic.startsWith("maneuver.load_factor")) return "g_load";
+  if (semantic.startsWith("production.rate")) return "units/month";
+  // A deployed count is a plain number of systems; a unit would invent a dimension for it.
+  if (semantic.startsWith("inventory.")) return undefined;
   // A calibre is written in millimetres; "0.24 m" for a 240 mm mortar reads as nobody writes it.
   if (semantic === "dimension.caliber") return "mm";
   if (semantic.startsWith("dimension.")) return "m";

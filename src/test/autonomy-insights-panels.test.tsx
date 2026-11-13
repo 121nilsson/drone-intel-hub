@@ -200,6 +200,10 @@ describe("Decision ledger labels", () => {
     expect(eventLabel("rule_probation_started")).toBe("Rule back on probation");
   });
 
+  it("labels the assertion frame check kind", () => {
+    expect(eventLabel("assertion_frame_check")).toBe("Assertion frame check");
+  });
+
   it("shows an unknown kind as the raw kind", () => {
     expect(eventLabel("some_future_kind")).toBe("some_future_kind");
   });

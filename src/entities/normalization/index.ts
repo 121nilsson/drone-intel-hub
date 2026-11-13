@@ -16,5 +16,13 @@ export {
   parseFrequencies,
 } from "./rf";
 export type { NormalizedRFLink, NormalizedRFRole } from "./rf";
-export { CANONICAL_UNIT, canonicalUnitFor, convert, normalizeQuantity } from "./units";
-export type { Dimension, NormalizedQuantity } from "./units";
+export { CANONICAL_UNIT, canonicalUnitFor, convert, displayUnit, normalizeQuantity } from "./units";
+export type { Dimension, NormalizedQuantity, QuantityContext } from "./units";
+export { CORE_DIMENSIONS, registryEntryFor, toleranceFor } from "./core-registry";
+export type {
+  AttributeDomain,
+  AttributeEntry,
+  AttributeTolerance,
+  CoreDimension,
+  PhysicalClass,
+} from "./core-registry";

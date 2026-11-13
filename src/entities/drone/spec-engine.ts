@@ -87,6 +87,8 @@ function claimFor(
     ...(spec.normalized
       ? { normalized: spec.normalized, normalizationConfidence: spec.normalized.confidence }
       : {}),
+    ...(spec.sourceUnit ? { sourceUnit: spec.sourceUnit } : {}),
+    ...(spec.sourceUnitBasis ? { sourceUnitBasis: spec.sourceUnitBasis } : {}),
     ...(ref?.sourceId ? { sourceId: ref.sourceId } : {}),
     ...(evidence ? { evidence } : {}),
     ...(ref?.extractionConfidence !== undefined

@@ -1,5 +1,5 @@
 import { qualifierBeforeFigure, type QuantityQualifier } from "@/entities/normalization/numeric";
-import { normalizeQuantity, rebaseQuantity } from "@/entities/normalization/units";
+import { displayUnit, normalizeQuantity, rebaseQuantity } from "@/entities/normalization/units";
 import { displayScale } from "./consensus";
 import type { SpecAttribute, SpecClaim } from "./types";
 
@@ -24,7 +24,7 @@ export function claimReading(spec: Pick<SpecAttribute, "unit">, claim: SpecClaim
     !bare(stated) || !stated
       ? stated
       : q?.unit
-        ? `${stated} ${q.unit}`
+        ? `${stated} ${displayUnit(q.unit)}`
         : spec.unit
           ? `${stated} ${spec.unit}`
           : stated;
@@ -65,7 +65,10 @@ const QUALIFIER_WORD: Partial<Record<QuantityQualifier, string>> = {
  * `normalized` only, so it says what the catalogue parsed and nothing about the raw clipping that
  * `claimReading` shows. Without a usable figure it is `claimReading` as before.
  */
-export function cleanReading(spec: Pick<SpecAttribute, "unit">, claim: SpecClaim): string {
+export function cleanReading(
+  spec: Pick<SpecAttribute, "unit"> & { semantic?: string },
+  claim: SpecClaim,
+): string {
   const stated = (claim.raw?.trim() || String(claim.value)).trim();
   // The word the post put before the figure ("range to at least 1,000", "(approximately 100"),
   // for the claims whose stored reading says "exact" because it never saw that word.
@@ -75,7 +78,10 @@ export function cleanReading(spec: Pick<SpecAttribute, "unit">, claim: SpecClaim
     // A claim with no stored reading (a value kept as the post's phrase): read the figure and its
     // unit out of the phrase for display only. Nothing is stored and consensus is not told.
     structuredReading(
-      normalizeQuantity(stated.slice(Math.max(stated.search(/[0-9]/), 0))),
+      normalizeQuantity(
+        stated.slice(Math.max(stated.search(/[0-9]/), 0)),
+        spec.semantic ? { semantic: spec.semantic } : undefined,
+      ),
       written,
       spec.unit,
     ) ??

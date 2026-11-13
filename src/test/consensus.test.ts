@@ -88,7 +88,7 @@ describe("consensus", () => {
     expect(agreed.display).not.toBe(disputed.display);
   });
 
-  it("shows the observed range when sources disagree", () => {
+  it("shows the median, not an envelope, when sources disagree", () => {
     const c = consensus(
       spec(
         [
@@ -99,8 +99,10 @@ describe("consensus", () => {
         "km",
       ),
     );
-    // The full observed range (min–max) is what makes the conflict visible.
-    expect(c.display).toBe("1000–5000 km");
+    // The disagreement is shown by the disputed flag. The min–max envelope mixes sources and was
+    // read as a source's own range, so the display is the median (previously "1000–5000 km").
+    expect(c.display).toBe("4000 km");
+    expect(c.disputed).toBe(true);
     expect(c.median).toBe(4000);
     expect(c.max).toBe(5000);
     expect(c.min).toBe(1000);

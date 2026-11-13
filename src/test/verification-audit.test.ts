@@ -240,11 +240,13 @@ describe("what the answers prove", () => {
     // dropped under 5%, but 140 is not a boundary, so the audit stays open until 150.
     const answers = (n: number, errorsAt: number[]) =>
       Array.from({ length: n }, (_, i) => row({ answer: errorsAt.includes(i) ? "no" : "yes" }));
-    expect(summarizeAudit(answers(140, [0, 1, 2])).decision).toBe("continue");
-    expect(summarizeAudit(answers(150, [0, 1, 2])).decision).toBe("continue");
+    // The old look at non-probability draws survives as information only: it is never the gate.
+    expect(summarizeAudit(answers(140, [0, 1, 2])).interim?.decision).toBe("continue");
+    expect(summarizeAudit(answers(150, [0, 1, 2])).interim?.decision).toBe("continue");
     const passed = summarizeAudit(answers(100, [0]));
-    expect(passed.decision).toBe("pass");
-    expect(passed.decidedAt).toBe(100);
+    expect(passed.interim?.decision).toBe("pass");
+    expect(passed.interim?.decidedAt).toBe(100);
+    expect(passed.decision).toBe("continue");
   });
 });
 

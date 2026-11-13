@@ -180,9 +180,10 @@ verifier read, is unchanged.
   errors, the verified share per prompt version, and the sources whose fetches are failing, quiet
   or unsteady. Ledger rows carry a readable label per event kind
   (`src/features/autonomy/event-labels.ts`).
-- **Audit (`/audit`):** the stratified human audit of `verified` claims (migrations 019/020) —
-  drawn with a recorded seed, hidden controls, the binomial stopping rule against the 5 % budget,
-  and the second reader's agreement with the person's answers. The frozen seed set lives only in
+- **Audit (`/audit`):** the human audit of `verified` claims (migrations 019/020/026) — the formal
+  evaluation (200 claims drawn once in proportion to language strata, one exact analysis against
+  the 5 % budget, `incomplete` is never a pass), earlier draws kept as information, hidden
+  controls, and the second reader's agreement with the person's answers as it stood at the draw. The frozen seed set lives only in
   `verification_audit`; nothing that learns may read it.
   Every batch of 25 or more carries two kinds of hidden control (`controlMix`): altered figures,
   which test whether the figure is read, and a rejected claim whose sentence names another system
@@ -326,5 +327,5 @@ On-demand Wikipedia/Wikidata catalog import from the Catalog page (`src/shared/i
 
 ## Schema
 
-Authoritative SQL: `migrations/001_init.sql`–`025_verifier_controls.sql` (see README PostgreSQL table). `drizzle/` is not used at
+Authoritative SQL: `migrations/001_init.sql`–`026_claim_governance_and_audit.sql` (see README PostgreSQL table). `drizzle/` is not used at
 application runtime.

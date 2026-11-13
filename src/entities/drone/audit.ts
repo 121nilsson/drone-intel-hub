@@ -7,6 +7,9 @@
  * prove. Nothing here reads or writes the catalogue.
  */
 
+import { readerOpposes } from "./entailment-verdict";
+import type { StoredEntailmentVerdict } from "./types";
+
 export type AuditLanguage = "en" | "uk" | "ru" | "other";
 
 /** The order the audit works through languages in, set by the project owner. */
@@ -51,7 +54,7 @@ export function seededRandom(seed: number): () => number {
   };
 }
 
-function shuffle<T>(items: readonly T[], random: () => number): T[] {
+export function shuffle<T>(items: readonly T[], random: () => number): T[] {
   const out = [...items];
   for (let i = out.length - 1; i > 0; i--) {
     const j = Math.floor(random() * (i + 1));
@@ -134,17 +137,16 @@ export function insertControls<T>(items: readonly T[], controls: readonly T[], s
 }
 
 /**
- * Whether the second reader contradicts the person: it called the claim unsupported where they
- * said the post states it, or supported where they said it does not. "Uncertain" contradicts
- * nothing, and a claim the reader has not read has no verdict to compare.
+ * Whether the second reader contradicts the person: it opposed the claim (contradicted, not
+ * found, or the legacy "unsupported") where they said the post states it, or supported it where
+ * they said it does not. "Uncertain" contradicts nothing, and a claim the reader has not read has
+ * no verdict to compare.
  */
 export function readerDisagrees(
   answer: "yes" | "no" | "cannot_tell" | null | undefined,
-  reader: "supported" | "unsupported" | "uncertain" | null | undefined,
+  reader: StoredEntailmentVerdict | null | undefined,
 ): boolean {
-  return (
-    (answer === "yes" && reader === "unsupported") || (answer === "no" && reader === "supported")
-  );
+  return (answer === "yes" && readerOpposes(reader)) || (answer === "no" && reader === "supported");
 }
 
 /**

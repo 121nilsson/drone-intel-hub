@@ -8,18 +8,26 @@ import type { SpecAttribute, SpecClaim } from "./types";
 const outletOf = (source: string) => outletKey(source) || source.trim().toLowerCase();
 
 /** One claim that speaks for the figure: the outlet it came from and its post's content hash. */
-interface Voice {
+export interface Voice {
   outlet: string;
   contentHash: string | undefined;
 }
 
+const voiceOf = (claim: SpecClaim): Voice => ({
+  outlet: outletOf(claim.source),
+  contentHash: claim.lineage?.contentHash,
+});
+
 /**
- * How many sources the voices make. Two voices are one source when they name the same outlet, or
+ * Groups voices that are one source. Two voices are one source when they name the same outlet, or
  * when both carry a content hash and the hashes are near-duplicates: an outlet that republished
  * another's wire text is not a second witness. A voice without a hash is grouped by outlet only,
  * which is what counted before hashes existed.
+ *
+ * Union-find, so the grouping is transitive: A~B and B~C put A, B and C in one group even when A
+ * and C are not near-duplicates themselves. Groups come back in first-seen order, as indexes.
  */
-function countSources(voices: readonly Voice[]): number {
+export function groupVoices(voices: readonly Voice[]): number[][] {
   const parent = voices.map((_, i) => i);
   const root = (i: number): number => {
     let r = i;
@@ -35,7 +43,24 @@ function countSources(voices: readonly Voice[]): number {
       if (sameOutlet || repost) parent[root(i)] = root(j);
     }
   }
-  return new Set(voices.map((_, i) => root(i))).size;
+  const groups = new Map<number, number[]>();
+  voices.forEach((_, i) => {
+    const r = root(i);
+    const group = groups.get(r);
+    if (group) group.push(i);
+    else groups.set(r, [i]);
+  });
+  return [...groups.values()];
+}
+
+/**
+ * The claims of one attribute, grouped into observations: claims from one outlet, and claims whose
+ * posts are near-duplicates, are one observation each. Unlike independentSourceCount this looks at
+ * every claim whatever figure it states, so a dispute can see two sources that disagree. Each
+ * group keeps the claims' own order.
+ */
+export function clusterObservations(claims: readonly SpecClaim[]): SpecClaim[][] {
+  return groupVoices(claims.map(voiceOf)).map((group) => group.map((i) => claims[i]!));
 }
 
 /**
@@ -65,5 +90,5 @@ export function independentSourceCount(spec: SpecAttribute, claim: SpecClaim): n
     const a = String(claim.value).trim().toLowerCase();
     if (a && a === String(other.value).trim().toLowerCase()) voices.push(voice);
   }
-  return countSources(voices);
+  return groupVoices(voices).length;
 }

@@ -1,4 +1,6 @@
 import { cleanReading } from "@/entities/drone/claim-reading";
+import { readerOpposes } from "@/entities/drone/entailment-verdict";
+import type { StoredEntailmentVerdict } from "@/entities/drone/types";
 import {
   ENTAILMENT_VERSION,
   entailmentPrompt,
@@ -161,7 +163,13 @@ export async function runVerifierControls(): Promise<VerifierControlRun> {
             ${reader.model}, ${ENTAILMENT_VERSION})
           on conflict (claim_id, entailment_version) do nothing`;
         counts.asked++;
-        counts[answer.verdict]++;
+        counts[
+          answer.verdict === "supported"
+            ? "supported"
+            : readerOpposes(answer.verdict)
+              ? "unsupported"
+              : "uncertain"
+        ]++;
         answered = true;
         break;
       }
@@ -197,7 +205,7 @@ export async function verifierControlsStatus(): Promise<VerifierControlsStatus> 
   const rows = dbConfigured()
     ? await db()<
         {
-          verdict: "supported" | "unsupported" | "uncertain";
+          verdict: StoredEntailmentVerdict;
           family: string | null;
           language: string | null;
         }[]

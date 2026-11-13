@@ -7,21 +7,26 @@ export const DECISION: Record<
   pass: {
     label: "pass",
     tone: "success",
-    says: "Verified precision is proven within the budget.",
+    says: "Verified precision is proven within the budget, at the formal evaluation's single analysis.",
   },
   fail: {
     label: "fail",
     tone: "danger",
-    says: "Verified claims are proven to be wrong more often than the budget allows.",
+    says: "Every claim of a fully audited population was checked, and more of them are wrong than the budget allows.",
   },
   not_proven: {
     label: "not proven",
     tone: "warning",
-    says: "The audit reached its maximum without proving precision within the budget.",
+    says: "The formal evaluation is complete, but its upper bound is above the budget: precision is not proven.",
+  },
+  incomplete: {
+    label: "incomplete",
+    tone: "warning",
+    says: "The exact bound could not be computed within its limit. That is never a pass.",
   },
   continue: {
     label: "open",
     tone: "muted",
-    says: "Not settled yet: the first decision is after 100 answers, then after every 50.",
+    says: "Not settled yet: the gate is one analysis over a fixed sample of 200 valid answers. Earlier figures are information, not a decision.",
   },
 };

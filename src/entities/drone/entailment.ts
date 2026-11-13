@@ -1,6 +1,14 @@
 import { catalogNames } from "./catalog-names";
 import { cleanReading } from "./claim-reading";
-import type { ClaimEntailment, Drone, EntailmentVerdict, SpecAttribute, SpecClaim } from "./types";
+import { readerStance } from "./entailment-verdict";
+import type {
+  ClaimEntailment,
+  Drone,
+  EntailmentVerdict,
+  SpecAttribute,
+  SpecClaim,
+  StoredEntailmentVerdict,
+} from "./types";
 import { fold } from "./verification";
 
 /**
@@ -22,8 +30,12 @@ import { fold } from "./verification";
  * taken for the attribute, a vague descriptor taken for a value, a bound taken for an exact figure.
  * Measured on the audit before the change (human answer / reader verdict): no/supported 12,
  * yes/unsupported 16, yes/supported 184, no/unsupported 14, uncertain 21.
+ * 5: "unsupported" split in two - contradicted (the text states another value, or another
+ * system's) and not_found (the text does not say) - which the human audit needs apart: a reader
+ * that opposes a claim the person confirmed is a different mistake in each case. Readings stored
+ * as "unsupported" stay as written and are never re-read as either.
  */
-export const ENTAILMENT_VERSION = "entailment-4";
+export const ENTAILMENT_VERSION = "entailment-5";
 
 /** A short stable hash of a post's text (FNV-1a): a changed post is read again. */
 export function textHash(text: string): string {
@@ -32,9 +44,15 @@ export function textHash(text: string): string {
   return h.toString(36);
 }
 
-/** Whether the reader has to be asked about this claim against this post. */
-export const needsEntailment = (claim: SpecClaim, hash: string) =>
-  claim.entailment?.version !== ENTAILMENT_VERSION || claim.entailment.textHash !== hash;
+/**
+ * Whether the reader has to be asked about this claim against this post. A reading also goes stale
+ * when the claim itself changed under an unchanged post, and a reading written without a
+ * fingerprint cannot be shown to describe the claim as it is now.
+ */
+export const needsEntailment = (claim: SpecClaim, hash: string, claimFingerprint: string) =>
+  claim.entailment?.version !== ENTAILMENT_VERSION ||
+  claim.entailment.textHash !== hash ||
+  claim.entailment.claimFingerprint !== claimFingerprint;
 
 /** One claim as the reader sees it: no quote, no confidence, no rationale. */
 export interface EntailmentQuestion {
@@ -81,7 +99,7 @@ export interface EntailmentAnswer {
 
 /**
  * Posts are long; the reader sees the beginning, where the figures nearly always are. Past it the
- * reader cannot see, so on a cut post its "unsupported" is read as uncertain (readEntailmentReply).
+ * reader cannot see, so on a cut post its "not_found" is read as uncertain (readEntailmentReply).
  */
 const MAX_POST_CHARS = 12000;
 /** Names listed per system; the catalogue keeps many spellings, and the first few carry it. */
@@ -97,20 +115,22 @@ export function entailmentPrompt(
     "system - not whether it is true, and not whether it is plausible.",
     'Answer "supported" only if the text states it, and give the exact passage, copied',
     "character for character from the text, that states it.",
-    'Answer "unsupported" if the text gives a different value, attributes it to another',
-    "system, or does not state it.",
+    'Answer "contradicted" if the text gives a different value for this attribute of this',
+    "system, or gives this figure for another system.",
+    'Answer "not_found" if the text does not state this value for this attribute and gives no',
+    "conflicting one.",
     'Answer "uncertain" if the text is ambiguous about it.',
     "A value in another unit or wording that means the same quantity is supported.",
     "The figure must be that attribute of that system, not another quantity that sits near it:",
     "the altitude of a target is not the system's own maximum altitude, a number of units struck or",
     "lost in one event is not a quantity deployed, and a capacity planned over several years is not",
-    'a production timeline - answer "unsupported" for those.',
+    'a production timeline - answer "not_found" for those.',
     "A vague descriptor (high-speed, mid-range, long-range, lightweight) is not a stated value for a",
-    'measured attribute: answer "unsupported".',
+    'measured attribute: answer "not_found".',
     'A qualifier in the claim ("up to", "at least", "approx.", a range) must match the text: "up to',
     '500" is not "500", and "620-650" is not "650" - answer "uncertain" when they differ.',
     'Each claim is numbered [n]; answer with that number as "ref".',
-    'Reply with JSON only: {"answers":[{"ref":"1","verdict":"supported|unsupported|uncertain","span":"..."}]}',
+    'Reply with JSON only: {"answers":[{"ref":"1","verdict":"supported|contradicted|not_found|uncertain","span":"..."}]}',
   ].join(" ");
   const claims = questions
     .map((q) => {
@@ -124,13 +144,23 @@ export function entailmentPrompt(
   return { system, prompt: `TEXT:\n${text}\n\nCLAIMS:\n${claims}`, truncated };
 }
 
-const VERDICTS: readonly EntailmentVerdict[] = ["supported", "unsupported", "uncertain"];
+/**
+ * What a reply may say. The legacy "unsupported" is not accepted from a model: it would put a
+ * verdict into the ledger that no longer says which of the two mistakes it was.
+ */
+const VERDICTS: readonly EntailmentVerdict[] = [
+  "supported",
+  "contradicted",
+  "not_found",
+  "uncertain",
+];
 
 /**
  * Read the reply, one answer per asked ref. A claim the reply skips, a verdict it misspells, and a
  * "supported" whose passage is not in the post all become `uncertain`, with the reason noted, so
  * a careless reply can never raise a claim. On a post the reader saw only part of (`truncated`),
- * "unsupported" also becomes `uncertain`: the figure may be in the part it was not shown.
+ * "not_found" also becomes `uncertain`: the figure may be in the part it was not shown. A
+ * contradiction stands: what the reader did see already gave a different value.
  */
 export function readEntailmentReply(
   reply: unknown,
@@ -165,7 +195,7 @@ export function readEntailmentReply(
           ? "the passage the reader quoted is not in the post"
           : "the reader gave no passage",
       });
-    else if (verdict === "unsupported" && truncated)
+    else if (verdict === "not_found" && truncated)
       answers.set(ref, {
         verdict: "uncertain",
         note: "the post was longer than the reader was shown",
@@ -202,6 +232,12 @@ export function toEntailment(
   at: string,
   /** Whether the claim names the model that extracted it, so the reader is known to differ. */
   extractorKnown = true,
+  /** What ties the verdict to this claim and this exact input (see ClaimEntailment). */
+  provenance: { claimFingerprint: string; readerInputHash: string; truncated: boolean } = {
+    claimFingerprint: "",
+    readerInputHash: "",
+    truncated: false,
+  },
 ): ClaimEntailment {
   return {
     verdict: answer.verdict,
@@ -213,6 +249,9 @@ export function toEntailment(
     textHash: hash,
     version: ENTAILMENT_VERSION,
     at,
+    ...(provenance.claimFingerprint ? { claimFingerprint: provenance.claimFingerprint } : {}),
+    ...(provenance.readerInputHash ? { readerInputHash: provenance.readerInputHash } : {}),
+    ...(provenance.truncated ? { truncated: true } : {}),
   };
 }
 
@@ -220,23 +259,42 @@ export function toEntailment(
 export interface EntailmentAgreement {
   /** Reader said supported: how often the person agreed the post states it. */
   supported: { yes: number; no: number };
-  /** Reader said unsupported. */
+  /**
+   * Reader opposed the claim, however it said so: the sum of the three kinds below, so a view that
+   * only asks "did it support or oppose" does not have to add them up.
+   */
   unsupported: { yes: number; no: number };
+  /** The post states another value, or the figure of another system. */
+  contradicted: { yes: number; no: number };
+  /** The post does not say. */
+  notFound: { yes: number; no: number };
+  /** Written before the verdict was split in two; never counted as either of the others. */
+  legacyUnsupported: { yes: number; no: number };
   /** Reader could not say. */
   uncertain: number;
 }
 
 export function entailmentAgreement(
-  pairs: ReadonlyArray<{ human: "yes" | "no"; reader: EntailmentVerdict }>,
+  pairs: ReadonlyArray<{ human: "yes" | "no"; reader: StoredEntailmentVerdict }>,
 ): EntailmentAgreement {
   const out: EntailmentAgreement = {
     supported: { yes: 0, no: 0 },
     unsupported: { yes: 0, no: 0 },
+    contradicted: { yes: 0, no: 0 },
+    notFound: { yes: 0, no: 0 },
+    legacyUnsupported: { yes: 0, no: 0 },
     uncertain: 0,
   };
   for (const { human, reader } of pairs) {
-    if (reader === "uncertain") out.uncertain++;
-    else out[reader][human]++;
+    const stance = readerStance(reader);
+    if (stance === "supports") out.supported[human]++;
+    else if (stance === "uncertain" || stance === null) out.uncertain++;
+    else {
+      out.unsupported[human]++;
+      if (stance === "contradicts") out.contradicted[human]++;
+      else if (stance === "absent") out.notFound[human]++;
+      else out.legacyUnsupported[human]++;
+    }
   }
   return out;
 }

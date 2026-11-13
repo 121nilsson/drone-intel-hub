@@ -14,8 +14,9 @@ import {
 } from "./audit";
 import { cleanReading } from "./claim-reading";
 import { ANALYST_SOURCE } from "./claim-review";
+import { readerOpposes } from "./entailment-verdict";
 import { attributeSemantic } from "./spec-engine";
-import type { Drone, EntailmentVerdict, SpecAttribute, SpecClaim } from "./types";
+import type { Drone, SpecAttribute, SpecClaim, StoredEntailmentVerdict } from "./types";
 import { figuresIn } from "./value-in-quote";
 
 /**
@@ -82,7 +83,7 @@ export function controlCandidates(
 
 /** One answer of the second reader to a control, as stored. */
 export interface ControlAnswer {
-  verdict: EntailmentVerdict;
+  verdict: StoredEntailmentVerdict;
   family?: string | null;
   language?: string | null;
 }
@@ -90,6 +91,10 @@ export interface ControlAnswer {
 export interface ControlSummary {
   asked: number;
   supported: number;
+  /**
+   * The reader opposed the altered figure: contradicted, not found, or the legacy "unsupported". A
+   * control is wrong by construction, so either of the first two is a catch; they are not told apart.
+   */
   unsupported: number;
   uncertain: number;
   /** One-sided 95 % upper bound on how often the reader's "supported" is a false support. */
@@ -108,7 +113,7 @@ export interface ControlStratum extends ControlSummary {
  */
 export function summarizeControls(rows: readonly ControlAnswer[]): ControlSummary {
   const supported = rows.filter((r) => r.verdict === "supported").length;
-  const unsupported = rows.filter((r) => r.verdict === "unsupported").length;
+  const unsupported = rows.filter((r) => readerOpposes(r.verdict)).length;
   return {
     asked: rows.length,
     supported,

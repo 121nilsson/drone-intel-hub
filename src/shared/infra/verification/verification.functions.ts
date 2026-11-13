@@ -45,6 +45,18 @@ export const drawAuditBatch = createServerFn({ method: "POST" }).handler(async (
   return await drawMore();
 });
 
+/** The formal evaluation: one frozen probability sample the gate is computed over. */
+export const drawFormalAudit = createServerFn({ method: "POST" }).handler(async () => {
+  const { drawFormalEvaluation } = await import("./audit.server");
+  return await drawFormalEvaluation();
+});
+
+/** Ask again about sample units whose answers a failed control voided. Null when none wait. */
+export const redrawVoidedAudit = createServerFn({ method: "POST" }).handler(async () => {
+  const { redrawVoided } = await import("./audit.server");
+  return await redrawVoided();
+});
+
 const ANSWERS: readonly AuditAnswer[] = ["yes", "no", "cannot_tell"];
 
 export const answerAuditItem = createServerFn({ method: "POST" })

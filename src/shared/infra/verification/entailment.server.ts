@@ -18,7 +18,13 @@ import type { SecondReaderRun, TokenUsageToday } from "@/shared/contracts/verifi
 import { chatCompletionOnce } from "@/shared/infra/ai-proxy.server";
 import { getAvailableProviders, getProviderModel } from "@/shared/infra/ai-providers";
 import { autonomySwitchEnabled } from "@/shared/infra/autonomy/switches.server";
-import { db, dbConfigured } from "@/shared/infra/postgres/db.server";
+import { db, dbConfigured, type Sql } from "@/shared/infra/postgres/db.server";
+import {
+  appendReaderRows,
+  claimFingerprint,
+  readerInputHash,
+  readerRow,
+} from "@/shared/infra/verification/audit-freeze.server";
 import { PostgresStore } from "@/shared/infra/postgres/postgres-store.server";
 import { LocalDroneRepository } from "@/shared/infra/storage/local-repository";
 
@@ -154,7 +160,16 @@ export async function ask(reader: ReaderOption, system: string, prompt: string):
 }
 
 export async function runEntailment(): Promise<SecondReaderRun> {
-  const empty = { posts: 0, claims: 0, supported: 0, unsupported: 0, uncertain: 0, deferred: 0 };
+  const empty = {
+    posts: 0,
+    claims: 0,
+    supported: 0,
+    unsupported: 0,
+    contradicted: 0,
+    notFound: 0,
+    uncertain: 0,
+    deferred: 0,
+  };
   const tokens = { input: 0, output: 0 };
   if (!dbConfigured()) return { ran: false, reason: "no database configured", ...empty, tokens };
   if (!autonomySwitchEnabled("ai_verifier"))
@@ -204,8 +219,13 @@ export async function runEntailment(): Promise<SecondReaderRun> {
     .flatMap(([id, targets]) => {
       const post = posts.get(id);
       if (!post?.text) return [];
-      const hash = textHash(post.text);
-      const due = targets.filter((t) => needsEntailment(t.claim, hash));
+      const text = post.text;
+      const hash = textHash(text);
+      // A reading is only current for the claim it was given on: a changed figure under an
+      // unchanged post is read again, and so is a reading that never recorded the claim.
+      const due = targets.filter((t) =>
+        needsEntailment(t.claim, hash, claimFingerprint(t.drone, t.spec, t.claim, text)),
+      );
       return due.length ? [{ id, text: post.text, at: +post.created_at, hash, due }] : [];
     })
     .sort(
@@ -215,6 +235,7 @@ export async function runEntailment(): Promise<SecondReaderRun> {
     );
 
   const verdicts = new Map<string, ClaimEntailment>();
+  const postTexts = new Map<string, string>();
   let attempted = 0;
   let stop = "";
   try {
@@ -270,10 +291,21 @@ export async function runEntailment(): Promise<SecondReaderRun> {
           truncated,
         );
         const at = new Date().toISOString();
+        // One call can carry several claims, so they share the input hash; each keeps its own
+        // fingerprint.
+        const inputHash = readerInputHash(system, prompt);
         post.due.forEach((t, i) => {
           const answer = answers.get(String(i + 1))!;
           const known = !!t.claim.model || !isAiExtracted(t.claim);
-          verdicts.set(t.claim.id, toEntailment(answer, reader, post.hash, at, known));
+          verdicts.set(
+            t.claim.id,
+            toEntailment(answer, reader, post.hash, at, known, {
+              claimFingerprint: claimFingerprint(t.drone, t.spec, t.claim, post.text),
+              readerInputHash: inputHash,
+              truncated,
+            }),
+          );
+          postTexts.set(t.claim.id, post.text);
         });
         break;
       }
@@ -281,6 +313,7 @@ export async function runEntailment(): Promise<SecondReaderRun> {
   } finally {
     // Whatever stopped the loop, the verdicts already paid for are written.
     await writeVerdicts(drones, verdicts);
+    await appendAuditHistory(sql, verdicts, postTexts);
   }
 
   const all = [...verdicts.values()];
@@ -294,11 +327,44 @@ export async function runEntailment(): Promise<SecondReaderRun> {
     posts: answeredPosts,
     claims: all.length,
     supported: count("supported"),
-    unsupported: count("unsupported"),
+    // Opposed the claim, however it said so; the two kinds are also reported apart.
+    unsupported: count("contradicted") + count("not_found") + count("unsupported"),
+    contradicted: count("contradicted"),
+    notFound: count("not_found"),
     uncertain: count("uncertain"),
     deferred: queue.length - answeredPosts,
     tokens,
   };
+}
+
+/**
+ * Append each reading to the history of the audit items it is about, after the draw. Only items
+ * frozen with the same claim fingerprint receive it: a reading of the claim as it is now says
+ * nothing about an item drawn when the claim was different. `at_draw` rows are written by the
+ * draw itself (audit.server.ts) and never here, so a later reading cannot pose as one.
+ */
+async function appendAuditHistory(
+  sql: Sql,
+  verdicts: ReadonlyMap<string, ClaimEntailment>,
+  postTexts: ReadonlyMap<string, string>,
+): Promise<void> {
+  const ids = [...verdicts.keys()];
+  if (!ids.length) return;
+  const items = await sql<
+    { id: string; claim_id: string; claim_fingerprint: string | null; answered_at: Date | null }[]
+  >`select id, claim_id, claim_fingerprint, answered_at from verification_audit
+     where claim_id = any(${ids}) and role <> 'control' and claim_fingerprint is not null`;
+  const rows = items.flatMap((item) => {
+    const e = verdicts.get(item.claim_id);
+    if (!e || e.claimFingerprint !== item.claim_fingerprint) return [];
+    return [
+      readerRow(item.id, e, "after_draw", {
+        postText: postTexts.get(item.claim_id) ?? "",
+        answeredAt: item.answered_at,
+      }),
+    ];
+  });
+  await appendReaderRows(sql, rows);
 }
 
 /**

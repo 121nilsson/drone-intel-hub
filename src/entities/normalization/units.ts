@@ -8,6 +8,11 @@ export const CANONICAL_UNIT = {
   power: "W",
   volume: "l",
   force: "N",
+  acceleration: "m/s2",
+  // A load factor is a ratio, not a mass: "4 g" of load is not 4 grams. Its own token keeps it
+  // out of every mass conversion (see LOAD_FACTOR_UNIT).
+  load_factor: "g_load",
+  count_rate: "units/month",
 } as const;
 
 /** 200 × 1.852 is 370.40000000000003 in IEEE754; 12 significant digits strip the arithmetic
@@ -50,9 +55,85 @@ interface UnitDef {
   pattern: RegExp;
 }
 
+/**
+ * "50 units/month", "50 systems per month", "50/month", "12 per week" - an optional noun, a
+ * mandatory time denominator. Built from one time alternative so the four count-rate units share
+ * one rule. The word boundary keeps "per" and "в" from matching inside a longer word.
+ */
+function COUNT_RATE_PATTERN(time: string, alone?: string): RegExp {
+  // "50 monthly" names its time without a preposition; only where the word itself says it.
+  const bare = alone ? `|(?<![\\p{L}])(?:${alone})(?![\\p{L}\\p{N}])` : "";
+  return new RegExp(
+    `(?:(?:units?|systems?|airframes?|drones?|pcs?\\.?|шт\\.?)\\s*)?` +
+      `(?:\\/|(?<![\\p{L}])(?:per|в|на)(?![\\p{L}]))\\s*` +
+      `(?:${time})(?![\\p{L}\\p{N}])${bare}`,
+    "iu",
+  );
+}
+
+/** Load factor, read only in the context of an attribute that is one. Never in UNITS. */
+const LOAD_FACTOR_UNIT: UnitDef = {
+  token: "g_load",
+  dimension: "load_factor",
+  toCanonical: 1,
+  pattern: /(?<![/\p{L}])(?:g[-\s]?(?:load|force)|g['’]?s|g)(?![\p{L}\p{N}])/iu,
+};
+
+/** Semantics whose figures are load factors ("maneuver.load_factor_max"). */
+const LOAD_FACTOR_CONTEXT = "maneuver.load_factor";
+
+/** Optional reading context. Only `semantic` changes a parse, and only for load factors. */
+export interface QuantityContext {
+  semantic?: string;
+}
+
+function unitsFor(ctx?: QuantityContext): readonly UnitDef[] {
+  // The load factor goes first so it wins a tie with mass "g" at the same position.
+  return ctx?.semantic?.startsWith(LOAD_FACTOR_CONTEXT) ? [LOAD_FACTOR_UNIT, ...UNITS] : UNITS;
+}
+
+/** The token-addressed load factor; any other token goes through the global list. */
+function tokenUnit(token: string): UnitDef | undefined {
+  return token === LOAD_FACTOR_UNIT.token ? LOAD_FACTOR_UNIT : undefined;
+}
+
+/** Display form of a canonical unit: the load factor is shown as "g", everything else as is. */
+export function displayUnit(unit: string): string {
+  return unit === LOAD_FACTOR_UNIT.token ? "g" : unit;
+}
+
 // Longer spellings first so "nautical miles" wins over "m" and "km/h" wins over "km".
 // `(?![\p{L}\p{N}])` is a Unicode-aware word end. ASCII `\b` does not treat Cyrillic as a letter.
 const UNITS: UnitDef[] = [
+  // Count rates first. findUnit prefers the earliest start, and a rate starts at its noun or
+  // slash, before the time word the duration units would match ("50/day" is a rate, not "day").
+  // The time denominator is mandatory, so a bare "3 d" or "5 min" is still a duration. "hour" is
+  // left out on purpose: "km/h" is a speed.
+  {
+    token: "units/month",
+    dimension: "count_rate",
+    toCanonical: 1,
+    pattern: COUNT_RATE_PATTERN("month|mo\\.?|мес\\p{L}*", "monthly"),
+  },
+  {
+    token: "units/week",
+    dimension: "count_rate",
+    toCanonical: 365.25 / 12 / 7,
+    pattern: COUNT_RATE_PATTERN("week|wk|нед\\p{L}*"),
+  },
+  {
+    token: "units/day",
+    dimension: "count_rate",
+    toCanonical: 365.25 / 12,
+    // Cyrillic day words are listed whole: "в диапазоне" and "на дальности" start with "д" too.
+    pattern: COUNT_RATE_PATTERN("day|день|дня|дней|сут\\p{L}*|доб[ауи]"),
+  },
+  {
+    token: "units/year",
+    dimension: "count_rate",
+    toCanonical: 1 / 12,
+    pattern: COUNT_RATE_PATTERN("year|yr|год\\p{L}*"),
+  },
   // Thrust. First, so "kN" is force and not knots on a tie; lowercase "kn" stays knots.
   // "кгс" ends in a letter, so the "кг" mass unit never takes it.
   {
@@ -295,9 +376,12 @@ const UNITS: UnitDef[] = [
   },
 ];
 
-function findUnit(text: string): { def: UnitDef; index: number } | undefined {
+function findUnit(
+  text: string,
+  units: readonly UnitDef[] = UNITS,
+): { def: UnitDef; index: number } | undefined {
   let best: { def: UnitDef; index: number } | undefined;
-  for (const def of UNITS) {
+  for (const def of units) {
     const flags = def.pattern.flags.includes("g") ? def.pattern.flags : `${def.pattern.flags}g`;
     const re = new RegExp(def.pattern.source, flags);
     for (const m of text.matchAll(re)) {
@@ -318,8 +402,11 @@ function findUnit(text: string): { def: UnitDef; index: number } | undefined {
  * value that cannot be read is a value that never reaches the consensus - it stays a string and
  * the row shows whatever spelling the source happened to use.
  */
-function findLeadingUnit(text: string): { def: UnitDef; rest: string } | undefined {
-  for (const def of UNITS) {
+function findLeadingUnit(
+  text: string,
+  units: readonly UnitDef[] = UNITS,
+): { def: UnitDef; rest: string } | undefined {
+  for (const def of units) {
     const m = def.pattern.exec(text);
     if (!m || m.index !== 0) continue;
     const rest = text.slice(m[0].length).trim();
@@ -331,14 +418,16 @@ function findLeadingUnit(text: string): { def: UnitDef; rest: string } | undefin
 
 export function convert(value: number, from: string, to: string): number | undefined {
   if (!Number.isFinite(value)) return undefined;
-  const src = UNITS.find((u) => u.token === from || u.pattern.test(from));
-  const dst = UNITS.find((u) => u.token === to || u.pattern.test(to));
+  // "g_load" matches the mass pattern for "g" too, so its own token is looked up first.
+  const src = tokenUnit(from) ?? UNITS.find((u) => u.token === from || u.pattern.test(from));
+  const dst = tokenUnit(to) ?? UNITS.find((u) => u.token === to || u.pattern.test(to));
   if (!src || !dst || src.dimension !== dst.dimension) return undefined;
   return cleanFloat((value * src.toCanonical) / dst.toCanonical);
 }
 
 export function canonicalUnitFor(rawUnit: string): string | undefined {
-  const hit = UNITS.find((u) => u.token === rawUnit || u.pattern.test(rawUnit.trim()));
+  const hit =
+    tokenUnit(rawUnit) ?? UNITS.find((u) => u.token === rawUnit || u.pattern.test(rawUnit.trim()));
   return hit ? CANONICAL_UNIT[hit.dimension] : undefined;
 }
 
@@ -378,16 +467,20 @@ function scale(n: number, factor: number): number {
  * Parse a measurement into a canonical unit. Returns undefined when no unit is recognized.
  * A range or an open bound does not invent a point `canonicalValue`.
  */
-export function normalizeQuantity(raw: string): NormalizedQuantity | undefined {
+export function normalizeQuantity(
+  raw: string,
+  ctx?: QuantityContext,
+): NormalizedQuantity | undefined {
   const text = raw
     .trim()
     .replace(THIN_SPACE_RE, " ")
     .replace(/[.,;:)]+$/g, "")
     .trim();
   if (!text) return undefined;
-  const found = findUnit(text);
+  const units = unitsFor(ctx);
+  const found = findUnit(text, units);
   // A unit before its number is read the same way, with the number taken from what follows.
-  const leading = found ? undefined : findLeadingUnit(text);
+  const leading = found ? undefined : findLeadingUnit(text, units);
   const def = found?.def ?? leading?.def;
   if (!def) return undefined;
   const numeric = (found ? text.slice(0, found.index) : leading!.rest).trim();
@@ -426,13 +519,16 @@ export function normalizeQuantity(raw: string): NormalizedQuantity | undefined {
  * text is read as it stands first; only when that fails is the parenthetical dropped and the
  * rest tried, so the primary figure wins.
  */
-export function normalizeQuantityLoose(raw: string): NormalizedQuantity | undefined {
-  const direct = normalizeQuantity(raw);
+export function normalizeQuantityLoose(
+  raw: string,
+  ctx?: QuantityContext,
+): NormalizedQuantity | undefined {
+  const direct = normalizeQuantity(raw, ctx);
   if (direct) return direct;
   const text = raw.trim();
   const stripped = text.replace(/\s*\([^()]*\)\s*$/, "").trim();
   if (!stripped || stripped === text) return undefined;
-  const q = normalizeQuantity(stripped);
+  const q = normalizeQuantity(stripped, ctx);
   return q ? { ...q, raw } : undefined;
 }
 

@@ -5,13 +5,31 @@ import { claimKey } from "@/entities/drone/claim-review";
 import { type Drone, type SpecAttribute } from "@/entities/drone/types";
 import { ConfidenceTag, Tag } from "@/shared/ui/primitives";
 import { DataTable, type Column } from "@/shared/ui/data-table";
+import { displayUnit } from "@/entities/normalization/units";
 import { ClaimChip } from "./claim-chip";
 import { ProvenanceSheet } from "./provenance-sheet";
 import type { ClaimSelection } from "./provenance-types";
 
 /** "min–max" when the claims disagree on the figure, else empty. */
+// The spread between point readings only: the envelope (min–max) mixes ranges and bounds, and
+// would show a source's range that no source stated.
 function spread(c: ReturnType<typeof consensus>): string {
-  return c.min !== undefined && c.max !== undefined && c.min !== c.max ? `${c.min}–${c.max}` : "";
+  return c.observedSpread ? `${c.observedSpread.min}–${c.observedSpread.max}` : "";
+}
+
+/** What each source stated as a range or bound, one line per source: never merged into one range. */
+function statedRanges(c: ReturnType<typeof consensus>): string[] {
+  return (c.explicitRanges ?? []).map((r) => {
+    const unit = displayUnit(r.canonicalUnit);
+    const outlet = r.source.split(" · ")[0] ?? r.source;
+    const figure =
+      r.min !== undefined && r.max !== undefined
+        ? `${r.min}–${r.max}`
+        : r.max !== undefined
+          ? `≤${r.max}`
+          : `≥${r.min}`;
+    return `${outlet}: ${figure} ${unit}`;
+  });
 }
 
 function liveSelection(drone: Drone, sel: ClaimSelection): ClaimSelection | null {
@@ -128,6 +146,11 @@ export function SpecTable({ drone }: { drone: Drone }) {
                 {spread(c) ? `${spread(c)} · ` : ""}
                 {c.sources} source{c.sources === 1 ? "" : "s"}
               </p>
+              {statedRanges(c).map((line) => (
+                <p key={line} className="font-mono text-[11px] text-muted-foreground">
+                  {line}
+                </p>
+              ))}
               {chips(s)}
             </div>
           );

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { useDrones, useServices } from "@/shared/infra/use-services";
+import { readerOpposes } from "@/entities/drone/entailment-verdict";
 import type { TokenUsageToday } from "@/shared/contracts/verification";
 import { Btn, Card, CardGrid, Panel, Tag } from "@/shared/ui/primitives";
 import { Stat } from "./stat";
@@ -21,10 +22,22 @@ export function SecondReaderPanel() {
   const [busy, setBusy] = useState(false);
 
   const counts = useMemo(() => {
+    // "unsupported" here is every way the reader opposed a claim: contradicted, not found, and the
+    // legacy verdict that never said which.
     const c = { supported: 0, unsupported: 0, uncertain: 0 };
     for (const d of drones)
       for (const s of d.specs)
-        for (const claim of s.claims) if (claim.entailment) c[claim.entailment.verdict]++;
+        for (const claim of s.claims) {
+          const verdict = claim.entailment?.verdict;
+          if (!verdict) continue;
+          c[
+            verdict === "supported"
+              ? "supported"
+              : readerOpposes(verdict)
+                ? "unsupported"
+                : "uncertain"
+          ]++;
+        }
     return c;
   }, [drones]);
   const read = counts.supported + counts.unsupported + counts.uncertain;

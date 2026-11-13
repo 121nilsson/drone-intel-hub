@@ -24,6 +24,15 @@ export interface ClaimLineage {
   contentHash?: string;
 }
 
+/**
+ * How a claim's source unit was established. Only a unit evidenced in the value text or in the
+ * quote is a source unit; an extractor's unit that nothing in the text confirms is
+ * `extractor_unverified` and must not scale the value; `conflict` means the quote and the
+ * extractor disagree, and no unit is chosen.
+ */
+export type SourceUnitBasis =
+  "value_text" | "quote" | "extractor_unverified" | "conflict" | "unknown";
+
 export interface SpecClaim {
   /** Stable identity assigned at creation. Older claims without one fall back to a composite key. */
   id?: string;
@@ -36,6 +45,12 @@ export interface SpecClaim {
   normalized?: NormalizedQuantity;
   /** Deterministic parser confidence, 0..1. */
   normalizationConfidence?: number;
+  /**
+   * The unit the figure was written in, when the source text shows it. Only a unit evidenced in
+   * the value text or the quote counts; the attribute's unit never does (see `SourceUnitBasis`).
+   */
+  sourceUnit?: string;
+  sourceUnitBasis?: SourceUnitBasis;
   source: string;
   /** RawDispatch id when this claim came from ingestion. */
   sourceId?: string;
@@ -95,11 +110,31 @@ export interface SpecClaim {
   entailment?: ClaimEntailment;
 }
 
-/** supported: the post states it. unsupported: it does not. uncertain: the reader cannot say. */
-export type EntailmentVerdict = "supported" | "unsupported" | "uncertain";
+/**
+ * supported: the post states it. contradicted: it states a different value, or the value of
+ * another system. not_found: it does not say. uncertain: the reader cannot say. New reader runs
+ * produce only these four.
+ */
+export type EntailmentVerdict = "supported" | "contradicted" | "not_found" | "uncertain";
+
+/**
+ * What a stored reading may hold. "unsupported" is the legacy verdict that folded contradicted
+ * and not_found together; it is kept as written and never re-read as either one.
+ */
+export type StoredEntailmentVerdict = EntailmentVerdict | "unsupported";
 
 export interface ClaimEntailment {
-  verdict: EntailmentVerdict;
+  verdict: StoredEntailmentVerdict;
+  /**
+   * Hash of the claim this verdict was given on (identity, value, unit, evidence, post text). A
+   * claim whose value changed under an unchanged post is read again. Absent on readings written
+   * before it existed: those cannot be shown to describe the claim as it is now.
+   */
+  claimFingerprint?: string;
+  /** Hash of the exact system and user prompt sent to the reader, including the cut post text. */
+  readerInputHash?: string;
+  /** The post was longer than the reader was shown. */
+  truncated?: boolean;
   /**
    * The passage the reader gave as its reason, only when it was found in the post. A passage
    * the post does not contain makes the verdict `uncertain`, whatever the reader said.
@@ -530,6 +565,12 @@ export interface ExtractedSpec {
   semantic?: string;
   raw?: string;
   normalized?: NormalizedQuantity;
+  /**
+   * The unit the figure was written in, when the source text shows it. Only a unit evidenced in
+   * the value text or the quote counts as a source unit; `unit` above is the extractor's claim.
+   */
+  sourceUnit?: string;
+  sourceUnitBasis?: SourceUnitBasis;
   money?: Money;
   moneyRange?: MoneyRange;
   /** Canonical measurement unit set by normalization (e.g. "USD" for cost.unit). */

@@ -62,7 +62,9 @@ export function AddSpecForm({ droneId, droneName, specs }: AddSpecFormProps) {
         if (!value.trim()) throw new Error("Value is required");
 
         // Parse the value like addAnalystClaim does: quantity first, then bare number, then text.
-        const normalized = normalizeQuantity(value.trim());
+        const normalized = normalizeQuantity(value.trim(), {
+          semantic: attributeSemantic({ key, label }),
+        });
         const numeric = Number(value.trim());
         const claimValue =
           normalized?.canonicalValue ?? (Number.isFinite(numeric) ? numeric : value.trim());

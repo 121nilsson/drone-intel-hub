@@ -44,7 +44,7 @@ const specKey = (s: ExtractedSpec) =>
 function restateKey(s: ExtractedSpec): string {
   const semantic = semanticKeyFor(s.key, s.label);
   const text = typeof s.value === "string" ? s.value : `${s.value} ${s.unit ?? ""}`;
-  let q = normalizeQuantity(text);
+  let q = normalizeQuantity(text, { semantic });
   const target = canonicalUnitForSemantic(semantic);
   if (q && target) q = rebaseQuantity(q, target);
   const v = q?.canonicalValue;

@@ -1,7 +1,12 @@
+import type { FormalGate } from "@/entities/drone/audit-design";
 import type { EntailmentAgreement } from "@/entities/drone/entailment";
 import type { ControlStratum, ControlSummary } from "@/entities/drone/verifier-controls";
 import type { VerificationCoverage } from "@/entities/drone/verification";
-import type { VerificationKind, VerificationState } from "@/entities/drone/types";
+import type {
+  StoredEntailmentVerdict,
+  VerificationKind,
+  VerificationState,
+} from "@/entities/drone/types";
 
 /**
  * What a verification run reports back to the Autonomy page.
@@ -122,6 +127,7 @@ export const AUTONOMY_EVENT_KINDS = [
   "rule_replay_requested",
   "verifier_control_run",
   "source_reenabled",
+  "assertion_frame_check",
 ] as const;
 export type AutonomyEventKind = (typeof AUTONOMY_EVENT_KINDS)[number];
 
@@ -168,6 +174,8 @@ export interface AuditItem {
   answer?: AuditAnswer;
   obviouslyWrong: boolean;
   readVia?: "original" | "translation";
+  /** The sampled claim this presentation belongs to; a re-asked claim keeps its unit. */
+  sampleUnitId?: string;
 }
 
 /**
@@ -189,9 +197,11 @@ export interface AuditFailedControl {
 }
 
 /**
- * A claim the person answered and the second reader contradicted: "yes" against its "unsupported",
- * or "no" against its "supported". Shown so the person can look again and say who was right; the
- * first answer is never replaced.
+ * A claim the person answered and the second reader contradicted: "yes" against its opposing
+ * verdict (contradicted, not found, or the legacy "unsupported"), or "no" against its "supported".
+ * Shown so the person can look again and say who was right; the first answer is never replaced.
+ * Only the reading that existed when the claim was drawn is compared; a later reading is shown
+ * apart, with its time (`readerAfterDraw`).
  */
 export interface AuditDisagreement {
   id: string;
@@ -204,11 +214,19 @@ export interface AuditDisagreement {
   /** The post as it was when drawn. */
   postText?: string;
   answer: "yes" | "no";
-  reader: "supported" | "unsupported";
+  reader: Exclude<StoredEntailmentVerdict, "uncertain">;
   /** The passage the reader gave as its reason, when it was found in the post. */
   readerSpan?: string;
   /** Why the reader's verdict was downgraded or could not be given. */
   readerNote?: string;
+  /** When the reader read the claim (not when the snapshot was stored). */
+  readerEvaluatedAt?: string;
+  /** A reading made after the draw: shown with its time and never counted as the one at draw. */
+  readerAfterDraw?: Array<{
+    verdict: StoredEntailmentVerdict;
+    evaluatedAt: string;
+    beforeHumanAnswer: boolean;
+  }>;
   secondLook?: AuditSecondLook;
 }
 
@@ -226,13 +244,36 @@ export interface AuditTally {
   upperBound: number;
 }
 
+/** The formal evaluation as the page shows it: the design's single analysis and its progress. */
+export interface AuditFormalStatus extends FormalGate {
+  /** audit_batches.id of the frozen design. */
+  designId: string;
+  /** Units whose answers were all voided and that wait to be asked again. */
+  retryPending: number;
+}
+
+/** What the sequential look at the old, non-probability draws would have said. Never the gate. */
+export interface AuditInterim {
+  decision: "pass" | "fail" | "continue" | "not_proven";
+  decidedAt?: number;
+}
+
 export interface AuditStatus {
   /** False when the server has no database; the audit needs one. */
   available: boolean;
-  /** pass / fail / continue / not_proven, against the 5% low-risk budget (plan §4.5). */
-  decision: "pass" | "fail" | "continue" | "not_proven";
-  /** The batch boundary (100, 150, 200 answers) the decision was taken at. */
-  decidedAt?: number;
+  /**
+   * The gate against the 5% low-risk budget (plan §4.5): the formal evaluation's single analysis.
+   * `continue` until a formal sample is drawn and fully answered. `incomplete` means the exact
+   * bound could not be computed and is never a pass.
+   */
+  decision: "pass" | "fail" | "continue" | "not_proven" | "incomplete";
+  /**
+   * The formal evaluation: a frozen probability sample of the verified claims. Present once drawn.
+   * The tallies below it cover every counted answer, the legacy draws included, and are information.
+   */
+  formal?: AuditFormalStatus;
+  /** The old 100/150/200 look at the first draws, kept as information because it is not a valid test. */
+  interim?: AuditInterim;
   budget: number;
   overall: AuditTally;
   byLanguage: Array<AuditTally & { language: string }>;
@@ -254,7 +295,12 @@ export interface AuditStatus {
    * how its verdicts line up. Absent until the two overlap.
    */
   reader?: {
+    /** The reading that existed when each claim was drawn: the only one that counts as "at draw". */
     agreement: EntailmentAgreement;
+    /** Readings made after the draw, apart and labelled; `blind` = before the person answered. */
+    afterDraw?: { agreement: EntailmentAgreement; measured: number; blind: number };
+    /** Readings written before they were tied to a claim version; shown, never counted as at-draw. */
+    legacy?: { agreement: EntailmentAgreement; measured: number };
     /** Claims both answered (yes/no) and read by the reader. */
     measured: number;
     /**
@@ -292,7 +338,10 @@ export interface SecondReaderRun {
   posts: number;
   claims: number;
   supported: number;
+  /** The reader opposed the claim: contradicted + not found. */
   unsupported: number;
+  contradicted: number;
+  notFound: number;
   uncertain: number;
   /** Posts left for a later run: the per-run cap, the ceiling, or no independent reader. */
   deferred: number;

@@ -7,7 +7,9 @@ import {
   disputeAuditControl,
   drawAuditBatch,
   drawAuditFirstSession,
+  drawFormalAudit,
   fetchAuditStatus,
+  redrawVoidedAudit,
 } from "@/shared/infra/verification/verification.functions";
 import type { AuditAnswer, AuditStatus } from "@/shared/contracts/verification";
 import { Btn, CardGrid, EmptyNote, PageTitle, Panel, Tag } from "@/shared/ui/primitives";
@@ -17,6 +19,7 @@ import { DECISION } from "./audit-decision";
 import { AuditDisagreements } from "./audit-disagreements";
 import { FailedControls } from "./audit-failed-controls";
 import { Question } from "./audit-question";
+import { FormalEvaluation } from "./audit-formal";
 import { Tally } from "./audit-tally";
 
 /**
@@ -134,6 +137,17 @@ export function AuditPage() {
                 )
               }
             />
+            <FormalEvaluation
+              status={status}
+              busy={busy}
+              onDraw={() => act(() => drawFormalAudit(), "Formal evaluation drawn", true)}
+              onRedraw={() =>
+                act(async () => {
+                  const r = await redrawVoidedAudit();
+                  if (!r) throw new Error("No claim is waiting to be asked again");
+                })
+              }
+            />
             <div className="mt-3 flex flex-wrap gap-2">
               {!status.seed.frozen ? (
                 <Btn
@@ -160,7 +174,7 @@ export function AuditPage() {
             ) : (
               <EmptyNote>
                 {status.seed.frozen
-                  ? "Nothing waiting. Draw 50 more for a tighter number."
+                  ? "Nothing waiting. The formal evaluation above is what proves the budget."
                   : "Draw the first session to begin."}
               </EmptyNote>
             )}
@@ -190,14 +204,36 @@ export function AuditPage() {
                   hint={`you said the post does not state it · wrong ≤ ${pctPrecise(status.reader.supportedErrorBound)}`}
                 />
                 <Stat
-                  label="It said unsupported"
+                  label="It opposed the claim"
                   value={`${status.reader.agreement.unsupported.yes} / ${
                     status.reader.agreement.unsupported.yes + status.reader.agreement.unsupported.no
                   }`}
-                  hint="you said the post does state it"
+                  hint={`you said the post does state it · contradicted ${
+                    status.reader.agreement.contradicted.yes +
+                    status.reader.agreement.contradicted.no
+                  } · not found ${
+                    status.reader.agreement.notFound.yes + status.reader.agreement.notFound.no
+                  } · legacy ${
+                    status.reader.agreement.legacyUnsupported.yes +
+                    status.reader.agreement.legacyUnsupported.no
+                  }`}
                 />
                 <Stat label="It could not say" value={`${status.reader.agreement.uncertain}`} />
               </CardGrid>
+              {status.reader.afterDraw && (
+                <p className="mt-3 text-xs text-muted-foreground">
+                  Readings made after the draw, apart from the figures above:{" "}
+                  {status.reader.afterDraw.measured} claims, {status.reader.afterDraw.blind} read
+                  before you answered it. They are not what the reader said when the claim was
+                  drawn.
+                </p>
+              )}
+              {status.reader.legacy && (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {status.reader.legacy.measured} older readings are kept as history; they were
+                  written before a reading was tied to a claim version and are not counted above.
+                </p>
+              )}
             </Panel>
           )}
 

@@ -96,7 +96,7 @@ export function seedExpectations(row: SeedAnswerRow): SeedExpectation[] {
   const stated = row.value.split("(≈")[0]!.trim();
   const out: SeedExpectation[] = [];
   for (const v of new Set([stated, row.value])) {
-    const q = normalizeQuantityLoose(v);
+    const q = normalizeQuantityLoose(v, { semantic });
     if (q?.canonicalValue !== undefined)
       out.push({
         semantic,
