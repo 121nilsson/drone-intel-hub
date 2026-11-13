@@ -27,6 +27,7 @@ const spec = (
   claims: values.map((c) => ({
     value: c.value,
     source: c.source,
+    evidence: `${c.value} km`,
     date: c.date ?? iso(NOW - 86_400_000),
     normalized: {
       raw: `${c.value} km`,

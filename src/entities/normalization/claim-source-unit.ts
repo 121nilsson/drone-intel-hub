@@ -23,8 +23,6 @@ const NUMBER = /\d{1,3}(?:[\u0020\u00a0\u202f\u2009,.]\d{3})+(?:[.,]\d+)?|\d+(?:
 
 const same = (a: number, b: number) => Math.abs(a - b) <= 1e-9 * Math.max(1, Math.abs(a));
 
-const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-
 /** The figure a value states: the number itself, or the first figure a text value writes. */
 function figureOf(value: number | string): number | undefined {
   if (typeof value === "number") return value;
@@ -113,16 +111,12 @@ function resolve(s: Stated): SourceUnit {
   return { basis: "unknown" };
 }
 
-/**
- * `normalized.raw` is source text, unless apply.ts or renormalize.ts built it as `${value} ${unit}`.
- * A built one takes its unit from the extractor or from the attribute, so it states no unit.
+/*
+ * `normalized.raw` is deliberately not read as source text. apply.ts and renormalize.ts have built it
+ * as "${value} ${unit}" from the extractor's or the attribute's unit, in forms no pattern can tell
+ * from a quote ("105 kg", "105 nautical miles"), and a stored claim does not say which it is. A
+ * figure whose only unit is there is "unknown" until the value text or the quote says one.
  */
-function sourceNormalizedRaw(claim: Pick<SpecClaim, "value" | "normalized">): string | undefined {
-  const raw = claim.normalized?.raw?.trim();
-  if (!raw) return undefined;
-  const built = new RegExp(`^${escapeRe(String(claim.value).trim())}\\s+\\S+$`);
-  return built.test(raw) ? undefined : raw;
-}
 
 export interface ClaimSourceUnitOptions {
   /**
@@ -151,9 +145,7 @@ export function claimSourceUnit(
       ? { unit: claim.sourceUnit, basis: claim.sourceUnitBasis }
       : { basis: claim.sourceUnitBasis };
   const valueText = typeof claim.value === "string" ? claim.value : undefined;
-  const texts = [claim.raw, valueText, sourceNormalizedRaw(claim)].filter(
-    (t): t is string => t !== undefined,
-  );
+  const texts = [claim.raw, valueText].filter((t): t is string => t !== undefined);
   return resolve({
     texts,
     value: claim.value,

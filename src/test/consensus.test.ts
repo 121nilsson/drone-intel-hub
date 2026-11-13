@@ -11,6 +11,8 @@ const spec = (claims: Array<[number | string, string]>, unit?: string): SpecAttr
     value,
     source,
     date: `2026-01-${String(i + 1).padStart(2, "0")}T00:00:00.000Z`,
+    // The source's own words carry the unit: a figure with none is held back from consensus.
+    ...(unit && typeof value === "number" ? { evidence: `${value} ${unit}` } : {}),
   })),
 });
 
@@ -115,6 +117,7 @@ describe("consensus", () => {
       value,
       source,
       date: "2026-10-01T00:00:00.000Z",
+      evidence: `${value} km`,
       adjudication: { verdict, confidence: 0.9, at: "2026-10-02T00:00:00.000Z" },
     });
     const c = consensus({
@@ -201,28 +204,34 @@ describe("consensus", () => {
 
   it("counts distinct sources, not claim count", () => {
     const c = consensus(
-      spec([
-        [1000, "a"],
-        [1000, "a"],
-        [1000, "b"],
-      ]),
+      spec(
+        [
+          [1000, "a"],
+          [1000, "a"],
+          [1000, "b"],
+        ],
+        "km",
+      ),
     );
     expect(c.sources).toBe(2);
     expect(c.confidence).toBe("medium");
   });
 
   it("does not render float noise", () => {
-    const c = consensus(spec([[2.35, "a"]]));
-    expect(c.display).toBe("2.35");
+    const c = consensus(spec([[2.35, "a"]], "km"));
+    expect(c.display).toBe("2.35 km");
   });
 
   it("omits the unit when the attribute has none", () => {
-    const c = consensus(
-      spec([
+    // An attribute with no measured unit: nothing to get wrong, so a bare figure is counted.
+    const c = consensus({
+      ...spec([
         [5, "a"],
         [5, "b"],
       ]),
-    );
+      key: "launch_tubes",
+      label: "Launch tubes",
+    });
     expect(c.display).toBe("5");
   });
 

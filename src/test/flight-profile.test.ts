@@ -12,6 +12,7 @@ const claim = (value: number, unit: string, over: Partial<SpecClaim> = {}): Spec
   value,
   source: "Outlet",
   date: "2026-10-01T00:00:00.000Z",
+  evidence: `${value} ${unit}`,
   normalized: {
     raw: `${value} ${unit}`,
     canonicalValue: value,
@@ -82,7 +83,7 @@ describe("the bounds check of a ballistic missile", () => {
   it("reads the RM-48U's 'Mach 4-6' as in bounds for a ballistic missile, out of bounds otherwise", () => {
     const mach = claim(0, "Mach", {
       value: "4–6",
-      raw: "4–6",
+      raw: "4–6 Mach",
       normalized: normalizeQuantityLoose("4–6 Mach")!,
     });
     const m = spec("speed.stated", "Mach", [mach]);
@@ -142,9 +143,9 @@ describe("auto-correction with a flight profile", () => {
 });
 
 describe("recheckDroneBounds", () => {
-  const fast = claim(6_125, "km/h", { evidence: "at Mach 5", sourceId: "p1" });
+  const fast = claim(6_125, "km/h", { evidence: "at 6125 km/h, Mach 5", sourceId: "p1" });
   const s = spec("speed.max", "km/h", [fast]);
-  const verified = verifyDrone(drone([s]), () => "It flies at Mach 5.", [], AT);
+  const verified = verifyDrone(drone([s]), () => "It flies at 6125 km/h, Mach 5.", [], AT);
 
   it("starts rejected, then follows the profile without losing the other checks", () => {
     const before = verified.specs[0]!.claims[0]!.verification!;

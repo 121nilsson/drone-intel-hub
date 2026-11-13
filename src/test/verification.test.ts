@@ -39,6 +39,7 @@ const point = (value: number, unit: string, source: string, over: Partial<SpecCl
   value,
   source,
   date: "2026-10-01T00:00:00.000Z",
+  evidence: `${value} ${unit}`,
   normalized: {
     raw: `${value} ${unit}`,
     canonicalValue: value,

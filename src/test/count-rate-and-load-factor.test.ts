@@ -112,3 +112,16 @@ describe("an older claim whose normalized reading was built from a unit nobody w
     expect(claimSourceUnit(claim, spec)).toMatchObject({ unit: "lb", basis: "value_text" });
   });
 });
+
+describe("a normalized reading is never taken for the source's words", () => {
+  it("leaves a multi-word unit built from the extractor unknown", () => {
+    const claim: SpecClaim = {
+      value: 105,
+      source: "s",
+      date: "2026-01-01",
+      normalized: normalizeQuantity("105 nautical miles")!,
+    };
+    expect(claim.normalized?.raw).toBe("105 nautical miles");
+    expect(claimSourceUnit(claim)).toEqual({ basis: "unknown" });
+  });
+});

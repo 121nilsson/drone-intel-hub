@@ -5,21 +5,12 @@ import { plausibleBounds } from "./auto-correction";
 import { correctedPoint } from "./claim-review";
 import { rawPoint } from "./consensus";
 import { attributeSemantic } from "./spec-engine";
+import { expectedUnit, feedsNumbers, unitStanding } from "./unit-policy";
 import type { FlightProfile, SpecAttribute, SpecClaim, VerificationCheck } from "./types";
 import { check } from "./verification-check";
 
 const inBounds = (value: number, bounds: { min: number; max: number }) =>
   value >= bounds.min && value <= bounds.max;
-
-/** The unit an attribute is measured in, as the catalogue normalizes it. */
-function expectedUnit(spec: SpecAttribute): string | undefined {
-  const semantic = attributeSemantic(spec);
-  return (
-    canonicalUnitForSemantic(semantic) ??
-    spec.canonicalUnit ??
-    (spec.unit ? canonicalUnitFor(spec.unit) : undefined)
-  );
-}
 
 /** The claim's own reading, parsed from `normalized`, `raw` or the stored value plus spec unit. */
 function reading(claim: SpecClaim, spec: SpecAttribute) {
@@ -69,7 +60,6 @@ export function unitCheck(spec: SpecAttribute, claim: SpecClaim, at: string): Ve
     });
   }
   const expected = expectedUnit(spec);
-  const parsed = reading(claim, spec);
   if (!expected)
     return check({
       kind: "unit_dimension",
@@ -78,6 +68,22 @@ export function unitCheck(spec: SpecAttribute, claim: SpecClaim, at: string): Ve
       detail: "attribute has no canonical measurement unit",
       at,
     });
+  // No unit is evidenced for this figure: the text does not give one, or only the extractor says
+  // which. It is not wrong - it cannot be judged - so it is uncertain, never a pass.
+  const standing = unitStanding(spec, claim);
+  if (standing === "unknown" || standing === "unverified")
+    return check({
+      kind: "unit_dimension",
+      verdict: "uncertain",
+      applicable: true,
+      confidence: 0.3,
+      detail:
+        standing === "unverified"
+          ? "the unit is the extractor's; the source text does not confirm it"
+          : "no unit is given for this figure in the source text",
+      at,
+    });
+  const parsed = reading(claim, spec);
   if (!parsed?.canonicalUnit) {
     const numeric = typeof claim.value === "number" || Number.isFinite(Number(claim.raw));
     return check({
@@ -137,6 +143,15 @@ export function boundsCheck(
   profile?: FlightProfile,
 ): VerificationCheck {
   const semantic = attributeSemantic(spec);
+  // A figure whose unit is not evidenced has no scale to hold against the bounds.
+  if (!feedsNumbers(unitStanding(spec, claim)))
+    return check({
+      kind: "bounds",
+      verdict: "uncertain",
+      applicable: false,
+      detail: "the figure's unit is not evidenced, so it cannot be held against bounds",
+      at,
+    });
   const bounds = plausibleBounds(semantic, profile);
   if (!bounds)
     return check({

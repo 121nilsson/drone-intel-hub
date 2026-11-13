@@ -20,8 +20,10 @@ import type { VerificationCheck, VerificationKind, VerificationVerdict } from ".
  * follows a sentence naming the system is no longer uncertain for want of a name.
  * 15: reposts of one text count as one independent source (verification-sources.ts); the backfill
  * stamps each claim's contentHash from its post first, so that count can see it.
+ * 16: a figure whose unit is not evidenced in its value or quote is uncertain, not measured in the
+ * attribute's unit (unit-policy.ts); an extractor unit the text contradicts fails.
  */
-export const VERIFIER_VERSION = "deterministic-15";
+export const VERIFIER_VERSION = "deterministic-16";
 
 interface CheckInput {
   kind: VerificationKind;

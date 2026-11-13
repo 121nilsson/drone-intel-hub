@@ -49,15 +49,49 @@ describe("consensus on normalized quantities", () => {
     expect(c.max).toBe(120);
   });
 
-  it("converts a numeric claim from its attribute unit at read time", () => {
+  it("converts a seed claim from its attribute unit at read time: the catalogue set that unit", () => {
     const spec: SpecAttribute = {
       key: "range",
       label: "Range",
       unit: "mi",
       discoveredBy: "seed",
-      claims: [{ value: 80, source: "a", date: "2026-01-01T00:00:00.000Z" }],
+      claims: [
+        { id: "seed:range:0:a:80:0", value: 80, source: "a", date: "2026-01-01T00:00:00.000Z" },
+      ],
     };
     expect(consensus(spec).display).toBe("128.75 km");
+  });
+
+  it("holds back a machine-read figure whose unit nothing evidences, instead of reading it in the attribute's unit", () => {
+    const spec: SpecAttribute = {
+      key: "range",
+      label: "Range",
+      unit: "mi",
+      discoveredBy: "ai",
+      claims: [{ value: 80, source: "a", date: "2026-01-01T00:00:00.000Z" }],
+    };
+    const c = consensus(spec);
+    expect(c.display).toBe("unit unknown");
+    expect(c.heldBack).toBe(1);
+    expect(c.sources).toBe(0);
+    // The claim itself is untouched: the figure and its text are still there to read.
+    expect(spec.claims[0]!.value).toBe(80);
+  });
+
+  it("keeps a figure with an evidenced unit when another is held back, and says how many", () => {
+    const spec: SpecAttribute = {
+      key: "range",
+      label: "Range",
+      unit: "km",
+      discoveredBy: "ai",
+      claims: [
+        { value: 80, source: "a", date: "2026-01-01T00:00:00.000Z" },
+        { value: 85, source: "b", date: "2026-01-02T00:00:00.000Z", evidence: "range of 85 km" },
+      ],
+    };
+    const c = consensus(spec);
+    expect(c.display).toBe("85 km");
+    expect(c.heldBack).toBe(1);
   });
 
   it("does not merge a different semantic just because the unit matches", () => {
@@ -67,7 +101,7 @@ describe("consensus on normalized quantities", () => {
       semantic: "range.max",
       unit: "km",
       discoveredBy: "ai",
-      claims: [{ value: 1000, source: "a", date: "2026-01-01T00:00:00.000Z" }],
+      claims: [{ value: 1000, source: "a", date: "2026-01-01T00:00:00.000Z", evidence: "1000 km" }],
     };
     const operational: SpecAttribute = {
       key: "operational_range",
@@ -75,7 +109,7 @@ describe("consensus on normalized quantities", () => {
       semantic: "range.operational",
       unit: "km",
       discoveredBy: "ai",
-      claims: [{ value: 400, source: "a", date: "2026-01-01T00:00:00.000Z" }],
+      claims: [{ value: 400, source: "a", date: "2026-01-01T00:00:00.000Z", evidence: "400 km" }],
     };
     expect(consensus(max).display).toBe("1000 km");
     expect(consensus(operational).display).toBe("400 km");

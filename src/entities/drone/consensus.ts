@@ -12,6 +12,7 @@ import {
   type QuantityQualifier,
 } from "@/entities/normalization/numeric";
 import { claimSourceUnit } from "@/entities/normalization/claim-source-unit";
+import { feedsNumbers, unitStanding } from "./unit-policy";
 import { toleranceFor, type AttributeTolerance } from "@/entities/normalization/core-registry";
 import { claimCounts, claimKey, correctedPoint } from "./claim-review";
 import { clusterObservations } from "./verification-sources";
@@ -61,6 +62,8 @@ export interface ExplicitSourceRange {
 }
 
 export interface Consensus {
+  /** Counted claims left out of the figures because no unit is evidenced for them. */
+  heldBack?: number;
   /**
    * What a reader sees. Non-disputed: the median (or the range or bound a single source gave).
    * Disputed: the median as well, flagged by `disputed` - never the envelope.
@@ -379,16 +382,39 @@ function supersedes(a: SpecClaim, b: SpecClaim): boolean {
   return a.source > b.source;
 }
 
+/**
+ * The consensus of one attribute. Claims whose unit nothing evidences are left out of the figures
+ * and counted in `heldBack` (unit-policy.ts).
+ */
 export function consensus(spec: SpecAttribute): Consensus {
+  const c = aggregate(spec);
+  if (c.heldBack !== undefined) return c;
+  const counted = spec.claims.filter((claim) => claimCounts(claim));
+  const heldBack = counted.filter((claim) => !feedsNumbers(unitStanding(spec, claim))).length;
+  return heldBack > 0 ? { ...c, heldBack } : c;
+}
+
+function aggregate(spec: SpecAttribute): Consensus {
   // An adjudicated "outlier" or an analyst-rejected claim stays on the record (the report said
   // what it said) but no longer feeds the aggregate: one rejected figure must not drag the
   // median into a dispute. Kept claims carry their original index, so consensus().outliers
   // still points into spec.claims.
   // A claim whose extractor unit and source text name different units has no trustworthy figure:
   // it stays on the record (and fails the unit check) but is never aggregated.
-  const kept = spec.claims.flatMap((claim, i) =>
-    claimCounts(claim) && claimSourceUnit(claim).basis !== "conflict" ? [{ claim, i }] : [],
-  );
+  // Nor is a figure whose unit nothing evidences ("105" under a kg attribute): it is held back and
+  // counted in `heldBack`, so a reader sees "unit unknown" instead of a number that may be off by
+  // a factor of 2.2 (unit-policy.ts).
+  const counted = spec.claims.flatMap((claim, i) => (claimCounts(claim) ? [{ claim, i }] : []));
+  const kept = counted.filter(({ claim }) => feedsNumbers(unitStanding(spec, claim)));
+  const heldBack = counted.length - kept.length;
+  if (kept.length === 0 && heldBack > 0)
+    return {
+      display: "unit unknown",
+      sources: 0,
+      disputed: false,
+      confidence: "low",
+      heldBack,
+    };
   const indexOf = new Map<SpecClaim, number>(kept.map(({ claim, i }) => [claim, i]));
   // One observation per outlet or repost cluster, stated by the cluster's latest claim. An outlet
   // that restated its figure counts once, with the restated figure; a wire text carried by two
