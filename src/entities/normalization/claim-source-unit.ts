@@ -59,6 +59,41 @@ function unitBeside(figure: string, rest: string): string | undefined {
   return undefined;
 }
 
+const NUMBER_WORDS: Record<string, number> = {
+  one: 1,
+  two: 2,
+  three: 3,
+  four: 4,
+  five: 5,
+  six: 6,
+  seven: 7,
+  eight: 8,
+  nine: 9,
+  ten: 10,
+  eleven: 11,
+  twelve: 12,
+  fifteen: 15,
+  twenty: 20,
+  thirty: 30,
+  forty: 40,
+  fifty: 50,
+  sixty: 60,
+  seventy: 70,
+  eighty: 80,
+  ninety: 90,
+  hundred: 100,
+};
+const WORD_FIGURE = new RegExp(
+  `(?<![\\p{L}])(${Object.keys(NUMBER_WORDS).join("|")})(?![\\p{L}])`,
+  "giu",
+);
+
+/** A unit in the word right before the figure: "Mach 0.6". Only a unit the parser takes in front. */
+function unitBefore(figure: string, before: string): string | undefined {
+  const word = before.match(/(\p{L}+)\s*$/u)?.[1];
+  return word ? normalizeQuantityLoose(`${word} ${figure}`)?.unit : undefined;
+}
+
 /**
  * The unit the quote gives the figure. A quote can state the same figure twice with different units
  * ("150 km and 150 km/h"), so when the extractor named one of them that one is taken; otherwise the
@@ -69,7 +104,17 @@ function unitInQuote(figure: number, quote: string, extractorUnit?: string): str
   for (const m of quote.matchAll(NUMBER)) {
     const n = parseNumber(m[0]);
     if (n === undefined || !same(n, figure)) continue;
-    const unit = unitBeside(m[0], quote.slice((m.index ?? 0) + m[0].length));
+    const unit =
+      unitBeside(m[0], quote.slice((m.index ?? 0) + m[0].length)) ??
+      // A unit written before its figure: "Mach 0.6", "speeds of Mach 5".
+      unitBefore(m[0], quote.slice(0, m.index ?? 0));
+    if (unit) found.push(unit);
+  }
+  // The figure written as an English word ("six miles", "ten kilometres", "six-meter boat"), only
+  // where the word is exactly the stored figure.
+  for (const m of quote.matchAll(WORD_FIGURE)) {
+    if (NUMBER_WORDS[m[1]!.toLowerCase()] !== figure) continue;
+    const unit = unitBeside(String(figure), quote.slice((m.index ?? 0) + m[0].length));
     if (unit) found.push(unit);
   }
   return (extractorUnit && found.find((u) => sameUnit(u, extractorUnit))) || found[0];
@@ -98,7 +143,14 @@ function resolve(s: Stated): SourceUnit {
   let unit: string | undefined;
   let basis: "value_text" | "quote" | undefined;
   for (const text of s.texts) {
-    const found = normalizeQuantityLoose(text)?.unit;
+    // "Mach 5+" and "more than Mach 0.6": the qualifier and the plus say how far, not which unit.
+    const plain = text
+      .replace(/\s*(?:\+|-?plus)\s*$/iu, "")
+      .replace(
+        /^\s*(?:exceeding|more than|over|above|roughly|about|around|approximately|nearly)\s+/iu,
+        "",
+      );
+    const found = normalizeQuantityLoose(text)?.unit ?? normalizeQuantityLoose(plain)?.unit;
     if (found) {
       unit = found;
       basis = "value_text";

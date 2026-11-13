@@ -233,23 +233,23 @@ I recomputed every bucket from the database with the same modules, separately fr
 6. **Keep step B in shadow.** 152 claims is a reviewable number; one more fixing round of this kind
    would plausibly bring it under 100.
 
-
 ## Writers notes
 
 What actually changed
 The script itself was unchanged — the update landed in the modules it calls (ecca42a, "Unit evidence: fixes found by the second catalogue report"), and it fixed both defects I reported in run 2:
- 	Run 2	Run 3	Delta
-quote basis	741	801	+60
-Read through attribute unit	337	277	−60
-Held back	207	152	−55 (−26.6 %)
+Run 2 Run 3 Delta
+quote basis 741 801 +60
+Read through attribute unit 337 277 −60
+Held back 207 152 −55 (−26.6 %)
 Denominators are unchanged at 1,809, and all buckets still reconcile.
 Fix 1 — the price in kilometres. expectedUnit() now short-circuits when the semantic is resolved, so PAC-3 / unit_cost's stale canonicalUnit: "km" is inert instead of authoritative. I verified it across the whole catalogue: 0 of 1,070 resolved-semantic specs now deviate. Claims forced to unknown by a stale unit dropped 14 → 7.
 Fix 2 — units past +, ranges and hyphens. This is the +60. CB90 CX "16.3m-long", ARBEL "150 to 200 meters", Stunner "250 кілометрів" and similar now evidence correctly.
 The finding that matters for planning
 I broke the remaining 152 down by cause, because they need different fixes:
+
 - 74 (48.7 %) have no evidence quote at all. These aren't a unit problem — no text means no unit can be evidenced. The next lever is evidence coverage, not the unit lexicon. That's the main thing run 3 tells you.
 - 21 quote the figure as a word ("six miles", "ten kilometres")
 - 14 hinge on unread unit words, mostly ton(s) — which the commit deliberately leaves unread because short and metric tons differ by 9 %
 - 43 other (Mach-ratio speeds, quotes that don't carry the stored figure)
-Verification
-I recomputed every bucket independently from the database and they match the script exactly. Note unverified and conflict are still structurally zero — 0 of 2,082 claims store sourceUnit — so that class remains unmeasured.
+  Verification
+  I recomputed every bucket independently from the database and they match the script exactly. Note unverified and conflict are still structurally zero — 0 of 2,082 claims store sourceUnit — so that class remains unmeasured.

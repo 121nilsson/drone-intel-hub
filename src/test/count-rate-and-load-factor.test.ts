@@ -171,3 +171,25 @@ describe("a price is not measured in kilometres", () => {
     expect(unitStanding(spec, claim)).toBe("not_needed");
   });
 });
+
+describe("what the third catalogue run left unread", () => {
+  const unit = (value: number | string, evidence: string) => sourceUnitFor({ value, evidence });
+  it("reads a figure written as an English word, only when the word is the stored figure", () => {
+    expect(unit(6, "range of around six miles")).toMatchObject({ unit: "mi", basis: "quote" });
+    expect(unit(10, "up to ten kilometres high")).toMatchObject({ unit: "km", basis: "quote" });
+    expect(unit(6, "STARK's first six-meter boat")).toMatchObject({ unit: "m", basis: "quote" });
+    expect(unit(7, "range of around six miles").basis).toBe("unknown");
+  });
+
+  it("reads a unit written before its figure, and past a plus or a qualifier in the value", () => {
+    expect(unit(0.6, "travel at speeds exceeding Mach 0.6")).toMatchObject({ basis: "quote" });
+    expect(sourceUnitFor({ value: "Mach 5+" })).toMatchObject({ basis: "value_text" });
+    expect(sourceUnitFor({ value: "more than Mach 0.6" })).toMatchObject({ basis: "value_text" });
+  });
+
+  it("reads nautical miles written in Ukrainian and Russian, and not a bare 'миль'", () => {
+    expect(normalizeQuantity("1000 морських миль")?.unit).toBe("nmi");
+    expect(normalizeQuantity("300 морских миль")?.unit).toBe("nmi");
+    expect(normalizeQuantity("100 миль")).toBeUndefined();
+  });
+});

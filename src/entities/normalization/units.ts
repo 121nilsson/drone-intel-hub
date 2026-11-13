@@ -180,7 +180,13 @@ const UNITS: UnitDef[] = [
     toCanonical: 1,
     pattern: /(?<![/\p{L}])(?:l|л)(?![\p{L}\p{N}])/iu,
   },
-  { token: "nmi", dimension: "distance", toCanonical: NM_KM, pattern: /nautical\s+miles?/iu },
+  {
+    token: "nmi",
+    dimension: "distance",
+    toCanonical: NM_KM,
+    // "морських миль" (uk) and "морских миль" (ru) are nautical miles; a bare "миль" is not.
+    pattern: /(?:nautical\s+miles?|морськ[а-яіїєґ]*\s+миль[а-яіїєґ]*|морск[а-яё]*\s+миль[а-яё]*)/iu,
+  },
   {
     token: "nmi",
     dimension: "distance",
