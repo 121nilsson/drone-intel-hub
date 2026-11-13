@@ -10,6 +10,7 @@
  */
 import type { SpecClaim } from "@/entities/drone/types";
 import { claimSourceUnit } from "@/entities/normalization/claim-source-unit";
+import { feedsNumbers, unitStanding, type UnitStanding } from "@/entities/drone/unit-policy";
 
 type Basis = ReturnType<typeof claimSourceUnit>["basis"];
 
@@ -39,6 +40,11 @@ async function main() {
   let viaAttributeUnit = 0;
   const byAttribute = new Map<string, number>();
   const conflicts: string[] = [];
+  // What the catalogue will do (unit-policy.ts), not just what the text shows: a figure an analyst,
+  // the seed catalogue or a reference import gave with its unit is "declared" and still counts.
+  const standings = new Map<UnitStanding, number>();
+  const heldByAttribute = new Map<string, number>();
+  const examples = new Map<string, string[]>();
 
   for (const { doc } of loaded) {
     for (const spec of doc.specs) {
@@ -47,6 +53,17 @@ async function main() {
       numericSpecs++;
       for (const claim of claims) {
         numericClaims++;
+        const standing = unitStanding(spec, claim);
+        standings.set(standing, (standings.get(standing) ?? 0) + 1);
+        if (!feedsNumbers(standing)) {
+          heldByAttribute.set(spec.key, (heldByAttribute.get(spec.key) ?? 0) + 1);
+          const list = examples.get(spec.key) ?? [];
+          if (list.length < 3)
+            list.push(
+              `    ${doc.name}: ${claim.raw ?? claim.value} ${spec.unit ?? ""} | ${claim.evidence ?? "no quote"}`,
+            );
+          examples.set(spec.key, list);
+        }
         const source = claimSourceUnit(claim, spec);
         counts.set(source.basis, (counts.get(source.basis) ?? 0) + 1);
         if (source.basis === "unknown" || source.basis === "extractor_unverified") {
@@ -78,6 +95,28 @@ async function main() {
       .slice(0, 15)
       .map(([k, n]) => `${k} ${n}`)
       .join(", ") || "none",
+  );
+  console.log("\nWhat step B does with them (unit-policy.ts):");
+  for (const st of [
+    "evidenced",
+    "declared",
+    "not_needed",
+    "unverified",
+    "unknown",
+    "conflict",
+  ] as const)
+    console.log(`  ${st}: ${standings.get(st) ?? 0}`);
+  const held = [...heldByAttribute.values()].reduce((a, b) => a + b, 0);
+  console.log(`Held back from consensus ("unit unknown"): ${held}`);
+  for (const [key, n] of [...heldByAttribute.entries()].sort((a, b) => b[1] - a[1]).slice(0, 15)) {
+    console.log(`  ${key}: ${n}`);
+    for (const line of examples.get(key) ?? []) console.log(line);
+  }
+  console.log(
+    "\nNote: extractor_unverified and conflict need a stored extractor unit (sourceUnit). Claims written\n" +
+      "before that field existed have none, so those two stay at zero for them; a claim whose text states\n" +
+      "a unit other than the attribute's (nautical miles under a km attribute) is evidenced and is\n" +
+      "converted, not a conflict.",
   );
   if (conflicts.length) {
     console.log("Conflicts (extractor unit disagrees with the value text or quote):");
