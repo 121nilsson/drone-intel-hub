@@ -1,5 +1,6 @@
 import { catalogNames } from "./catalog-names";
 import { cleanReading } from "./claim-reading";
+import { ENTAILMENT_INSTRUCTION } from "./entailment-instruction";
 import { readerStance } from "./entailment-verdict";
 import type {
   ClaimEntailment,
@@ -34,8 +35,10 @@ import { fold } from "./verification";
  * system's) and not_found (the text does not say) - which the human audit needs apart: a reader
  * that opposes a claim the person confirmed is a different mistake in each case. Readings stored
  * as "unsupported" stay as written and are never re-read as either.
+ * 6: the instruction rewritten as a full reader brief (entailment-instruction.ts): variant vs
+ * platform, planned vs actual quantities, range kinds, qualifier boundaries, evidence rules.
  */
-export const ENTAILMENT_VERSION = "entailment-5";
+export const ENTAILMENT_VERSION = "entailment-6";
 
 /** A short stable hash of a post's text (FNV-1a): a changed post is read again. */
 export function textHash(text: string): string {
@@ -109,29 +112,7 @@ export function entailmentPrompt(
   post: string,
   questions: readonly EntailmentQuestion[],
 ): { system: string; prompt: string; truncated: boolean } {
-  const system = [
-    "You check claims against a source text. You are not told how the claims were found.",
-    "For each claim decide only whether the TEXT states this value for this attribute of this",
-    "system - not whether it is true, and not whether it is plausible.",
-    'Answer "supported" only if the text states it, and give the exact passage, copied',
-    "character for character from the text, that states it.",
-    'Answer "contradicted" if the text gives a different value for this attribute of this',
-    "system, or gives this figure for another system.",
-    'Answer "not_found" if the text does not state this value for this attribute and gives no',
-    "conflicting one.",
-    'Answer "uncertain" if the text is ambiguous about it.',
-    "A value in another unit or wording that means the same quantity is supported.",
-    "The figure must be that attribute of that system, not another quantity that sits near it:",
-    "the altitude of a target is not the system's own maximum altitude, a number of units struck or",
-    "lost in one event is not a quantity deployed, and a capacity planned over several years is not",
-    'a production timeline - answer "not_found" for those.',
-    "A vague descriptor (high-speed, mid-range, long-range, lightweight) is not a stated value for a",
-    'measured attribute: answer "not_found".',
-    'A qualifier in the claim ("up to", "at least", "approx.", a range) must match the text: "up to',
-    '500" is not "500", and "620-650" is not "650" - answer "uncertain" when they differ.',
-    'Each claim is numbered [n]; answer with that number as "ref".',
-    'Reply with JSON only: {"answers":[{"ref":"1","verdict":"supported|contradicted|not_found|uncertain","span":"..."}]}',
-  ].join(" ");
+  const system = ENTAILMENT_INSTRUCTION;
   const claims = questions
     .map((q) => {
       const also = (q.aliases ?? []).filter((a) => a !== q.system).slice(0, MAX_ALIASES);

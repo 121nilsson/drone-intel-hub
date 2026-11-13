@@ -31,18 +31,22 @@ describe("the mistakes the audit found are named in the instruction", () => {
   const { system } = entailmentPrompt(POST, []);
 
   it("a neighbouring quantity is not the attribute", () => {
-    expect(system).toMatch(/altitude of a target is not the system's own maximum altitude/);
-    expect(system).toMatch(/units struck/);
-    expect(system).toMatch(/not\s+a production timeline/);
+    expect(system).toMatch(
+      /Maximum altitude of a system is not the same as the altitude of its target/,
+    );
+    expect(system).toMatch(
+      /Number of systems destroyed is not the same as number of systems in service/,
+    );
+    expect(system).toMatch(/Production capacity/);
   });
 
   it("a vague descriptor is not a value, and a bound is not an exact figure", () => {
-    expect(system).toMatch(/vague descriptor \(high-speed, mid-range, long-range/);
-    expect(system).toMatch(/"up to\s+500" is not "500"/);
+    expect(system).toMatch(/A vague descriptor is not a numerical specification/);
+    expect(system).toMatch(/up to 500/);
   });
 
   it("is a new reading round, so the answers given under the old wording are asked again", () => {
-    expect(ENTAILMENT_VERSION).toBe("entailment-5");
+    expect(ENTAILMENT_VERSION).toBe("entailment-6");
     const claim = { entailment: { version: "entailment-3", textHash: "h" } } as SpecClaim;
     expect(needsEntailment(claim, "h", "fp")).toBe(true);
   });
