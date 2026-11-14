@@ -10,6 +10,12 @@ import { recordAutonomyEvent } from "@/shared/infra/autonomy/ledger.server";
  * Why one event per post and not per frame: the ledger keeps every decision forever, so volume
  * is set here. The frames, their reasons and the evidence quotes go in `checks`, so an analyst
  * can go from a hit to the text it came from.
+ *
+ * Storage guarantees differ, and this writer has the weaker one: recordAutonomyEvent() is best
+ * effort (a failed write is logged, not raised) and autonomy_events is append-only by convention
+ * in application code only. verification_audit_reader, by contrast, is append-only protected by
+ * database triggers (no update, delete or truncate; migration 026) with hash-based provenance.
+ * Do not read a missing event here as proof that no check ran.
  */
 
 export interface AssertionFrameCheckInput {

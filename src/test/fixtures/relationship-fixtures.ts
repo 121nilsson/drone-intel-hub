@@ -7,6 +7,10 @@
  * cannot see from aggregate counts. Each fixture names what must NOT come out, because the wrong
  * reading is usually a plausible one.
  *
+ * Scope: these fixtures feed validateFrame(), which checks structural and relational consistency
+ * of a frame someone already built. They do not show that source text is read correctly; there is
+ * no frame producer in the ingest flow yet, so nothing here is an end-to-end regression.
+ *
  * Fixtures with status "pending_source" are slots. Their source text has not been supplied,
  * so they carry no invented sentence and count as nothing: they are not passing regressions.
  */
@@ -211,7 +215,35 @@ const specifiedFixtures: RelationshipFixture[] = [
     title: "A load factor in g is not a mass in g",
     sourceText: "The airframe withstands 4g during evasive maneuvers with a 500 g optical payload.",
     participants: loadFactorParticipants,
-    expectedFrames: [],
+    // One sentence, two figures, two owners: one frame per figure.
+    expectedFrames: [
+      {
+        evidence: "The airframe withstands 4g during evasive maneuvers",
+        sentenceIndex: 0,
+        predicate: "withstands",
+        participants: loadFactorParticipants,
+        subjectEntityId: "p1",
+        measurement: {
+          ownerParticipantId: "p1",
+          rawKey: "maneuver.load_factor_max",
+          rawValue: 4,
+          rawUnit: "g",
+        },
+      },
+      {
+        evidence: "with a 500 g optical payload",
+        sentenceIndex: 0,
+        predicate: "carries",
+        participants: loadFactorParticipants,
+        subjectEntityId: "p1",
+        measurement: {
+          ownerParticipantId: "p2",
+          rawKey: "payload.mass",
+          rawValue: 500,
+          rawUnit: "g",
+        },
+      },
+    ],
     expectedClaims: [
       {
         semantic: "maneuver.load_factor_max",
@@ -240,7 +272,35 @@ const specifiedFixtures: RelationshipFixture[] = [
     title: "A production rate is not added to a deployed stock",
     sourceText: "The system is produced at 50 units/month with 300 currently deployed in theater.",
     participants: productionInventoryParticipants,
-    expectedFrames: [],
+    // A rate and a stock in one sentence stay two frames; they are never summed.
+    expectedFrames: [
+      {
+        evidence: "The system is produced at 50 units/month",
+        sentenceIndex: 0,
+        predicate: "produced_at",
+        participants: productionInventoryParticipants,
+        subjectEntityId: "p1",
+        measurement: {
+          ownerParticipantId: "p1",
+          rawKey: "production.rate_monthly",
+          rawValue: 50,
+          rawUnit: "units/month",
+        },
+      },
+      {
+        evidence: "300 currently deployed in theater",
+        sentenceIndex: 0,
+        predicate: "deployed",
+        participants: productionInventoryParticipants,
+        subjectEntityId: "p1",
+        measurement: {
+          ownerParticipantId: "p1",
+          rawKey: "inventory.deployed_count",
+          rawValue: 300,
+          rawUnit: "units",
+        },
+      },
+    ],
     expectedClaims: [
       {
         semantic: "production.rate_monthly",

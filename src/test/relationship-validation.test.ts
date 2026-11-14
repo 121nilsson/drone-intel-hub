@@ -172,6 +172,79 @@ describe("assertion validation on fixture frames", () => {
     expect(validateFrame(frameFrom(f, 0))).toEqual({ status: "pass", reasons: [] });
   });
 
+  it.each(real.map((f) => [f.id, f] as const))(
+    "%s: every expected frame is structurally and relationally consistent (not an end-to-end reading)",
+    (_id, f) => {
+      expect(f.expectedFrames.length).toBeGreaterThan(0);
+      for (let i = 0; i < f.expectedFrames.length; i++) {
+        expect(validateFrame(frameFrom(f, i))).toEqual({ status: "pass", reasons: [] });
+      }
+    },
+  );
+
+  it("load-factor-vs-mass keeps one frame per figure, each with its own owner", () => {
+    const f = RELATIONSHIP_FIXTURES.find((x) => x.id === "load-factor-vs-mass")!;
+    const owned = f.expectedFrames.map((x) => [
+      x.measurement?.rawKey,
+      x.measurement?.ownerParticipantId,
+    ]);
+    expect(owned).toEqual([
+      ["maneuver.load_factor_max", "p1"],
+      ["payload.mass", "p2"],
+    ]);
+  });
+
+  it("production-vs-inventory keeps the rate and the stock as separate frames", () => {
+    const f = RELATIONSHIP_FIXTURES.find((x) => x.id === "production-vs-inventory")!;
+    expect(f.expectedFrames.map((x) => x.measurement?.rawValue)).toEqual([50, 300]);
+    expect(f.expectedFrames.map((x) => x.measurement?.rawKey)).toEqual([
+      "production.rate_monthly",
+      "inventory.deployed_count",
+    ]);
+  });
+
+  it("bars-patriot: Patriot as the subject of the Shahed engagement is still consistent structurally", () => {
+    // Documents the limit: the validator cannot know from structure alone that Patriot did not
+    // counter Shahed. Only a producer read against the source can; that is not tested here.
+    const f = RELATIONSHIP_FIXTURES.find((x) => x.id === "bars-patriot")!;
+    const swapped = { ...frameFrom(f, 0), subjectEntityId: "p3" };
+    expect(validateFrame(swapped).status).toBe("pass");
+  });
+
+  it("bars-patriot: a Patriot-named figure owned by Bars fails", () => {
+    const f = RELATIONSHIP_FIXTURES.find((x) => x.id === "bars-patriot")!;
+    const bad = {
+      ...frameFrom(f, 0),
+      measurement: { ownerParticipantId: "p1", rawKey: "patriot.range_km", rawValue: 160 },
+    };
+    expect(validateFrame(bad).status).toBe("fail");
+  });
+
+  it("locust-coyote: LOCUST as the subject fails", () => {
+    const f = RELATIONSHIP_FIXTURES.find((x) => x.id === "locust-coyote")!;
+    expect(validateFrame({ ...frameFrom(f, 0), subjectEntityId: "p2" }).status).toBe("fail");
+  });
+
+  it("load-factor-vs-mass: the payload mass owned by a payload-role subject is fine, a location owner is not", () => {
+    const f = RELATIONSHIP_FIXTURES.find((x) => x.id === "load-factor-vs-mass")!;
+    const frame = frameFrom(f, 1);
+    const asLocation = {
+      ...frame,
+      participants: frame.participants.map((p) =>
+        p.participantId === "p2" ? { ...p, role: "location" as const } : p,
+      ),
+      subjectEntityId: "p2",
+    };
+    expect(validateFrame(asLocation).status).toBe("fail");
+  });
+
+  it("production-vs-inventory: a measurement owner that is not a participant fails", () => {
+    const f = RELATIONSHIP_FIXTURES.find((x) => x.id === "production-vs-inventory")!;
+    const frame = frameFrom(f, 1);
+    const bad = { ...frame, measurement: { ...frame.measurement!, ownerParticipantId: "p9" } };
+    expect(validateFrame(bad).status).toBe("fail");
+  });
+
   it("returns new objects with the status filled in, and leaves the input untouched", () => {
     const f = RELATIONSHIP_FIXTURES.find((x) => x.id === "bars-patriot")!;
     const input = [frameFrom(f, 0), frameFrom(f, 1)];
