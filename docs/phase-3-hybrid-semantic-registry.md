@@ -1,4 +1,5 @@
 # Drone Intel Hub – Phase 3: Hybrid Semantic Registry Specification
+
 ## Architecture, Canonical Identity Governance, Deterministic Resolution, and Validation Model
 
 ---
@@ -7,14 +8,15 @@
 
 Drone Intel Hub extracts, normalizes, verifies, and analyzes technical specifications and operational data concerning unmanned systems and counter-drone capabilities across multilingual OSINT sources (news dispatches, manufacturer brochures, defence analytics, and field reports). A recurring architectural challenge is the semantic variation of extracted attribute names. Different sources express identical technical concepts using diverse languages, transliterations, synonyms, domain-specific abbreviations, and varying levels of technical precision.
 
-Currently, the resolution of raw attribute keys to canonical semantic concepts is handled by a hardcoded, procedural TypeScript routine ([`src/entities/normalization/semantic.ts`](../src/entities/normalization/semantic.ts)). When an extracted key or label does not match an internal rule, the function silently returns the raw key unchanged (*identity fallback*). Furthermore, physical dimension and unit assignments rely on prefix matching ([`src/entities/normalization/core-registry.ts`](../src/entities/normalization/core-registry.ts)), which cannot distinguish whether a semantic identifier represents a genuine, registered concept.
+Currently, the resolution of raw attribute keys to canonical semantic concepts is handled by a hardcoded, procedural TypeScript routine ([`src/entities/normalization/semantic.ts`](../src/entities/normalization/semantic.ts)). When an extracted key or label does not match an internal rule, the function silently returns the raw key unchanged (_identity fallback_). Furthermore, physical dimension and unit assignments rely on prefix matching ([`src/entities/normalization/core-registry.ts`](../src/entities/normalization/core-registry.ts)), which cannot distinguish whether a semantic identifier represents a genuine, registered concept.
 
 This document establishes the architecture for **Phase 3: The Hybrid Semantic Registry**. It addresses previous architectural shortcomings and defines:
+
 1. **A Strict Separation of Three Registry Concerns:**
-   * *Canonical Semantic Concepts:* A closed, code-owned manifest of valid technical concepts.
-   * *Physical and Consensus Metadata:* Authoritative physical units, dimensions, conversion factors, and consensus tolerances owned by the code core ([`core-registry.ts`](../src/entities/normalization/core-registry.ts) and [`units.ts`](../src/entities/normalization/units.ts)).
-   * *Terminology and Alias Mappings:* An extensible, versioned, database-backed inventory of multilingual terminology and context rules, consumed strictly via compiled, immutable snapshots.
-2. **A Corrected Four-Class Alias Model:** Class 1 (Canonical Synonyms), Class 2 (Context-Conditioned Synonyms), Class 3 (Qualified Distinct Concepts), and Class 4 (Known Ambiguous Candidates), alongside an explicit state for *Unknown Terminology*.
+   - _Canonical Semantic Concepts:_ A closed, code-owned manifest of valid technical concepts.
+   - _Physical and Consensus Metadata:_ Authoritative physical units, dimensions, conversion factors, and consensus tolerances owned by the code core ([`core-registry.ts`](../src/entities/normalization/core-registry.ts) and [`units.ts`](../src/entities/normalization/units.ts)).
+   - _Terminology and Alias Mappings:_ An extensible, versioned, database-backed inventory of multilingual terminology and context rules, consumed strictly via compiled, immutable snapshots.
+2. **A Corrected Four-Class Alias Model:** Class 1 (Canonical Synonyms), Class 2 (Context-Conditioned Synonyms), Class 3 (Qualified Distinct Concepts), and Class 4 (Known Ambiguous Candidates), alongside an explicit state for _Unknown Terminology_.
 3. **Structured Resolution Metadata Instead of Uncalibrated Probabilities:** Deterministic resolution states, match types, matched rule IDs, and guard audit trails replace arbitrary floating-point confidence scores.
 4. **Guaranteed Historical Reproducibility:** Content-addressed snapshot hashes, append-only revisions, runtime immutability, and zero network/database dependencies during resolution.
 5. **A Non-Destructive Offline Replay Strategy:** Initial Phase 3 validation runs offline against frozen fixtures and reference sets, completely isolated from production ingest hot paths, consensus calculations, and audit gates.
@@ -24,20 +26,23 @@ This document establishes the architecture for **Phase 3: The Hybrid Semantic Re
 ## 2. Scope, Non-Goals, and Safety Invariants
 
 ### Scope
-* Formalize the canonical semantic concept vocabulary for unmanned systems and counter-drone technical attributes.
-* Define an extensible, versioned database schema for terminology aliases, language variants, and context guards.
-* Specify a pure, deterministic in-memory snapshot compiler and resolver.
-* Design an offline shadow-mode replay methodology to evaluate coverage, parity, and semantic accuracy against existing data without modifying production claims.
-* Define strict boundaries separating semantic resolution from taxonomy classification, unit conversion, numeric parsing, claim verification, and relationship extraction.
+
+- Formalize the canonical semantic concept vocabulary for unmanned systems and counter-drone technical attributes.
+- Define an extensible, versioned database schema for terminology aliases, language variants, and context guards.
+- Specify a pure, deterministic in-memory snapshot compiler and resolver.
+- Design an offline shadow-mode replay methodology to evaluate coverage, parity, and semantic accuracy against existing data without modifying production claims.
+- Define strict boundaries separating semantic resolution from taxonomy classification, unit conversion, numeric parsing, claim verification, and relationship extraction.
 
 ### Explicit Non-Goals
-* **No Production Ingest Integration in Initial Work:** The initial resolver runs in isolation and offline replay; it does not replace or wrap `semanticKeyFor()` inside [`src/entities/normalization/apply.ts`](../src/entities/normalization/apply.ts).
-* **No Production Claim or Consensus Alteration:** Phase 3 must not change any existing claim value, unit, consensus grouping, catalog status, or verification verdict.
-* **No Autonomous Writes to Active Semantics:** `AUTO_APPLY_TIERS` remains strictly empty (`[]`). All new aliases, promotions, and deprecations require human review.
-* **No Replacement of Existing Taxonomies:** The registry does not duplicate the propulsion, installation, or protocol taxonomies in [`src/entities/normalization/taxonomy.ts`](../src/entities/normalization/taxonomy.ts).
-* **No Arbitrary Regex DSL:** User- or AI-supplied unstructured regular expressions are prohibited. Matching relies on literal strings, bounded word tokens, and validated context guards.
+
+- **No Production Ingest Integration in Initial Work:** The initial resolver runs in isolation and offline replay; it does not replace or wrap `semanticKeyFor()` inside [`src/entities/normalization/apply.ts`](../src/entities/normalization/apply.ts).
+- **No Production Claim or Consensus Alteration:** Phase 3 must not change any existing claim value, unit, consensus grouping, catalog status, or verification verdict.
+- **No Autonomous Writes to Active Semantics:** `AUTO_APPLY_TIERS` remains strictly empty (`[]`). All new aliases, promotions, and deprecations require human review.
+- **No Replacement of Existing Taxonomies:** The registry does not duplicate the propulsion, installation, or protocol taxonomies in [`src/entities/normalization/taxonomy.ts`](../src/entities/normalization/taxonomy.ts).
+- **No Arbitrary Regex DSL:** User- or AI-supplied unstructured regular expressions are prohibited. Matching relies on literal strings, bounded word tokens, and validated context guards.
 
 ### Mandatory Safety Invariants
+
 1. **The Analyst Outranks Automation:** An analyst's manual attribute assignment or review verdict unconditionally supersedes any automated semantic mapping.
 2. **Deterministic Reproducibility:** Given identical input text, context metadata, and snapshot identity, the resolver must produce the identical resolution outcome.
 3. **Safe Default for Ambiguity:** If context is missing, conflicting, or the term is ambiguous, the resolver must fail safe to an explicit unresolved state. It must never guess.
@@ -81,64 +86,64 @@ The following findings were verified against repository `121nilsson/drone-intel-
 ### Direct Implementation Verifications
 
 1. **`src/entities/normalization/semantic.ts`**
-   * *Symbols:* `semanticKeyFor(key: string, label = ""): string`, `canonicalUnitForSemantic(semantic: string): string | undefined`, `COUNTED`.
-   * *Observed Behaviour:* Normalizes raw keys using regex-based case conversion and unit suffix stripping (`_(km|m|kmh|kg|min|w|l)$`). Trailing `_min` stripping creates a collision with `range_min` (which requires a special guard on line 112). Resolves approximately 58 known canonical concepts via sequential `if-else` blocks and regex checks. Falls back to returning `key` verbatim if unmatched (line 258).
-   * *Architectural Impact:* Downstream components cannot distinguish whether a returned string is an approved canonical identifier or an unrecognized raw term. Prefix-based unit assignment in `canonicalUnitForSemantic` assumes any string starting with `range.` is a distance in `km`.
+   - _Symbols:_ `semanticKeyFor(key: string, label = ""): string`, `canonicalUnitForSemantic(semantic: string): string | undefined`, `COUNTED`.
+   - _Observed Behaviour:_ Normalizes raw keys using regex-based case conversion and unit suffix stripping (`_(km|m|kmh|kg|min|w|l)$`). Trailing `_min` stripping creates a collision with `range_min` (which requires a special guard on line 112). Resolves approximately 58 known canonical concepts via sequential `if-else` blocks and regex checks. Falls back to returning `key` verbatim if unmatched (line 258).
+   - _Architectural Impact:_ Downstream components cannot distinguish whether a returned string is an approved canonical identifier or an unrecognized raw term. Prefix-based unit assignment in `canonicalUnitForSemantic` assumes any string starting with `range.` is a distance in `km`.
 
 2. **`src/entities/normalization/core-registry.ts`**
-   * *Symbols:* `CANONICAL_UNIT`, `CORE_DIMENSIONS`, `AttributeEntry`, `registryEntryFor(semantic: string)`.
-   * *Observed Behaviour:* Defines physical dimensions (`distance`, `speed`, `mass`, `duration`, `power`, `volume`, `force`, `acceleration`, `load_factor`, `count_rate`), base units, and consensus tolerances. `registryEntryFor()` looks up exact entries first, then suffix `*.count`, then family prefixes (`range.`, `speed.`, etc.) via `FAMILIES.find((f) => semantic.startsWith(f.semantic))`.
-   * *Architectural Impact:* `registryEntryFor("range.invalid_term")` succeeds and returns the `range.` family entry. Therefore, **`registryEntryFor()` cannot be used as an existence validator for canonical concepts**.
+   - _Symbols:_ `CANONICAL_UNIT`, `CORE_DIMENSIONS`, `AttributeEntry`, `registryEntryFor(semantic: string)`.
+   - _Observed Behaviour:_ Defines physical dimensions (`distance`, `speed`, `mass`, `duration`, `power`, `volume`, `force`, `acceleration`, `load_factor`, `count_rate`), base units, and consensus tolerances. `registryEntryFor()` looks up exact entries first, then suffix `*.count`, then family prefixes (`range.`, `speed.`, etc.) via `FAMILIES.find((f) => semantic.startsWith(f.semantic))`.
+   - _Architectural Impact:_ `registryEntryFor("range.invalid_term")` succeeds and returns the `range.` family entry. Therefore, **`registryEntryFor()` cannot be used as an existence validator for canonical concepts**.
 
 3. **`src/entities/drone/spec-engine.ts`**
-   * *Symbols:* `attributeSemantic()`, `sameAttribute()`, `regroup()`, `mergeSpecs()`.
-   * *Observed Behaviour:* `attributeSemantic()` re-evaluates `semanticKeyFor(spec.key, spec.label)` whenever `spec.semantic === spec.key`. `sameAttribute()` ensures two attributes merge only if their semantics match AND either their raw keys match or at least one raw key resolves to the semantic without relying on the label.
-   * *Architectural Impact:* An erroneous semantic mapping causes specs to group together in `Drone.specs`, pooling claims from unrelated attributes into a single disputed consensus calculation.
+   - _Symbols:_ `attributeSemantic()`, `sameAttribute()`, `regroup()`, `mergeSpecs()`.
+   - _Observed Behaviour:_ `attributeSemantic()` re-evaluates `semanticKeyFor(spec.key, spec.label)` whenever `spec.semantic === spec.key`. `sameAttribute()` ensures two attributes merge only if their semantics match AND either their raw keys match or at least one raw key resolves to the semantic without relying on the label.
+   - _Architectural Impact:_ An erroneous semantic mapping causes specs to group together in `Drone.specs`, pooling claims from unrelated attributes into a single disputed consensus calculation.
 
 4. **`src/entities/drone/auto-correction.ts`**
-   * *Symbols:* `detectCorrection()`, `PLAUSIBLE`, `BALLISTIC`, `statesRecordedFigure()`.
-   * *Observed Behaviour:* Reads `attributeSemantic(spec)` to retrieve physical bounds from `PLAUSIBLE` (e.g., `range.max`: 0.1–25,000 km, `speed.max`: 1–4,000 km/h). Compares claims against other sources for unit slips (e.g., km vs m).
-   * *Architectural Impact:* Misclassifying an attribute (e.g. mapping `cruise_speed` to `speed.max`, or `warhead_weight` to `payload.capacity`) triggers false unit-slip corrections or false implausibility flags.
+   - _Symbols:_ `detectCorrection()`, `PLAUSIBLE`, `BALLISTIC`, `statesRecordedFigure()`.
+   - _Observed Behaviour:_ Reads `attributeSemantic(spec)` to retrieve physical bounds from `PLAUSIBLE` (e.g., `range.max`: 0.1–25,000 km, `speed.max`: 1–4,000 km/h). Compares claims against other sources for unit slips (e.g., km vs m).
+   - _Architectural Impact:_ Misclassifying an attribute (e.g. mapping `cruise_speed` to `speed.max`, or `warhead_weight` to `payload.capacity`) triggers false unit-slip corrections or false implausibility flags.
 
 5. **`src/shared/contracts/rules.ts` & `src/shared/infra/heuristics/rule-registry.server.ts`**
-   * *Symbols:* `RuleSnapshot`, `compileRuleSnapshot()`, `getOrRefreshRuleSnapshot()`.
-   * *Observed Behaviour:* Implements database-backed dynamic heuristic rules (`dynamic_rules` table), an integer version counter (`dynamic_rules_version`), and an in-memory compiled snapshot. Refreshes cache with `TTL_MS = 30_000` (30 seconds, not 60 seconds). If the database query fails, it catches the error, logs a warning, and retains the cached snapshot. In pure/browser environments, an empty snapshot is used.
+   - _Symbols:_ `RuleSnapshot`, `compileRuleSnapshot()`, `getOrRefreshRuleSnapshot()`.
+   - _Observed Behaviour:_ Implements database-backed dynamic heuristic rules (`dynamic_rules` table), an integer version counter (`dynamic_rules_version`), and an in-memory compiled snapshot. Refreshes cache with `TTL_MS = 30_000` (30 seconds, not 60 seconds). If the database query fails, it catches the error, logs a warning, and retains the cached snapshot. In pure/browser environments, an empty snapshot is used.
 
 6. **`src/entities/normalization/taxonomy.ts` & `src/shared/contracts/taxonomy.ts`**
-   * *Symbols:* `TaxonomyTerm`, `SEEDED_TERMS`, `TaxonomyCandidate`, `TaxonomyRepository`, `resolveTerm()`.
-   * *Observed Behaviour:* Manages system-level domain taxonomies: `propulsion`, `installation`, and `protocol`. Stores canonical IDs, labels, parent IDs, and aliases. Provides exact and alias matching (`resolveTerm`). Unmatched terms record `TaxonomyCandidate` records.
-   * *Architectural Impact:* This system models **what a system or component is**, whereas the semantic registry models **what a measured attribute represents**. They must not be conflated.
+   - _Symbols:_ `TaxonomyTerm`, `SEEDED_TERMS`, `TaxonomyCandidate`, `TaxonomyRepository`, `resolveTerm()`.
+   - _Observed Behaviour:_ Manages system-level domain taxonomies: `propulsion`, `installation`, and `protocol`. Stores canonical IDs, labels, parent IDs, and aliases. Provides exact and alias matching (`resolveTerm`). Unmatched terms record `TaxonomyCandidate` records.
+   - _Architectural Impact:_ This system models **what a system or component is**, whereas the semantic registry models **what a measured attribute represents**. They must not be conflated.
 
 7. **`src/shared/contracts/proposals.ts` & `src/shared/infra/proposals/`**
-   * *Symbols:* `PROPOSAL_KINDS`, `AUTO_APPLY_TIERS`, `ruleApplier`, `admitProposal()`.
-   * *Observed Behaviour:* `PROPOSAL_KINDS` reserves `"normalizer"` alongside `"rule"`, `"prompt"`, `"schema"`, `"model_route"`, and `"code_patch"`. However, [`src/shared/infra/proposals/admit.ts`](../src/shared/infra/proposals/admit.ts) registers only `ruleApplier`. **There is currently no implementation for `normalizerApplier`.** `AUTO_APPLY_TIERS` is frozen as an empty array (`[]`).
+   - _Symbols:_ `PROPOSAL_KINDS`, `AUTO_APPLY_TIERS`, `ruleApplier`, `admitProposal()`.
+   - _Observed Behaviour:_ `PROPOSAL_KINDS` reserves `"normalizer"` alongside `"rule"`, `"prompt"`, `"schema"`, `"model_route"`, and `"code_patch"`. However, [`src/shared/infra/proposals/admit.ts`](../src/shared/infra/proposals/admit.ts) registers only `ruleApplier`. **There is currently no implementation for `normalizerApplier`.** `AUTO_APPLY_TIERS` is frozen as an empty array (`[]`).
 
 8. **`src/entities/drone/claim-lineage.ts` & `src/entities/drone/types.ts`**
-   * *Symbols:* `ClaimLineage`, `SpecClaim.lineage`.
-   * *Observed Behaviour:* Tracks `promptVersion`, `promptHash`, `pipelineVersion`, `rulesVersion`, `ruleIds`, `matchedName`, `matchedVia`, and `contentHash`.
-   * *Architectural Impact:* Merely adding optional properties to TypeScript interfaces does not ensure reproducibility if the referenced version cannot be resolved to an immutable snapshot.
+   - _Symbols:_ `ClaimLineage`, `SpecClaim.lineage`.
+   - _Observed Behaviour:_ Tracks `promptVersion`, `promptHash`, `pipelineVersion`, `rulesVersion`, `ruleIds`, `matchedName`, `matchedVia`, and `contentHash`.
+   - _Architectural Impact:_ Merely adding optional properties to TypeScript interfaces does not ensure reproducibility if the referenced version cannot be resolved to an immutable snapshot.
 
 9. **`src/shared/infra/autonomy/ledger.server.ts`**
-   * *Symbols:* `recordAutonomyEvent()`, `autonomy_events` table (migration `018_autonomy_events.sql`).
-   * *Observed Behaviour:* Records governance decisions and operational milestones (actor, action, before/after, `reversed_by`). Retains non-heartbeat rows permanently.
-   * *Architectural Impact:* Writing high-volume, per-extraction shadow resolution telemetry into `autonomy_events` would pollute the audit ledger and degrade query performance.
+   - _Symbols:_ `recordAutonomyEvent()`, `autonomy_events` table (migration `018_autonomy_events.sql`).
+   - _Observed Behaviour:_ Records governance decisions and operational milestones (actor, action, before/after, `reversed_by`). Retains non-heartbeat rows permanently.
+   - _Architectural Impact:_ Writing high-volume, per-extraction shadow resolution telemetry into `autonomy_events` would pollute the audit ledger and degrade query performance.
 
 ---
 
 ## 4. Existing Functionality vs Architectural Gaps
 
-| Architectural Dimension | Existing Implementation | Identified Deficiency | Phase 3 Hybrid Specification |
-| :--- | :--- | :--- | :--- |
-| **Canonical Concept Registry** | Hardcoded inside `semantic.ts` procedural code. | No discrete manifest. Concepts are conflated with parsing regexes. | Closed, code-owned `CanonicalManifest` defining exact valid concepts. |
-| **Concept Validation** | `registryEntryFor(id)` prefix match. | Accepts non-existent concepts if they match family prefixes (e.g. `speed.arbitrary`). | Exact allowlist validation. Prefix matching used only for metadata inheritance on valid concepts. |
-| **Unresolved Terms** | Identity fallback: returns raw key. | Unmapped keys appear as resolved semantics to downstream code. | Explicit `SemanticResolutionResult` with `resolved: false` and typed failure reason. |
-| **Context Awareness** | None. `semanticKeyFor(key, label)` inspects only string names. | Cannot distinguish C-UAS envelope from drone reach, or USV beam from radar beam. | Bounded `ContextGuards` evaluating system class, domain, subsystem, and unit dimension. |
-| **Alias Inventory** | Hardcoded regexes in TypeScript source. | Adding an alias requires code commit, PR, and redeployment. | Database-backed `semantic_aliases` table compiled into memory. |
-| **Alias Classification** | Implicit. All rules treated as procedural if-statements. | No distinction between exact synonyms, context rules, and ambiguous terms. | Four-Class Model: Synonym (1), Context (2), Qualified Concept (3), Ambiguous (4). |
-| **Confidence Scoring** | None (or arbitrary uncalibrated floats). | Misleading representation of rule certainty. | Structured audit metadata: status, match type, rule ID, guard match list. |
-| **Snapshot Versioning** | None for semantics. | Claim lineage cannot identify which semantic rules mapped an extraction. | Content-hashed, immutable in-memory snapshot with monotonic version counter. |
-| **Shadow Evaluation** | Not implemented. | Testing new vocabulary risks breaking production ingest. | Isolated offline replay comparing legacy vs hybrid resolver on frozen reference corpora. |
-| **Telemetry Persistence** | Proposal to log all evaluations to `autonomy_events`. | Table bloat in core audit ledger. | Dedicated diagnostic run summary and bounded discrepancy records. |
+| Architectural Dimension        | Existing Implementation                                        | Identified Deficiency                                                                 | Phase 3 Hybrid Specification                                                                      |
+| :----------------------------- | :------------------------------------------------------------- | :------------------------------------------------------------------------------------ | :------------------------------------------------------------------------------------------------ |
+| **Canonical Concept Registry** | Hardcoded inside `semantic.ts` procedural code.                | No discrete manifest. Concepts are conflated with parsing regexes.                    | Closed, code-owned `CanonicalManifest` defining exact valid concepts.                             |
+| **Concept Validation**         | `registryEntryFor(id)` prefix match.                           | Accepts non-existent concepts if they match family prefixes (e.g. `speed.arbitrary`). | Exact allowlist validation. Prefix matching used only for metadata inheritance on valid concepts. |
+| **Unresolved Terms**           | Identity fallback: returns raw key.                            | Unmapped keys appear as resolved semantics to downstream code.                        | Explicit `SemanticResolutionResult` with `resolved: false` and typed failure reason.              |
+| **Context Awareness**          | None. `semanticKeyFor(key, label)` inspects only string names. | Cannot distinguish C-UAS envelope from drone reach, or USV beam from radar beam.      | Bounded `ContextGuards` evaluating system class, domain, subsystem, and unit dimension.           |
+| **Alias Inventory**            | Hardcoded regexes in TypeScript source.                        | Adding an alias requires code commit, PR, and redeployment.                           | Database-backed `semantic_aliases` table compiled into memory.                                    |
+| **Alias Classification**       | Implicit. All rules treated as procedural if-statements.       | No distinction between exact synonyms, context rules, and ambiguous terms.            | Four-Class Model: Synonym (1), Context (2), Qualified Concept (3), Ambiguous (4).                 |
+| **Confidence Scoring**         | None (or arbitrary uncalibrated floats).                       | Misleading representation of rule certainty.                                          | Structured audit metadata: status, match type, rule ID, guard match list.                         |
+| **Snapshot Versioning**        | None for semantics.                                            | Claim lineage cannot identify which semantic rules mapped an extraction.              | Content-hashed, immutable in-memory snapshot with monotonic version counter.                      |
+| **Shadow Evaluation**          | Not implemented.                                               | Testing new vocabulary risks breaking production ingest.                              | Isolated offline replay comparing legacy vs hybrid resolver on frozen reference corpora.          |
+| **Telemetry Persistence**      | Proposal to log all evaluations to `autonomy_events`.          | Table bloat in core audit ledger.                                                     | Dedicated diagnostic run summary and bounded discrepancy records.                                 |
 
 ---
 
@@ -147,8 +152,9 @@ The following findings were verified against repository `121nilsson/drone-intel-
 ### The Distinction Between Identity and Metadata
 
 A foundational design requirement is the separation of **Canonical Identity** from **Semantic Metadata**:
-* **Canonical Semantic Identity:** An exact, immutable identifier representing an agreed technical or operational property (e.g., `speed.max`, `speed.cruise`, `payload.warhead`, `altitude.service_ceiling`).
-* **Semantic Metadata:** The physical and operational properties associated with that concept (physical class, canonical unit, display unit, domain, and consensus tolerance).
+
+- **Canonical Semantic Identity:** An exact, immutable identifier representing an agreed technical or operational property (e.g., `speed.max`, `speed.cruise`, `payload.warhead`, `altitude.service_ceiling`).
+- **Semantic Metadata:** The physical and operational properties associated with that concept (physical class, canonical unit, display unit, domain, and consensus tolerance).
 
 ```
 [Candidate Semantic ID: "range.hypothetical_glide"]
@@ -187,59 +193,317 @@ export interface CanonicalConceptDefinition {
  */
 export const CANONICAL_CONCEPTS: readonly CanonicalConceptDefinition[] = Object.freeze([
   // Speed
-  { id: "speed.max", family: "speed.", label: "Maximum Speed", description: "Maximum dash or level speed", introducedInVersion: "1.0.0" },
-  { id: "speed.cruise", family: "speed.", label: "Cruise Speed", description: "Nominal cruising flight speed", introducedInVersion: "1.0.0" },
-  { id: "speed.dive", family: "speed.", label: "Dive Speed", description: "Terminal dive or intercept speed", introducedInVersion: "1.0.0" },
-  { id: "speed.stated", family: "speed.", label: "Stated Speed", description: "Reported speed without cruise/max qualification", introducedInVersion: "1.0.0" },
-  { id: "speed.target_max", family: "speed.", label: "Max Target Speed", description: "Maximum speed of engageable target (C-UAS)", introducedInVersion: "1.0.0" },
+  {
+    id: "speed.max",
+    family: "speed.",
+    label: "Maximum Speed",
+    description: "Maximum dash or level speed",
+    introducedInVersion: "1.0.0",
+  },
+  {
+    id: "speed.cruise",
+    family: "speed.",
+    label: "Cruise Speed",
+    description: "Nominal cruising flight speed",
+    introducedInVersion: "1.0.0",
+  },
+  {
+    id: "speed.dive",
+    family: "speed.",
+    label: "Dive Speed",
+    description: "Terminal dive or intercept speed",
+    introducedInVersion: "1.0.0",
+  },
+  {
+    id: "speed.stated",
+    family: "speed.",
+    label: "Stated Speed",
+    description: "Reported speed without cruise/max qualification",
+    introducedInVersion: "1.0.0",
+  },
+  {
+    id: "speed.target_max",
+    family: "speed.",
+    label: "Max Target Speed",
+    description: "Maximum speed of engageable target (C-UAS)",
+    introducedInVersion: "1.0.0",
+  },
 
   // Range
-  { id: "range.max", family: "range.", label: "Maximum Range", description: "Maximum one-way physical reach", introducedInVersion: "1.0.0" },
-  { id: "range.operational", family: "range.", label: "Operational Range", description: "Standard operating radius or mission reach", introducedInVersion: "1.0.0" },
-  { id: "range.combat_radius", family: "range.", label: "Combat Radius", description: "Radius of action allowing return to base", introducedInVersion: "1.0.0" },
-  { id: "range.combat", family: "range.", label: "Combat Range", description: "Mission range under combat load", introducedInVersion: "1.0.0" },
-  { id: "range.ferry", family: "range.", label: "Ferry Range", description: "Maximum range without payload/stores", introducedInVersion: "1.0.0" },
-  { id: "range.link", family: "range.", label: "Link/Control Range", description: "Line-of-sight communication or data link limit", introducedInVersion: "1.0.0" },
-  { id: "range.engagement", family: "range.", label: "Engagement Range", description: "Effective engagement or suppression envelope (C-UAS)", introducedInVersion: "1.0.0" },
-  { id: "range.detection", family: "range.", label: "Detection Range", description: "Sensor detection distance", introducedInVersion: "1.0.0" },
-  { id: "range.fiber_spool", family: "range.", label: "Fiber Spool Length", description: "Physical tether or optical fiber payout length", introducedInVersion: "1.0.0" },
-  { id: "range.min", family: "range.", label: "Minimum Range", description: "Minimum arming, engagement or operating distance", introducedInVersion: "1.0.0" },
+  {
+    id: "range.max",
+    family: "range.",
+    label: "Maximum Range",
+    description: "Maximum one-way physical reach",
+    introducedInVersion: "1.0.0",
+  },
+  {
+    id: "range.operational",
+    family: "range.",
+    label: "Operational Range",
+    description: "Standard operating radius or mission reach",
+    introducedInVersion: "1.0.0",
+  },
+  {
+    id: "range.combat_radius",
+    family: "range.",
+    label: "Combat Radius",
+    description: "Radius of action allowing return to base",
+    introducedInVersion: "1.0.0",
+  },
+  {
+    id: "range.combat",
+    family: "range.",
+    label: "Combat Range",
+    description: "Mission range under combat load",
+    introducedInVersion: "1.0.0",
+  },
+  {
+    id: "range.ferry",
+    family: "range.",
+    label: "Ferry Range",
+    description: "Maximum range without payload/stores",
+    introducedInVersion: "1.0.0",
+  },
+  {
+    id: "range.link",
+    family: "range.",
+    label: "Link/Control Range",
+    description: "Line-of-sight communication or data link limit",
+    introducedInVersion: "1.0.0",
+  },
+  {
+    id: "range.engagement",
+    family: "range.",
+    label: "Engagement Range",
+    description: "Effective engagement or suppression envelope (C-UAS)",
+    introducedInVersion: "1.0.0",
+  },
+  {
+    id: "range.detection",
+    family: "range.",
+    label: "Detection Range",
+    description: "Sensor detection distance",
+    introducedInVersion: "1.0.0",
+  },
+  {
+    id: "range.fiber_spool",
+    family: "range.",
+    label: "Fiber Spool Length",
+    description: "Physical tether or optical fiber payout length",
+    introducedInVersion: "1.0.0",
+  },
+  {
+    id: "range.min",
+    family: "range.",
+    label: "Minimum Range",
+    description: "Minimum arming, engagement or operating distance",
+    introducedInVersion: "1.0.0",
+  },
 
   // Altitude
-  { id: "altitude.max", family: "altitude.", label: "Maximum Altitude", description: "Absolute operational ceiling", introducedInVersion: "1.0.0" },
-  { id: "altitude.service_ceiling", family: "altitude.", label: "Service Ceiling", description: "Aeronautical ceiling (climb rate decay bound)", introducedInVersion: "1.0.0" },
-  { id: "altitude.target_max", family: "altitude.", label: "Max Target Altitude", description: "Ceiling of engageable target (C-UAS)", introducedInVersion: "1.0.0" },
-  { id: "altitude.target_min", family: "altitude.", label: "Min Target Altitude", description: "Floor of engageable target (C-UAS)", introducedInVersion: "1.0.0" },
+  {
+    id: "altitude.max",
+    family: "altitude.",
+    label: "Maximum Altitude",
+    description: "Absolute operational ceiling",
+    introducedInVersion: "1.0.0",
+  },
+  {
+    id: "altitude.service_ceiling",
+    family: "altitude.",
+    label: "Service Ceiling",
+    description: "Aeronautical ceiling (climb rate decay bound)",
+    introducedInVersion: "1.0.0",
+  },
+  {
+    id: "altitude.target_max",
+    family: "altitude.",
+    label: "Max Target Altitude",
+    description: "Ceiling of engageable target (C-UAS)",
+    introducedInVersion: "1.0.0",
+  },
+  {
+    id: "altitude.target_min",
+    family: "altitude.",
+    label: "Min Target Altitude",
+    description: "Floor of engageable target (C-UAS)",
+    introducedInVersion: "1.0.0",
+  },
 
   // Payload & Weight
-  { id: "payload.capacity", family: "payload.", label: "Payload Capacity", description: "Maximum carrying capacity for equipment/stores", introducedInVersion: "1.0.0" },
-  { id: "payload.mass", family: "payload.", label: "Payload Mass", description: "Nominal carried payload weight", introducedInVersion: "1.0.0" },
-  { id: "payload.warhead", family: "payload.", label: "Warhead Mass", description: "Net explosive charge weight", introducedInVersion: "1.0.0" },
-  { id: "weight.mtow", family: "weight.", label: "MTOW", description: "Maximum takeoff weight", introducedInVersion: "1.0.0" },
-  { id: "weight.empty", family: "weight.", label: "Empty Weight", description: "Airframe weight without fuel or payload", introducedInVersion: "1.0.0" },
-  { id: "weight.launch", family: "weight.", label: "Launch Weight", description: "Total weight at moment of launch", introducedInVersion: "1.0.0" },
-  { id: "weight.total", family: "weight.", label: "Total Weight", description: "Stated gross system weight", introducedInVersion: "1.0.0" },
+  {
+    id: "payload.capacity",
+    family: "payload.",
+    label: "Payload Capacity",
+    description: "Maximum carrying capacity for equipment/stores",
+    introducedInVersion: "1.0.0",
+  },
+  {
+    id: "payload.mass",
+    family: "payload.",
+    label: "Payload Mass",
+    description: "Nominal carried payload weight",
+    introducedInVersion: "1.0.0",
+  },
+  {
+    id: "payload.warhead",
+    family: "payload.",
+    label: "Warhead Mass",
+    description: "Net explosive charge weight",
+    introducedInVersion: "1.0.0",
+  },
+  {
+    id: "weight.mtow",
+    family: "weight.",
+    label: "MTOW",
+    description: "Maximum takeoff weight",
+    introducedInVersion: "1.0.0",
+  },
+  {
+    id: "weight.empty",
+    family: "weight.",
+    label: "Empty Weight",
+    description: "Airframe weight without fuel or payload",
+    introducedInVersion: "1.0.0",
+  },
+  {
+    id: "weight.launch",
+    family: "weight.",
+    label: "Launch Weight",
+    description: "Total weight at moment of launch",
+    introducedInVersion: "1.0.0",
+  },
+  {
+    id: "weight.total",
+    family: "weight.",
+    label: "Total Weight",
+    description: "Stated gross system weight",
+    introducedInVersion: "1.0.0",
+  },
 
   // Dimensions
-  { id: "dimension.length", family: "dimension.", label: "Length", description: "Overall airframe/hull length", introducedInVersion: "1.0.0" },
-  { id: "dimension.wingspan", family: "dimension.", label: "Wingspan", description: "Total wing span", introducedInVersion: "1.0.0" },
-  { id: "dimension.height", family: "dimension.", label: "Height", description: "Overall height", introducedInVersion: "1.0.0" },
-  { id: "dimension.width", family: "dimension.", label: "Width", description: "Beam or fuselage width", introducedInVersion: "1.0.0" },
-  { id: "dimension.diameter", family: "dimension.", label: "Diameter", description: "Fuselage or body diameter", introducedInVersion: "1.0.0" },
-  { id: "dimension.depth", family: "dimension.", label: "Draft/Depth", description: "Subsurface draft or depth", introducedInVersion: "1.0.0" },
-  { id: "dimension.caliber", family: "dimension.", label: "Caliber", description: "Bore or munition caliber", introducedInVersion: "1.0.0" },
+  {
+    id: "dimension.length",
+    family: "dimension.",
+    label: "Length",
+    description: "Overall airframe/hull length",
+    introducedInVersion: "1.0.0",
+  },
+  {
+    id: "dimension.wingspan",
+    family: "dimension.",
+    label: "Wingspan",
+    description: "Total wing span",
+    introducedInVersion: "1.0.0",
+  },
+  {
+    id: "dimension.height",
+    family: "dimension.",
+    label: "Height",
+    description: "Overall height",
+    introducedInVersion: "1.0.0",
+  },
+  {
+    id: "dimension.width",
+    family: "dimension.",
+    label: "Width",
+    description: "Beam or fuselage width",
+    introducedInVersion: "1.0.0",
+  },
+  {
+    id: "dimension.diameter",
+    family: "dimension.",
+    label: "Diameter",
+    description: "Fuselage or body diameter",
+    introducedInVersion: "1.0.0",
+  },
+  {
+    id: "dimension.depth",
+    family: "dimension.",
+    label: "Draft/Depth",
+    description: "Subsurface draft or depth",
+    introducedInVersion: "1.0.0",
+  },
+  {
+    id: "dimension.caliber",
+    family: "dimension.",
+    label: "Caliber",
+    description: "Bore or munition caliber",
+    introducedInVersion: "1.0.0",
+  },
 
   // Power, Endurance, Logistics
-  { id: "power.rf", family: "power.", label: "RF Jamming Power", description: "Transmitter/jammer output power", introducedInVersion: "1.0.0" },
-  { id: "power.engine", family: "power.", label: "Engine Power", description: "Propulsion motor or engine output", introducedInVersion: "1.0.0" },
-  { id: "endurance.flight", family: "endurance.", label: "Flight Endurance", description: "Total operating duration in flight", introducedInVersion: "1.0.0" },
-  { id: "maneuver.load_factor_max", family: "maneuver.", label: "Max Load Factor", description: "Normal structural acceleration limit (g)", introducedInVersion: "1.0.0" },
-  { id: "capacity.fuel", family: "capacity.", label: "Fuel Capacity", description: "Internal liquid fuel volume", introducedInVersion: "1.0.0" },
-  { id: "capacity.target_channels", family: "capacity.", label: "Target Channels", description: "Simultaneous target tracking/engagement channels", introducedInVersion: "1.0.0" },
-  { id: "cost.unit", family: "cost.", label: "Unit Cost", description: "Procurement price per unit", introducedInVersion: "1.0.0" },
-  { id: "production.rate_monthly", family: "production.", label: "Monthly Production", description: "Manufacturing output per month", introducedInVersion: "1.0.0" },
-  { id: "inventory.deployed_count", family: "inventory.", label: "Deployed Units", description: "Active operational inventory count", introducedInVersion: "1.0.0" },
-  { id: "guidance.system", family: "guidance.", label: "Guidance System", description: "Navigation and terminal homing technology", introducedInVersion: "1.0.0" },
+  {
+    id: "power.rf",
+    family: "power.",
+    label: "RF Jamming Power",
+    description: "Transmitter/jammer output power",
+    introducedInVersion: "1.0.0",
+  },
+  {
+    id: "power.engine",
+    family: "power.",
+    label: "Engine Power",
+    description: "Propulsion motor or engine output",
+    introducedInVersion: "1.0.0",
+  },
+  {
+    id: "endurance.flight",
+    family: "endurance.",
+    label: "Flight Endurance",
+    description: "Total operating duration in flight",
+    introducedInVersion: "1.0.0",
+  },
+  {
+    id: "maneuver.load_factor_max",
+    family: "maneuver.",
+    label: "Max Load Factor",
+    description: "Normal structural acceleration limit (g)",
+    introducedInVersion: "1.0.0",
+  },
+  {
+    id: "capacity.fuel",
+    family: "capacity.",
+    label: "Fuel Capacity",
+    description: "Internal liquid fuel volume",
+    introducedInVersion: "1.0.0",
+  },
+  {
+    id: "capacity.target_channels",
+    family: "capacity.",
+    label: "Target Channels",
+    description: "Simultaneous target tracking/engagement channels",
+    introducedInVersion: "1.0.0",
+  },
+  {
+    id: "cost.unit",
+    family: "cost.",
+    label: "Unit Cost",
+    description: "Procurement price per unit",
+    introducedInVersion: "1.0.0",
+  },
+  {
+    id: "production.rate_monthly",
+    family: "production.",
+    label: "Monthly Production",
+    description: "Manufacturing output per month",
+    introducedInVersion: "1.0.0",
+  },
+  {
+    id: "inventory.deployed_count",
+    family: "inventory.",
+    label: "Deployed Units",
+    description: "Active operational inventory count",
+    introducedInVersion: "1.0.0",
+  },
+  {
+    id: "guidance.system",
+    family: "guidance.",
+    label: "Guidance System",
+    description: "Navigation and terminal homing technology",
+    introducedInVersion: "1.0.0",
+  },
 ]);
 
 const VALID_CANONICAL_IDS: ReadonlySet<string> = new Set(CANONICAL_CONCEPTS.map((c) => c.id));
@@ -251,6 +515,7 @@ export function isValidCanonicalId(id: string): boolean {
 ```
 
 ### Invariants for Validation
+
 1. An approved database alias **must** reference an identifier where `isValidCanonicalId(target) === true`.
 2. Prefix matching via `core-registry.ts` is permissible **only** after an identifier has passed `isValidCanonicalId`.
 3. An unknown identifier that happens to start with `range.` (e.g. `range.hypothetical`) is rejected as an invalid concept and never inherits the physical unit `km` or consensus tolerance `0.6`.
@@ -300,51 +565,56 @@ In the revised model, `speed.cruise`, `speed.max`, `altitude.service_ceiling`, a
 ### Class Definitions
 
 #### Class 1: Canonical Synonym (Direct / Universal Equivalent)
-* **Definition:** A term that is universally and directly equivalent to exactly one canonical semantic concept across all domains without requiring context.
-* **Criteria:** Universal semantic equivalence. Bijective technical identity.
-* **Resolution Rule:** Auto-resolves unconditionally once the alias is approved.
-* **Representative Examples:**
-  * `top_speed`, `maximum_speed`, `vitesse_maximale`, `максимальная_скорость` $\rightarrow$ `speed.max`
-  * `wingspan`, `wing_span`, `рамах_крила` $\rightarrow$ `dimension.wingspan`
-  * `mtow`, `max_takeoff_weight`, `максимальный_взлетный_вес` $\rightarrow$ `weight.mtow`
+
+- **Definition:** A term that is universally and directly equivalent to exactly one canonical semantic concept across all domains without requiring context.
+- **Criteria:** Universal semantic equivalence. Bijective technical identity.
+- **Resolution Rule:** Auto-resolves unconditionally once the alias is approved.
+- **Representative Examples:**
+  - `top_speed`, `maximum_speed`, `vitesse_maximale`, `максимальная_скорость` $\rightarrow$ `speed.max`
+  - `wingspan`, `wing_span`, `рамах_крила` $\rightarrow$ `dimension.wingspan`
+  - `mtow`, `max_takeoff_weight`, `максимальный_взлетный_вес` $\rightarrow$ `weight.mtow`
 
 #### Class 2: Context-Conditioned Synonym (Scoped Equivalent)
-* **Definition:** A term that is equivalent to a canonical concept only when explicit contextual guards (system class, operating domain, component/subsystem, or unit dimension) are satisfied.
-* **Criteria:** The term is polysemic across different system categories, but monosemic within a verified context.
-* **Resolution Rule:** Auto-resolves **if and only if** all declared context guards are satisfied. If context is missing, incomplete, or contradictory, resolution fails safe.
-* **Representative Examples:**
-  * `effective_range`:
-    * *Guard:* `systemClass in ['c-uas', 'jammer', 'ew']` $\rightarrow$ `range.engagement`
-    * *Guard:* `systemClass in ['strike_uav', 'loitering_munition']` $\rightarrow$ Fails safe to `unresolved_context` (could mean link range or flight radius).
-  * `beam`:
-    * *Guard:* `domain == 'Sea'` $\rightarrow$ `dimension.width`
-    * *Guard:* `unitDimension == 'angle'` or `subsystem == 'radar'` $\rightarrow$ Fails safe / rejected (not airframe width).
-  * `output_power`:
-    * *Guard:* `subsystem == 'jammer'` $\rightarrow$ `power.rf`
-    * *Guard:* `subsystem == 'engine'` $\rightarrow$ `power.engine`
+
+- **Definition:** A term that is equivalent to a canonical concept only when explicit contextual guards (system class, operating domain, component/subsystem, or unit dimension) are satisfied.
+- **Criteria:** The term is polysemic across different system categories, but monosemic within a verified context.
+- **Resolution Rule:** Auto-resolves **if and only if** all declared context guards are satisfied. If context is missing, incomplete, or contradictory, resolution fails safe.
+- **Representative Examples:**
+  - `effective_range`:
+    - _Guard:_ `systemClass in ['c-uas', 'jammer', 'ew']` $\rightarrow$ `range.engagement`
+    - _Guard:_ `systemClass in ['strike_uav', 'loitering_munition']` $\rightarrow$ Fails safe to `unresolved_context` (could mean link range or flight radius).
+  - `beam`:
+    - _Guard:_ `domain == 'Sea'` $\rightarrow$ `dimension.width`
+    - _Guard:_ `unitDimension == 'angle'` or `subsystem == 'radar'` $\rightarrow$ Fails safe / rejected (not airframe width).
+  - `output_power`:
+    - _Guard:_ `subsystem == 'jammer'` $\rightarrow$ `power.rf`
+    - _Guard:_ `subsystem == 'engine'` $\rightarrow$ `power.engine`
 
 #### Class 3: Qualified Distinct Concept (Narrowed / Specific Concept)
-* **Definition:** A term representing a specific operational variation or sub-concept that must retain its own distinct canonical identity rather than collapsing into a broader concept.
-* **Criteria:** Must not be merged with broader attributes in consensus calculations.
-* **Resolution Rule:** Resolves to its own explicit canonical identifier.
-* **Representative Examples:**
-  * `cruising_speed`, `speed_cruise`, `крейсерська швидкість` $\rightarrow$ `speed.cruise` (NOT `speed.max`).
-  * `service_ceiling`, `практический_потолок` $\rightarrow$ `altitude.service_ceiling` (NOT `altitude.max`).
-  * `warhead_weight`, `боевая_часть`, `вага_бойової_частини` $\rightarrow$ `payload.warhead` (NOT `payload.capacity`).
-  * `combat_radius`, `боевой_радиус` $\rightarrow$ `range.combat_radius` (NOT `range.max`).
+
+- **Definition:** A term representing a specific operational variation or sub-concept that must retain its own distinct canonical identity rather than collapsing into a broader concept.
+- **Criteria:** Must not be merged with broader attributes in consensus calculations.
+- **Resolution Rule:** Resolves to its own explicit canonical identifier.
+- **Representative Examples:**
+  - `cruising_speed`, `speed_cruise`, `крейсерська швидкість` $\rightarrow$ `speed.cruise` (NOT `speed.max`).
+  - `service_ceiling`, `практический_потолок` $\rightarrow$ `altitude.service_ceiling` (NOT `altitude.max`).
+  - `warhead_weight`, `боевая_часть`, `вага_бойової_частини` $\rightarrow$ `payload.warhead` (NOT `payload.capacity`).
+  - `combat_radius`, `боевой_радиус` $\rightarrow$ `range.combat_radius` (NOT `range.max`).
 
 #### Class 4: Known Ambiguous Candidate (Contested / Polysemous Term)
-* **Definition:** A term verified to possess multiple plausible technical interpretations that cannot be resolved safely with available text or metadata.
-* **Criteria:** Documented ambiguity in OSINT reporting.
-* **Resolution Rule:** **Never auto-resolves.** Emits diagnostic candidates and queues the instance for analyst review.
-* **Representative Examples:**
-  * `radius`: Ambiguous between `range.combat_radius`, `maneuver.turn_radius`, and EW suppression radius.
-  * `power`: Ambiguous between RF transmitter power (W), piston/turbine engine power (hp/kW), and battery storage (Wh).
-  * `capacity`: Ambiguous between payload mass (kg), fuel tank volume (l), battery capacity (mAh), and target channels.
+
+- **Definition:** A term verified to possess multiple plausible technical interpretations that cannot be resolved safely with available text or metadata.
+- **Criteria:** Documented ambiguity in OSINT reporting.
+- **Resolution Rule:** **Never auto-resolves.** Emits diagnostic candidates and queues the instance for analyst review.
+- **Representative Examples:**
+  - `radius`: Ambiguous between `range.combat_radius`, `maneuver.turn_radius`, and EW suppression radius.
+  - `power`: Ambiguous between RF transmitter power (W), piston/turbine engine power (hp/kW), and battery storage (Wh).
+  - `capacity`: Ambiguous between payload mass (kg), fuel tank volume (l), battery capacity (mAh), and target channels.
 
 #### Unknown Terminology (Unclassified)
-* **Definition:** A term not present in the active snapshot.
-* **Distinction:** An unknown term is not necessarily ambiguous; it is merely unindexed. It produces an `unresolved_unknown` state and records an observation candidate without guessing.
+
+- **Definition:** A term not present in the active snapshot.
+- **Distinction:** An unknown term is not necessarily ambiguous; it is merely unindexed. It produces an `unresolved_unknown` state and records an observation candidate without guessing.
 
 ---
 
@@ -356,18 +626,18 @@ To eliminate uncalibrated numeric confidence values, the resolver outputs struct
 // Proposed addition: src/entities/normalization/semantic-result.ts
 
 export type SemanticResolutionStatus =
-  | "resolved"               // Successfully matched an approved Class 1, 2, or 3 rule
-  | "unresolved_context"     // Class 2 rule matched name, but context guards failed or were missing
-  | "unresolved_conflict"    // Multiple mutually incompatible rules matched with equal precedence
-  | "unresolved_ambiguous"   // Matched an approved Class 4 ambiguous entry
-  | "unresolved_unknown"     // Term is completely unindexed in the active snapshot
+  | "resolved" // Successfully matched an approved Class 1, 2, or 3 rule
+  | "unresolved_context" // Class 2 rule matched name, but context guards failed or were missing
+  | "unresolved_conflict" // Multiple mutually incompatible rules matched with equal precedence
+  | "unresolved_ambiguous" // Matched an approved Class 4 ambiguous entry
+  | "unresolved_unknown" // Term is completely unindexed in the active snapshot
   | "unresolved_deprecated"; // Matched rule is marked deprecated without a valid superseding target
 
 export type SemanticMatchType =
-  | "canonical_identity"     // Exact match against CANONICAL_CONCEPTS manifest
-  | "literal_synonym"        // Exact case-insensitive literal string match
-  | "token_bounded"          // Normalized token-boundary match
-  | "context_guard";         // Class 2 context-conditioned match
+  | "canonical_identity" // Exact match against CANONICAL_CONCEPTS manifest
+  | "literal_synonym" // Exact case-insensitive literal string match
+  | "token_bounded" // Normalized token-boundary match
+  | "context_guard"; // Class 2 context-conditioned match
 
 export interface GuardEvaluationAudit {
   readonly guardName: string;
@@ -384,7 +654,8 @@ export interface SemanticResolutionResult {
   readonly status: SemanticResolutionStatus;
 
   /** Operational classification of the matched alias (if any). */
-  readonly aliasClass?: "class1_synonym" | "class2_context" | "class3_qualified" | "class4_ambiguous";
+  readonly aliasClass?:
+    "class1_synonym" | "class2_context" | "class3_qualified" | "class4_ambiguous";
 
   /** The specific rule mechanism that produced the resolution. */
   readonly matchType?: SemanticMatchType;
@@ -442,6 +713,7 @@ The hybrid architecture guarantees that safety-critical invariants remain immuta
 ```
 
 ### Layer Ownership Rules
+
 1. **Core Registry (Code Core):** Owns base dimensions, physical classes, presentation units, consensus tolerances, and the canonical manifest. The database can never add dimensions, redefine conversion factors, or alter consensus tolerances.
 2. **Database Layer (Persistence):** Owns terminology variants, multilingual aliases, context guard definitions, status transitions, and audit provenance.
 3. **Runtime In-Memory Snapshot (Execution):** Resolution runs strictly in memory against compiled plain lookup structures. No database I/O occurs on resolution paths.
@@ -464,17 +736,33 @@ export interface ContextGuards {
   readonly unitDimension?: Dimension;
 }
 
-export interface SemanticAliasDefinition {
+interface BaseAliasDefinition {
   readonly ruleId: string;
-  readonly canonicalId: string;
-  readonly aliasClass: "class1_synonym" | "class2_context" | "class3_qualified" | "class4_ambiguous";
   readonly language: AliasLanguage;
   readonly rawKey: string;
   readonly labelTokens?: readonly string[];
-  readonly contextGuards?: ContextGuards;
   readonly rationale: string;
   readonly author: string;
 }
+
+/** Class 1, 2, and 3: Must point to a valid canonicalId; cannot have candidate lists. */
+export interface Class1_3AliasDefinition extends BaseAliasDefinition {
+  readonly aliasClass: "class1_synonym" | "class2_context" | "class3_qualified";
+  readonly canonicalId: string;
+  readonly candidateCanonicalIds?: never;
+  readonly contextGuards?: ContextGuards;
+}
+
+/** Class 4: Known ambiguous term; must NOT have canonicalId; must provide candidate targets. */
+export interface Class4AliasDefinition extends BaseAliasDefinition {
+  readonly aliasClass: "class4_ambiguous";
+  readonly canonicalId?: never;
+  readonly candidateCanonicalIds: readonly string[];
+  readonly contextGuards?: never;
+}
+
+/** Discriminated union strictly mirroring database table CHECK constraints. */
+export type SemanticAliasDefinition = Class1_3AliasDefinition | Class4AliasDefinition;
 
 export interface ResolutionContextInput {
   readonly rawKey: string;
@@ -544,62 +832,68 @@ Resolution proceeds through strict precedence gates. The algorithm halts at the 
 ### Precedence Gate Specifications
 
 1. **Gate 0: Exact Manifest Identity**
-   If `isValidCanonicalId(normalizedKey(rawKey))` is true:
-   Return `status: "resolved"`, `canonicalId: normalizedKey(rawKey)`, `matchType: "canonical_identity"`.
+   Check if the raw key is directly an exact canonical ID in lowercase:
+   `const trimmedKey = rawKey.trim().toLowerCase();`
+   If `isValidCanonicalId(trimmedKey)` is true:
+   Return `status: "resolved"`, `canonicalId: trimmedKey`, `matchType: "canonical_identity"`.
+   _Separation Invariant:_ Gate 0 operates directly against canonical ID syntax and does not run alias normalization (which removes namespace dots).
 
 2. **Gate 1: Approved Class 1 Synonym Match**
-   Query the active snapshot for a Class 1 entry matching `normalizedKey(rawKey)`. If `labelTokens` are defined, verify that `rawLabel` contains the required literal tokens.
+   Query the active snapshot for a Class 1 entry matching `normalizeAliasKey(rawKey)`. If `labelTokens` are defined, verify that `rawLabel` contains the required literal tokens.
    If matched: Return `status: "resolved"`, `canonicalId: rule.canonicalId`, `aliasClass: "class1_synonym"`, `matchType: "literal_synonym"`.
 
 3. **Gate 2: Approved Class 2 Context Match**
-   Query the active snapshot for Class 2 entries matching `normalizedKey(rawKey)`.
+   Query the active snapshot for Class 2 entries matching `normalizeAliasKey(rawKey)`.
    For each candidate rule, evaluate its declared `contextGuards`:
-   * `systemClasses`: Checked against `context.systemClass`.
-   * `domains`: Checked against `context.domain`.
-   * `subsystems`: Checked against `context.subsystem`.
-   * `unitDimension`: Verified by checking `context.rawUnit` against [`units.ts: CANONICAL_UNIT`](../src/entities/normalization/units.ts#L3).
-   * **Collision Handling:**
-     * If exactly one candidate passes all guards: Return `status: "resolved"`, `canonicalId: rule.canonicalId`.
-     * If multiple candidates pass with conflicting `canonicalId`s: Fail safe to `status: "unresolved_conflict"`.
-     * If candidate matches term name but guards fail: Fail safe to `status: "unresolved_context"`.
+   - `systemClasses`: Checked against `context.systemClass`.
+   - `domains`: Checked against `context.domain`.
+   - `subsystems`: Checked against `context.subsystem`.
+   - `unitDimension`: Verified by checking `context.rawUnit` against [`units.ts: CANONICAL_UNIT`](../src/entities/normalization/units.ts#L3).
+   - **Collision Handling:**
+     - If exactly one candidate passes all guards: Return `status: "resolved"`, `canonicalId: rule.canonicalId`.
+     - If multiple candidates pass with conflicting `canonicalId`s: Fail safe to `status: "unresolved_conflict"`.
+     - If candidate matches term name but guards fail: Fail safe to `status: "unresolved_context"`.
 
 4. **Gate 3: Approved Class 3 Qualified Concept Match**
-   Query the active snapshot for Class 3 entries matching `normalizedKey(rawKey)`.
+   Query the active snapshot for Class 3 entries matching `normalizeAliasKey(rawKey)`.
    If matched: Return `status: "resolved"`, `canonicalId: rule.canonicalId`, `aliasClass: "class3_qualified"`.
-   *Crucial Invariant:* The resolved ID is its own distinct concept (e.g. `altitude.service_ceiling`).
+   _Crucial Invariant:_ The resolved ID is its own distinct concept (e.g. `altitude.service_ceiling`).
 
 5. **Gate 4: Class 4 Known Ambiguity Check**
-   Query the active snapshot for Class 4 ambiguous terms.
+   Query the active snapshot for Class 4 ambiguous terms matching `normalizeAliasKey(rawKey)`.
    If matched: Return `status: "unresolved_ambiguous"`, `aliasClass: "class4_ambiguous"`, `canonicalId: undefined`.
 
 6. **Gate 5: Unclassified Terminology Fallback (Hard Stop)**
    If no gate has matched: Return `status: "unresolved_unknown"`, `canonicalId: undefined`.
-   *Strict Invariant (No Backdoor Fallback):* The resolver does **not** invoke `semanticKeyFor()`, does **not** return the raw key as a canonical ID, and does **not** execute heuristic regex guessing. It halts and returns an unmapped result. This ensures that unknown inputs are cleanly exposed as gaps in the registry rather than silently masquerading as resolved semantics.
+   _Strict Invariant (No Backdoor Fallback):_ The resolver does **not** invoke `semanticKeyFor()`, does **not** return the raw key as a canonical ID, and does **not** execute heuristic regex guessing. It halts and returns an unmapped result. This ensures that unknown inputs are cleanly exposed as gaps in the registry rather than silently masquerading as resolved semantics.
 
 ---
 
 ## 11. Matching and Language Normalization Policy
 
-Arbitrary regular expressions in database rules are prohibited. Matching relies on strict, deterministic normalization:
+Arbitrary regular expressions in database rules are prohibited. Matching relies on strict, deterministic, Unicode-aware normalization:
 
 ```typescript
-/** Deterministic key normalizer. Pure and bounded. */
-export function normalizeAttributeKey(key: string): string {
+/** Deterministic alias key normalizer. Pure, bounded, and Unicode-aware. */
+export function normalizeAliasKey(key: string): string {
   return key
     .trim()
     .replace(/([a-z0-9])([A-Z])/g, "$1_$2") // camelCase to snake_case
     .toLowerCase()
-    .normalize("NFKC")                      // Unicode compatibility decomposition
-    .replace(/[\s-]+/g, "_")                // Hyphens and spaces to underscores
-    .replace(/[^a-z0-9_\u0400-\u04ff]/g, "") // Retain alphanumeric, underscore, Cyrillic
+    .normalize("NFKC") // Unicode compatibility decomposition
+    .replace(/[\s-]+/g, "_") // Hyphens and spaces to underscores
+    .replace(/[^\p{L}\p{N}_]/gu, "") // Retain Unicode letters, numbers, and underscores (supports Swedish, Ukrainian, Russian, Persian, Chinese, etc.)
     .replace(/_(km|m|kmh|kg|min|w|l)$/, ""); // Strip common trailing unit artifacts
 }
 ```
 
 ### Multilingual and Morphological Rules
-* **No Unconstrained Diacritic Stripping:** Diacritics are normalized via Unicode `NFKC` normalization, but semantic characters (e.g., Scandinavian `å`, `ä`, `ö` or Ukrainian `і`, `ї`, `є`) are never blindly converted to ASCII equivalents, as doing so alters vocabulary identity.
-* **Cyrillic Script Integrity:** Russian and Ukrainian terms are matched in their native Cyrillic script. Transliterations (e.g. `dalnost` for `дальность`) are stored as separate explicit alias entries, not created dynamically by phonetic heuristics.
-* **Token Boundaries:** Label matching tests for exact substring or whitespace-delimited word tokens. Arbitrary regex quantifiers (`.*`, `.+`) are rejected at snapshot compilation time.
+
+- **Full Multilingual Alphabet Support:** Using Unicode property escapes (`\p{L}`, `\p{N}`) ensures non-ASCII alphabets (Swedish `å`, `ä`, `ö`, Ukrainian `і`, `ї`, `є`, Russian Cyrillic, Persian/Arabic script, Chinese characters) are preserved and indexable rather than being stripped.
+- **No Unconstrained Diacritic Stripping:** Diacritics are normalized via Unicode `NFKC` normalization, but semantic characters are never blindly converted to ASCII equivalents, as doing so alters vocabulary identity.
+- **Cyrillic and Non-Latin Script Integrity:** Russian, Ukrainian, Persian, and Chinese terms are matched in their native scripts. Transliterations (e.g. `dalnost` for `дальность`) are stored as separate explicit alias entries, not created dynamically by phonetic heuristics.
+- **Separation from Canonical IDs:** Canonical concept IDs use standard dot-notation (`family.leaf`). Gate 0 matches exact canonical IDs directly without stripping dots; alias normalization is applied only to raw alias candidate keys.
+- **Token Boundaries:** Label matching tests for exact substring or whitespace-delimited word tokens. Arbitrary regex quantifiers (`.*`, `.+`) are rejected at snapshot compilation time.
 
 ---
 
@@ -608,8 +902,9 @@ export function normalizeAttributeKey(key: string): string {
 ### Evaluation of Versioning Architectures
 
 Two persistence models were evaluated:
-* **Option A: Append-Only Alias Revisions:** Every change creates a new row with a revision ID; active state is derived by grouping by rule ID.
-* **Option B: Immutable Complete Snapshots:** Every activation serializes the complete registry into an immutable snapshot row containing an in-memory compilation artifact and a SHA-256 content hash.
+
+- **Option A: Append-Only Alias Revisions:** Every change creates a new row with a revision ID; active state is derived by grouping by rule ID.
+- **Option B: Immutable Complete Snapshots:** Every activation serializes the complete registry into an immutable snapshot row containing an in-memory compilation artifact and a SHA-256 content hash.
 
 **Architectural Decision:** We adopt a **hybrid of Option A and Option B**. Individual alias edits are stored in an append-only revision ledger (`semantic_alias_revisions`), while each formal activation compiles a complete, immutable snapshot (`semantic_registry_snapshots`) referenced by a monotonic version number and SHA-256 hash.
 
@@ -631,8 +926,22 @@ CREATE TABLE IF NOT EXISTS semantic_alias_revisions (
   author                  TEXT NOT NULL,
   created_at              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   CONSTRAINT chk_canonical_target CHECK (
-    (alias_class = 'class4_ambiguous' AND canonical_id IS NULL AND candidate_canonical_ids IS NOT NULL) OR
-    (alias_class IN ('class1_synonym', 'class2_context', 'class3_qualified') AND canonical_id IS NOT NULL)
+    (
+      alias_class = 'class4_ambiguous'
+      AND canonical_id IS NULL
+      AND jsonb_typeof(candidate_canonical_ids) = 'array'
+      AND jsonb_array_length(candidate_canonical_ids) > 0
+    )
+    OR
+    (
+      alias_class IN (
+        'class1_synonym',
+        'class2_context',
+        'class3_qualified'
+      )
+      AND canonical_id IS NOT NULL
+      AND candidate_canonical_ids IS NULL
+    )
   )
 );
 
@@ -673,18 +982,26 @@ BEFORE UPDATE OR DELETE ON semantic_registry_snapshots
 FOR EACH ROW EXECUTE FUNCTION prevent_semantic_registry_mutation();
 ```
 
+### Invariants for Candidate Targets & Snapshot Compilation
+
+1. **Database-Level Protection:** The SQL `chk_canonical_target` constraint strictly enforces at the DB level that Class 4 rows have `canonical_id IS NULL` and non-empty `candidate_canonical_ids` JSON array, while Classes 1–3 have `canonical_id IS NOT NULL` and `candidate_canonical_ids IS NULL`.
+2. **Compiler-Level Validation of Candidate Targets:** Since PostgreSQL cannot inspect code-owned TypeScript sets, the **snapshot compiler** enforces an unconditional verification gate at compilation/activation time:
+   - For every Class 4 rule, **every identifier** in `candidateCanonicalIds` must satisfy `isValidCanonicalId(candidate) === true`.
+   - If any candidate references an unregistered or invalid concept, snapshot compilation immediately aborts with an error, preventing the snapshot from being saved or activated.
+
 ### Composite Snapshot Content Addressability
+
 A snapshot hash computed over database rules alone is insufficient, because changes to code-owned definitions (e.g. `CANONICAL_CONCEPTS`, physical dimensions, consensus tolerances, or normalizer compiler logic) could silently alter resolution behavior under an unchanged database state.
 
-The snapshot content hash is therefore computed over a **composite digest** that explicitly binds code invariants and active database rules:
+The snapshot content hash is therefore computed over a **composite digest** that explicitly binds all code invariants and active database rules:
 
 ```typescript
 export interface SnapshotCompositeDigest {
-  readonly resolverVersion: string;         // Compiler / resolver engine version (e.g. "1.0.0")
-  readonly manifestVersion: string;         // Version of CANONICAL_CONCEPTS (e.g. "1.0.0")
-  readonly manifestHash: string;            // SHA-256 over canonical JSON of CANONICAL_CONCEPTS
-  readonly coreRegistryVersion: string;     // Version of core-registry.ts
-  readonly coreDimensionsHash: string;      // SHA-256 over CORE_DIMENSIONS + tolerances
+  readonly resolverVersion: string; // Compiler / resolver engine version (e.g. "1.0.0")
+  readonly manifestVersion: string; // Version of CANONICAL_CONCEPTS (e.g. "1.0.0")
+  readonly manifestHash: string; // SHA-256 over canonical JSON of CANONICAL_CONCEPTS
+  readonly coreRegistryVersion: string; // Version identifier from core-registry.ts
+  readonly coreMetadataHash: string; // SHA-256 over full core-registry.ts metadata: CORE_DIMENSIONS + ENTRY_LIST (tolerances, domains, dimensions) + DEFAULT_TOLERANCE
   readonly activeRules: readonly SemanticAliasDefinition[]; // Canonical sorted active rules
 }
 ```
@@ -694,11 +1011,13 @@ $$\text{snapshot\_content\_hash} = \text{SHA256}\Big(\text{canonical\_json\_sort
 This cryptographic binding guarantees that if any code-level invariant or active rule changes, the snapshot content hash changes, completely preventing silent historical drift.
 
 ### Runtime Immutability Guarantee
+
 To ensure runtime immutability in JavaScript/TypeScript:
-* Snapshots are encapsulated inside an opaque interface.
-* Callers cannot access internal lookup maps directly.
-* Lookup functions expose only frozen value objects or defensive copies.
-* Resolver functions are pure: `resolveSemantic(input, snapshot)`.
+
+- Snapshots are encapsulated inside an opaque interface.
+- Callers cannot access internal lookup maps directly.
+- Lookup functions expose only frozen value objects or defensive copies.
+- Resolver functions are pure: `resolveSemantic(input, snapshot)`.
 
 ```typescript
 // Proposed: src/entities/normalization/semantic-snapshot.ts
@@ -709,13 +1028,14 @@ export interface ReadonlySemanticSnapshot {
   readonly contentHash: string;
   readonly manifestVersion: string;
   readonly activatedAt: string;
-  
+
   // Public resolution interface (safe, pure, read-only)
   resolve(input: ResolutionContextInput): SemanticResolutionResult;
 }
 ```
 
 ### Database Failure and Cold-Start Resilience
+
 1. **Cache TTL Refresh:** The server queries `select max(version) from semantic_registry_snapshots` every 30 seconds (matching [`src/shared/infra/heuristics/rule-registry.server.ts`](../src/shared/infra/heuristics/rule-registry.server.ts)).
 2. **Database Failure During Refresh:** If the query fails, the server logs a warning and **retains the current active in-memory snapshot**. Ingest and processing never halt.
 3. **Cold-Start Without Database:** If the service boots without database access or with `DATABASE_URL` unset, it automatically initializes a **Fallback Code Seed Snapshot** compiled from hardcoded initial seed rules. The snapshot flags its state as `isDegradedSeedOnly: true`.
@@ -809,6 +1129,7 @@ To maintain architectural decoupling, each pipeline stage enforces strict bounda
 ```
 
 ### Governance Invariants
+
 1. **No Autonomous Promotion:** `AUTO_APPLY_TIERS` remains empty (`[]`). All new semantic mappings require explicit analyst approval.
 2. **Audit Ledgering:** Snapshot activations and deprecations write an event to `autonomy_events` ([`src/shared/infra/autonomy/ledger.server.ts`](../src/shared/infra/autonomy/ledger.server.ts)) with action `semantic_snapshot_activated`.
 3. **Rollback:** An analyst can activate an older snapshot version at any time. The database merely updates the active snapshot pointer, immediately restoring prior resolution behavior.
@@ -820,9 +1141,10 @@ To maintain architectural decoupling, each pipeline stage enforces strict bounda
 To satisfy the non-destructive safety requirement, the new resolver will **not** be integrated into production ingest during initial implementation.
 
 ### Isolated Evaluation Harness
-* **Offline Execution:** An offline script (`scripts/evaluate-semantic-registry.ts`) reads stored dispatch extractions and frozen test fixtures.
-* **Comparative Execution:** Evaluates both legacy `semanticKeyFor()` and the new `resolveSemantic()` against each extraction.
-* **Dedicated Diagnostic Persistence:** Results are written to a dedicated, bounded diagnostic collection (`semantic_evaluation_runs`), **not** to the core `autonomy_events` ledger.
+
+- **Offline Execution:** An offline script (`scripts/evaluate-semantic-registry.ts`) reads stored dispatch extractions and frozen test fixtures.
+- **Comparative Execution:** Evaluates both legacy `semanticKeyFor()` and the new `resolveSemantic()` against each extraction.
+- **Dedicated Diagnostic Persistence:** Results are written to a dedicated, bounded diagnostic collection (`semantic_evaluation_runs`), **not** to the core `autonomy_events` ledger.
 
 ```typescript
 // Proposed diagnostic storage interface
@@ -854,19 +1176,22 @@ export interface SemanticEvaluationSummary {
 ```
 
 ### Three-Tier Evaluation Material
+
 Volume alone (e.g. 2,000 raw posts) is not a quality guarantee; a random historical sample tends to be dominated by common `speed` and `range` terms while underrepresenting difficult, rare, and high-risk technical attributes. Evaluation therefore combines three distinct test materials:
+
 1. **The Complete Existing Normalization Corpus:** Replays 100% of the existing fixture corpus (`src/test/fixtures/normalization-corpus.ts`).
 2. **Frozen Stratified Historical Sample:** A fixed sample stratified across both **language** and **semantic attribute family**, selected via a deterministic, reproducible sampling methodology.
 3. **Dedicated Adversarial & Boundary Set:** Specifically constructed test cases targeting known conflation traps, polysemous abbreviations, homonyms across system classes (e.g. USV width vs radar angle), and edge cases identified during repository analysis.
 
 ### Reproducible Sampling Methodology for Historical Material
+
 To guarantee that the historical evaluation sample can be reconstructed identically by any auditor or test run:
 
 1. **Population and Cutoff Window:** The sampling population comprises all dispatches and extracted specifications stored in PostgreSQL up to a frozen cutoff timestamp (`2026-11-01T00:00:00Z`). Later posts are excluded.
 2. **Post-Level Deduplication:** Ingestion feeds frequently syndicate identical dispatches across multiple outlets. Posts are deduplicated prior to stratification using the dispatch `contentHash` (SimHash) and text hash. A syndicated report contributes to the sampling pool only once.
 3. **Stratification Matrix (Language × Attribute Family):**
-   * *Languages (3):* English (`en`), Ukrainian (`uk`), Russian (`ru`).
-   * *Semantic Families & Programme Metadata (12):*
+   - _Languages (3):_ English (`en`), Ukrainian (`uk`), Russian (`ru`).
+   - _Semantic Families & Programme Metadata (12):_
      1. `speed.` (max, cruise, dive, stated, target)
      2. `range.` (max, operational, combat radius, link, engagement, detection)
      3. `altitude.` (max, service ceiling, target ceiling/floor)
@@ -879,21 +1204,22 @@ To guarantee that the historical evaluation sample can be reconstructed identica
      10. `capacity.` (fuel volume, target channels)
      11. `cost.` (unit procurement price)
      12. `other_programme_metadata` (explicit category capturing `production.rate_monthly`, `inventory.deployed_count`, `guidance.system`, and long-tail unclassified raw extraction keys, preventing them from falling outside the sampling plan).
-   * *Total Strata Cells:* $3 \times 12 = 36\text{ cells}$.
+   - _Total Strata Cells:_ $3 \times 12 = 36\text{ cells}$.
 4. **Sample Quota per Cell:**
-   * Target quota: 60 unique extraction instances per stratum cell (nominal target $\approx 2,160$ extraction contexts).
+   - Target quota: 60 unique extraction instances per stratum cell (nominal target $\approx 2,160$ extraction contexts).
 5. **Handling of Small or Empty Strata:**
-   * If a stratum contains fewer than 60 instances (e.g. Ukrainian load factor `maneuver.` or Russian fuel capacity `capacity.`), **100% of available unique instances** in that cell are sampled.
-   * Deficits are never backfilled with common attributes (`speed` or `range`), as doing so would distort family representation.
-   * Empty or undersaturated strata are explicitly recorded in the sampling manifest metadata.
+   - If a stratum contains fewer than 60 instances (e.g. Ukrainian load factor `maneuver.` or Russian fuel capacity `capacity.`), **100% of available unique instances** in that cell are sampled.
+   - Deficits are never backfilled with common attributes (`speed` or `range`), as doing so would distort family representation.
+   - Empty or undersaturated strata are explicitly recorded in the sampling manifest metadata.
 6. **Fixed Random Seed and Content Hash:**
-   * The sampling script (`scripts/sample-historical-evaluation-set.ts`) uses a deterministic PRNG initialized with a fixed constant seed string:
+   - The sampling script (`scripts/sample-historical-evaluation-set.ts`) uses a deterministic PRNG initialized with a fixed constant seed string:
      `SEED = "drone-intel-hub-phase3-eval-20261115"`.
-   * The sampled records are serialized to a versioned fixture file: `src/test/fixtures/historical-stratified-sample.json`.
-   * The fixture is stamped with a computed SHA-256 content hash in a companion manifest (`historical-stratified-sample.manifest.json`).
-   * Running the sampling script against the frozen database cutoff produces a bitwise identical dataset.
+   - The sampled records are serialized to a versioned fixture file: `src/test/fixtures/historical-stratified-sample.json`.
+   - The fixture is stamped with a computed SHA-256 content hash in a companion manifest (`historical-stratified-sample.manifest.json`).
+   - Running the sampling script against the frozen database cutoff produces a bitwise identical dataset.
 
 ### Reference Corpus Ground Truth and Review Model
+
 Measuring genuine semantic correctness requires comparison against human ground truth rather than automated consensus or model predictions. The reference corpus (`src/test/fixtures/semantic-reference-corpus.ts`) is governed by an explicit review model:
 
 ```typescript
@@ -929,86 +1255,105 @@ export interface SemanticReferenceCase {
 ```
 
 #### Mandatory Ambiguity, Negative Cases, and Statistical Metrics
-* The reference corpus must explicitly contain at least **30% negative or ambiguous test cases** (e.g., bare `radius` without context, `power` on an unknown system, `effective_range` on a UAV where engagement vs link range cannot be deduced).
-* **Statistical Metrics for Withholding and Resolution:**
+
+- The reference corpus must explicitly contain at least **30% negative or ambiguous test cases** (e.g., bare `radius` without context, `power` on an unknown system, `effective_range` on a UAV where engagement vs link range cannot be deduced).
+- **Statistical Metrics for Withholding and Resolution:**
   To evaluate the system's safety and precision without conflating true negative rates with positive predictive value, we specify distinct statistical formulations:
 
   $$\text{Withholding Recall (Specificity on Negative Cases)} = \frac{\text{Correctly Unresolved Negative Cases}}{\text{All Actual Negative / Ambiguous Cases in Reference Set}}$$
-  *Measures whether the system reliably detects and withholds on terms that should not be resolved.*
+  _Measures whether the system reliably detects and withholds on terms that should not be resolved._
 
   $$\text{Withholding Precision} = \frac{\text{Correctly Unresolved Negative Cases}}{\text{All Cases Where Resolver Withheld (Total Unresolved Outcomes)}}$$
-  *Measures whether the system's decision to withhold was justified, ensuring it does not excessively withhold on terms that possess sufficient context for safe resolution.*
+  _Measures whether the system's decision to withhold was justified, ensuring it does not excessively withhold on terms that possess sufficient context for safe resolution._
 
   $$\text{Resolution Precision (on positive mappings)} = \frac{\text{Correctly Resolved Valid Cases}}{\text{All Cases Where Resolver Mapped to a Canonical ID}}$$
-  *Measures the correctness of positive assignments, proving that mapped concepts match human truth.*
+  _Measures the correctness of positive assignments, proving that mapped concepts match human truth._
 
   $$\text{Withholding } F_1 = 2 \times \frac{\text{Withholding Precision} \times \text{Withholding Recall}}{\text{Withholding Precision} + \text{Withholding Recall}}$$
 
-* A resolver that achieves high resolution coverage by guessing on ambiguous terms will fail the Withholding Recall benchmark. Conversely, a resolver that refuses to resolve valid synonyms will fail the Withholding Precision benchmark.
+- A resolver that achieves high resolution coverage by guessing on ambiguous terms will fail the Withholding Recall benchmark. Conversely, a resolver that refuses to resolve valid synonyms will fail the Withholding Precision benchmark.
+
+#### Stratum-Level Reporting and Population-Weighted Error Estimation
+
+Because the historical evaluation set uses a balanced quota (target 60 items per stratum cell) rather than a proportional sample of the production database, raw aggregated metric averages would misrepresent operational performance: rare strata (e.g. load factor) would have equal weight with high-volume strata (e.g. speed).
+
+To avoid this distortion, evaluation telemetry enforces two reporting standards:
+
+1. **Stratum-Level Metric Breakdown:** All metrics (resolution coverage, withholding recall/precision, resolution precision) must be reported individually across each of the 36 strata ($3\text{ languages} \times 12\text{ attribute families}$).
+2. **Stratum-Weighted Population Error Estimation:** When computing overall estimated production error and coverage across the historical population, cell-level metrics must be weighted by actual stratum population counts ($N_h$):
+   $$\hat{P}_{\text{population}} = \sum_{h=1}^{36} W_h \hat{p}_h, \quad \text{where } W_h = \frac{N_h}{N}$$
+   This ensures that production estimates accurately reflect real-world data volume without compromising the depth of inspection on rare attributes.
 
 ### Measuring Actual Semantic Correctness
+
 Evaluation strictly separates:
-* **Resolution Coverage:** Percentage of extracted attributes assigned a canonical ID. High coverage is not proof of correctness.
-* **Legacy Parity:** Frequency of agreement with `semanticKeyFor()`. Legacy behavior contains known flaws; therefore, 100% parity is neither expected nor desired.
-* **Human-Reviewed Correctness:** Precision, recall, and withholding accuracy measured directly against `src/test/fixtures/semantic-reference-corpus.ts`. Correctness is measured against human ground truth, never by automated consensus.
+
+- **Resolution Coverage:** Percentage of extracted attributes assigned a canonical ID. High coverage is not proof of correctness.
+- **Legacy Parity:** Frequency of agreement with `semanticKeyFor()`. Legacy behavior contains known flaws; therefore, 100% parity is neither expected nor desired.
+- **Human-Reviewed Correctness:** Precision, recall, and withholding accuracy measured directly against `src/test/fixtures/semantic-reference-corpus.ts`. Correctness is measured against human ground truth, never by automated consensus.
 
 ---
 
 ## 16. End-to-End Resolution Scenarios
 
 ### Scenario 1: Direct Multilingual Alias (Class 1)
-* **Input:** `rawKey: "vitesse_maximale"`, `rawLabel: "Vitesse maximale"`, `context: { domain: "Air", rawUnit: "km/h" }`
-* **Algorithm Trace:** Gate 0 fails $\rightarrow$ Gate 1 matches Class 1 synonym rule `vitesse_maximale` $\rightarrow$ `speed.max`.
-* **Resolution Result:**
-  * `status`: `"resolved"`
-  * `canonicalId`: `"speed.max"`
-  * `aliasClass`: `"class1_synonym"`
-  * `matchType`: `"literal_synonym"`
-  * `matchedRuleId`: `"rule-speed-max-fr"`
-  * `diagnostics`: `[]`
-* **Explanation:** Direct French synonym for maximum speed. Unconditionally maps to `speed.max`.
+
+- **Input:** `rawKey: "vitesse_maximale"`, `rawLabel: "Vitesse maximale"`, `context: { domain: "Air", rawUnit: "km/h" }`
+- **Algorithm Trace:** Gate 0 fails $\rightarrow$ Gate 1 matches Class 1 synonym rule `vitesse_maximale` $\rightarrow$ `speed.max`.
+- **Resolution Result:**
+  - `status`: `"resolved"`
+  - `canonicalId`: `"speed.max"`
+  - `aliasClass`: `"class1_synonym"`
+  - `matchType`: `"literal_synonym"`
+  - `matchedRuleId`: `"rule-speed-max-fr"`
+  - `diagnostics`: `[]`
+- **Explanation:** Direct French synonym for maximum speed. Unconditionally maps to `speed.max`.
 
 ### Scenario 2: Counter-UAS Envelope (Class 2 - Guard Satisfied)
-* **Input:** `rawKey: "effective_range"`, `rawLabel: "Jamming Range"`, `context: { systemClass: "c-uas", subsystem: "jammer", domain: "Land", rawUnit: "km" }`
-* **Algorithm Trace:** Gate 0 & 1 fail $\rightarrow$ Gate 2 matches rule `rule-range-eff-cuas` (requires `systemClass == 'c-uas'`). Guard check passes.
-* **Resolution Result:**
-  * `status`: `"resolved"`
-  * `canonicalId`: `"range.engagement"`
-  * `aliasClass`: `"class2_context"`
-  * `matchType`: `"context_guard"`
-  * `guardAudit`: `[{ guardName: "systemClasses", expected: ["c-uas", "ew"], actual: "c-uas", satisfied: true }]`
-* **Explanation:** System is a C-UAS jammer. `effective_range` correctly represents engagement/jamming envelope.
+
+- **Input:** `rawKey: "effective_range"`, `rawLabel: "Jamming Range"`, `context: { systemClass: "c-uas", subsystem: "jammer", domain: "Land", rawUnit: "km" }`
+- **Algorithm Trace:** Gate 0 & 1 fail $\rightarrow$ Gate 2 matches rule `rule-range-eff-cuas` (requires `systemClass == 'c-uas'`). Guard check passes.
+- **Resolution Result:**
+  - `status`: `"resolved"`
+  - `canonicalId`: `"range.engagement"`
+  - `aliasClass`: `"class2_context"`
+  - `matchType`: `"context_guard"`
+  - `guardAudit`: `[{ guardName: "systemClasses", expected: ["c-uas", "ew"], actual: "c-uas", satisfied: true }]`
+- **Explanation:** System is a C-UAS jammer. `effective_range` correctly represents engagement/jamming envelope.
 
 ### Scenario 3: Missing Context on Polysemous Term (Class 2 - Guard Failure)
-* **Input:** `rawKey: "effective_range"`, `rawLabel: "Effective range"`, `context: { systemClass: undefined, domain: "Air", rawUnit: "km" }`
-* **Algorithm Trace:** Gate 0 & 1 fail $\rightarrow$ Gate 2 matches candidate rule `rule-range-eff-cuas`. System class guard fails.
-* **Resolution Result:**
-  * `status`: `"unresolved_context"`
-  * `canonicalId`: `undefined`
-  * `aliasClass`: `"class2_context"`
-  * `guardAudit`: `[{ guardName: "systemClasses", expected: ["c-uas", "ew"], actual: undefined, satisfied: false }]`
-  * `diagnostics`: `["Context guard 'systemClasses' failed: actual was undefined"]`
-* **Explanation:** Without knowing whether the system is an effector or a reconnaissance UAV, the system refuses to guess. Fails safe.
+
+- **Input:** `rawKey: "effective_range"`, `rawLabel: "Effective range"`, `context: { systemClass: undefined, domain: "Air", rawUnit: "km" }`
+- **Algorithm Trace:** Gate 0 & 1 fail $\rightarrow$ Gate 2 matches candidate rule `rule-range-eff-cuas`. System class guard fails.
+- **Resolution Result:**
+  - `status`: `"unresolved_context"`
+  - `canonicalId`: `undefined`
+  - `aliasClass`: `"class2_context"`
+  - `guardAudit`: `[{ guardName: "systemClasses", expected: ["c-uas", "ew"], actual: undefined, satisfied: false }]`
+  - `diagnostics`: `["Context guard 'systemClasses' failed: actual was undefined"]`
+- **Explanation:** Without knowing whether the system is an effector or a reconnaissance UAV, the system refuses to guess. Fails safe.
 
 ### Scenario 4: Qualified Concept (Class 3)
-* **Input:** `rawKey: "cruising_speed"`, `rawLabel: "Cruise Speed"`, `context: { domain: "Air", rawUnit: "km/h" }`
-* **Algorithm Trace:** Gate 0 & 1 fail $\rightarrow$ Gate 2 fails $\rightarrow$ Gate 3 matches Class 3 concept rule `cruising_speed` $\rightarrow$ `speed.cruise`.
-* **Resolution Result:**
-  * `status`: `"resolved"`
-  * `canonicalId`: `"speed.cruise"`
-  * `aliasClass`: `"class3_qualified"`
-  * `matchType`: `"literal_synonym"`
-* **Explanation:** Successfully resolves to `speed.cruise`. Preserves distinct identity from `speed.max`, preventing grouping collisions.
+
+- **Input:** `rawKey: "cruising_speed"`, `rawLabel: "Cruise Speed"`, `context: { domain: "Air", rawUnit: "km/h" }`
+- **Algorithm Trace:** Gate 0 & 1 fail $\rightarrow$ Gate 2 fails $\rightarrow$ Gate 3 matches Class 3 concept rule `cruising_speed` $\rightarrow$ `speed.cruise`.
+- **Resolution Result:**
+  - `status`: `"resolved"`
+  - `canonicalId`: `"speed.cruise"`
+  - `aliasClass`: `"class3_qualified"`
+  - `matchType`: `"literal_synonym"`
+- **Explanation:** Successfully resolves to `speed.cruise`. Preserves distinct identity from `speed.max`, preventing grouping collisions.
 
 ### Scenario 5: Known Ambiguous Term (Class 4)
-* **Input:** `rawKey: "radius"`, `rawLabel: "Radius"`, `context: { domain: "Air", rawUnit: "km" }`
-* **Algorithm Trace:** Gates 0–3 fail $\rightarrow$ Gate 4 matches Class 4 ambiguous entry `rule-radius-ambig`.
-* **Resolution Result:**
-  * `status`: `"unresolved_ambiguous"`
-  * `canonicalId`: `undefined`
-  * `aliasClass`: `"class4_ambiguous"`
-  * `diagnostics`: `["Term 'radius' is known ambiguous: candidate interpretations: range.combat_radius, maneuver.turn_radius, range.engagement"]`
-* **Explanation:** The bare noun "radius" is polysemous. Automatically resolves to undefined; flags candidates for review.
+
+- **Input:** `rawKey: "radius"`, `rawLabel: "Radius"`, `context: { domain: "Air", rawUnit: "km" }`
+- **Algorithm Trace:** Gates 0–3 fail $\rightarrow$ Gate 4 matches Class 4 ambiguous entry `rule-radius-ambig`.
+- **Resolution Result:**
+  - `status`: `"unresolved_ambiguous"`
+  - `canonicalId`: `undefined`
+  - `aliasClass`: `"class4_ambiguous"`
+  - `diagnostics`: `["Term 'radius' is known ambiguous: candidate interpretations: range.combat_radius, maneuver.turn_radius, range.engagement"]`
+- **Explanation:** The bare noun "radius" is polysemous. Automatically resolves to undefined; flags candidates for review.
 
 ---
 
@@ -1016,41 +1361,46 @@ Evaluation strictly separates:
 
 ### Unit and Adversarial Test Requirements
 
+Testing is structured into two clearly separated verification tiers to eliminate any ambiguity between unit-level invariants and corpus-level benchmarks:
+
+- **Tier 1 (Deterministic & Adversarial Safety Fixtures):** Requires a **100% pass rate** on all explicit unit tests in `src/test/semantic-registry-isolated.test.ts`. Any failure in Gate 0–5 precedence, manifest validation, immutability, or adversarial pair non-conflation is a hard blocker.
+- **Tier 2 (Corpus-Level Benchmark on Human Ground Truth):** Evaluated against the larger human-reviewed reference corpus (`src/test/fixtures/semantic-reference-corpus.ts`), satisfying the statistical quality thresholds specified below.
+
 A dedicated test suite (`src/test/semantic-registry-isolated.test.ts`) must prove the following invariants:
 
 1. **Manifest Integrity:**
-   * `isValidCanonicalId("speed.max") === true`
-   * `isValidCanonicalId("range.fake_entry") === false`
-   * `isValidCanonicalId("speed.") === false` (Prefixes are not concepts)
+   - `isValidCanonicalId("speed.max") === true`
+   - `isValidCanonicalId("range.fake_entry") === false`
+   - `isValidCanonicalId("speed.") === false` (Prefixes are not concepts)
 
 2. **Adversarial Non-Conflation Tests:**
-   * `resolve("top_speed")` $\neq$ `resolve("cruising_speed")` (`speed.max` vs `speed.cruise`)
-   * `resolve("warhead_weight")` $\neq$ `resolve("payload_capacity")` (`payload.warhead` vs `payload.capacity`)
-   * `resolve("service_ceiling")` $\neq$ `resolve("max_altitude")` (`altitude.service_ceiling` vs `altitude.max`)
-   * `resolve("combat_radius")` $\neq$ `resolve("max_range")` (`range.combat_radius` vs `range.max`)
-   * `resolve("beam", { domain: "Sea" })` resolves to `dimension.width`; `resolve("beam", { domain: "Air", rawUnit: "deg" })` fails safe to unresolved.
-   * `resolve("max_g", { rawUnit: "g" })` resolves to `maneuver.load_factor_max` (`g_load`); `resolve("weight", { rawUnit: "g" })` resolves to `weight.total` (`kg`).
-   * `resolve("jamming_power")` resolves to `power.rf`; `resolve("engine_power")` resolves to `power.engine`.
+   - `resolve("top_speed")` $\neq$ `resolve("cruising_speed")` (`speed.max` vs `speed.cruise`)
+   - `resolve("warhead_weight")` $\neq$ `resolve("payload_capacity")` (`payload.warhead` vs `payload.capacity`)
+   - `resolve("service_ceiling")` $\neq$ `resolve("max_altitude")` (`altitude.service_ceiling` vs `altitude.max`)
+   - `resolve("combat_radius")` $\neq$ `resolve("max_range")` (`range.combat_radius` vs `range.max`)
+   - `resolve("beam", { domain: "Sea" })` resolves to `dimension.width`; `resolve("beam", { domain: "Air", rawUnit: "deg" })` fails safe to unresolved.
+   - `resolve("max_g", { rawUnit: "g" })` resolves to `maneuver.load_factor_max` (`g_load`); `resolve("weight", { rawUnit: "g" })` resolves to `weight.total` (`kg`).
+   - `resolve("jamming_power")` resolves to `power.rf`; `resolve("engine_power")` resolves to `power.engine`.
 
 3. **Determinism and Offline Invariance:**
-   * Executing 10,000 resolutions of identical inputs produces bitwise identical results.
-   * Zero network calls and zero database queries are triggered during resolution.
-   * The resolver operates successfully with `DATABASE_URL` unset.
+   - Executing 10,000 resolutions of identical inputs produces bitwise identical results.
+   - Zero network calls and zero database queries are triggered during resolution.
+   - The resolver operates successfully with `DATABASE_URL` unset.
 
 4. **Snapshot Immutability Tests:**
-   * Mutating properties on a returned resolution result does not alter subsequent resolver calls.
-   * Internal snapshot state cannot be modified by external consumers.
+   - Mutating properties on a returned resolution result does not alter subsequent resolver calls.
+   - Internal snapshot state cannot be modified by external consumers.
 
 5. **No Legacy Backdoor Fallback:**
-   * Querying an unindexed term (e.g. `hypothetical_laser_emitter`) returns `status: "unresolved_unknown"` and `canonicalId: undefined`.
-   * Under no circumstances does the resolver fall back to `semanticKeyFor()` or return the raw input key as a canonical ID.
-   * Spy/mock assertions verify that `semanticKeyFor` execution count is zero during hybrid resolver runs.
+   - Querying an unindexed term (e.g. `hypothetical_laser_emitter`) returns `status: "unresolved_unknown"` and `canonicalId: undefined`.
+   - Under no circumstances does the resolver fall back to `semanticKeyFor()` or return the raw input key as a canonical ID.
+   - Spy/mock assertions verify that `semanticKeyFor` execution count is zero during hybrid resolver runs.
 
 6. **Withholding Precision and Recall on Ground Truth Reference Set:**
-   * Evaluated against `src/test/fixtures/semantic-reference-corpus.ts`:
-     * **Withholding Recall $\ge 98\%$** across all declared negative and ambiguous test cases (proves near-zero ungrounded guessing on under-specified inputs).
-     * **Withholding Precision $\ge 95\%$** across all instances where the resolver outputs an unresolved state (proves the resolver does not over-withhold on valid synonyms).
-     * **Resolution Precision $\ge 99\%$** on positive assignments to canonical concepts.
+   - Evaluated against `src/test/fixtures/semantic-reference-corpus.ts`:
+     - **Withholding Recall $\ge 98\%$** across all declared negative and ambiguous test cases (proves near-zero ungrounded guessing on under-specified inputs).
+     - **Withholding Precision $\ge 95\%$** across all instances where the resolver outputs an unresolved state (proves the resolver does not over-withhold on valid synonyms).
+     - **Resolution Precision $\ge 99\%$** on positive assignments to canonical concepts.
 
 ---
 
@@ -1081,7 +1431,8 @@ Implementation must proceed in decoupled, independently reviewable stages:
 | - Construct src/test/fixtures/semantic-reference-corpus.ts (human-reviewed ground truth)         |
 | - Replay 100% of normalization-corpus.ts fixtures against the isolated resolver                  |
 | - Execute three-tier evaluation: fixtures + stratified historical sample + adversarial set       |
-| - Verify 100% correctness on reference benchmark; document intentional legacy deviations         |
+| - 100% pass rate on safety fixtures; meet corpus thresholds (Recall >=98%, Precision >=95%/99%)  |
+| - Stratum-level breakdown & population-weighted error estimation; document legacy deviations     |
 | - Non-goals: Production claims unchanged.                                                        |
 +──────────────────────────────────────────────────────────────────────────────────────────────────+
                                                   │
@@ -1128,84 +1479,99 @@ Implementation must proceed in decoupled, independently reviewable stages:
 
 ### Identified Risks and Mitigations
 
-| Risk | Severity | Mitigation Strategy |
-| :--- | :--- | :--- |
-| **Silent Parity Breakage:** Divergence between legacy `semanticKeyFor` and hybrid resolver breaks existing assumptions. | High | Phase 3.2 explicit parity bench: all intentional divergences must be documented and tested against reference fixtures. |
-| **Over-reliance on Context:** Extraction pipeline fails to supply `systemClass` or `domain`. | Medium | Gate 2 fails safe to `unresolved_context`. Unresolved state preserves raw key and prevents erroneous grouping. |
-| **Database Connection Failure:** Server unable to refresh snapshot on boot. | Low | Resolver initializes seamlessly from static code seed. Cold-start never throws. |
-| **Audit Ledger Pollution:** Shadow evaluation records thousands of debug events. | Medium | Shadow evaluation telemetry is written to dedicated evaluation run tables, completely bypassing `autonomy_events`. |
+| Risk                                                                                                                    | Severity | Mitigation Strategy                                                                                                    |
+| :---------------------------------------------------------------------------------------------------------------------- | :------- | :--------------------------------------------------------------------------------------------------------------------- |
+| **Silent Parity Breakage:** Divergence between legacy `semanticKeyFor` and hybrid resolver breaks existing assumptions. | High     | Phase 3.2 explicit parity bench: all intentional divergences must be documented and tested against reference fixtures. |
+| **Over-reliance on Context:** Extraction pipeline fails to supply `systemClass` or `domain`.                            | Medium   | Gate 2 fails safe to `unresolved_context`. Unresolved state preserves raw key and prevents erroneous grouping.         |
+| **Database Connection Failure:** Server unable to refresh snapshot on boot.                                             | Low      | Resolver initializes seamlessly from static code seed. Cold-start never throws.                                        |
+| **Audit Ledger Pollution:** Shadow evaluation records thousands of debug events.                                        | Medium   | Shadow evaluation telemetry is written to dedicated evaluation run tables, completely bypassing `autonomy_events`.     |
 
 ### Approved Architectural Decisions for Phase 3 Implementation
 
 The following three architectural decisions have been explicitly reviewed and approved:
 
 1. **Initial Seed Rule Migration: Option B Approved (Incremental Curation)**
-   * **Decision:** We do **not** automatically batch-convert all 58 procedural rules from `semantic.ts` into database seed revisions in migration `029`.
-   * **Rationale:** `semantic.ts` contains complex procedural logic: sequential precedence rules, label-dependent matching, regex conditions, noun-counting (`countSemantic()`), and delicate domain heuristics (e.g. `effective_range`, bare `range`, `range_min`). A bulk conversion risks populating the database with rules that appear uniform but subtly deviate from existing behaviour.
-   * **Action Plan:**
-     * Retain current `semantic.ts` as a frozen baseline and legacy fallback.
-     * Build the new hybrid resolver with a clean, discrete, and curated seed set.
-     * Incrementally migrate existing rules individually once their semantics, precedence, and context guards have been explicitly documented.
-     * Require a dedicated regression test for each migrated rule prior to snapshot activation.
+   - **Decision:** We do **not** automatically batch-convert all 58 procedural rules from `semantic.ts` into database seed revisions in migration `029`.
+   - **Rationale:** `semantic.ts` contains complex procedural logic: sequential precedence rules, label-dependent matching, regex conditions, noun-counting (`countSemantic()`), and delicate domain heuristics (e.g. `effective_range`, bare `range`, `range_min`). A bulk conversion risks populating the database with rules that appear uniform but subtly deviate from existing behaviour.
+   - **Action Plan:**
+     - Retain current `semantic.ts` as a frozen baseline and legacy fallback.
+     - Build the new hybrid resolver with a clean, discrete, and curated seed set.
+     - Incrementally migrate existing rules individually once their semantics, precedence, and context guards have been explicitly documented.
+     - Require a dedicated regression test for each migrated rule prior to snapshot activation.
 
 2. **Shadow Replay Scope: Three-Tier Stratified Corpus Approved**
-   * **Decision:** Replay volume alone is not a quality guarantee; a random historical sample overrepresents common `speed` and `range` terms while omitting complex and long-tail attributes.
-   * **Action Plan:** The offline evaluation harness (`scripts/evaluate-semantic-registry.ts`) will evaluate against three combined test materials:
+   - **Decision:** Replay volume alone is not a quality guarantee; a random historical sample overrepresents common `speed` and `range` terms while omitting complex and long-tail attributes.
+   - **Action Plan:** The offline evaluation harness (`scripts/evaluate-semantic-registry.ts`) will evaluate against three combined test materials:
      1. **Complete Existing Normalization Corpus:** Replays 100% of `src/test/fixtures/normalization-corpus.ts`.
      2. **Frozen Stratified Historical Sample:** A fixed corpus stratified across both **language** (English, Ukrainian, Russian) and **semantic attribute family** (propulsion/engine power, RF/jamming, payload/warhead mass, airframe dimensions, operational limits).
      3. **Dedicated Adversarial & Boundary Set:** Specifically constructed cases targeting known conflation traps, homonyms across system classes, and ambiguous abbreviations.
      4. **Human-Reviewed Reference Ground Truth:** Actual semantic correctness is measured strictly against human-reviewed mappings, never against automated consensus.
 
 3. **Handling of Legacy Specs with Unmapped Semantics: Approved**
-   * **Decision:** Existing claims and stored specs in `drones.data` remain **completely untouched**.
-   * **Action Plan:** Unmapped raw keys in historical claims are preserved. Any future reinterpretation or normalization of historical claims will take place strictly via a separate, versioned backfill script (`scripts/renormalize-claims.ts`) featuring dry-run mode, impact reporting, and explicit human sign-off during a future production integration stage.
+   - **Decision:** Existing claims and stored specs in `drones.data` remain **completely untouched**.
+   - **Action Plan:** Unmapped raw keys in historical claims are preserved. Any future reinterpretation or normalization of historical claims will take place strictly via a separate, versioned backfill script (`scripts/renormalize-claims.ts`) featuring dry-run mode, impact reporting, and explicit human sign-off during a future production integration stage.
 
 ---
 
 ## 20. Summary of Changes from the Previous Specification
 
 1. **Fixed Canonical Concept Validation:**
-   * *Previous:* Used `registryEntryFor(canonicalId)` to validate concepts, which erroneously accepted any string matching a family prefix (e.g. `range.anything`).
-   * *Revised:* Introduced `CANONICAL_CONCEPTS` and `isValidCanonicalId()` as an exact code-owned allowlist. Prefix matching in `core-registry.ts` is restricted to metadata lookup on valid concepts.
+   - _Previous:_ Used `registryEntryFor(canonicalId)` to validate concepts, which erroneously accepted any string matching a family prefix (e.g. `range.anything`).
+   - _Revised:_ Introduced `CANONICAL_CONCEPTS` and `isValidCanonicalId()` as an exact code-owned allowlist. Prefix matching in `core-registry.ts` is restricted to metadata lookup on valid concepts.
 2. **Corrected Four-Class Alias Model:**
-   * *Previous:* Conflated sub-concepts (`cruise_speed`, `service_ceiling`) as "qualified aliases" of parent concepts, creating severe risks of accidental consensus merging.
-   * *Revised:* Clarified that `speed.cruise` and `altitude.service_ceiling` are distinct canonical concepts. Class 3 represents specific concepts mapping to their own distinct canonical IDs.
+   - _Previous:_ Conflated sub-concepts (`cruise_speed`, `service_ceiling`) as "qualified aliases" of parent concepts, creating severe risks of accidental consensus merging.
+   - _Revised:_ Clarified that `speed.cruise` and `altitude.service_ceiling` are distinct canonical concepts. Class 3 represents specific concepts mapping to their own distinct canonical IDs.
 3. **Explicit Unresolved States:**
-   * *Previous:* Grouped all unknown terms into Class 4 Ambiguous.
-   * *Revised:* Established clear distinctions between `unresolved_context`, `unresolved_conflict`, `unresolved_ambiguous`, `unresolved_unknown`, and `unresolved_deprecated`.
+   - _Previous:_ Grouped all unknown terms into Class 4 Ambiguous.
+   - _Revised:_ Established clear distinctions between `unresolved_context`, `unresolved_conflict`, `unresolved_ambiguous`, `unresolved_unknown`, and `unresolved_deprecated`.
 4. **Eliminated Uncalibrated Confidence Floats:**
-   * *Previous:* Assigned arbitrary numeric confidences (`1.0`, `0.85`, `0.70`).
-   * *Revised:* Replaced numbers with structured audit metadata (`matchType`, `guardAudit`, `status`).
+   - _Previous:_ Assigned arbitrary numeric confidences (`1.0`, `0.85`, `0.70`).
+   - _Revised:_ Replaced numbers with structured audit metadata (`matchType`, `guardAudit`, `status`).
 5. **Genuinely Immutable Snapshots:**
-   * *Previous:* Relied on mutable tables with `updated_at` queries and shallow `Object.freeze()`.
-   * *Revised:* Implemented SHA-256 content-addressed immutable snapshots, append-only revisions, and encapsulated read-only lookup interfaces.
+   - _Previous:_ Relied on mutable tables with `updated_at` queries and shallow `Object.freeze()`.
+   - _Revised:_ Implemented SHA-256 content-addressed immutable snapshots, append-only revisions, and encapsulated read-only lookup interfaces.
 6. **Corrected Server TTL Invariant:**
-   * *Previous:* Assumed a 60-second TTL based on an unbuilt roadmap note.
-   * *Revised:* Verified and aligned with the actual 30-second TTL (`TTL_MS = 30_000`) used by `rule-registry.server.ts`.
+   - _Previous:_ Assumed a 60-second TTL based on an unbuilt roadmap note.
+   - _Revised:_ Verified and aligned with the actual 30-second TTL (`TTL_MS = 30_000`) used by `rule-registry.server.ts`.
 7. **Removed Hot-Path Shadow Integration:**
-   * *Previous:* Proposed instrumenting `normalizeSpec()` in production ingest immediately.
-   * *Revised:* Moved shadow evaluation to an offline replay script and dedicated evaluation run model, preserving total production isolation.
+   - _Previous:_ Proposed instrumenting `normalizeSpec()` in production ingest immediately.
+   - _Revised:_ Moved shadow evaluation to an offline replay script and dedicated evaluation run model, preserving total production isolation.
 8. **Removed Early Normalizer Proposal Applier:**
-   * *Previous:* Proposed implementing `normalizerApplier` during Phase 3.1.
-   * *Revised:* Kept proposal applier implementation deferred until governance and curation tools are built (Phase 3.5); `AUTO_APPLY_TIERS` remains empty.
+   - _Previous:_ Proposed implementing `normalizerApplier` during Phase 3.1.
+   - _Revised:_ Kept proposal applier implementation deferred until governance and curation tools are built (Phase 3.5); `AUTO_APPLY_TIERS` remains empty.
 9. **Protected the Autonomy Event Ledger:**
-   * *Previous:* Proposed logging all shadow evaluation comparisons to `autonomy_events`.
-   * *Revised:* Restricted `autonomy_events` to true governance decisions (snapshot activations), preventing telemetry bloat.
+   - _Previous:_ Proposed logging all shadow evaluation comparisons to `autonomy_events`.
+   - _Revised:_ Restricted `autonomy_events` to true governance decisions (snapshot activations), preventing telemetry bloat.
 10. **Class 4 Schema Realignment (Nullable `canonical_id`):**
-    * *Previous:* Defined `canonical_id TEXT NOT NULL` in `semantic_alias_revisions`, which conflicted with Class 4 terms having multiple or zero resolved meanings.
-    * *Revised:* Made `canonical_id` nullable, added `candidate_canonical_ids JSONB`, and enforced a CHECK constraint requiring candidate arrays for Class 4 and exact canonical IDs for Classes 1–3.
+    - _Previous:_ Defined `canonical_id TEXT NOT NULL` in `semantic_alias_revisions`, which conflicted with Class 4 terms having multiple or zero resolved meanings.
+    - _Revised:_ Made `canonical_id` nullable, added `candidate_canonical_ids JSONB`, and enforced a CHECK constraint requiring candidate arrays for Class 4 and exact canonical IDs for Classes 1–3.
 11. **Composite Snapshot Content Addressability:**
-    * *Previous:* Computed hash only over database alias rules.
-    * *Revised:* Bound the SHA-256 content hash to a composite digest encompassing the compiler resolver version, canonical manifest version, manifest hash, and core registry version.
+    - _Previous:_ Computed hash only over database alias rules.
+    - _Revised:_ Bound the SHA-256 content hash to a composite digest encompassing the compiler resolver version, canonical manifest version, manifest hash, and core registry version.
 12. **Database-Enforced Immutability Triggers:**
-    * *Previous:* Immutability was described conceptually but lacked database-level enforcement against `UPDATE` and `DELETE`.
-    * *Revised:* Added PostgreSQL triggers raising exceptions on any `UPDATE` or `DELETE` against `semantic_alias_revisions` and `semantic_registry_snapshots`.
+    - _Previous:_ Immutability was described conceptually but lacked database-level enforcement against `UPDATE` and `DELETE`.
+    - _Revised:_ Added PostgreSQL triggers raising exceptions on any `UPDATE` or `DELETE` against `semantic_alias_revisions` and `semantic_registry_snapshots`.
 13. **Statistical Formulation of Withholding Metrics:**
-    * *Previous:* Formulated Withholding Precision with total negative cases as the denominator.
-    * *Revised:* Formally separated *Withholding Recall* (denominator: all negative cases in reference set) from *Withholding Precision* (denominator: all instances where resolution withheld).
+    - _Previous:_ Formulated Withholding Precision with total negative cases as the denominator.
+    - _Revised:_ Formally separated _Withholding Recall_ (denominator: all negative cases in reference set) from _Withholding Precision_ (denominator: all instances where resolution withheld).
 14. **Expanded Historical Stratification Matrix:**
-    * *Previous:* 11 attribute families, which risked dropping programme-level metadata or unclassified terms.
-    * *Revised:* Added `other_programme_metadata` as the 12th category (covering production rate, inventory count, guidance, and unclassified attributes), yielding a robust 36-cell matrix.
+    - _Previous:_ 11 attribute families, which risked dropping programme-level metadata or unclassified terms.
+    - _Revised:_ Added `other_programme_metadata` as the 12th category (covering production rate, inventory count, guidance, and unclassified attributes), yielding a robust 36-cell matrix.
 15. **Repository-Relative File Links:**
-    * *Previous:* Contained local `file:///C:/dev/...` links.
-    * *Revised:* Converted all file references to standard repository-relative Markdown links (`../src/...`).
+    - _Previous:_ Contained local `file:///C:/dev/...` links.
+    - _Revised:_ Converted all file references to standard repository-relative Markdown links (`../src/...`).
+16. **Strict Class 4 CHECK Constraint and Candidate Target Validation:**
+    - _Previous:_ Simple nullability check without verifying JSON structure.
+    - _Revised:_ Enforced `jsonb_typeof(candidate_canonical_ids) = 'array'` and `jsonb_array_length(candidate_canonical_ids) > 0` at DB level; enforced compiler validation that every candidate target exists in `CANONICAL_CONCEPTS`.
+17. **TypeScript Discriminated Union Model:**
+    - _Previous:_ Single `SemanticAliasDefinition` interface with optional fields that allowed invalid state combinations.
+    - _Revised:_ Explicit discriminated union (`Class1_3AliasDefinition | Class4AliasDefinition`) strictly mirroring DB constraints at compile time.
+18. **Unicode-Aware Key Normalization and Gate 0 Separation:**
+    - _Previous:_ Restricted ASCII/Cyrillic regex that stripped Swedish (å, ä, ö), Persian, and Chinese, while Gate 0 stripped dots from canonical IDs.
+    - _Revised:_ Replaced with Unicode property escapes (`\p{L}`, `\p{N}`) for aliases; separated Gate 0 so canonical IDs are validated in their exact dot-notated form.
+19. **Two-Tier Quality Gates and Stratum-Weighted Estimation:**
+    - _Previous:_ Contradiction between 100% roadmap goal and statistical thresholds; no weighting.
+    - _Revised:_ 100% strictly required on deterministic/adversarial unit safety fixtures; statistical thresholds (>=98%, >=95%, >=99%) on reference corpus with stratum breakdown and population-weighted error estimation.
+20. **Comprehensive Core Metadata Hash Binding:**
+    - _Previous:_ Composite hash bound only `CORE_DIMENSIONS`.
+    - _Revised:_ Expanded to `coreMetadataHash` binding `CORE_DIMENSIONS` and all attribute-specific tolerances, domains, and dimensions in `ENTRY_LIST` from `core-registry.ts`.
