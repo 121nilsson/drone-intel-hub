@@ -21,6 +21,11 @@ import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { sha256Hex } from "../entities/normalization/sha256";
 import {
+  CANONICAL_UNIT,
+  UNIT_NORMALIZER_VERSION,
+  canonicalUnitFor,
+} from "../entities/normalization/units";
+import {
   isValidCanonicalId,
   CANONICAL_CONCEPTS,
 } from "../entities/normalization/canonical-manifest";
@@ -1184,5 +1189,110 @@ describe("Language scoping", () => {
   it("language is part of the content hash", () => {
     const h = (language: string) => compileSemanticSnapshot([rule({ language })]).contentHash;
     expect(h("sv")).not.toBe(h("uk"));
+  });
+});
+
+// ─── 22. Unit table and unit classifier are bound to the snapshot ─────────
+
+describe("Unit table immutability and versioning", () => {
+  it("CANONICAL_UNIT is frozen at runtime", () => {
+    expect(Object.isFrozen(CANONICAL_UNIT)).toBe(true);
+    expect(() => {
+      (CANONICAL_UNIT as unknown as Record<string, string>)["mass"] = "lb";
+    }).toThrow();
+    expect(CANONICAL_UNIT.mass).toBe("kg");
+  });
+
+  it("golden unit classification, pinned to UNIT_NORMALIZER_VERSION", () => {
+    // Changing any of these means recognition behaviour changed: bump UNIT_NORMALIZER_VERSION
+    // in units.ts, then update this table and the version below together.
+    expect(UNIT_NORMALIZER_VERSION).toBe("1.0.0");
+    const golden: Record<string, string | null> = {
+      g: "kg",
+      kg: "kg",
+      lb: "kg",
+      km: "km",
+      m: "km",
+      mi: "km",
+      "km/h": "km/h",
+      mph: "km/h",
+      kt: "km/h",
+      min: "min",
+      h: "min",
+      W: "W",
+      kW: "W",
+      hp: "W",
+      l: "l",
+      gal: "l",
+      N: "N",
+      g_load: "g_load",
+      "units/month": "units/month",
+      deg: null,
+      "°": null,
+      banana: null,
+    };
+    for (const [unit, expected] of Object.entries(golden)) {
+      expect(canonicalUnitFor(unit) ?? null, unit).toBe(expected);
+    }
+  });
+
+  it("a different UNIT_NORMALIZER_VERSION changes the snapshot content hash", async () => {
+    const rules = [rule({ ruleId: "a", rawKey: "k" })];
+    const here = compileSemanticSnapshot(rules).contentHash;
+    vi.resetModules();
+    vi.doMock("../entities/normalization/units", async () => {
+      const real = await vi.importActual<typeof import("../entities/normalization/units")>(
+        "../entities/normalization/units",
+      );
+      return { ...real, UNIT_NORMALIZER_VERSION: "9.9.9" };
+    });
+    try {
+      const mod = await import("../entities/normalization/semantic-resolver");
+      expect(mod.compileSemanticSnapshot(rules).contentHash).not.toBe(here);
+    } finally {
+      vi.doUnmock("../entities/normalization/units");
+      vi.resetModules();
+    }
+  });
+});
+
+// ─── 23. Audit across several Class 2 candidates ──────────────────────────
+
+describe("Guard audit across Class 2 candidates", () => {
+  const c2 = (ruleId: string, domains: string[], unitDimension?: "mass") =>
+    rule({
+      ruleId,
+      rawKey: "weight",
+      aliasClass: "class2_context",
+      canonicalId: "weight.total",
+      contextGuards: { domains, ...(unitDimension ? { unitDimension } : {}) },
+    });
+  const snap = compileSemanticSnapshot([c2("b-sea", ["Sea"]), c2("a-air", ["Air"], "mass")]);
+
+  it("when none passes, every candidate's guards are audited and tagged by ruleId", () => {
+    const r = snap.resolve({ rawKey: "weight", domain: "Land", rawUnit: "km" });
+    expect(r.status).toBe("unresolved_context");
+    expect(r.guardAudit!.map((g) => `${g.ruleId}:${g.guardName}`)).toEqual([
+      "a-air:domains",
+      "a-air:unitDimension",
+      "b-sea:domains",
+    ]);
+    expect(r.guardAudit!.every((g) => !g.satisfied)).toBe(true);
+    expect(r.diagnostics.some((d) => d.includes("'a-air'") && d.includes("unitDimension"))).toBe(
+      true,
+    );
+    expect(r.diagnostics.some((d) => d.includes("'b-sea'"))).toBe(true);
+  });
+
+  it("a resolved result's audit belongs to the matched rule", () => {
+    const r = snap.resolve({ rawKey: "weight", domain: "Sea" });
+    expect(r.matchedRuleId).toBe("b-sea");
+    expect(r.guardAudit!.every((g) => g.ruleId === "b-sea")).toBe(true);
+  });
+
+  it("is independent of input order", () => {
+    const flipped = compileSemanticSnapshot([c2("a-air", ["Air"], "mass"), c2("b-sea", ["Sea"])]);
+    const ctx = { rawKey: "weight", domain: "Land", rawUnit: "km" };
+    expect(flipped.resolve(ctx)).toEqual(snap.resolve(ctx));
   });
 });

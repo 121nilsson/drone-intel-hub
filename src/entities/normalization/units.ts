@@ -1,6 +1,14 @@
 import { parseRange, type QuantityRange } from "./numeric";
 
-export const CANONICAL_UNIT = {
+/**
+ * Version of the unit RECOGNITION behaviour: the UNITS patterns, tokenUnit and canonicalUnitFor.
+ * The semantic resolver binds it into every snapshot hash, so bump it whenever a change here can
+ * alter which dimension a raw unit string classifies to (a golden test pins the behaviour).
+ */
+export const UNIT_NORMALIZER_VERSION = "1.0.0";
+
+/** Frozen at runtime: the semantic snapshot hash and unit classification both read it. */
+export const CANONICAL_UNIT = Object.freeze({
   distance: "km",
   speed: "km/h",
   mass: "kg",
@@ -13,7 +21,7 @@ export const CANONICAL_UNIT = {
   // out of every mass conversion (see LOAD_FACTOR_UNIT).
   load_factor: "g_load",
   count_rate: "units/month",
-} as const;
+} as const);
 
 /** 200 × 1.852 is 370.40000000000003 in IEEE754; 12 significant digits strip the arithmetic
  * noise without hiding real precision. */

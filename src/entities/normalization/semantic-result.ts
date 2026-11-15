@@ -32,6 +32,8 @@ export type SemanticMatchType =
 
 /** Audit record for a single context guard evaluated during Class 2 resolution. */
 export interface GuardEvaluationAudit {
+  /** Rule whose guard this entry records, so several candidates stay distinguishable. */
+  readonly ruleId: string;
   readonly guardName: string;
   readonly expected: string | readonly string[];
   readonly actual: string | undefined;

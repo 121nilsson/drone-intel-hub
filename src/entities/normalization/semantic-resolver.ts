@@ -22,7 +22,7 @@ import {
   isValidCanonicalId,
 } from "./canonical-manifest";
 import { sha256Hex } from "./sha256";
-import { CANONICAL_UNIT, canonicalUnitFor, type Dimension } from "./units";
+import { CANONICAL_UNIT, UNIT_NORMALIZER_VERSION, canonicalUnitFor, type Dimension } from "./units";
 import type { GuardEvaluationAudit, SemanticResolutionResult } from "./semantic-result";
 
 // ─── Public contracts ──────────────────────────────────────────────────────
@@ -405,6 +405,7 @@ function computeContentHash(rules: readonly SemanticAliasDefinition[]): string {
       manifestVersion: CANONICAL_MANIFEST_VERSION,
       manifestHash: MANIFEST_HASH,
       unitTableHash: UNIT_TABLE_HASH,
+      unitNormalizerVersion: UNIT_NORMALIZER_VERSION,
       rules: sorted,
     }),
   );
@@ -428,6 +429,7 @@ function dimensionOfUnit(rawUnit: string | undefined): Dimension | undefined {
  * each one fared; the rule passes only if all are satisfied.
  */
 function evaluateGuards(
+  ruleId: string,
   guards: CompiledGuards,
   ctx: ResolutionContextInput,
 ): { passed: boolean; audit: GuardEvaluationAudit[] } {
@@ -440,6 +442,7 @@ function evaluateGuards(
   for (const [guardName, expected, actual] of lists) {
     if (!expected) continue;
     audit.push({
+      ruleId,
       guardName,
       expected,
       actual,
@@ -449,6 +452,7 @@ function evaluateGuards(
   if (guards.unitDimension !== undefined) {
     const actual = dimensionOfUnit(ctx.rawUnit);
     audit.push({
+      ruleId,
       guardName: "unitDimension",
       expected: guards.unitDimension,
       actual,
@@ -537,12 +541,12 @@ function resolveWithLookups(
   // ── Gate 2: Class 2 context-conditioned synonym ────────────────────────
   if (contexts.length > 0) {
     const passing: Array<{ entry: CompiledClass2; audit: GuardEvaluationAudit[] }> = [];
-    let guardAuditForFail: GuardEvaluationAudit[] = [];
+    const guardAuditForFail: GuardEvaluationAudit[] = [];
 
     for (const entry of contexts) {
-      const { passed, audit } = evaluateGuards(entry.contextGuards, input);
+      const { passed, audit } = evaluateGuards(entry.ruleId, entry.contextGuards, input);
       if (!passed) {
-        guardAuditForFail = audit;
+        guardAuditForFail.push(...audit);
       } else if (!entry.labelTokens || labelTokensMatch(entry.labelTokens, input.rawLabel)) {
         passing.push({ entry, audit });
       } else {
@@ -586,7 +590,8 @@ function resolveWithLookups(
         ...guardAuditForFail
           .filter((g) => !g.satisfied)
           .map(
-            (g) => `Context guard '${g.guardName}' failed: actual was ${g.actual ?? "undefined"}`,
+            (g) =>
+              `Rule '${g.ruleId}' context guard '${g.guardName}' failed: actual was ${g.actual ?? "undefined"}`,
           ),
       ],
     });
