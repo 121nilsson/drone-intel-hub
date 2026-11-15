@@ -22,9 +22,9 @@ export interface ScheduledTask {
 export const SCHEDULED_TASKS: readonly ScheduledTask[] = [
   {
     name: "sources:sync",
-    cron: "*/10 * * * *",
+    cron: "*/15 * * * *",
     label: "Source sync",
-    every: "every 10 min",
+    every: "every 15 min",
     does: "Polls the monitored sources and ingests new reports. A run stops starting AI work after 8 min, so ticks never overlap.",
     switch: "autocorrect",
   },
