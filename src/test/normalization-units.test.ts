@@ -164,3 +164,16 @@ describe("normalizeQuantity", () => {
     expect(normalizeQuantity("3 days")?.canonicalValue).toBe(4320);
   });
 });
+
+describe("acceleration is never read as speed (findUnit path)", () => {
+  it.each(["10 m/s2", "10 m/s²", "10 м/с2"])("%s is an acceleration", (raw) => {
+    expect(normalizeQuantity(raw)).toMatchObject({ canonicalUnit: "m/s2", canonicalValue: 10 });
+  });
+
+  it("m/s stays a speed", () => {
+    expect(normalizeQuantity("10 m/s")).toMatchObject({
+      canonicalUnit: "km/h",
+      canonicalValue: 36,
+    });
+  });
+});
