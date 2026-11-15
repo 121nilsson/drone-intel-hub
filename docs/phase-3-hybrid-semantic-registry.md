@@ -876,14 +876,19 @@ Arbitrary regular expressions in database rules are prohibited. Matching relies 
 ```typescript
 /** Deterministic alias key normalizer. Pure, bounded, and Unicode-aware. */
 export function normalizeAliasKey(key: string): string {
-  return key
+  const folded = key
+    .normalize("NFKC") // fold compatibility forms first
     .trim()
-    .replace(/([a-z0-9])([A-Z])/g, "$1_$2") // camelCase to snake_case
+    .replace(/([\p{Ll}\p{N}])(\p{Lu})/gu, "$1_$2") // camelCase boundary becomes a delimiter
     .toLowerCase()
-    .normalize("NFKC") // Unicode compatibility decomposition
-    .replace(/[\s-]+/g, "_") // Hyphens and spaces to underscores
-    .replace(/[^\p{L}\p{N}_]/gu, "") // Retain Unicode letters, numbers, and underscores (supports Swedish, Ukrainian, Russian, Persian, Chinese, etc.)
-    .replace(/_(km|m|kmh|kg|min|w|l)$/, ""); // Strip common trailing unit artifacts
+    .replace(/[^\p{L}\p{N}]+/gu, "_") // every run of non-letter/number is ONE "_" (never deleted)
+    .replace(/^_+|_+$/g, "");
+  let current = folded;
+  for (;;) {
+    const next = current.replace(/_(km|kmh|kg|m)$/, ""); // unambiguous unit artifacts only
+    if (next === current || next === "") return current;
+    current = next;
+  }
 }
 ```
 
@@ -893,7 +898,10 @@ export function normalizeAliasKey(key: string): string {
 - **No Unconstrained Diacritic Stripping:** Diacritics are normalized via Unicode `NFKC` normalization, but semantic characters are never blindly converted to ASCII equivalents, as doing so alters vocabulary identity.
 - **Cyrillic and Non-Latin Script Integrity:** Russian, Ukrainian, Persian, and Chinese terms are matched in their native scripts. Transliterations (e.g. `dalnost` for `дальность`) are stored as separate explicit alias entries, not created dynamically by phonetic heuristics.
 - **Separation from Canonical IDs:** Canonical concept IDs use standard dot-notation (`family.leaf`). Gate 0 matches exact canonical IDs directly without stripping dots; alias normalization is applied only to raw alias candidate keys.
-- **Token Boundaries:** Label matching tests for exact substring or whitespace-delimited word tokens. Arbitrary regex quantifiers (`.*`, `.+`) are rejected at snapshot compilation time.
+- **Delimiters Are Kept, Not Deleted:** Spaces, hyphens, dots and slashes all become one `_`, so `air craft`, `air-craft` and `air_craft` agree while `aircraft` stays distinct. The original `rawKey` is always preserved beside the result.
+- **Unit Suffixes:** Only `_km`, `_kmh`, `_kg`, `_m` are stripped. `_min`, `_w` and `_l` are not: `range_min` must never collapse into `range` (legacy `semantic.ts` needs a special guard for exactly this).
+- **Token Boundaries:** Label matching compares whole Unicode word tokens (NFKC, lowercase), never substrings: `max` does not match `Maximal`. Rule tokens containing regex syntax are rejected at snapshot compilation time.
+- **Compile-Time Validation:** Rule keys are normalized with the same function at compilation. Two rules colliding on a normalized key, a Class 4 key that is also a synonym, a Class 2 rule without an effective guard, and context guards on a Class 1/3 rule are compilation errors.
 
 ---
 
@@ -1007,6 +1015,8 @@ export interface SnapshotCompositeDigest {
 ```
 
 $$\text{snapshot\_content\_hash} = \text{SHA256}\Big(\text{canonical\_json\_sort}(\text{SnapshotCompositeDigest})\Big)$$
+
+In Phase 3.1 the compiler computes `contentHash` itself (pure SHA-256 over resolver version, manifest version, manifest hash and every rule field sorted by `ruleId`); callers cannot supply it. `coreRegistryVersion` and `coreMetadataHash` are bound in Phase 3.3.
 
 This cryptographic binding guarantees that if any code-level invariant or active rule changes, the snapshot content hash changes, completely preventing silent historical drift.
 
@@ -1396,7 +1406,7 @@ A dedicated test suite (`src/test/semantic-registry-isolated.test.ts`) must prov
    - Under no circumstances does the resolver fall back to `semanticKeyFor()` or return the raw input key as a canonical ID.
    - Spy/mock assertions verify that `semanticKeyFor` execution count is zero during hybrid resolver runs.
 
-6. **Withholding Precision and Recall on Ground Truth Reference Set:**
+6. **Withholding Precision and Recall on Ground Truth Reference Set (Phase 3.2; the Phase 3.1 unit tests are only a 100% regression guard and do not measure these thresholds):**
    - Evaluated against `src/test/fixtures/semantic-reference-corpus.ts`:
      - **Withholding Recall $\ge 98\%$** across all declared negative and ambiguous test cases (proves near-zero ungrounded guessing on under-specified inputs).
      - **Withholding Precision $\ge 95\%$** across all instances where the resolver outputs an unresolved state (proves the resolver does not over-withhold on valid synonyms).
@@ -1422,6 +1432,7 @@ Implementation must proceed in decoupled, independently reviewable stages:
 | - Implement src/entities/normalization/canonical-manifest.ts                                     |
 | - Implement src/entities/normalization/semantic-resolver.ts (pure, zero DB dependencies)         |
 | - Implement unit test suite verifying Gate 0-5 precedence and adversarial pairs                  |
+| - Implement semantic-result.ts and sha256.ts (pure, no external imports)                         |
 | - Non-goals: No database migrations; no hot-path production modifications.                       |
 +──────────────────────────────────────────────────────────────────────────────────────────────────+
                                                   │
