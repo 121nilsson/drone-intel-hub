@@ -659,7 +659,7 @@ export function compileSemanticSnapshot(
 
 // ─── Code seed snapshot ────────────────────────────────────────────────────
 
-const CODE_SEED_RULES: readonly SemanticAliasDefinition[] = Object.freeze([
+export const CODE_SEED_RULES: readonly SemanticAliasDefinition[] = Object.freeze([
   // ── Class 1: Speed ───────────────────────────────────────────────────────
   {
     ruleId: "seed-speed-max-en-1",

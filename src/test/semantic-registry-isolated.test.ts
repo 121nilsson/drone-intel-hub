@@ -926,14 +926,16 @@ describe("Isolation from legacy and production code", () => {
       for (const name of readdirSync(dir)) {
         const full = join(dir, name);
         if (statSync(full).isDirectory()) {
-          if (name !== "test") walk(full);
+          // semantic-eval is evaluation infrastructure; what matters is that nothing outside it
+          // (and outside the isolated modules) imports it.
+          if (name !== "test" && name !== "semantic-eval") walk(full);
           continue;
         }
         if (!/\.(ts|tsx)$/.test(name) || ISOLATED.includes(name)) continue;
         const src = readFileSync(full, "utf8");
         if (
           importsOf(src).some((s) =>
-            /semantic-resolver|canonical-manifest|semantic-result|\/sha256$/.test(s),
+            /semantic-resolver|canonical-manifest|semantic-result|semantic-eval|\/sha256$/.test(s),
           )
         ) {
           offenders.push(full);
