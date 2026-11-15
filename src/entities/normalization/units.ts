@@ -5,7 +5,7 @@ import { parseRange, type QuantityRange } from "./numeric";
  * The semantic resolver binds it into every snapshot hash, so bump it whenever a change here can
  * alter which dimension a raw unit string classifies to (a golden test pins the behaviour).
  */
-export const UNIT_NORMALIZER_VERSION = "1.0.0";
+export const UNIT_NORMALIZER_VERSION = "1.1.0";
 
 /** Frozen at runtime: the semantic snapshot hash and unit classification both read it. */
 export const CANONICAL_UNIT = Object.freeze({
@@ -213,7 +213,14 @@ const UNITS: UnitDef[] = [
     toCanonical: MILE_KM,
     pattern: /(?:mph|miles?\s*per\s*hour)(?![\p{L}\p{N}])/iu,
   },
-  { token: "m/s", dimension: "speed", toCanonical: 3.6, pattern: /(?:m\/s|м\/с)/iu },
+  // Acceleration before speed, and speed refuses a trailing exponent: "m/s2" is never "m/s".
+  {
+    token: "m/s2",
+    dimension: "acceleration",
+    toCanonical: 1,
+    pattern: /(?:m\/s(?:2|²)|м\/с(?:2|²))(?![\p{L}\p{N}])/iu,
+  },
+  { token: "m/s", dimension: "speed", toCanonical: 3.6, pattern: /(?:m\/s|м\/с)(?![\p{N}²³])/iu },
   {
     token: "kn",
     dimension: "speed",
@@ -435,15 +442,31 @@ function findLeadingUnit(
 export function convert(value: number, from: string, to: string): number | undefined {
   if (!Number.isFinite(value)) return undefined;
   // "g_load" matches the mass pattern for "g" too, so its own token is looked up first.
-  const src = tokenUnit(from) ?? UNITS.find((u) => u.token === from || u.pattern.test(from));
-  const dst = tokenUnit(to) ?? UNITS.find((u) => u.token === to || u.pattern.test(to));
+  const src = classifyUnit(from);
+  const dst = classifyUnit(to);
   if (!src || !dst || src.dimension !== dst.dimension) return undefined;
   return cleanFloat((value * src.toCanonical) / dst.toCanonical);
 }
 
+/**
+ * Classifies a STANDALONE unit string. The UNITS patterns are written to find a unit at the end of
+ * a longer measurement, so they may match only a prefix ("m/s" inside "m/s2"). A standalone string
+ * must be consumed completely: a prefix match must never decide the physical dimension.
+ */
+function classifyUnit(text: string): UnitDef | undefined {
+  const t = text.trim();
+  return (
+    tokenUnit(t) ??
+    UNITS.find((u) => {
+      if (u.token === t) return true;
+      const m = u.pattern.exec(t);
+      return m !== null && m.index === 0 && m[0].length === t.length;
+    })
+  );
+}
+
 export function canonicalUnitFor(rawUnit: string): string | undefined {
-  const hit =
-    tokenUnit(rawUnit) ?? UNITS.find((u) => u.token === rawUnit || u.pattern.test(rawUnit.trim()));
+  const hit = classifyUnit(rawUnit);
   return hit ? CANONICAL_UNIT[hit.dimension] : undefined;
 }
 

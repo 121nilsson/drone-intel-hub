@@ -24,6 +24,7 @@ import {
   CANONICAL_UNIT,
   UNIT_NORMALIZER_VERSION,
   canonicalUnitFor,
+  convert,
 } from "../entities/normalization/units";
 import {
   isValidCanonicalId,
@@ -1206,7 +1207,7 @@ describe("Unit table immutability and versioning", () => {
   it("golden unit classification, pinned to UNIT_NORMALIZER_VERSION", () => {
     // Changing any of these means recognition behaviour changed: bump UNIT_NORMALIZER_VERSION
     // in units.ts, then update this table and the version below together.
-    expect(UNIT_NORMALIZER_VERSION).toBe("1.0.0");
+    expect(UNIT_NORMALIZER_VERSION).toBe("1.1.0");
     const golden: Record<string, string | null> = {
       g: "kg",
       kg: "kg",
@@ -1215,6 +1216,10 @@ describe("Unit table immutability and versioning", () => {
       m: "km",
       mi: "km",
       "km/h": "km/h",
+      "m/s": "km/h",
+      "m/s2": "m/s2",
+      "m/s²": "m/s2",
+      "м/с2": "m/s2",
       mph: "km/h",
       kt: "km/h",
       min: "min",
@@ -1294,5 +1299,57 @@ describe("Guard audit across Class 2 candidates", () => {
     const flipped = compileSemanticSnapshot([c2("a-air", ["Air"], "mass"), c2("b-sea", ["Sea"])]);
     const ctx = { rawKey: "weight", domain: "Land", rawUnit: "km" };
     expect(flipped.resolve(ctx)).toEqual(snap.resolve(ctx));
+  });
+});
+
+// ─── 24. A prefix match must never decide the physical dimension ──────────
+
+describe("Standalone unit classification needs a full match", () => {
+  const dim = (u: string) => {
+    const c = canonicalUnitFor(u);
+    return c === undefined
+      ? undefined
+      : (Object.keys(CANONICAL_UNIT) as Array<keyof typeof CANONICAL_UNIT>).find(
+          (d) => CANONICAL_UNIT[d] === c,
+        );
+  };
+
+  it("maps the physical dimensions the review named", () => {
+    expect(dim("m/s")).toBe("speed");
+    expect(dim("m/s2")).toBe("acceleration");
+    expect(dim("m/s²")).toBe("acceleration");
+    expect(dim("km/h")).toBe("speed");
+    expect(dim("g")).toBe("mass");
+    expect(dim("g_load")).toBe("load_factor");
+  });
+
+  it("rejects strings that only START with a unit", () => {
+    for (const u of ["m/s3", "m/s2x", "m/sec ond", "km/hx", "kgx", "m/s2 per s"]) {
+      expect(canonicalUnitFor(u), u).toBeUndefined();
+    }
+  });
+
+  it("convert() applies the same rule", () => {
+    expect(convert(10, "m/s", "km/h")).toBe(36);
+    expect(convert(10, "m/s2", "km/h")).toBeUndefined();
+    expect(convert(10, "m/s2", "m/s2")).toBe(10);
+  });
+
+  it("the unitDimension guard separates acceleration from speed", () => {
+    const g = (unitDimension: "speed" | "acceleration") =>
+      compileSemanticSnapshot([
+        rule({
+          aliasClass: "class2_context",
+          rawKey: "x",
+          canonicalId: "speed.max",
+          contextGuards: { unitDimension },
+        }),
+      ]);
+    expect(g("speed").resolve({ rawKey: "x", rawUnit: "m/s2" }).status).toBe("unresolved_context");
+    expect(g("speed").resolve({ rawKey: "x", rawUnit: "m/s" }).status).toBe("resolved");
+    expect(g("acceleration").resolve({ rawKey: "x", rawUnit: "m/s²" }).status).toBe("resolved");
+    expect(g("acceleration").resolve({ rawKey: "x", rawUnit: "m/s" }).status).toBe(
+      "unresolved_context",
+    );
   });
 });
