@@ -39,7 +39,7 @@ export interface CanonicalConceptDefinition {
  * Complete, closed list of canonical semantic concepts.
  * Order within families is for readability only; lookup uses a Set.
  */
-export const CANONICAL_CONCEPTS: readonly CanonicalConceptDefinition[] = Object.freeze([
+const RAW_CONCEPTS: readonly CanonicalConceptDefinition[] = [
   // ── Speed ──────────────────────────────────────────────────────────────
   {
     id: "speed.max",
@@ -353,7 +353,16 @@ export const CANONICAL_CONCEPTS: readonly CanonicalConceptDefinition[] = Object.
     description: "Navigation and terminal homing technology",
     introducedInVersion: "1.0.0",
   },
-]);
+];
+
+/**
+ * The manifest is frozen per entry, not only as an array: the lookup set and the
+ * snapshot manifest hash are derived from it at load time, so a runtime edit of
+ * one entry would otherwise desynchronise them.
+ */
+export const CANONICAL_CONCEPTS: readonly CanonicalConceptDefinition[] = Object.freeze(
+  RAW_CONCEPTS.map((c) => Object.freeze({ ...c })),
+);
 
 /** Fast lookup set, derived once at module initialisation. */
 const VALID_CANONICAL_IDS: ReadonlySet<string> = new Set(CANONICAL_CONCEPTS.map((c) => c.id));

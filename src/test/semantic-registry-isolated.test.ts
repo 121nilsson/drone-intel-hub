@@ -38,7 +38,7 @@ function resolve(
   rawKey: string,
   opts: {
     rawLabel?: string;
-    rawUnit?: string;
+    rawUnit?: string | undefined;
     systemClass?: string;
     domain?: string;
     subsystem?: string;
@@ -362,7 +362,7 @@ describe("Snapshot immutability", () => {
         ruleId: "test-rule-1",
         canonicalId: "speed.max",
         aliasClass: "class1_synonym",
-        language: "en",
+        language: "all",
         rawKey: "top_speed",
         rationale: "test",
         author: "test",
@@ -608,7 +608,7 @@ function rule(over: Record<string, unknown>): SemanticAliasDefinition {
     ruleId: "r",
     canonicalId: "speed.max",
     aliasClass: "class1_synonym",
-    language: "en",
+    language: "all",
     rawKey: "k",
     rationale: "t",
     author: "t",
@@ -875,21 +875,42 @@ function importsOf(src: string): string[] {
 }
 
 describe("Isolation from legacy and production code", () => {
-  it("isolated modules import only each other (no semantic.ts, no DB/server, no env)", () => {
-    const allowed = new Set([
-      "./canonical-manifest",
-      "./semantic-result",
-      "./sha256",
-      "./semantic-resolver",
-    ]);
-    for (const f of ISOLATED) {
-      const src = readFileSync(join(NORM_DIR, f), "utf8");
-      for (const spec of importsOf(src)) {
-        expect(allowed.has(spec), `${f} imports '${spec}'`).toBe(true);
+  it("the whole transitive import graph is free of semantic.ts, DB/server code, env and packages", () => {
+    const SRC = join(__dirname, "..");
+    const resolveSpec = (from: string, spec: string): string | undefined => {
+      const rel = spec.startsWith("@/") ? join(SRC, spec.slice(2)) : join(from, "..", spec);
+      for (const c of [`${rel}.ts`, join(rel, "index.ts")]) {
+        try {
+          if (statSync(c).isFile()) return c;
+        } catch {
+          /* try next */
+        }
       }
+      return undefined;
+    };
+    const seen = new Set<string>();
+    const queue = ISOLATED.map((f) => join(NORM_DIR, f));
+    while (queue.length > 0) {
+      const file = queue.pop()!;
+      if (seen.has(file)) continue;
+      seen.add(file);
+      const src = readFileSync(file, "utf8");
       const code = src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
-      expect(code, f).not.toMatch(/semanticKeyFor|process\.env|\.server/);
+      expect(code, file).not.toMatch(/semanticKeyFor|process\.env|\.server/);
+      for (const spec of importsOf(src)) {
+        expect(spec.startsWith("./") || spec.startsWith("@/"), `${file} imports '${spec}'`).toBe(
+          true,
+        );
+        const target = resolveSpec(file, spec);
+        expect(target, `${file} -> '${spec}' unresolved`).toBeDefined();
+        expect(target, `${file} reaches the legacy normalizer`).not.toMatch(
+          /normalization[\\/](semantic|apply|core-registry)\.ts$/,
+        );
+        queue.push(target!);
+      }
     }
+    // Sanity: the walk really followed the chain through units.ts.
+    expect([...seen].some((f) => /units\.ts$/.test(f))).toBe(true);
   });
 
   it("no production module imports the isolated resolver yet", () => {
@@ -915,5 +936,253 @@ describe("Isolation from legacy and production code", () => {
     };
     walk(SRC);
     expect(offenders).toEqual([]);
+  });
+});
+
+// ─── 17. Manifest is genuinely immutable ──────────────────────────────────
+
+describe("Manifest immutability", () => {
+  it("every concept object is frozen, not only the array", () => {
+    expect(Object.isFrozen(CANONICAL_CONCEPTS)).toBe(true);
+    for (const c of CANONICAL_CONCEPTS) expect(Object.isFrozen(c), c.id).toBe(true);
+  });
+
+  it("a runtime edit of a concept throws and cannot desynchronise the id set", () => {
+    const first = CANONICAL_CONCEPTS[0]! as { id: string };
+    const before = first.id;
+    expect(() => {
+      first.id = "evil.concept";
+    }).toThrow();
+    expect(first.id).toBe(before);
+    expect(isValidCanonicalId("evil.concept")).toBe(false);
+    expect(isValidCanonicalId(before)).toBe(true);
+  });
+
+  it("concept ids are unique", () => {
+    const ids = CANONICAL_CONCEPTS.map((c) => c.id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+});
+
+// ─── 18. Same hash => same behaviour (order independence) ─────────────────
+
+describe("Order independence", () => {
+  const c2 = (ruleId: string, domains: string[]) =>
+    rule({
+      ruleId,
+      rawKey: "beam",
+      aliasClass: "class2_context",
+      canonicalId: "dimension.width",
+      contextGuards: { domains },
+    });
+
+  it("two Class 2 rules passing together give identical results in any order", () => {
+    const rules = [c2("z-rule", ["Sea", "Air"]), c2("a-rule", ["Sea"]), c2("m-rule", ["Sea"])];
+    const forward = compileSemanticSnapshot(rules);
+    const reversed = compileSemanticSnapshot([...rules].reverse());
+    const shuffled = compileSemanticSnapshot([rules[1]!, rules[0]!, rules[2]!]);
+    expect(reversed.contentHash).toBe(forward.contentHash);
+    expect(shuffled.contentHash).toBe(forward.contentHash);
+    const ctx = { rawKey: "beam", domain: "Sea" };
+    const r = forward.resolve(ctx);
+    expect(r.matchedRuleId).toBe("a-rule");
+    expect(reversed.resolve(ctx)).toEqual(r);
+    expect(shuffled.resolve(ctx)).toEqual(r);
+  });
+
+  it("failing-guard audit is also order independent", () => {
+    const rules = [c2("b", ["Sea"]), c2("a", ["Land"])];
+    const f = compileSemanticSnapshot(rules).resolve({ rawKey: "beam", domain: "Air" });
+    const r = compileSemanticSnapshot([...rules].reverse()).resolve({
+      rawKey: "beam",
+      domain: "Air",
+    });
+    expect(r).toEqual(f);
+  });
+});
+
+// ─── 19. unitDimension guard ──────────────────────────────────────────────
+
+describe("unitDimension guard", () => {
+  it("weight with a mass unit resolves to weight.total", () => {
+    for (const rawUnit of ["g", "kg", "lb"]) {
+      const r = resolve("weight", { rawUnit });
+      expect(r.status, rawUnit).toBe("resolved");
+      expect(r.canonicalId).toBe("weight.total");
+      const g = r.guardAudit!.find((a) => a.guardName === "unitDimension")!;
+      expect(g.expected).toBe("mass");
+      expect(g.actual).toBe("mass");
+    }
+  });
+
+  it("weight with a non-mass, unknown or missing unit fails safe", () => {
+    for (const rawUnit of ["km", "deg", "°", "banana", "", undefined]) {
+      const r = resolve("weight", { rawUnit });
+      expect(r.status, String(rawUnit)).toBe("unresolved_context");
+      expect(r.canonicalId).toBeUndefined();
+    }
+  });
+
+  it("rejects an unknown unitDimension at compile time", () => {
+    expect(() =>
+      compileSemanticSnapshot([
+        rule({
+          aliasClass: "class2_context",
+          contextGuards: { unitDimension: "angle" as unknown as "mass" },
+        }),
+      ]),
+    ).toThrow(/unknown unitDimension/);
+  });
+
+  it("combines with other guards: all must hold", () => {
+    const s = compileSemanticSnapshot([
+      rule({
+        aliasClass: "class2_context",
+        rawKey: "weight",
+        canonicalId: "weight.total",
+        contextGuards: { domains: ["Air"], unitDimension: "mass" },
+      }),
+    ]);
+    expect(s.resolve({ rawKey: "weight", domain: "Air", rawUnit: "kg" }).status).toBe("resolved");
+    expect(s.resolve({ rawKey: "weight", domain: "Sea", rawUnit: "kg" }).status).toBe(
+      "unresolved_context",
+    );
+    expect(s.resolve({ rawKey: "weight", domain: "Air", rawUnit: "km" }).status).toBe(
+      "unresolved_context",
+    );
+  });
+
+  it("the guard is part of the content hash", () => {
+    const h = (d: "mass" | "distance") =>
+      compileSemanticSnapshot([
+        rule({
+          aliasClass: "class2_context",
+          rawKey: "weight",
+          canonicalId: "weight.total",
+          contextGuards: { unitDimension: d },
+        }),
+      ]).contentHash;
+    expect(h("mass")).not.toBe(h("distance"));
+  });
+});
+
+// ─── 20. Complete guard audit ─────────────────────────────────────────────
+
+describe("Complete guard audit", () => {
+  const s = compileSemanticSnapshot([
+    rule({
+      aliasClass: "class2_context",
+      rawKey: "span",
+      canonicalId: "dimension.wingspan",
+      contextGuards: {
+        systemClasses: ["uav"],
+        domains: ["Air"],
+        subsystems: ["wing"],
+        unitDimension: "distance",
+      },
+    }),
+  ]);
+
+  it("records every guard even when the first one fails", () => {
+    const r = s.resolve({ rawKey: "span", systemClass: "usv", domain: "Sea" });
+    expect(r.status).toBe("unresolved_context");
+    expect(r.guardAudit!.map((g) => g.guardName)).toEqual([
+      "systemClasses",
+      "domains",
+      "subsystems",
+      "unitDimension",
+    ]);
+    expect(r.guardAudit!.every((g) => !g.satisfied)).toBe(true);
+    expect(r.diagnostics.length).toBe(4);
+  });
+
+  it("marks only the failing guard as unsatisfied", () => {
+    const r = s.resolve({
+      rawKey: "span",
+      systemClass: "uav",
+      domain: "Air",
+      subsystem: "wing",
+      rawUnit: "kg",
+    });
+    expect(r.status).toBe("unresolved_context");
+    expect(r.guardAudit!.filter((g) => !g.satisfied).map((g) => g.guardName)).toEqual([
+      "unitDimension",
+    ]);
+  });
+
+  it("resolves when all four hold", () => {
+    expect(
+      s.resolve({
+        rawKey: "span",
+        systemClass: "uav",
+        domain: "Air",
+        subsystem: "wing",
+        rawUnit: "m",
+      }).status,
+    ).toBe("resolved");
+  });
+});
+
+// ─── 21. Language scoping ─────────────────────────────────────────────────
+
+describe("Language scoping", () => {
+  const rules = [
+    rule({ ruleId: "sv-1", rawKey: "fart", language: "sv", canonicalId: "speed.max" }),
+    rule({ ruleId: "uk-1", rawKey: "fart", language: "uk", canonicalId: "speed.cruise" }),
+    rule({
+      ruleId: "all-1",
+      rawKey: "wingspan",
+      language: "all",
+      canonicalId: "dimension.wingspan",
+    }),
+  ];
+  const snap = compileSemanticSnapshot(rules);
+
+  it("the same term resolves per caller language", () => {
+    expect(snap.resolve({ rawKey: "fart", language: "sv" }).canonicalId).toBe("speed.max");
+    expect(snap.resolve({ rawKey: "fart", language: "uk" }).canonicalId).toBe("speed.cruise");
+  });
+
+  it("a language-specific rule does not match another or an unknown language", () => {
+    expect(snap.resolve({ rawKey: "fart", language: "en" }).status).toBe("unresolved_unknown");
+    expect(snap.resolve({ rawKey: "fart" }).status).toBe("unresolved_unknown");
+  });
+
+  it("language 'all' rules apply to every caller, with or without a language", () => {
+    for (const language of [undefined, "sv", "xx"]) {
+      expect(
+        snap.resolve({ rawKey: "wingspan", ...(language ? { language } : {}) }).canonicalId,
+      ).toBe("dimension.wingspan");
+    }
+  });
+
+  it("caller language is compared case-insensitively", () => {
+    expect(snap.resolve({ rawKey: "fart", language: " SV " }).canonicalId).toBe("speed.max");
+  });
+
+  it("same key in overlapping language scopes is a compile error, disjoint scopes are not", () => {
+    expect(() =>
+      compileSemanticSnapshot([
+        rule({ ruleId: "a", rawKey: "x", language: "all" }),
+        rule({ ruleId: "b", rawKey: "x", language: "sv", canonicalId: "speed.cruise" }),
+      ]),
+    ).toThrow(/collides/);
+    expect(() =>
+      compileSemanticSnapshot([
+        rule({ ruleId: "a", rawKey: "x", language: "en" }),
+        rule({ ruleId: "b", rawKey: "x", language: "sv", canonicalId: "speed.cruise" }),
+      ]),
+    ).not.toThrow();
+  });
+
+  it("rejects an unknown rule language", () => {
+    expect(() => compileSemanticSnapshot([rule({ language: "klingon" })])).toThrow(
+      /unknown language/,
+    );
+  });
+
+  it("language is part of the content hash", () => {
+    const h = (language: string) => compileSemanticSnapshot([rule({ language })]).contentHash;
+    expect(h("sv")).not.toBe(h("uk"));
   });
 });

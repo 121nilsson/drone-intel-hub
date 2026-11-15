@@ -22,6 +22,7 @@ import {
   isValidCanonicalId,
 } from "./canonical-manifest";
 import { sha256Hex } from "./sha256";
+import { CANONICAL_UNIT, canonicalUnitFor, type Dimension } from "./units";
 import type { GuardEvaluationAudit, SemanticResolutionResult } from "./semantic-result";
 
 // ─── Public contracts ──────────────────────────────────────────────────────
@@ -37,6 +38,8 @@ export interface ContextGuards {
   readonly domains?: readonly string[];
   /** subsystem values that satisfy this guard. */
   readonly subsystems?: readonly string[];
+  /** Physical dimension the caller's rawUnit must classify to (units.ts). */
+  readonly unitDimension?: Dimension;
 }
 
 interface BaseAliasDefinition {
@@ -70,12 +73,12 @@ export type SemanticAliasDefinition = Class1_3AliasDefinition | Class4AliasDefin
 /** Caller-supplied context for a resolution attempt. */
 export interface ResolutionContextInput {
   readonly rawKey: string;
-  readonly rawLabel?: string;
-  readonly rawUnit?: string;
-  readonly systemClass?: string;
-  readonly domain?: string;
-  readonly subsystem?: string;
-  readonly language?: string;
+  readonly rawLabel?: string | undefined;
+  readonly rawUnit?: string | undefined;
+  readonly systemClass?: string | undefined;
+  readonly domain?: string | undefined;
+  readonly subsystem?: string | undefined;
+  readonly language?: string | undefined;
 }
 
 /**
@@ -181,31 +184,47 @@ interface CompiledGuards {
   readonly systemClasses?: readonly string[];
   readonly domains?: readonly string[];
   readonly subsystems?: readonly string[];
+  readonly unitDimension?: Dimension;
 }
 
-interface CompiledDirect {
+interface EntryBase {
   readonly ruleId: string;
+  readonly language: AliasLanguage;
+}
+
+interface CompiledDirect extends EntryBase {
+  readonly kind: "direct";
   readonly canonicalId: string;
   readonly labelTokens?: readonly string[];
   readonly aliasClass: "class1_synonym" | "class3_qualified";
 }
 
-interface CompiledClass2 {
-  readonly ruleId: string;
+interface CompiledClass2 extends EntryBase {
+  readonly kind: "context";
   readonly canonicalId: string;
   readonly contextGuards: CompiledGuards;
   readonly labelTokens?: readonly string[];
 }
 
-interface CompiledClass4 {
-  readonly ruleId: string;
+interface CompiledClass4 extends EntryBase {
+  readonly kind: "ambiguous";
   readonly candidates: readonly string[];
 }
 
-interface CompiledLookups {
-  readonly direct: ReadonlyMap<string, CompiledDirect>;
-  readonly class2: ReadonlyMap<string, readonly CompiledClass2[]>;
-  readonly class4: ReadonlyMap<string, CompiledClass4>;
+type CompiledEntry = CompiledDirect | CompiledClass2 | CompiledClass4;
+
+/** Every entry for a normalized key; language scoping is applied at resolve time. */
+type CompiledLookups = ReadonlyMap<string, readonly CompiledEntry[]>;
+
+const LANGUAGES: ReadonlySet<string> = new Set(["all", "en", "uk", "ru", "sv", "fa", "zh"]);
+
+function scopesOverlap(a: AliasLanguage, b: AliasLanguage): boolean {
+  return a === "all" || b === "all" || a === b;
+}
+
+/** A rule applies to a caller whose language is unknown only if it is language-neutral. */
+function appliesToLanguage(rule: AliasLanguage, caller: string | undefined): boolean {
+  return rule === "all" || (caller !== undefined && caller.trim().toLowerCase() === rule);
 }
 
 function freezeList(values: readonly string[] | undefined): readonly string[] | undefined {
@@ -216,7 +235,13 @@ function compileGuards(ruleId: string, guards: ContextGuards | undefined): Compi
   const systemClasses = freezeList(guards?.systemClasses);
   const domains = freezeList(guards?.domains);
   const subsystems = freezeList(guards?.subsystems);
-  if (!systemClasses && !domains && !subsystems) {
+  const unitDimension = guards?.unitDimension;
+  if (unitDimension !== undefined && !Object.hasOwn(CANONICAL_UNIT, unitDimension)) {
+    throw new Error(
+      `Snapshot compilation error: Class 2 rule '${ruleId}' has unknown unitDimension '${String(unitDimension)}'`,
+    );
+  }
+  if (!systemClasses && !domains && !subsystems && unitDimension === undefined) {
     throw new Error(
       `Snapshot compilation error: Class 2 rule '${ruleId}' has no effective context guard`,
     );
@@ -225,34 +250,33 @@ function compileGuards(ruleId: string, guards: ContextGuards | undefined): Compi
     ...(systemClasses ? { systemClasses } : {}),
     ...(domains ? { domains } : {}),
     ...(subsystems ? { subsystems } : {}),
+    ...(unitDimension !== undefined ? { unitDimension } : {}),
   });
 }
 
 /**
  * Validates and copies rules into private structures. The caller's rule
  * objects and arrays are never retained, so mutating them after compilation
- * cannot change resolution.
+ * cannot change resolution. Class 2 candidates are sorted by ruleId, so the
+ * outcome depends only on the rule set, never on its input order (matching the
+ * order-independent content hash).
  */
 function buildLookups(rules: readonly SemanticAliasDefinition[]): CompiledLookups {
-  const direct = new Map<string, CompiledDirect>();
-  const class2 = new Map<string, CompiledClass2[]>();
-  const class4 = new Map<string, CompiledClass4>();
-  const kindOfKey = new Map<string, "direct" | "context" | "ambiguous">();
+  const byKey = new Map<string, CompiledEntry[]>();
   const seenRuleIds = new Set<string>();
 
-  const claim = (
-    nk: string,
-    kind: "direct" | "context" | "ambiguous",
-    ruleId: string,
-    allowShared: boolean,
-  ): void => {
-    const existing = kindOfKey.get(nk);
-    if (existing !== undefined && !(allowShared && existing === kind)) {
-      throw new Error(
-        `Snapshot compilation error: Rule '${ruleId}' collides on normalized key '${nk}' with an earlier rule`,
-      );
+  const add = (nk: string, entry: CompiledEntry): void => {
+    const list = byKey.get(nk) ?? [];
+    for (const other of list) {
+      const bothContext = other.kind === "context" && entry.kind === "context";
+      if (!bothContext && scopesOverlap(other.language, entry.language)) {
+        throw new Error(
+          `Snapshot compilation error: Rule '${entry.ruleId}' collides on normalized key '${nk}' with rule '${other.ruleId}'`,
+        );
+      }
     }
-    kindOfKey.set(nk, kind);
+    list.push(entry);
+    byKey.set(nk, list);
   };
 
   for (const rule of rules) {
@@ -263,12 +287,18 @@ function buildLookups(rules: readonly SemanticAliasDefinition[]): CompiledLookup
     }
     seenRuleIds.add(rule.ruleId);
 
+    if (!LANGUAGES.has(rule.language)) {
+      throw new Error(
+        `Snapshot compilation error: Rule '${rule.ruleId}' has unknown language '${String(rule.language)}'`,
+      );
+    }
     const nk = normalizeAliasKey(rule.rawKey);
     if (nk === "") {
       throw new Error(
         `Snapshot compilation error: Rule '${rule.ruleId}' has an empty normalized key`,
       );
     }
+    const common = { ruleId: rule.ruleId, language: rule.language };
 
     if (rule.aliasClass === "class4_ambiguous") {
       if (rule.candidateCanonicalIds.length === 0) {
@@ -283,11 +313,14 @@ function buildLookups(rules: readonly SemanticAliasDefinition[]): CompiledLookup
           );
         }
       }
-      claim(nk, "ambiguous", rule.ruleId, false);
-      class4.set(nk, {
-        ruleId: rule.ruleId,
-        candidates: Object.freeze([...rule.candidateCanonicalIds]),
-      });
+      add(
+        nk,
+        Object.freeze({
+          ...common,
+          kind: "ambiguous" as const,
+          candidates: Object.freeze([...rule.candidateCanonicalIds]),
+        }),
+      );
       continue;
     }
 
@@ -301,18 +334,16 @@ function buildLookups(rules: readonly SemanticAliasDefinition[]): CompiledLookup
       : undefined;
 
     if (rule.aliasClass === "class2_context") {
-      const contextGuards = compileGuards(rule.ruleId, rule.contextGuards);
-      claim(nk, "context", rule.ruleId, true);
-      const list = class2.get(nk) ?? [];
-      list.push(
+      add(
+        nk,
         Object.freeze({
-          ruleId: rule.ruleId,
+          ...common,
+          kind: "context" as const,
           canonicalId: rule.canonicalId,
-          contextGuards,
+          contextGuards: compileGuards(rule.ruleId, rule.contextGuards),
           ...(labelTokens ? { labelTokens } : {}),
         }),
       );
-      class2.set(nk, list);
       continue;
     }
 
@@ -321,11 +352,11 @@ function buildLookups(rules: readonly SemanticAliasDefinition[]): CompiledLookup
         `Snapshot compilation error: Rule '${rule.ruleId}' is ${rule.aliasClass} and must not carry context guards`,
       );
     }
-    claim(nk, "direct", rule.ruleId, false);
-    direct.set(
+    add(
       nk,
       Object.freeze({
-        ruleId: rule.ruleId,
+        ...common,
+        kind: "direct" as const,
         canonicalId: rule.canonicalId,
         aliasClass: rule.aliasClass,
         ...(labelTokens ? { labelTokens } : {}),
@@ -333,8 +364,13 @@ function buildLookups(rules: readonly SemanticAliasDefinition[]): CompiledLookup
     );
   }
 
-  for (const [k, v] of class2) class2.set(k, Object.freeze(v) as unknown as CompiledClass2[]);
-  return { direct, class2, class4 };
+  for (const [k, list] of byKey) {
+    const sorted = [...list].sort((a, b) =>
+      a.ruleId < b.ruleId ? -1 : a.ruleId > b.ruleId ? 1 : 0,
+    );
+    byKey.set(k, Object.freeze(sorted) as unknown as CompiledEntry[]);
+  }
+  return byKey;
 }
 
 // ─── Content addressing ────────────────────────────────────────────────────
@@ -351,11 +387,13 @@ function canonicalJson(value: unknown): string {
 }
 
 const MANIFEST_HASH = sha256Hex(canonicalJson(CANONICAL_CONCEPTS));
+const UNIT_TABLE_HASH = sha256Hex(canonicalJson(CANONICAL_UNIT));
 
 /**
- * SHA-256 over resolver version, manifest version and hash, and every rule
- * (all fields, sorted by ruleId). Any change that can alter resolution or its
- * provenance changes the hash. Core-registry metadata is bound in Phase 3.3.
+ * SHA-256 over resolver version, manifest version and hash, the canonical unit
+ * table, and every rule (all fields, sorted by ruleId). Resolution is a pure
+ * function of this digest's inputs plus the caller's context, and does not
+ * depend on rule input order. Core-registry metadata is bound in Phase 3.3.
  */
 function computeContentHash(rules: readonly SemanticAliasDefinition[]): string {
   const sorted = [...rules].sort((a, b) =>
@@ -366,6 +404,7 @@ function computeContentHash(rules: readonly SemanticAliasDefinition[]): string {
       resolverVersion: SEMANTIC_RESOLVER_VERSION,
       manifestVersion: CANONICAL_MANIFEST_VERSION,
       manifestHash: MANIFEST_HASH,
+      unitTableHash: UNIT_TABLE_HASH,
       rules: sorted,
     }),
   );
@@ -373,23 +412,50 @@ function computeContentHash(rules: readonly SemanticAliasDefinition[]): string {
 
 // ─── Guard evaluation ──────────────────────────────────────────────────────
 
+const DIMENSION_BY_CANONICAL_UNIT: ReadonlyMap<string, Dimension> = new Map(
+  (Object.keys(CANONICAL_UNIT) as Dimension[]).map((d) => [CANONICAL_UNIT[d], d]),
+);
+
+/** Physical dimension of a raw unit string, or undefined when it cannot be classified. */
+function dimensionOfUnit(rawUnit: string | undefined): Dimension | undefined {
+  if (!rawUnit || rawUnit.trim() === "") return undefined;
+  const canonical = canonicalUnitFor(rawUnit);
+  return canonical === undefined ? undefined : DIMENSION_BY_CANONICAL_UNIT.get(canonical);
+}
+
+/**
+ * Evaluates EVERY declared guard (no short-circuit) so the audit records how
+ * each one fared; the rule passes only if all are satisfied.
+ */
 function evaluateGuards(
   guards: CompiledGuards,
   ctx: ResolutionContextInput,
 ): { passed: boolean; audit: GuardEvaluationAudit[] } {
   const audit: GuardEvaluationAudit[] = [];
-  const checks: Array<[string, readonly string[] | undefined, string | undefined]> = [
+  const lists: Array<[string, readonly string[] | undefined, string | undefined]> = [
     ["systemClasses", guards.systemClasses, ctx.systemClass],
     ["domains", guards.domains, ctx.domain],
     ["subsystems", guards.subsystems, ctx.subsystem],
   ];
-  for (const [guardName, expected, actual] of checks) {
+  for (const [guardName, expected, actual] of lists) {
     if (!expected) continue;
-    const satisfied = actual !== undefined && expected.includes(actual);
-    audit.push({ guardName, expected, actual, satisfied });
-    if (!satisfied) return { passed: false, audit };
+    audit.push({
+      guardName,
+      expected,
+      actual,
+      satisfied: actual !== undefined && expected.includes(actual),
+    });
   }
-  return { passed: true, audit };
+  if (guards.unitDimension !== undefined) {
+    const actual = dimensionOfUnit(ctx.rawUnit);
+    audit.push({
+      guardName: "unitDimension",
+      expected: guards.unitDimension,
+      actual,
+      satisfied: actual === guards.unitDimension,
+    });
+  }
+  return { passed: audit.every((a) => a.satisfied), audit };
 }
 
 // ─── Result builder ────────────────────────────────────────────────────────
@@ -444,48 +510,48 @@ function resolveWithLookups(
   const nk = normalizeAliasKey(input.rawKey);
   const diagnostics: string[] = [];
 
+  // Language scoping: only rules whose language is "all" or equals the caller's.
+  const applicable = (lookups.get(nk) ?? []).filter((e) =>
+    appliesToLanguage(e.language, input.language),
+  );
+  const direct = applicable.find((e): e is CompiledDirect => e.kind === "direct");
+  const contexts = applicable.filter((e): e is CompiledClass2 => e.kind === "context");
+  const ambiguous = applicable.find((e): e is CompiledClass4 => e.kind === "ambiguous");
+
   // ── Gates 1 and 3: direct Class 1 synonym / Class 3 qualified concept ──
-  const entry = lookups.direct.get(nk);
-  if (entry) {
-    if (!entry.labelTokens || labelTokensMatch(entry.labelTokens, input.rawLabel)) {
+  if (direct) {
+    if (!direct.labelTokens || labelTokensMatch(direct.labelTokens, input.rawLabel)) {
       return frozenResult({
         ...base,
-        canonicalId: entry.canonicalId,
+        canonicalId: direct.canonicalId,
         status: "resolved",
-        aliasClass: entry.aliasClass,
-        matchType: entry.labelTokens ? "token_bounded" : "literal_synonym",
-        matchedRuleId: entry.ruleId,
+        aliasClass: direct.aliasClass,
+        matchType: direct.labelTokens ? "token_bounded" : "literal_synonym",
+        matchedRuleId: direct.ruleId,
         diagnostics: [],
       });
     }
-    diagnostics.push(`Rule '${entry.ruleId}' matched the key but its label tokens were absent.`);
+    diagnostics.push(`Rule '${direct.ruleId}' matched the key but its label tokens were absent.`);
   }
 
   // ── Gate 2: Class 2 context-conditioned synonym ────────────────────────
-  const class2Candidates = lookups.class2.get(nk);
-  if (class2Candidates && class2Candidates.length > 0) {
-    const passing: Array<{ ruleId: string; canonicalId: string; audit: GuardEvaluationAudit[] }> =
-      [];
+  if (contexts.length > 0) {
+    const passing: Array<{ entry: CompiledClass2; audit: GuardEvaluationAudit[] }> = [];
     let guardAuditForFail: GuardEvaluationAudit[] = [];
 
-    for (const candidate of class2Candidates) {
-      const { passed, audit } = evaluateGuards(candidate.contextGuards, input);
+    for (const entry of contexts) {
+      const { passed, audit } = evaluateGuards(entry.contextGuards, input);
       if (!passed) {
         guardAuditForFail = audit;
-      } else if (
-        !candidate.labelTokens ||
-        labelTokensMatch(candidate.labelTokens, input.rawLabel)
-      ) {
-        passing.push({ ruleId: candidate.ruleId, canonicalId: candidate.canonicalId, audit });
+      } else if (!entry.labelTokens || labelTokensMatch(entry.labelTokens, input.rawLabel)) {
+        passing.push({ entry, audit });
       } else {
-        diagnostics.push(
-          `Rule '${candidate.ruleId}' guards passed but its label tokens were absent.`,
-        );
+        diagnostics.push(`Rule '${entry.ruleId}' guards passed but its label tokens were absent.`);
       }
     }
 
     if (passing.length > 0) {
-      const ids = [...new Set(passing.map((p) => p.canonicalId))];
+      const ids = [...new Set(passing.map((p) => p.entry.canonicalId))];
       if (ids.length > 1) {
         return frozenResult({
           ...base,
@@ -496,15 +562,15 @@ function resolveWithLookups(
           ],
         });
       }
+      // contexts are sorted by ruleId, so "first" is the same for any input order.
       const first = passing[0]!;
-      const cand = class2Candidates.find((c) => c.ruleId === first.ruleId)!;
       return frozenResult({
         ...base,
-        canonicalId: first.canonicalId,
+        canonicalId: first.entry.canonicalId,
         status: "resolved",
         aliasClass: "class2_context",
-        matchType: cand.labelTokens ? "token_bounded" : "context_guard",
-        matchedRuleId: first.ruleId,
+        matchType: first.entry.labelTokens ? "token_bounded" : "context_guard",
+        matchedRuleId: first.entry.ruleId,
         guardAudit: first.audit,
         diagnostics: [],
       });
@@ -517,24 +583,25 @@ function resolveWithLookups(
       guardAudit: guardAuditForFail,
       diagnostics: [
         ...diagnostics,
-        ...guardAuditForFail.map(
-          (g) => `Context guard '${g.guardName}' failed: actual was ${g.actual ?? "undefined"}`,
-        ),
+        ...guardAuditForFail
+          .filter((g) => !g.satisfied)
+          .map(
+            (g) => `Context guard '${g.guardName}' failed: actual was ${g.actual ?? "undefined"}`,
+          ),
       ],
     });
   }
 
   // ── Gate 4: Class 4 known ambiguous ────────────────────────────────────
-  const class4Entry = lookups.class4.get(nk);
-  if (class4Entry) {
+  if (ambiguous) {
     return frozenResult({
       ...base,
       status: "unresolved_ambiguous",
       aliasClass: "class4_ambiguous",
-      matchedRuleId: class4Entry.ruleId,
-      candidateCanonicalIds: class4Entry.candidates,
+      matchedRuleId: ambiguous.ruleId,
+      candidateCanonicalIds: ambiguous.candidates,
       diagnostics: [
-        `Term '${nk}' is known ambiguous: candidate interpretations: ${class4Entry.candidates.join(", ")}`,
+        `Term '${nk}' is known ambiguous: candidate interpretations: ${ambiguous.candidates.join(", ")}`,
       ],
     });
   }
@@ -593,7 +660,7 @@ const CODE_SEED_RULES: readonly SemanticAliasDefinition[] = Object.freeze([
     ruleId: "seed-speed-max-en-1",
     canonicalId: "speed.max",
     aliasClass: "class1_synonym",
-    language: "en",
+    language: "all",
     rawKey: "top_speed",
     rationale: "Universal unambiguous synonym for maximum speed.",
     author: "phase3-seed",
@@ -602,7 +669,7 @@ const CODE_SEED_RULES: readonly SemanticAliasDefinition[] = Object.freeze([
     ruleId: "seed-speed-max-en-2",
     canonicalId: "speed.max",
     aliasClass: "class1_synonym",
-    language: "en",
+    language: "all",
     rawKey: "maximum_speed",
     rationale: "Direct English synonym for maximum speed.",
     author: "phase3-seed",
@@ -611,7 +678,7 @@ const CODE_SEED_RULES: readonly SemanticAliasDefinition[] = Object.freeze([
     ruleId: "seed-speed-max-en-3",
     canonicalId: "speed.max",
     aliasClass: "class1_synonym",
-    language: "en",
+    language: "all",
     rawKey: "max_speed",
     rationale: "Abbreviated English synonym for maximum speed.",
     author: "phase3-seed",
@@ -620,7 +687,7 @@ const CODE_SEED_RULES: readonly SemanticAliasDefinition[] = Object.freeze([
     ruleId: "seed-speed-max-en-4",
     canonicalId: "speed.max",
     aliasClass: "class1_synonym",
-    language: "en",
+    language: "all",
     rawKey: "vmax",
     rationale: "Aeronautical abbreviation for maximum airspeed.",
     author: "phase3-seed",
@@ -631,7 +698,7 @@ const CODE_SEED_RULES: readonly SemanticAliasDefinition[] = Object.freeze([
     ruleId: "seed-speed-cruise-en-1",
     canonicalId: "speed.cruise",
     aliasClass: "class3_qualified",
-    language: "en",
+    language: "all",
     rawKey: "cruising_speed",
     rationale: "Cruise speed is distinct from max speed; must not collapse into speed.max.",
     author: "phase3-seed",
@@ -640,7 +707,7 @@ const CODE_SEED_RULES: readonly SemanticAliasDefinition[] = Object.freeze([
     ruleId: "seed-speed-cruise-en-2",
     canonicalId: "speed.cruise",
     aliasClass: "class3_qualified",
-    language: "en",
+    language: "all",
     rawKey: "cruise_speed",
     rationale: "Cruise speed is distinct from max speed; must not collapse into speed.max.",
     author: "phase3-seed",
@@ -649,7 +716,7 @@ const CODE_SEED_RULES: readonly SemanticAliasDefinition[] = Object.freeze([
     ruleId: "seed-speed-cruise-en-3",
     canonicalId: "speed.cruise",
     aliasClass: "class3_qualified",
-    language: "en",
+    language: "all",
     rawKey: "speed_cruise",
     rationale: "Inverted word-order variant of cruise speed.",
     author: "phase3-seed",
@@ -660,7 +727,7 @@ const CODE_SEED_RULES: readonly SemanticAliasDefinition[] = Object.freeze([
     ruleId: "seed-range-max-en-1",
     canonicalId: "range.max",
     aliasClass: "class1_synonym",
-    language: "en",
+    language: "all",
     rawKey: "max_range",
     rationale: "Direct synonym for maximum range.",
     author: "phase3-seed",
@@ -669,7 +736,7 @@ const CODE_SEED_RULES: readonly SemanticAliasDefinition[] = Object.freeze([
     ruleId: "seed-range-max-en-2",
     canonicalId: "range.max",
     aliasClass: "class1_synonym",
-    language: "en",
+    language: "all",
     rawKey: "maximum_range",
     rationale: "Direct synonym for maximum range.",
     author: "phase3-seed",
@@ -680,7 +747,7 @@ const CODE_SEED_RULES: readonly SemanticAliasDefinition[] = Object.freeze([
     ruleId: "seed-range-combatradius-en-1",
     canonicalId: "range.combat_radius",
     aliasClass: "class3_qualified",
-    language: "en",
+    language: "all",
     rawKey: "combat_radius",
     rationale:
       "Combat radius is an outbound-only mission distance, distinct from max/operational range.",
@@ -692,7 +759,7 @@ const CODE_SEED_RULES: readonly SemanticAliasDefinition[] = Object.freeze([
     ruleId: "seed-altitude-max-en-1",
     canonicalId: "altitude.max",
     aliasClass: "class1_synonym",
-    language: "en",
+    language: "all",
     rawKey: "max_altitude",
     rationale: "Direct synonym for maximum altitude / absolute ceiling.",
     author: "phase3-seed",
@@ -701,7 +768,7 @@ const CODE_SEED_RULES: readonly SemanticAliasDefinition[] = Object.freeze([
     ruleId: "seed-altitude-max-en-2",
     canonicalId: "altitude.max",
     aliasClass: "class1_synonym",
-    language: "en",
+    language: "all",
     rawKey: "maximum_altitude",
     rationale: "Direct synonym for maximum altitude.",
     author: "phase3-seed",
@@ -710,7 +777,7 @@ const CODE_SEED_RULES: readonly SemanticAliasDefinition[] = Object.freeze([
     ruleId: "seed-altitude-max-en-3",
     canonicalId: "altitude.max",
     aliasClass: "class1_synonym",
-    language: "en",
+    language: "all",
     rawKey: "operational_altitude",
     rationale:
       "In OSINT reporting this almost always refers to the operational ceiling, not a service ceiling.",
@@ -722,7 +789,7 @@ const CODE_SEED_RULES: readonly SemanticAliasDefinition[] = Object.freeze([
     ruleId: "seed-altitude-svc-en-1",
     canonicalId: "altitude.service_ceiling",
     aliasClass: "class3_qualified",
-    language: "en",
+    language: "all",
     rawKey: "service_ceiling",
     rationale: "Service ceiling is the aeronautical ceiling, distinct from absolute max altitude.",
     author: "phase3-seed",
@@ -733,7 +800,7 @@ const CODE_SEED_RULES: readonly SemanticAliasDefinition[] = Object.freeze([
     ruleId: "seed-payload-capacity-en-1",
     canonicalId: "payload.capacity",
     aliasClass: "class1_synonym",
-    language: "en",
+    language: "all",
     rawKey: "payload_capacity",
     rationale: "Direct synonym for payload carrying capacity.",
     author: "phase3-seed",
@@ -742,7 +809,7 @@ const CODE_SEED_RULES: readonly SemanticAliasDefinition[] = Object.freeze([
     ruleId: "seed-payload-capacity-en-2",
     canonicalId: "payload.capacity",
     aliasClass: "class1_synonym",
-    language: "en",
+    language: "all",
     rawKey: "max_payload",
     rationale: "Maximum payload is payload capacity.",
     author: "phase3-seed",
@@ -753,7 +820,7 @@ const CODE_SEED_RULES: readonly SemanticAliasDefinition[] = Object.freeze([
     ruleId: "seed-payload-warhead-en-1",
     canonicalId: "payload.warhead",
     aliasClass: "class3_qualified",
-    language: "en",
+    language: "all",
     rawKey: "warhead_weight",
     rationale:
       "Warhead mass is a specific explosive-charge measurement, distinct from general payload capacity.",
@@ -763,7 +830,7 @@ const CODE_SEED_RULES: readonly SemanticAliasDefinition[] = Object.freeze([
     ruleId: "seed-payload-warhead-en-2",
     canonicalId: "payload.warhead",
     aliasClass: "class3_qualified",
-    language: "en",
+    language: "all",
     rawKey: "warhead_mass",
     rationale: "Warhead mass synonym.",
     author: "phase3-seed",
@@ -774,7 +841,7 @@ const CODE_SEED_RULES: readonly SemanticAliasDefinition[] = Object.freeze([
     ruleId: "seed-weight-mtow-en-1",
     canonicalId: "weight.mtow",
     aliasClass: "class1_synonym",
-    language: "en",
+    language: "all",
     rawKey: "mtow",
     rationale: "MTOW is the ICAO abbreviation for maximum takeoff weight.",
     author: "phase3-seed",
@@ -783,7 +850,7 @@ const CODE_SEED_RULES: readonly SemanticAliasDefinition[] = Object.freeze([
     ruleId: "seed-weight-mtow-en-2",
     canonicalId: "weight.mtow",
     aliasClass: "class1_synonym",
-    language: "en",
+    language: "all",
     rawKey: "max_takeoff_weight",
     rationale: "Maximum takeoff weight — standard English form of MTOW.",
     author: "phase3-seed",
@@ -792,7 +859,7 @@ const CODE_SEED_RULES: readonly SemanticAliasDefinition[] = Object.freeze([
     ruleId: "seed-weight-total-en-1",
     canonicalId: "weight.total",
     aliasClass: "class1_synonym",
-    language: "en",
+    language: "all",
     rawKey: "total_weight",
     rationale: "Stated total/gross system weight.",
     author: "phase3-seed",
@@ -803,7 +870,7 @@ const CODE_SEED_RULES: readonly SemanticAliasDefinition[] = Object.freeze([
     ruleId: "seed-dim-wingspan-en-1",
     canonicalId: "dimension.wingspan",
     aliasClass: "class1_synonym",
-    language: "en",
+    language: "all",
     rawKey: "wingspan",
     rationale: "Direct match — wing span is unambiguous.",
     author: "phase3-seed",
@@ -812,7 +879,7 @@ const CODE_SEED_RULES: readonly SemanticAliasDefinition[] = Object.freeze([
     ruleId: "seed-dim-wingspan-en-2",
     canonicalId: "dimension.wingspan",
     aliasClass: "class1_synonym",
-    language: "en",
+    language: "all",
     rawKey: "wing_span",
     rationale: "Hyphenated/spaced variant of wingspan.",
     author: "phase3-seed",
@@ -823,11 +890,24 @@ const CODE_SEED_RULES: readonly SemanticAliasDefinition[] = Object.freeze([
     ruleId: "seed-dim-width-beam-sea",
     canonicalId: "dimension.width",
     aliasClass: "class2_context",
-    language: "en",
+    language: "all",
     rawKey: "beam",
     contextGuards: { domains: ["Sea"] },
     rationale:
       "In naval architecture 'beam' unambiguously means hull width. On non-Sea platforms the term is polysemous.",
+    author: "phase3-seed",
+  },
+
+  // ── Class 2: bare weight — only with a mass unit ──────────────────────────
+  {
+    ruleId: "seed-weight-total-mass-unit",
+    canonicalId: "weight.total",
+    aliasClass: "class2_context",
+    language: "all",
+    rawKey: "weight",
+    contextGuards: { unitDimension: "mass" },
+    rationale:
+      "Bare 'weight' is a stated total weight only when its unit is a mass; an angle or ratio unit fails safe.",
     author: "phase3-seed",
   },
 
@@ -836,7 +916,7 @@ const CODE_SEED_RULES: readonly SemanticAliasDefinition[] = Object.freeze([
     ruleId: "seed-power-rf-en-1",
     canonicalId: "power.rf",
     aliasClass: "class1_synonym",
-    language: "en",
+    language: "all",
     rawKey: "jamming_power",
     rationale: "Jamming power unambiguously refers to RF transmitter output power.",
     author: "phase3-seed",
@@ -845,7 +925,7 @@ const CODE_SEED_RULES: readonly SemanticAliasDefinition[] = Object.freeze([
     ruleId: "seed-power-engine-en-1",
     canonicalId: "power.engine",
     aliasClass: "class1_synonym",
-    language: "en",
+    language: "all",
     rawKey: "engine_power",
     rationale: "Engine power unambiguously refers to propulsion output.",
     author: "phase3-seed",
@@ -856,7 +936,7 @@ const CODE_SEED_RULES: readonly SemanticAliasDefinition[] = Object.freeze([
     ruleId: "seed-endurance-flight-en-1",
     canonicalId: "endurance.flight",
     aliasClass: "class1_synonym",
-    language: "en",
+    language: "all",
     rawKey: "flight_endurance",
     rationale: "Direct synonym for flight endurance.",
     author: "phase3-seed",
@@ -865,7 +945,7 @@ const CODE_SEED_RULES: readonly SemanticAliasDefinition[] = Object.freeze([
     ruleId: "seed-endurance-flight-en-2",
     canonicalId: "endurance.flight",
     aliasClass: "class1_synonym",
-    language: "en",
+    language: "all",
     rawKey: "endurance",
     rationale: "In UAS OSINT context, bare 'endurance' almost always means flight time.",
     author: "phase3-seed",
@@ -876,7 +956,7 @@ const CODE_SEED_RULES: readonly SemanticAliasDefinition[] = Object.freeze([
     ruleId: "seed-maneuver-gload-en-1",
     canonicalId: "maneuver.load_factor_max",
     aliasClass: "class1_synonym",
-    language: "en",
+    language: "all",
     rawKey: "max_g",
     rationale: "Max G / g-limit is the structural load factor ceiling, not a mass.",
     author: "phase3-seed",
@@ -885,7 +965,7 @@ const CODE_SEED_RULES: readonly SemanticAliasDefinition[] = Object.freeze([
     ruleId: "seed-maneuver-gload-en-2",
     canonicalId: "maneuver.load_factor_max",
     aliasClass: "class1_synonym",
-    language: "en",
+    language: "all",
     rawKey: "g_limit",
     rationale: "g-limit is the structural load factor ceiling.",
     author: "phase3-seed",
@@ -894,7 +974,7 @@ const CODE_SEED_RULES: readonly SemanticAliasDefinition[] = Object.freeze([
     ruleId: "seed-maneuver-gload-en-3",
     canonicalId: "maneuver.load_factor_max",
     aliasClass: "class1_synonym",
-    language: "en",
+    language: "all",
     rawKey: "load_factor",
     rationale: "Load factor — ratio of lift to weight, measured in g.",
     author: "phase3-seed",
@@ -904,7 +984,7 @@ const CODE_SEED_RULES: readonly SemanticAliasDefinition[] = Object.freeze([
   {
     ruleId: "seed-ambig-radius",
     aliasClass: "class4_ambiguous",
-    language: "en",
+    language: "all",
     rawKey: "radius",
     candidateCanonicalIds: ["range.combat_radius", "range.engagement"],
     rationale: "Bare 'radius' is polysemous: combat radius or EW suppression/engagement radius.",
@@ -913,7 +993,7 @@ const CODE_SEED_RULES: readonly SemanticAliasDefinition[] = Object.freeze([
   {
     ruleId: "seed-ambig-power",
     aliasClass: "class4_ambiguous",
-    language: "en",
+    language: "all",
     rawKey: "power",
     candidateCanonicalIds: ["power.rf", "power.engine"],
     rationale: "Bare 'power' is polysemous: RF transmitter power (W) vs engine power (kW/hp).",
@@ -922,7 +1002,7 @@ const CODE_SEED_RULES: readonly SemanticAliasDefinition[] = Object.freeze([
   {
     ruleId: "seed-ambig-capacity",
     aliasClass: "class4_ambiguous",
-    language: "en",
+    language: "all",
     rawKey: "capacity",
     candidateCanonicalIds: ["payload.capacity", "capacity.fuel", "capacity.target_channels"],
     rationale:
