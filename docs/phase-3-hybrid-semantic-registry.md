@@ -7,12 +7,12 @@
 
 Drone Intel Hub extracts, normalizes, verifies, and analyzes technical specifications and operational data concerning unmanned systems and counter-drone capabilities across multilingual OSINT sources (news dispatches, manufacturer brochures, defence analytics, and field reports). A recurring architectural challenge is the semantic variation of extracted attribute names. Different sources express identical technical concepts using diverse languages, transliterations, synonyms, domain-specific abbreviations, and varying levels of technical precision.
 
-Currently, the resolution of raw attribute keys to canonical semantic concepts is handled by a hardcoded, procedural TypeScript routine ([`src/entities/normalization/semantic.ts`](file:///C:/dev/drone-intel-hub/src/entities/normalization/semantic.ts)). When an extracted key or label does not match an internal rule, the function silently returns the raw key unchanged (*identity fallback*). Furthermore, physical dimension and unit assignments rely on prefix matching ([`src/entities/normalization/core-registry.ts`](file:///C:/dev/drone-intel-hub/src/entities/normalization/core-registry.ts)), which cannot distinguish whether a semantic identifier represents a genuine, registered concept.
+Currently, the resolution of raw attribute keys to canonical semantic concepts is handled by a hardcoded, procedural TypeScript routine ([`src/entities/normalization/semantic.ts`](../src/entities/normalization/semantic.ts)). When an extracted key or label does not match an internal rule, the function silently returns the raw key unchanged (*identity fallback*). Furthermore, physical dimension and unit assignments rely on prefix matching ([`src/entities/normalization/core-registry.ts`](../src/entities/normalization/core-registry.ts)), which cannot distinguish whether a semantic identifier represents a genuine, registered concept.
 
 This document establishes the architecture for **Phase 3: The Hybrid Semantic Registry**. It addresses previous architectural shortcomings and defines:
 1. **A Strict Separation of Three Registry Concerns:**
    * *Canonical Semantic Concepts:* A closed, code-owned manifest of valid technical concepts.
-   * *Physical and Consensus Metadata:* Authoritative physical units, dimensions, conversion factors, and consensus tolerances owned by the code core ([`core-registry.ts`](file:///C:/dev/drone-intel-hub/src/entities/normalization/core-registry.ts) and [`units.ts`](file:///C:/dev/drone-intel-hub/src/entities/normalization/units.ts)).
+   * *Physical and Consensus Metadata:* Authoritative physical units, dimensions, conversion factors, and consensus tolerances owned by the code core ([`core-registry.ts`](../src/entities/normalization/core-registry.ts) and [`units.ts`](../src/entities/normalization/units.ts)).
    * *Terminology and Alias Mappings:* An extensible, versioned, database-backed inventory of multilingual terminology and context rules, consumed strictly via compiled, immutable snapshots.
 2. **A Corrected Four-Class Alias Model:** Class 1 (Canonical Synonyms), Class 2 (Context-Conditioned Synonyms), Class 3 (Qualified Distinct Concepts), and Class 4 (Known Ambiguous Candidates), alongside an explicit state for *Unknown Terminology*.
 3. **Structured Resolution Metadata Instead of Uncalibrated Probabilities:** Deterministic resolution states, match types, matched rule IDs, and guard audit trails replace arbitrary floating-point confidence scores.
@@ -31,10 +31,10 @@ This document establishes the architecture for **Phase 3: The Hybrid Semantic Re
 * Define strict boundaries separating semantic resolution from taxonomy classification, unit conversion, numeric parsing, claim verification, and relationship extraction.
 
 ### Explicit Non-Goals
-* **No Production Ingest Integration in Initial Work:** The initial resolver runs in isolation and offline replay; it does not replace or wrap `semanticKeyFor()` inside [`src/entities/normalization/apply.ts`](file:///C:/dev/drone-intel-hub/src/entities/normalization/apply.ts).
+* **No Production Ingest Integration in Initial Work:** The initial resolver runs in isolation and offline replay; it does not replace or wrap `semanticKeyFor()` inside [`src/entities/normalization/apply.ts`](../src/entities/normalization/apply.ts).
 * **No Production Claim or Consensus Alteration:** Phase 3 must not change any existing claim value, unit, consensus grouping, catalog status, or verification verdict.
 * **No Autonomous Writes to Active Semantics:** `AUTO_APPLY_TIERS` remains strictly empty (`[]`). All new aliases, promotions, and deprecations require human review.
-* **No Replacement of Existing Taxonomies:** The registry does not duplicate the propulsion, installation, or protocol taxonomies in [`src/entities/normalization/taxonomy.ts`](file:///C:/dev/drone-intel-hub/src/entities/normalization/taxonomy.ts).
+* **No Replacement of Existing Taxonomies:** The registry does not duplicate the propulsion, installation, or protocol taxonomies in [`src/entities/normalization/taxonomy.ts`](../src/entities/normalization/taxonomy.ts).
 * **No Arbitrary Regex DSL:** User- or AI-supplied unstructured regular expressions are prohibited. Matching relies on literal strings, bounded word tokens, and validated context guards.
 
 ### Mandatory Safety Invariants
@@ -111,7 +111,7 @@ The following findings were verified against repository `121nilsson/drone-intel-
 
 7. **`src/shared/contracts/proposals.ts` & `src/shared/infra/proposals/`**
    * *Symbols:* `PROPOSAL_KINDS`, `AUTO_APPLY_TIERS`, `ruleApplier`, `admitProposal()`.
-   * *Observed Behaviour:* `PROPOSAL_KINDS` reserves `"normalizer"` alongside `"rule"`, `"prompt"`, `"schema"`, `"model_route"`, and `"code_patch"`. However, [`src/shared/infra/proposals/admit.ts`](file:///C:/dev/drone-intel-hub/src/shared/infra/proposals/admit.ts) registers only `ruleApplier`. **There is currently no implementation for `normalizerApplier`.** `AUTO_APPLY_TIERS` is frozen as an empty array (`[]`).
+   * *Observed Behaviour:* `PROPOSAL_KINDS` reserves `"normalizer"` alongside `"rule"`, `"prompt"`, `"schema"`, `"model_route"`, and `"code_patch"`. However, [`src/shared/infra/proposals/admit.ts`](../src/shared/infra/proposals/admit.ts) registers only `ruleApplier`. **There is currently no implementation for `normalizerApplier`.** `AUTO_APPLY_TIERS` is frozen as an empty array (`[]`).
 
 8. **`src/entities/drone/claim-lineage.ts` & `src/entities/drone/types.ts`**
    * *Symbols:* `ClaimLineage`, `SpecClaim.lineage`.
@@ -261,7 +261,7 @@ export function isValidCanonicalId(id: string): boolean {
 
 ### Conceptual Clarification: Qualified Concepts vs Aliases
 
-In the initial draft, terms such as `cruise_speed`, `service_ceiling`, and `warhead_weight` were ambiguously defined as "qualified aliases" of parent concepts (`speed.max`, `altitude.max`). **This was architecturally hazardous.** In Drone Intel Hub, if two attributes share a canonical semantic string, downstream grouping in [`spec-engine.ts: regroup()`](file:///C:/dev/drone-intel-hub/src/entities/drone/spec-engine.ts#L54) pools their claims into a single attribute. If `cruise_speed` collapsed into `speed.max`, a cruise speed of $180\text{ km/h}$ and a top speed of $300\text{ km/h}$ would be merged and flagged as a factual contradiction!
+In the initial draft, terms such as `cruise_speed`, `service_ceiling`, and `warhead_weight` were ambiguously defined as "qualified aliases" of parent concepts (`speed.max`, `altitude.max`). **This was architecturally hazardous.** In Drone Intel Hub, if two attributes share a canonical semantic string, downstream grouping in [`spec-engine.ts: regroup()`](../src/entities/drone/spec-engine.ts#L54) pools their claims into a single attribute. If `cruise_speed` collapsed into `speed.max`, a cruise speed of $180\text{ km/h}$ and a top speed of $300\text{ km/h}$ would be merged and flagged as a factual contradiction!
 
 In the revised model, `speed.cruise`, `speed.max`, `altitude.service_ceiling`, and `payload.warhead` are **distinct canonical concepts**, each with its own entry in `CANONICAL_CONCEPTS`.
 
@@ -557,7 +557,7 @@ Resolution proceeds through strict precedence gates. The algorithm halts at the 
    * `systemClasses`: Checked against `context.systemClass`.
    * `domains`: Checked against `context.domain`.
    * `subsystems`: Checked against `context.subsystem`.
-   * `unitDimension`: Verified by checking `context.rawUnit` against [`units.ts: CANONICAL_UNIT`](file:///C:/dev/drone-intel-hub/src/entities/normalization/units.ts#L3).
+   * `unitDimension`: Verified by checking `context.rawUnit` against [`units.ts: CANONICAL_UNIT`](../src/entities/normalization/units.ts#L3).
    * **Collision Handling:**
      * If exactly one candidate passes all guards: Return `status: "resolved"`, `canonicalId: rule.canonicalId`.
      * If multiple candidates pass with conflicting `canonicalId`s: Fail safe to `status: "unresolved_conflict"`.
@@ -618,40 +618,80 @@ Two persistence models were evaluated:
 -- Idempotent setup for the Hybrid Semantic Registry
 
 CREATE TABLE IF NOT EXISTS semantic_alias_revisions (
-  revision_id     UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  rule_id         TEXT NOT NULL,
-  canonical_id    TEXT NOT NULL,
-  alias_class     TEXT NOT NULL CHECK (alias_class IN ('class1_synonym', 'class2_context', 'class3_qualified', 'class4_ambiguous')),
-  language        TEXT NOT NULL DEFAULT 'all',
-  raw_key         TEXT NOT NULL,
-  label_tokens    JSONB,
-  context_guards  JSONB,
-  rationale       TEXT NOT NULL,
-  author          TEXT NOT NULL,
-  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  revision_id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  rule_id                 TEXT NOT NULL,
+  canonical_id            TEXT, -- NULL for Class 4 ambiguous terms
+  candidate_canonical_ids JSONB, -- Mandatory candidate targets for Class 4 ambiguous terms
+  alias_class             TEXT NOT NULL CHECK (alias_class IN ('class1_synonym', 'class2_context', 'class3_qualified', 'class4_ambiguous')),
+  language                TEXT NOT NULL DEFAULT 'all',
+  raw_key                 TEXT NOT NULL,
+  label_tokens            JSONB,
+  context_guards          JSONB,
+  rationale               TEXT NOT NULL,
+  author                  TEXT NOT NULL,
+  created_at              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT chk_canonical_target CHECK (
+    (alias_class = 'class4_ambiguous' AND canonical_id IS NULL AND candidate_canonical_ids IS NOT NULL) OR
+    (alias_class IN ('class1_synonym', 'class2_context', 'class3_qualified') AND canonical_id IS NOT NULL)
+  )
 );
 
 CREATE TABLE IF NOT EXISTS semantic_registry_snapshots (
-  snapshot_id     TEXT PRIMARY KEY, -- e.g. "snap-v004-a1b2c3d4"
-  version         INTEGER NOT NULL UNIQUE,
-  content_hash    TEXT NOT NULL,    -- SHA-256 over canonical JSON of rules
-  manifest_version TEXT NOT NULL,   -- Version of code CANONICAL_CONCEPTS
-  compiled_rules  JSONB NOT NULL,   -- Complete serialized snapshot payload
-  activated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  activated_by    TEXT NOT NULL,
-  note            TEXT
+  snapshot_id             TEXT PRIMARY KEY, -- e.g. "snap-v004-a1b2c3d4"
+  version                 INTEGER NOT NULL UNIQUE,
+  content_hash            TEXT NOT NULL,    -- SHA-256 over composite digest (rules + manifests)
+  manifest_version        TEXT NOT NULL,   -- Version of code CANONICAL_CONCEPTS
+  manifest_hash           TEXT NOT NULL,   -- SHA-256 over CANONICAL_CONCEPTS
+  core_registry_version   TEXT NOT NULL,   -- Version identifier from core-registry.ts
+  resolver_version        TEXT NOT NULL,   -- Version of the resolver engine/compiler code
+  compiled_rules          JSONB NOT NULL,   -- Complete serialized snapshot payload
+  activated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  activated_by            TEXT NOT NULL,
+  note                    TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_semantic_revisions_rule ON semantic_alias_revisions(rule_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_semantic_snapshots_version ON semantic_registry_snapshots(version DESC);
+
+-- Concrete Database-Enforced Immutability:
+-- Protects against accidental UPDATE/DELETE from scripts, ORM bugs, or administrative manual edits.
+CREATE OR REPLACE FUNCTION prevent_semantic_registry_mutation()
+RETURNS trigger AS $$
+BEGIN
+  RAISE EXCEPTION 'Table % is strictly append-only: UPDATE and DELETE operations are forbidden.', TG_TABLE_NAME;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_prevent_alias_revision_mutation ON semantic_alias_revisions;
+CREATE TRIGGER trg_prevent_alias_revision_mutation
+BEFORE UPDATE OR DELETE ON semantic_alias_revisions
+FOR EACH ROW EXECUTE FUNCTION prevent_semantic_registry_mutation();
+
+DROP TRIGGER IF EXISTS trg_prevent_snapshot_mutation ON semantic_registry_snapshots;
+CREATE TRIGGER trg_prevent_snapshot_mutation
+BEFORE UPDATE OR DELETE ON semantic_registry_snapshots
+FOR EACH ROW EXECUTE FUNCTION prevent_semantic_registry_mutation();
 ```
 
-### Snapshot Content Addressability
-Each compiled snapshot receives a deterministic SHA-256 content hash computed over the canonical, key-sorted JSON serialization of its active rules.
+### Composite Snapshot Content Addressability
+A snapshot hash computed over database rules alone is insufficient, because changes to code-owned definitions (e.g. `CANONICAL_CONCEPTS`, physical dimensions, consensus tolerances, or normalizer compiler logic) could silently alter resolution behavior under an unchanged database state.
 
+The snapshot content hash is therefore computed over a **composite digest** that explicitly binds code invariants and active database rules:
+
+```typescript
+export interface SnapshotCompositeDigest {
+  readonly resolverVersion: string;         // Compiler / resolver engine version (e.g. "1.0.0")
+  readonly manifestVersion: string;         // Version of CANONICAL_CONCEPTS (e.g. "1.0.0")
+  readonly manifestHash: string;            // SHA-256 over canonical JSON of CANONICAL_CONCEPTS
+  readonly coreRegistryVersion: string;     // Version of core-registry.ts
+  readonly coreDimensionsHash: string;      // SHA-256 over CORE_DIMENSIONS + tolerances
+  readonly activeRules: readonly SemanticAliasDefinition[]; // Canonical sorted active rules
+}
 ```
-snapshot_content_hash = SHA256(canonical_json_sort(active_rules))
-```
+
+$$\text{snapshot\_content\_hash} = \text{SHA256}\Big(\text{canonical\_json\_sort}(\text{SnapshotCompositeDigest})\Big)$$
+
+This cryptographic binding guarantees that if any code-level invariant or active rule changes, the snapshot content hash changes, completely preventing silent historical drift.
 
 ### Runtime Immutability Guarantee
 To ensure runtime immutability in JavaScript/TypeScript:
@@ -676,7 +716,7 @@ export interface ReadonlySemanticSnapshot {
 ```
 
 ### Database Failure and Cold-Start Resilience
-1. **Cache TTL Refresh:** The server queries `select max(version) from semantic_registry_snapshots` every 30 seconds (matching [`src/shared/infra/heuristics/rule-registry.server.ts`](file:///C:/dev/drone-intel-hub/src/shared/infra/heuristics/rule-registry.server.ts)).
+1. **Cache TTL Refresh:** The server queries `select max(version) from semantic_registry_snapshots` every 30 seconds (matching [`src/shared/infra/heuristics/rule-registry.server.ts`](../src/shared/infra/heuristics/rule-registry.server.ts)).
 2. **Database Failure During Refresh:** If the query fails, the server logs a warning and **retains the current active in-memory snapshot**. Ingest and processing never halt.
 3. **Cold-Start Without Database:** If the service boots without database access or with `DATABASE_URL` unset, it automatically initializes a **Fallback Code Seed Snapshot** compiled from hardcoded initial seed rules. The snapshot flags its state as `isDegradedSeedOnly: true`.
 
@@ -770,7 +810,7 @@ To maintain architectural decoupling, each pipeline stage enforces strict bounda
 
 ### Governance Invariants
 1. **No Autonomous Promotion:** `AUTO_APPLY_TIERS` remains empty (`[]`). All new semantic mappings require explicit analyst approval.
-2. **Audit Ledgering:** Snapshot activations and deprecations write an event to `autonomy_events` ([`src/shared/infra/autonomy/ledger.server.ts`](file:///C:/dev/drone-intel-hub/src/shared/infra/autonomy/ledger.server.ts)) with action `semantic_snapshot_activated`.
+2. **Audit Ledgering:** Snapshot activations and deprecations write an event to `autonomy_events` ([`src/shared/infra/autonomy/ledger.server.ts`](../src/shared/infra/autonomy/ledger.server.ts)) with action `semantic_snapshot_activated`.
 3. **Rollback:** An analyst can activate an older snapshot version at any time. The database merely updates the active snapshot pointer, immediately restoring prior resolution behavior.
 
 ---
@@ -826,10 +866,22 @@ To guarantee that the historical evaluation sample can be reconstructed identica
 2. **Post-Level Deduplication:** Ingestion feeds frequently syndicate identical dispatches across multiple outlets. Posts are deduplicated prior to stratification using the dispatch `contentHash` (SimHash) and text hash. A syndicated report contributes to the sampling pool only once.
 3. **Stratification Matrix (Language × Attribute Family):**
    * *Languages (3):* English (`en`), Ukrainian (`uk`), Russian (`ru`).
-   * *Semantic Families (11):* `speed.`, `range.`, `altitude.`, `payload.`, `weight.`, `dimension.`, `power.`, `endurance.`, `maneuver.`, `capacity.`, `cost.`.
-   * *Total Strata Cells:* $3 \times 11 = 33\text{ cells}$.
+   * *Semantic Families & Programme Metadata (12):*
+     1. `speed.` (max, cruise, dive, stated, target)
+     2. `range.` (max, operational, combat radius, link, engagement, detection)
+     3. `altitude.` (max, service ceiling, target ceiling/floor)
+     4. `payload.` (capacity, mass, warhead)
+     5. `weight.` (mtow, empty, launch, total)
+     6. `dimension.` (length, wingspan, height, width/beam, diameter, depth, caliber)
+     7. `power.` (rf jammer power, engine output)
+     8. `endurance.` (flight duration)
+     9. `maneuver.` (load factor g)
+     10. `capacity.` (fuel volume, target channels)
+     11. `cost.` (unit procurement price)
+     12. `other_programme_metadata` (explicit category capturing `production.rate_monthly`, `inventory.deployed_count`, `guidance.system`, and long-tail unclassified raw extraction keys, preventing them from falling outside the sampling plan).
+   * *Total Strata Cells:* $3 \times 12 = 36\text{ cells}$.
 4. **Sample Quota per Cell:**
-   * Target quota: 60 unique extraction instances per stratum cell (nominal target $\approx 1,980$ extraction contexts).
+   * Target quota: 60 unique extraction instances per stratum cell (nominal target $\approx 2,160$ extraction contexts).
 5. **Handling of Small or Empty Strata:**
    * If a stratum contains fewer than 60 instances (e.g. Ukrainian load factor `maneuver.` or Russian fuel capacity `capacity.`), **100% of available unique instances** in that cell are sampled.
    * Deficits are never backfilled with common attributes (`speed` or `range`), as doing so would distort family representation.
@@ -876,11 +928,23 @@ export interface SemanticReferenceCase {
 }
 ```
 
-#### Mandatory Ambiguity and Negative Cases
+#### Mandatory Ambiguity, Negative Cases, and Statistical Metrics
 * The reference corpus must explicitly contain at least **30% negative or ambiguous test cases** (e.g., bare `radius` without context, `power` on an unknown system, `effective_range` on a UAV where engagement vs link range cannot be deduced).
-* **Withholding Precision Metric:** The evaluation benchmark explicitly calculates the system's ability to refrain from uncalibrated mappings:
-  $$\text{Withholding Precision} = \frac{\text{Correctly Unresolved Negative Cases}}{\text{Total Negative / Ambiguous Cases in Reference Set}}$$
-* A resolver that achieves 100% resolution coverage by guessing ambiguous terms will fail the Withholding Precision benchmark.
+* **Statistical Metrics for Withholding and Resolution:**
+  To evaluate the system's safety and precision without conflating true negative rates with positive predictive value, we specify distinct statistical formulations:
+
+  $$\text{Withholding Recall (Specificity on Negative Cases)} = \frac{\text{Correctly Unresolved Negative Cases}}{\text{All Actual Negative / Ambiguous Cases in Reference Set}}$$
+  *Measures whether the system reliably detects and withholds on terms that should not be resolved.*
+
+  $$\text{Withholding Precision} = \frac{\text{Correctly Unresolved Negative Cases}}{\text{All Cases Where Resolver Withheld (Total Unresolved Outcomes)}}$$
+  *Measures whether the system's decision to withhold was justified, ensuring it does not excessively withhold on terms that possess sufficient context for safe resolution.*
+
+  $$\text{Resolution Precision (on positive mappings)} = \frac{\text{Correctly Resolved Valid Cases}}{\text{All Cases Where Resolver Mapped to a Canonical ID}}$$
+  *Measures the correctness of positive assignments, proving that mapped concepts match human truth.*
+
+  $$\text{Withholding } F_1 = 2 \times \frac{\text{Withholding Precision} \times \text{Withholding Recall}}{\text{Withholding Precision} + \text{Withholding Recall}}$$
+
+* A resolver that achieves high resolution coverage by guessing on ambiguous terms will fail the Withholding Recall benchmark. Conversely, a resolver that refuses to resolve valid synonyms will fail the Withholding Precision benchmark.
 
 ### Measuring Actual Semantic Correctness
 Evaluation strictly separates:
@@ -982,10 +1046,11 @@ A dedicated test suite (`src/test/semantic-registry-isolated.test.ts`) must prov
    * Under no circumstances does the resolver fall back to `semanticKeyFor()` or return the raw input key as a canonical ID.
    * Spy/mock assertions verify that `semanticKeyFor` execution count is zero during hybrid resolver runs.
 
-6. **Withholding Precision on Ground Truth Reference Set:**
+6. **Withholding Precision and Recall on Ground Truth Reference Set:**
    * Evaluated against `src/test/fixtures/semantic-reference-corpus.ts`:
-     * Withholding Precision $\ge 98\%$ across all declared negative and ambiguous test cases.
-     * Zero uncalibrated guesses on ambiguous inputs lacking requisite context.
+     * **Withholding Recall $\ge 98\%$** across all declared negative and ambiguous test cases (proves near-zero ungrounded guessing on under-specified inputs).
+     * **Withholding Precision $\ge 95\%$** across all instances where the resolver outputs an unresolved state (proves the resolver does not over-withhold on valid synonyms).
+     * **Resolution Precision $\ge 99\%$** on positive assignments to canonical concepts.
 
 ---
 
@@ -1126,3 +1191,21 @@ The following three architectural decisions have been explicitly reviewed and ap
 9. **Protected the Autonomy Event Ledger:**
    * *Previous:* Proposed logging all shadow evaluation comparisons to `autonomy_events`.
    * *Revised:* Restricted `autonomy_events` to true governance decisions (snapshot activations), preventing telemetry bloat.
+10. **Class 4 Schema Realignment (Nullable `canonical_id`):**
+    * *Previous:* Defined `canonical_id TEXT NOT NULL` in `semantic_alias_revisions`, which conflicted with Class 4 terms having multiple or zero resolved meanings.
+    * *Revised:* Made `canonical_id` nullable, added `candidate_canonical_ids JSONB`, and enforced a CHECK constraint requiring candidate arrays for Class 4 and exact canonical IDs for Classes 1–3.
+11. **Composite Snapshot Content Addressability:**
+    * *Previous:* Computed hash only over database alias rules.
+    * *Revised:* Bound the SHA-256 content hash to a composite digest encompassing the compiler resolver version, canonical manifest version, manifest hash, and core registry version.
+12. **Database-Enforced Immutability Triggers:**
+    * *Previous:* Immutability was described conceptually but lacked database-level enforcement against `UPDATE` and `DELETE`.
+    * *Revised:* Added PostgreSQL triggers raising exceptions on any `UPDATE` or `DELETE` against `semantic_alias_revisions` and `semantic_registry_snapshots`.
+13. **Statistical Formulation of Withholding Metrics:**
+    * *Previous:* Formulated Withholding Precision with total negative cases as the denominator.
+    * *Revised:* Formally separated *Withholding Recall* (denominator: all negative cases in reference set) from *Withholding Precision* (denominator: all instances where resolution withheld).
+14. **Expanded Historical Stratification Matrix:**
+    * *Previous:* 11 attribute families, which risked dropping programme-level metadata or unclassified terms.
+    * *Revised:* Added `other_programme_metadata` as the 12th category (covering production rate, inventory count, guidance, and unclassified attributes), yielding a robust 36-cell matrix.
+15. **Repository-Relative File Links:**
+    * *Previous:* Contained local `file:///C:/dev/...` links.
+    * *Revised:* Converted all file references to standard repository-relative Markdown links (`../src/...`).
