@@ -265,7 +265,7 @@ export function IntakePage({
         </p>
       </Panel>
       <div className="min-w-0 space-y-6">
-        <Panel title={`Triage queue · ${pending.length}`}>
+        <Panel title={`Triage queue · ${pending.length} candidates`}>
           {shown.families.length > 0 && (
             <div className="mb-4 space-y-3">
               <p className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
@@ -305,7 +305,7 @@ export function IntakePage({
                 Show {Math.min(INTAKE_PAGE_SIZE, shown.hiddenRemaining)} more
               </Btn>
               <span className="font-mono text-xs text-muted-foreground">
-                {shown.shownCount} of {queueItems}
+                {shown.shownCount} of {queueItems} queue items · a family counts as one
               </span>
             </div>
           )}

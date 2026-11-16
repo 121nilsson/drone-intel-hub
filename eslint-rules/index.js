@@ -83,13 +83,34 @@ function resolveSource(filePath, source) {
   return undefined;
 }
 
-/** True when the import binds a runtime value rather than only types. */
+/** True when a module is loaded at runtime rather than only for its types. */
 function bindsValue(node) {
-  if (node.importKind === "type") return false;
+  if (node.importKind === "type" || node.exportKind === "type") return false;
   const specifiers = node.specifiers || [];
-  if (specifiers.length === 0) return false;
-  // Only a named specifier can be type-only; a default or namespace import always binds a value.
-  return specifiers.some((s) => !(s.type === "ImportSpecifier" && s.importKind === "type"));
+  // A bare `import "./x"` binds no name but still loads the module; so does `export * from`.
+  if (specifiers.length === 0) return true;
+  // Only a named specifier can be type-only; default, namespace and `*` always load the module.
+  return specifiers.some(
+    (s) =>
+      !(s.type === "ImportSpecifier" && s.importKind === "type") &&
+      !(s.type === "ExportSpecifier" && s.exportKind === "type"),
+  );
+}
+
+/**
+ * All the ways a module is loaded: a static import, a re-export, `export *` and `import()`. Every
+ * layer rule visits all four, so forwarding a module through a slice or loading it lazily cannot
+ * slip past the boundary. A computed dynamic import has no static source to resolve.
+ */
+function moduleLoadVisitors(check) {
+  return {
+    ImportDeclaration: (node) => check(node.source, bindsValue(node)),
+    ExportNamedDeclaration: (node) => {
+      if (node.source) check(node.source, bindsValue(node));
+    },
+    ExportAllDeclaration: (node) => check(node.source, bindsValue(node)),
+    ImportExpression: (node) => check(node.source, true),
+  };
 }
 
 const noCrossFeatureImport = {
@@ -105,21 +126,19 @@ const noCrossFeatureImport = {
   create(context) {
     const from = sliceOf(context.filename);
     if (!from) return {};
-    return {
-      ImportDeclaration(node) {
-        const source = node.source.value;
-        if (typeof source !== "string") return;
-        const resolved = resolveSource(context.filename, source);
-        if (!resolved) return;
-        const to = sliceOf(resolved);
-        if (!to || to === from) return;
-        context.report({
-          node: node.source,
-          messageId: "crossFeature",
-          data: { from, to, source },
-        });
-      },
-    };
+    return moduleLoadVisitors((sourceNode) => {
+      const source = sourceNode.value;
+      if (typeof source !== "string") return;
+      const resolved = resolveSource(context.filename, source);
+      if (!resolved) return;
+      const to = sliceOf(resolved);
+      if (!to || to === from) return;
+      context.report({
+        node: sourceNode,
+        messageId: "crossFeature",
+        data: { from, to, source },
+      });
+    });
   },
 };
 
@@ -136,20 +155,18 @@ const noLowerLayerFeatureImport = {
   create(context) {
     const layer = layerOf(context.filename);
     if (layer !== "shared" && layer !== "entities") return {};
-    return {
-      ImportDeclaration(node) {
-        const source = node.source.value;
-        if (typeof source !== "string") return;
-        const resolved = resolveSource(context.filename, source);
-        if (!resolved) return;
-        if (!sliceOf(resolved)) return;
-        context.report({
-          node: node.source,
-          messageId: "lowerLayer",
-          data: { layer, source },
-        });
-      },
-    };
+    return moduleLoadVisitors((sourceNode) => {
+      const source = sourceNode.value;
+      if (typeof source !== "string") return;
+      const resolved = resolveSource(context.filename, source);
+      if (!resolved) return;
+      if (!sliceOf(resolved)) return;
+      context.report({
+        node: sourceNode,
+        messageId: "lowerLayer",
+        data: { layer, source },
+      });
+    });
   },
 };
 
@@ -166,20 +183,18 @@ const noServerImportFromClient = {
   create(context) {
     const filename = context.filename;
     if (/\.(server|functions)\.ts$/.test(filename)) return {};
-    // Tests, the Nitro task runner and Nitro plugins are server-side by construction.
+    // Tests, the Nitro task runner/plugins and the tsx CLI scripts are server-side by construction.
     const layer = layerOf(filename);
     if (layer === "test") return {};
-    const rel = path.relative(ROOT, filename);
-    if (rel.split(path.sep)[0] === "tasks" || rel.split(path.sep)[0] === "plugins") return {};
-    return {
-      ImportDeclaration(node) {
-        const source = node.source.value;
-        if (typeof source !== "string") return;
-        if (!/\.server(\/|$)/.test(source)) return;
-        if (!bindsValue(node)) return;
-        context.report({ node: node.source, messageId: "serverImport", data: { source } });
-      },
-    };
+    const top = path.relative(ROOT, filename).split(path.sep)[0];
+    if (top === "tasks" || top === "plugins" || top === "scripts") return {};
+    return moduleLoadVisitors((sourceNode, value) => {
+      const source = sourceNode.value;
+      if (typeof source !== "string") return;
+      if (!/\.server(\/|$)/.test(source)) return;
+      if (!value) return;
+      context.report({ node: sourceNode, messageId: "serverImport", data: { source } });
+    });
   },
 };
 
