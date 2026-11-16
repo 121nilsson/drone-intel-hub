@@ -97,6 +97,63 @@ function KineticColumn({ target, defender }: { target: Drone; defender: Drone })
   );
 }
 
+/**
+ * One side of the comparison. A module-level component on purpose: declared inside the page it
+ * would be a new component type on every render, remounting the panel and dropping the select's
+ * focus each time the analyst picks a system or the catalogue updates.
+ */
+function SystemPanel({
+  d,
+  label,
+  options,
+  onPick,
+}: {
+  d: Drone;
+  label: string;
+  options: readonly Drone[];
+  onPick: (id: string) => void;
+}) {
+  return (
+    <Panel
+      title={
+        <Select
+          value={d.id}
+          onChange={(e) => onPick(e.target.value)}
+          aria-label={label}
+          size="sm"
+          className="max-w-full"
+        >
+          {options.map((x) => (
+            <option key={x.id} value={x.id} className="bg-card">
+              {x.name}
+            </option>
+          ))}
+        </Select>
+      }
+    >
+      <h2 className="text-2xl font-semibold">{d.name}</h2>
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        <Tag tone="primary">{d.domain}</Tag>
+        <Tag caps={false} mono={false}>
+          <CountryBadge code={d.origin} />
+        </Tag>
+        {d.operators.map((o) => (
+          <Tag key={o} tone="accent" caps={false} mono={false}>
+            Op <CountryBadge code={o} />
+          </Tag>
+        ))}
+      </div>
+      <ul className="mt-4 space-y-1 text-sm">
+        {d.rf.map((r, i) => (
+          <li key={i} className="font-mono">
+            <span className="text-muted-foreground">{r.role}</span> {r.band}
+          </li>
+        ))}
+      </ul>
+    </Panel>
+  );
+}
+
 export function CounterpartsPage({ a, b }: { a?: string | undefined; b?: string | undefined }) {
   const drones = useDrones();
   const svc = useServices();
@@ -128,54 +185,22 @@ export function CounterpartsPage({ a, b }: { a?: string | undefined; b?: string 
   const set = (k: "a" | "b", v: string) =>
     nav({ to: "/counterparts", search: { a: k === "a" ? v : A.id, b: k === "b" ? v : B.id } });
 
-  const Card = ({ d, k }: { d: Drone; k: "a" | "b" }) => (
-    <Panel
-      title={
-        <Select
-          value={d.id}
-          onChange={(e) => set(k, e.target.value)}
-          aria-label={k === "a" ? "First system to compare" : "Second system to compare"}
-          size="sm"
-          className="max-w-full"
-        >
-          {drones
-            .filter((x) => x.id !== (k === "a" ? B.id : A.id))
-            .map((x) => (
-              <option key={x.id} value={x.id} className="bg-card">
-                {x.name}
-              </option>
-            ))}
-        </Select>
-      }
-    >
-      <h2 className="text-2xl font-semibold">{d.name}</h2>
-      <div className="mt-2 flex flex-wrap gap-1.5">
-        <Tag tone="primary">{d.domain}</Tag>
-        <Tag caps={false} mono={false}>
-          <CountryBadge code={d.origin} />
-        </Tag>
-        {d.operators.map((o) => (
-          <Tag key={o} tone="accent" caps={false} mono={false}>
-            Op <CountryBadge code={o} />
-          </Tag>
-        ))}
-      </div>
-      <ul className="mt-4 space-y-1 text-sm">
-        {d.rf.map((r, i) => (
-          <li key={i} className="font-mono">
-            <span className="text-muted-foreground">{r.role}</span> {r.band}
-          </li>
-        ))}
-      </ul>
-    </Panel>
-  );
-
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-semibold md:text-3xl">Counterpart comparison</h1>
       <div className="grid gap-4 md:grid-cols-2">
-        <Card d={A} k="a" />
-        <Card d={B} k="b" />
+        <SystemPanel
+          d={A}
+          label="First system to compare"
+          options={drones.filter((x) => x.id !== B.id)}
+          onPick={(id) => set("a", id)}
+        />
+        <SystemPanel
+          d={B}
+          label="Second system to compare"
+          options={drones.filter((x) => x.id !== A.id)}
+          onPick={(id) => set("b", id)}
+        />
       </div>
       <Panel title="EW threat matrix">
         <div className="grid gap-6 md:grid-cols-2">

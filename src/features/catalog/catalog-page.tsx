@@ -270,7 +270,10 @@ export function CatalogPage({
     }
     return last;
   }, [dispatches]);
-  const results = useMemo(() => repo.search(q, f), [repo, q, f]);
+  // `search` reads the live repository, so `drones` (which changes with it) is a dependency:
+  // without it an import, merge or sync leaves the list showing the catalogue as it was.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const results = useMemo(() => repo.search(q, f), [repo, drones, q, f]);
   // One pass over the catalogue for every card's counterpart, not one resolution per card.
   const counterparts = useMemo(() => firstCounterparts(drones), [drones]);
   const sorted = useMemo(() => {

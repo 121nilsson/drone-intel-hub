@@ -9,11 +9,8 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Select } from "@/shared/ui/fields";
-import { Btn } from "@/shared/ui/primitives";
+import { Field, Input, Select, Textarea } from "@/shared/ui/fields";
+import { Btn, Segmented } from "@/shared/ui/primitives";
 import { useServices } from "@/shared/infra/use-services";
 import type { Drone, SpecAttribute, SpecClaim } from "@/entities/drone/types";
 import { ANALYST_SOURCE } from "@/entities/drone/claim-review";
@@ -27,17 +24,18 @@ interface AddSpecFormProps {
   specs: SpecAttribute[];
 }
 
+type Mode = "existing" | "new";
+
 /**
  * Manual specification entry for a dossier page. Lets an analyst record a manufacturer or
  * observed figure as an analyst-owned claim on an attribute (existing or new). The claim is
  * reviewed "confirmed" by the analyst, so it feeds consensus like any other source.
  */
 export function AddSpecForm({ droneId, droneName, specs }: AddSpecFormProps) {
-  const existingKeys = specs.map((s) => s.key);
   const svc = useServices();
   const [open, setOpen] = useState(false);
-  const [mode, setMode] = useState<"existing" | "new">("existing");
-  const [selectedKey, setSelectedKey] = useState(existingKeys[0] ?? "");
+  const [mode, setMode] = useState<Mode>("existing");
+  const [selectedKey, setSelectedKey] = useState("");
   const [newKey, setNewKey] = useState("");
   const [newLabel, setNewLabel] = useState("");
   const [unit, setUnit] = useState("");
@@ -46,6 +44,20 @@ export function AddSpecForm({ droneId, droneName, specs }: AddSpecFormProps) {
   const [source, setSource] = useState(ANALYST_SOURCE);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  // Until the analyst picks, the select shows (and the form uses) the first attribute.
+  const activeKey = specs.some((s) => s.key === selectedKey) ? selectedKey : (specs[0]?.key ?? "");
+
+  const resetForm = useCallback(() => {
+    setMode("existing");
+    setSelectedKey("");
+    setNewKey("");
+    setNewLabel("");
+    setUnit("");
+    setValue("");
+    setEvidence("");
+    setSource(ANALYST_SOURCE);
+    setError("");
+  }, []);
 
   const submit = useCallback(
     async (e: React.FormEvent<HTMLFormElement>) => {
@@ -54,33 +66,38 @@ export function AddSpecForm({ droneId, droneName, specs }: AddSpecFormProps) {
       setSubmitting(true);
       try {
         const at = new Date().toISOString();
-        const key = mode === "new" ? newKey.trim() : selectedKey || existingKeys[0];
+        const key = mode === "new" ? newKey.trim() : activeKey;
         const label =
-          mode === "new" ? newLabel.trim() : specs.find((s) => s.key === selectedKey)?.label || key;
+          mode === "new" ? newLabel.trim() : specs.find((s) => s.key === key)?.label || key;
 
         if (!key || !label) throw new Error("Key and label are required");
         if (!value.trim()) throw new Error("Value is required");
 
+        // A bare number plus a unit is read as the figure in that unit ("150" + "km/h"), so the
+        // unit field takes part in normalisation for an existing attribute as well as a new one.
+        const typed = value.trim();
+        const numeric = Number(typed);
+        const text = unit.trim() && Number.isFinite(numeric) ? `${typed} ${unit.trim()}` : typed;
+
         // Parse the value like addAnalystClaim does: quantity first, then bare number, then text.
-        const normalized = normalizeQuantity(value.trim(), {
+        const normalized = normalizeQuantity(text, {
           semantic: attributeSemantic({ key, label }),
         });
-        const numeric = Number(value.trim());
         const claimValue =
-          normalized?.canonicalValue ?? (Number.isFinite(numeric) ? numeric : value.trim());
+          normalized?.canonicalValue ?? (Number.isFinite(numeric) ? numeric : typed);
 
         const claim: SpecClaim = {
           id: crypto.randomUUID(),
           value: claimValue,
           ...(normalized
             ? {
-                raw: value.trim(),
+                raw: text,
                 normalized,
                 normalizationConfidence: normalized.confidence,
               }
             : Number.isFinite(numeric)
               ? {}
-              : { raw: value.trim() }),
+              : { raw: typed }),
           ...(evidence.trim() ? { evidence: evidence.trim() } : {}),
           source: source.trim() || ANALYST_SOURCE,
           date: at,
@@ -96,7 +113,7 @@ export function AddSpecForm({ droneId, droneName, specs }: AddSpecFormProps) {
         const spec: SpecAttribute = {
           key,
           label,
-          ...(unit ? { unit } : {}),
+          ...(unit.trim() ? { unit: unit.trim() } : {}),
           ...(semantic ? { semantic } : {}),
           ...(canonicalUnit ? { canonicalUnit } : {}),
           claims: [claim],
@@ -133,14 +150,7 @@ export function AddSpecForm({ droneId, droneName, specs }: AddSpecFormProps) {
         });
 
         setOpen(false);
-        setMode("existing");
-        setSelectedKey("");
-        setNewKey("");
-        setNewLabel("");
-        setUnit("");
-        setValue("");
-        setEvidence("");
-        setSource(ANALYST_SOURCE);
+        resetForm();
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e));
       } finally {
@@ -151,8 +161,7 @@ export function AddSpecForm({ droneId, droneName, specs }: AddSpecFormProps) {
       droneId,
       svc.drones,
       mode,
-      selectedKey,
-      existingKeys,
+      activeKey,
       specs,
       newKey,
       newLabel,
@@ -160,120 +169,145 @@ export function AddSpecForm({ droneId, droneName, specs }: AddSpecFormProps) {
       value,
       evidence,
       source,
+      resetForm,
     ],
   );
 
-  const attributeOptions =
-    mode === "existing" ? (
-      <Select
-        value={selectedKey}
-        onChange={(e) => setSelectedKey(e.target.value)}
-        aria-label="Existing attribute"
-        className="w-full"
-      >
-        {existingKeys.map((k) => (
-          <option key={k} value={k}>
-            {k}
-          </option>
-        ))}
-      </Select>
-    ) : (
-      <>
-        <div className="space-y-2">
-          <Label>Key</Label>
-          <Input
-            value={newKey}
-            onChange={(e) => setNewKey(e.target.value)}
-            placeholder="max_speed"
-          />
-        </div>
-        <div className="space-y-2">
-          <Label>Label</Label>
-          <Input
-            value={newLabel}
-            onChange={(e) => setNewLabel(e.target.value)}
-            placeholder="Maximum speed"
-          />
-        </div>
-      </>
-    );
-
   return (
-    <Sheet open={open} onOpenChange={setOpen}>
-      <>
-        <SheetTrigger asChild>
-          <Btn variant="ghost">Add specification</Btn>
-        </SheetTrigger>
-        <SheetContent className="sm:max-w-md">
-          <SheetHeader>
-            <SheetTitle>Add specification</SheetTitle>
-            <SheetDescription>
-              Record a manufacturer or observed figure for {droneName}. Stored as an analyst claim
-              on {mode === "existing" ? "an existing attribute" : "a new attribute"}.
-            </SheetDescription>
-          </SheetHeader>
-          <form onSubmit={submit} className="space-y-4 p-4">
-            {error && (
-              <p className="text-xs text-destructive bg-destructive/10 p-2 rounded">{error}</p>
-            )}
-            <div className="space-y-2">
-              <Label>Attribute</Label>
-              <div className="flex gap-2">
-                <Btn
-                  variant={mode === "existing" ? "primary" : "ghost"}
-                  onClick={() => setMode("existing")}
+    <Sheet
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        // Cancel, Escape and a tap outside all leave a clean form for the next time.
+        if (!next) resetForm();
+      }}
+    >
+      <SheetTrigger asChild>
+        <Btn variant="ghost">Add specification</Btn>
+      </SheetTrigger>
+      <SheetContent className="sm:max-w-md">
+        <SheetHeader>
+          <SheetTitle>Add specification</SheetTitle>
+          <SheetDescription>
+            Record a manufacturer or observed figure for {droneName}. Stored as an analyst claim on{" "}
+            {mode === "existing" ? "an existing attribute" : "a new attribute"}.
+          </SheetDescription>
+        </SheetHeader>
+        <form onSubmit={submit} className="space-y-4 p-4">
+          {error && (
+            <p role="alert" className="bg-destructive/10 p-2 text-xs text-destructive">
+              {error}
+            </p>
+          )}
+          <Segmented
+            label="Attribute"
+            value={mode}
+            onChange={setMode}
+            options={[
+              { value: "existing", label: "Existing attribute" },
+              { value: "new", label: "New attribute" },
+            ]}
+          />
+          {mode === "existing" ? (
+            <Field label="Attribute">
+              {(id) => (
+                <Select
+                  id={id}
+                  value={activeKey}
+                  onChange={(e) => setSelectedKey(e.target.value)}
+                  className="w-full"
                 >
-                  Existing
-                </Btn>
-                <Btn variant={mode === "new" ? "primary" : "ghost"} onClick={() => setMode("new")}>
-                  New
-                </Btn>
-              </div>
-              {attributeOptions}
-            </div>
-            <div className="space-y-2">
-              <Label>Value</Label>
+                  {specs.map((s) => (
+                    <option key={s.key} value={s.key}>
+                      {s.label}
+                    </option>
+                  ))}
+                </Select>
+              )}
+            </Field>
+          ) : (
+            <>
+              <Field label="Key">
+                {(id) => (
+                  <Input
+                    id={id}
+                    value={newKey}
+                    onChange={(e) => setNewKey(e.target.value)}
+                    placeholder="max_speed"
+                  />
+                )}
+              </Field>
+              <Field label="Label">
+                {(id) => (
+                  <Input
+                    id={id}
+                    value={newLabel}
+                    onChange={(e) => setNewLabel(e.target.value)}
+                    placeholder="Maximum speed"
+                  />
+                )}
+              </Field>
+            </>
+          )}
+          <Field label="Value">
+            {(id) => (
               <Input
+                id={id}
                 value={value}
                 onChange={(e) => setValue(e.target.value)}
                 placeholder="e.g. 150 or 150 km/h"
               />
-            </div>
-            <div className="space-y-2">
-              <Label>Unit (optional)</Label>
+            )}
+          </Field>
+          <Field
+            label="Unit (optional)"
+            hint="Read together with a bare number: 150 with km/h is 150 km/h."
+          >
+            {(id) => (
               <Input
+                id={id}
                 value={unit}
                 onChange={(e) => setUnit(e.target.value)}
                 placeholder="e.g. km/h"
               />
-            </div>
-            <div className="space-y-2">
-              <Label>Evidence (optional)</Label>
+            )}
+          </Field>
+          <Field label="Evidence (optional)">
+            {(id) => (
               <Textarea
+                id={id}
                 value={evidence}
                 onChange={(e) => setEvidence(e.target.value)}
                 placeholder="Verbatim quote from the source"
               />
-            </div>
-            <div className="space-y-2">
-              <Label>Source</Label>
+            )}
+          </Field>
+          <Field label="Source">
+            {(id) => (
               <Input
+                id={id}
                 value={source}
                 onChange={(e) => setSource(e.target.value)}
                 placeholder="Analyst"
               />
-            </div>
-            <div className="flex justify-end gap-2 pt-4">
-              <Btn variant="ghost" onClick={() => setOpen(false)}>
-                Cancel
-              </Btn>
-              <Btn type="submit" variant="primary" disabled={submitting}>
-                {submitting ? "Saving…" : "Add claim"}
-              </Btn>
-            </div>
-          </form>
-        </SheetContent>
-      </>
+            )}
+          </Field>
+          <div className="flex justify-end gap-2 pt-4">
+            <Btn
+              variant="ghost"
+              onClick={() => {
+                setOpen(false);
+                resetForm();
+              }}
+            >
+              Cancel
+            </Btn>
+            <Btn type="submit" variant="primary" disabled={submitting}>
+              {submitting ? "Saving…" : "Add claim"}
+            </Btn>
+          </div>
+        </form>
+      </SheetContent>
     </Sheet>
   );
 }

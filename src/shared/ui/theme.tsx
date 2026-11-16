@@ -13,22 +13,33 @@ const ThemeContext = createContext<ThemeContextValue | null>(null);
 const STORAGE_KEY = "drone-intel-theme";
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setThemeState] = useState<Theme>(() => {
-    if (typeof window === "undefined") return "dark";
-    const stored = window.localStorage.getItem(STORAGE_KEY);
-    return stored === "light" ? "light" : "dark";
-  });
+  // The first render matches the server's markup (dark); the stored choice is applied after
+  // mount. Reading storage during render would disagree with the server's HTML, and it throws
+  // where site data is blocked.
+  const [theme, setThemeState] = useState<Theme>("dark");
+  const [restored, setRestored] = useState(false);
+
+  useEffect(() => {
+    try {
+      if (window.localStorage.getItem(STORAGE_KEY) === "light") setThemeState("light");
+    } catch {
+      // Storage unavailable: the default applies and the choice is simply not remembered.
+    }
+    setRestored(true);
+  }, []);
 
   useEffect(() => {
     const root = document.documentElement;
     root.classList.toggle("light", theme === "light");
     root.classList.toggle("dark", theme === "dark");
+    // Not before the stored choice is read, or the default would overwrite it.
+    if (!restored) return;
     try {
       window.localStorage.setItem(STORAGE_KEY, theme);
     } catch {
       // ignore
     }
-  }, [theme]);
+  }, [theme, restored]);
 
   const value: ThemeContextValue = {
     theme,
