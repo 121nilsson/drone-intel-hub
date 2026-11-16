@@ -1,6 +1,6 @@
 import { defineTask } from "nitro/task";
 import { ensureMigrated } from "../../src/shared/infra/postgres/migrate.server";
-import { dbConfigured } from "../../src/shared/infra/postgres/db.server";
+import { serverServices } from "../../src/shared/infra/server-services.server";
 import { runServerVerification } from "../../src/shared/infra/verification/verify.server";
 import { recordTaskRun } from "../../src/shared/infra/task-runs.server";
 
@@ -12,7 +12,7 @@ export default defineTask({
   async run() {
     // Without PostgreSQL the browser verifies its own store; this job has nothing to do, and is
     // a skip rather than an hourly failure.
-    if (!dbConfigured()) {
+    if (!serverServices().backend.capabilities.sql) {
       console.log("[verification:run] skipped - no database configured");
       return { result: "skipped: no database configured" };
     }

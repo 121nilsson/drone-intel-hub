@@ -13,15 +13,13 @@ let lastChecked = 0;
 type Loader = () => Promise<{ version: number; rows: DynamicRuleRow[] } | null>;
 
 const pgLoader: Loader = async () => {
-  const { db, dbConfigured } = await import("@/shared/infra/postgres/db.server");
-  if (!dbConfigured()) return null;
-  const [v] =
-    await db()`select coalesce(max(version), 0)::int as version from dynamic_rules_version`;
-  const version = Number(v?.["version"] ?? 0);
+  // Imported on first use, as the driver was: ingestion that never refreshes loads no adapter.
+  const { serverServices } = await import("@/shared/infra/server-services.server");
+  const { backend, rules } = serverServices();
+  if (!backend.capabilities.sql) return null;
+  const version = await rules.rulesVersion();
   if (version <= currentVersion) return { version, rows: [] };
-  const rows =
-    await db()`select id, kind, language, payload from dynamic_rules where status = 'active'`;
-  return { version, rows: rows as unknown as DynamicRuleRow[] };
+  return { version, rows: await rules.activeRules() };
 };
 
 /**

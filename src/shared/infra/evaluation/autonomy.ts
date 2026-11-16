@@ -1,6 +1,7 @@
 import type { Candidate, Drone, Extraction } from "@/entities/drone/types";
 import type { IntelExtractor } from "@/shared/contracts/ai";
 import type { RuleKind } from "@/shared/contracts/rules";
+import type { DecisionActor, DecisionKind } from "@/shared/contracts/rules-repo";
 import { RULE_RISK } from "@/shared/infra/proposals/rule-applier";
 import { normalizeExtraction } from "@/entities/normalization/apply";
 import {
@@ -111,8 +112,9 @@ export async function shadowStep(
   return next;
 }
 
-export type DecisionKind = "shadowed" | "activated" | "auto_activated" | "rejected" | "quarantined";
-export type DecisionActor = "analyst" | "autonomous" | "circuit_breaker" | "sandbox";
+// The decision vocabulary is part of the rules port (contracts/rules-repo.ts); re-exported here
+// so the policy code and its importers keep their path.
+export type { DecisionKind, DecisionActor };
 
 export interface RuleDecision {
   category: string;

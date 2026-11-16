@@ -1,6 +1,11 @@
 import { createServerFn } from "@tanstack/react-start";
 import type { ProviderEnvConfig } from "@/shared/contracts/ai";
-import { COLLECTIONS, DocumentConflictError, type Collection } from "@/shared/contracts/store";
+import {
+  COLLECTIONS,
+  DocumentConflictError,
+  canLease,
+  type Collection,
+} from "@/shared/contracts/store";
 import { MAX_LEASE_MS } from "@/shared/infra/ingest/auto-ingest";
 
 const checkCollection = (c: unknown): Collection => {
@@ -21,21 +26,18 @@ const checkRev = (r: unknown): number | null => {
   return n;
 };
 
-/** DATABASE_URL (self-hosted PostgreSQL) wins; otherwise Lovable Cloud when configured. */
+/** The document store of the configured backend (selection lives in backend.server.ts). */
 async function store() {
-  if (process.env["DATABASE_URL"]) {
-    const { PostgresStore } = await import("../postgres/postgres-store.server");
-    return new PostgresStore();
-  }
-  const { CloudStore } = await import("../cloud/cloud-store.server");
-  return new CloudStore();
+  const { createBackend } = await import("./backend.server");
+  return createBackend().documents();
 }
 
 /** Storage backend plus non-secret inference settings for the Settings UI. */
 export const getStoreStatus = createServerFn({ method: "POST" }).handler(async () => {
-  const postgres =
-    !!process.env["DATABASE_URL"] ||
-    (!!process.env["SUPABASE_URL"] && !!process.env["SUPABASE_SERVICE_ROLE_KEY"]);
+  const { createBackend } = await import("./backend.server");
+  const backend = createBackend();
+  // `postgres` keeps its wire name: it means "a server storage backend is configured".
+  const postgres = backend.serverStorage;
 
   // The provider settings are optional and live in a different system from the catalog. A
   // failure to read them must not make the client think there is no server storage and switch to
@@ -50,9 +52,9 @@ export const getStoreStatus = createServerFn({ method: "POST" }).handler(async (
     console.error("[store] provider settings unavailable", e);
   }
 
-  // Lovable Cloud reports revision 0 and stays last-write-wins (see docs/architecture.md), so a client must
-  // not run unattended bulk writes against it on the assumption that conflicts are caught.
-  const revisions = !postgres || !!process.env["DATABASE_URL"];
+  // Lovable Cloud is last-write-wins (see docs/architecture.md), so a client must not run unattended
+  // bulk writes against it on the assumption that conflicts are caught.
+  const revisions = backend.capabilities.revisions;
 
   return { postgres, revisions, provider, providerError };
 });
@@ -138,8 +140,8 @@ export const storeRemove = createServerFn({ method: "POST" })
  * so the caller keeps its loaded-window numbers (exact whenever the archive fits the cap).
  */
 export const fetchDispatchCounts = createServerFn({ method: "POST" }).handler(async () => {
-  const { dispatchCounts } = await import("./dispatch-counts.server");
-  return dispatchCounts();
+  const { createBackend } = await import("./backend.server");
+  return createBackend().archiveCounts();
 });
 
 const MAX_CLAIM = 200;
@@ -165,7 +167,7 @@ export const storeClaim = createServerFn({ method: "POST" })
     const s = await store();
     // A store without claim support (or a collection that is not the queue) must not look
     // like "claimed everything" - signal the caller to fall back.
-    if (!s.claim) return { ids: [], ok: false };
+    if (!canLease(s)) return { ids: [], ok: false };
     const ids = await s.claim(data.c, data);
     if (ids === null) return { ids: [], ok: false };
     return { ids, ok: true };
@@ -180,6 +182,6 @@ export const storeRelease = createServerFn({ method: "POST" })
   })
   .handler(async ({ data }) => {
     const s = await store();
-    await s.release?.(data.c, data.ids, data.owner);
+    if (canLease(s)) await s.release(data.c, data.ids, data.owner);
     return { ok: true };
   });

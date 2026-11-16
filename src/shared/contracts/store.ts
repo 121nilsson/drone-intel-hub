@@ -93,17 +93,8 @@ export interface StorePageOptions {
   limit: number;
 }
 
-/**
- * Async document persistence — the only seam between repositories and storage.
- * Implementations: browser localStorage, remote server-function bridge, PostgreSQL.
- *
- * A write is conditional on the revision it was read from. That is what stops two writers
- * holding whole-collection snapshots from replacing each other's documents: the second writer
- * gets `DocumentConflictError` and can reload and reapply its change instead of clobbering the
- * first. The revision is stored beside the document, never inside it, so domain documents stay
- * free of storage metadata.
- */
-export interface DocumentStore {
+/** Read side of a store: what a caller that only displays the catalogue needs. */
+export interface DocumentReader {
   /** Returns null when the collection has never been initialised. */
   load<C extends Collection>(c: C): Promise<VersionedDoc<CollectionMap[C]>[] | null>;
   /**
@@ -123,6 +114,18 @@ export interface DocumentStore {
    * Optional: a store without it leaves the caller with the window it loaded.
    */
   loadByIds?<C extends Collection>(c: C, ids: string[]): Promise<VersionedDoc<CollectionMap[C]>[]>;
+}
+
+/**
+ * Write side of a store.
+ *
+ * A write is conditional on the revision it was read from. That is what stops two writers
+ * holding whole-collection snapshots from replacing each other's documents: the second writer
+ * gets `DocumentConflictError` and can reload and reapply its change instead of clobbering the
+ * first. The revision is stored beside the document, never inside it, so domain documents stay
+ * free of storage metadata.
+ */
+export interface DocumentWriter {
   /** Initialise an empty collection with seed data. */
   seed<C extends Collection>(c: C, items: CollectionMap[C][]): Promise<void>;
   /**
@@ -141,6 +144,10 @@ export interface DocumentStore {
     expectedRev: number | null,
   ): Promise<number>;
   remove(c: Collection, id: string): Promise<void>;
+}
+
+/** Exclusive leasing of pending documents, for the work queue. */
+export interface QueueLeasing {
   /**
    * Atomically lease up to `limit` pending documents, oldest first, and return exactly those.
    * Anything not leased is left untouched.
@@ -156,10 +163,41 @@ export interface DocumentStore {
    * so the caller can fall back to plain reads. An empty array means "claimed nothing",
    * which is a real result and must not be confused with the fallback.
    */
-  claim?(
+  claim(
     c: Collection,
     opts: { limit: number; leaseMs: number; owner: string },
   ): Promise<string[] | null>;
   /** Clear leases held by `owner` - called on completion, failure, and startup recovery. */
-  release?(c: Collection, ids: string[], owner: string): Promise<void>;
+  release(c: Collection, ids: string[], owner: string): Promise<void>;
 }
+
+/** Archive-truth counters for the intel feed header; the load window is a cache bound, not a count. */
+export interface DispatchCounts {
+  total: number;
+  pending: number;
+}
+
+/** A store that can count the whole dispatch archive, not only the window it loads. */
+export interface ArchiveCounter {
+  archiveCounts(): Promise<DispatchCounts>;
+}
+
+/**
+ * Async document persistence — the only seam between repositories and storage.
+ * Implementations: browser localStorage, remote server-function bridge, PostgreSQL.
+ *
+ * The three roles are separate interfaces so a caller depends on what it uses; leasing and
+ * counting are optional capabilities, tested with `canLease` and `canCountArchive`.
+ */
+export interface DocumentStore
+  extends DocumentReader, DocumentWriter, Partial<QueueLeasing>, Partial<ArchiveCounter> {}
+
+export const canLease = (s: DocumentStore): s is DocumentStore & QueueLeasing =>
+  typeof s.claim === "function" && typeof s.release === "function";
+
+export const canCountArchive = (s: DocumentStore): s is DocumentStore & ArchiveCounter =>
+  typeof s.archiveCounts === "function";
+
+/** A server-side store: both server backends page and look up by id, which the transport relies on. */
+export type ServerDocumentStore = DocumentStore &
+  Required<Pick<DocumentReader, "loadPage" | "loadByIds">>;

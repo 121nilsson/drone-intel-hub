@@ -1,11 +1,8 @@
-import { db, dbConfigured } from "@/shared/infra/postgres/db.server";
-import { PostgresStore } from "@/shared/infra/postgres/postgres-store.server";
+import { serverServices } from "@/shared/infra/server-services.server";
 import { HeuristicExtractor } from "@/shared/infra/heuristic-ai";
 import { getOrRefreshRuleSnapshot } from "@/shared/infra/heuristics/rule-registry.server";
 import { evaluateHeuristic } from "@/shared/infra/evaluation/evaluation";
-import { sanitizeJson } from "@/shared/infra/json-sanitize";
 import { documentsOf } from "@/shared/contracts/store";
-import type { JSONValue } from "postgres";
 import type { Candidate, Drone } from "@/entities/drone/types";
 import { claimLock, releaseLock } from "@/shared/infra/evaluation/evaluation-lock.server";
 import { EVAL_SEED, pinnedCorpusVersion } from "@/shared/infra/evaluation/evaluation-corpus.server";
@@ -26,13 +23,14 @@ export interface EvaluationHealthResult {
 }
 
 export async function runEvaluation(): Promise<EvaluationRunResult> {
-  if (!dbConfigured()) return { ran: false, reason: "no database configured" };
+  if (!serverServices().backend.capabilities.sql)
+    return { ran: false, reason: "no database configured" };
   const lock = await claimLock();
   if (!lock.ok) return { ran: false, reason: lock.reason };
 
   try {
     const corpusVersion = await pinnedCorpusVersion();
-    const store = new PostgresStore();
+    const store = await serverServices().backend.documents();
     const drones = (documentsOf(await store.load("drones")) ?? []) as unknown as Drone[];
     const candidates = (documentsOf(await store.load("candidates")) ??
       []) as unknown as Candidate[];
@@ -44,9 +42,14 @@ export async function runEvaluation(): Promise<EvaluationRunResult> {
     });
 
     const id = crypto.randomUUID();
-    await db()`
-      insert into eval_reports (id, generated_at, seed, sample_size, corpus_version, report)
-      values (${id}, ${report.generatedAt}, ${EVAL_SEED}, ${report.totalItems}, ${corpusVersion}, ${db().json(sanitizeJson(report as unknown as JSONValue))})`;
+    await serverServices().evaluation.insertReport({
+      id,
+      generatedAt: report.generatedAt,
+      seed: EVAL_SEED,
+      sampleSize: report.totalItems,
+      corpusVersion,
+      report,
+    });
     return { ran: true, reason: "ok", reportId: id, totalItems: report.totalItems };
   } catch (e) {
     return { ran: false, reason: e instanceof Error ? e.message : String(e) };
@@ -56,14 +59,14 @@ export async function runEvaluation(): Promise<EvaluationRunResult> {
 }
 
 export async function runEvaluationHealth(): Promise<EvaluationHealthResult> {
-  if (!dbConfigured())
+  if (!serverServices().backend.capabilities.sql)
     return { ran: false, reason: "no database configured", regression: false, details: [] };
   const lock = await claimLock();
   if (!lock.ok) return { ran: false, reason: lock.reason, regression: false, details: [] };
 
   try {
     const corpusVersion = await pinnedCorpusVersion();
-    const store = new PostgresStore();
+    const store = await serverServices().backend.documents();
     const drones = (documentsOf(await store.load("drones")) ?? []) as unknown as Drone[];
     const candidates = (documentsOf(await store.load("candidates")) ??
       []) as unknown as Candidate[];
@@ -74,16 +77,20 @@ export async function runEvaluationHealth(): Promise<EvaluationHealthResult> {
       includeDiscarded: false,
     });
 
-    const rows = await db()`select report from eval_reports order by generated_at desc limit 1`;
-    const prev = rows.length && rows[0] ? (rows[0]["report"] as Record<string, unknown>) : null;
+    const prev = await serverServices().evaluation.latestReport();
 
     const details: string[] = [];
     let regression = false;
 
     const id = crypto.randomUUID();
-    await db()`
-      insert into eval_reports (id, generated_at, seed, sample_size, corpus_version, report)
-      values (${id}, ${report.generatedAt}, ${EVAL_SEED}, ${report.totalItems}, ${corpusVersion}, ${db().json(sanitizeJson(report as unknown as JSONValue))})`;
+    await serverServices().evaluation.insertReport({
+      id,
+      generatedAt: report.generatedAt,
+      seed: EVAL_SEED,
+      sampleSize: report.totalItems,
+      corpusVersion,
+      report,
+    });
 
     if (prev) {
       const prevSummary = (prev["summary"] ?? {}) as Record<string, unknown>;

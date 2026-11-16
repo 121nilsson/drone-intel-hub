@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { consensus } from "@/entities/drone/consensus";
 import { groupSpecs } from "@/entities/drone/spec-groups";
 import { claimKey } from "@/entities/drone/claim-review";
@@ -44,6 +44,12 @@ export function SpecTable({ drone }: { drone: Drone }) {
   // The sheet reads the selection from the live entry, so a verdict given in it shows at once
   // instead of on the copy that was clicked.
   const live = sel ? liveSelection(drone, sel) : null;
+  // Each row reads its consensus in several columns; compute it once per attribute.
+  const consensusByKey = useMemo(
+    () => new Map(drone.specs.map((s) => [s.key, consensus(s)])),
+    [drone.specs],
+  );
+  const cons = (s: SpecAttribute) => consensusByKey.get(s.key) ?? consensus(s);
   const chips = (s: SpecAttribute) => (
     <div className="mt-1.5 flex flex-wrap gap-1">
       {s.claims.map((claim, i) => (
@@ -76,7 +82,7 @@ export function SpecTable({ drone }: { drone: Drone }) {
       width: "18%",
       className: "font-mono text-primary",
       cell: (s) => {
-        const c = consensus(s);
+        const c = cons(s);
         return (
           <>
             {c.display}{" "}
@@ -94,20 +100,34 @@ export function SpecTable({ drone }: { drone: Drone }) {
       header: "Spread",
       width: "12%",
       className: "font-mono text-xs text-muted-foreground",
-      cell: (s) => spread(consensus(s)) || "—",
+      cell: (s) => {
+        const c = cons(s);
+        const ranges = statedRanges(c);
+        return (
+          <>
+            {spread(c) || (ranges.length ? "" : "—")}
+            {/* What each source stated as a range or bound; the phone card shows the same lines. */}
+            {ranges.map((line) => (
+              <span key={line} className="block text-[11px] [overflow-wrap:anywhere]">
+                {line}
+              </span>
+            ))}
+          </>
+        );
+      },
     },
     {
       id: "sources",
       header: "Sources",
       width: "9%",
       className: "font-mono text-xs",
-      cell: (s) => consensus(s).sources,
+      cell: (s) => cons(s).sources,
     },
     {
       id: "confidence",
       header: "Conf.",
       width: "9%",
-      cell: (s) => <ConfidenceTag level={consensus(s).confidence} />,
+      cell: (s) => <ConfidenceTag level={cons(s).confidence} />,
     },
   ];
   return (
@@ -120,7 +140,7 @@ export function SpecTable({ drone }: { drone: Drone }) {
         sections={groupSpecs(drone.specs).map((g) => ({ id: g.id, label: g.label, rows: g.specs }))}
         rowKey={(s) => s.key}
         card={(s) => {
-          const c = consensus(s);
+          const c = cons(s);
           return (
             <div data-testid={`spec-${s.key}`}>
               <div className="flex items-start justify-between gap-2">

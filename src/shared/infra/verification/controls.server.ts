@@ -1,6 +1,5 @@
 import { cleanReading } from "@/entities/drone/claim-reading";
 import { readerOpposes } from "@/entities/drone/entailment-verdict";
-import type { StoredEntailmentVerdict } from "@/entities/drone/types";
 import {
   ENTAILMENT_VERSION,
   entailmentPrompt,
@@ -19,8 +18,7 @@ import type { VerifierControlRun, VerifierControlsStatus } from "@/shared/contra
 import { parseModelJson } from "@/shared/infra/model-json";
 import { autonomySwitchEnabled } from "@/shared/infra/autonomy/switches.server";
 import { recordAutonomyEvent } from "@/shared/infra/autonomy/ledger.server";
-import { db, dbConfigured } from "@/shared/infra/postgres/db.server";
-import { PostgresStore } from "@/shared/infra/postgres/postgres-store.server";
+import { serverServices } from "@/shared/infra/server-services.server";
 import { LocalDroneRepository } from "@/shared/infra/storage/local-repository";
 import {
   CEILING,
@@ -59,21 +57,17 @@ interface ControlPick extends ControlCandidate {
 export async function runVerifierControls(): Promise<VerifierControlRun> {
   const empty = { asked: 0, supported: 0, unsupported: 0, uncertain: 0 };
   const tokens = { input: 0, output: 0 };
-  if (!dbConfigured()) return { ran: false, reason: "no database configured", ...empty, tokens };
+  const { backend, verification } = serverServices();
+  if (!backend.capabilities.sql)
+    return { ran: false, reason: "no database configured", ...empty, tokens };
   if (!autonomySwitchEnabled("ai_verifier"))
     return { ran: false, reason: "AI_VERIFIER=off", ...empty, tokens };
   const options = readerOptions();
   if (!options.length) return { ran: false, reason: "no AI provider configured", ...empty, tokens };
 
   const drones = new LocalDroneRepository();
-  await drones.attach(new PostgresStore());
-  const sql = db();
-  const asked = new Set(
-    (
-      await sql<{ claim_id: string }[]>`select claim_id from verifier_controls
-        where entailment_version = ${ENTAILMENT_VERSION}`
-    ).map((r) => r.claim_id),
-  );
+  await drones.attach(await backend.documents());
+  const asked = new Set(await verification.askedClaimIds(ENTAILMENT_VERSION));
 
   // The language of a candidate reads its post, so the posts are loaded first: once to find the
   // posts the candidates come from, then the candidates again with those texts in hand.
@@ -81,10 +75,9 @@ export async function runVerifierControls(): Promise<VerifierControlRun> {
   const sourceIds = [...new Set(controlCandidates(all, asked).map((c) => c.claim.sourceId))];
   const posts = new Map(
     sourceIds.length
-      ? (
-          await sql<{ id: string; text: string | null; created_at: Date }[]>`
-            select id, data->>'text' as text, created_at from dispatches where id = any(${sourceIds})`
-        ).flatMap((r) => (r.text ? [[r.id, { text: r.text, at: +r.created_at }] as const] : []))
+      ? (await verification.postTexts(sourceIds)).flatMap((r) =>
+          r.text ? [[r.id, { text: r.text, at: +r.created_at }] as const] : [],
+        )
       : [],
   );
   const candidates = controlCandidates(
@@ -155,13 +148,21 @@ export async function runVerifierControls(): Promise<VerifierControlRun> {
           pick.post.text,
           truncated,
         ).get("1")!;
-        await sql`insert into verifier_controls (claim_id, drone_id, spec_key, family, language,
-            source_id, true_value, altered_value, verdict, span, provider, model, entailment_version)
-          values (${pick.claim.id}, ${pick.drone.id}, ${pick.spec.key}, ${pick.family},
-            ${pick.language}, ${pick.post.id}, ${cleanReading(pick.spec, pick.claim)},
-            ${pick.altered}, ${answer.verdict}, ${answer.span ?? null}, ${reader.provider},
-            ${reader.model}, ${ENTAILMENT_VERSION})
-          on conflict (claim_id, entailment_version) do nothing`;
+        await verification.recordControl({
+          claimId: pick.claim.id,
+          droneId: pick.drone.id,
+          specKey: pick.spec.key,
+          family: pick.family,
+          language: pick.language,
+          sourceId: pick.post.id,
+          trueValue: cleanReading(pick.spec, pick.claim),
+          alteredValue: pick.altered,
+          verdict: answer.verdict,
+          span: answer.span ?? null,
+          provider: reader.provider,
+          model: reader.model,
+          entailmentVersion: ENTAILMENT_VERSION,
+        });
         counts.asked++;
         counts[
           answer.verdict === "supported"
@@ -202,16 +203,7 @@ export async function runVerifierControls(): Promise<VerifierControlRun> {
 
 /** The controls' record for the current entailment version: overall and per stratum. */
 export async function verifierControlsStatus(): Promise<VerifierControlsStatus> {
-  const rows = dbConfigured()
-    ? await db()<
-        {
-          verdict: StoredEntailmentVerdict;
-          family: string | null;
-          language: string | null;
-        }[]
-      >`
-        select verdict, family, language from verifier_controls
-         where entailment_version = ${ENTAILMENT_VERSION}`
-    : [];
+  // Without a database the repository has no controls to report.
+  const rows = await serverServices().verification.controlVerdicts(ENTAILMENT_VERSION);
   return { summary: summarizeControls(rows), strata: controlStrata(rows) };
 }

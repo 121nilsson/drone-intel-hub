@@ -15,6 +15,9 @@
  * Idempotent: a second run finds no legacy ids and changes nothing. Reload open tabs afterwards;
  * a stale tab's write to an old id is refused as a conflict, never re-created.
  */
+// One-off repair that rewrites ids across many tables in a single transaction on its own
+// connection; it is not application code and has no port to go through.
+// eslint-disable-next-line @repo/no-raw-db-import
 import postgres from "postgres";
 import { systemSlug } from "@/entities/drone/name-key";
 

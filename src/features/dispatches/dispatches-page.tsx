@@ -2,7 +2,13 @@ import { Link } from "@tanstack/react-router";
 import { ExternalSourceLink, SystemChip } from "@/shared/ui/links";
 import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useMemo, useState } from "react";
-import { useDispatches, useServices, useSources, useAttached } from "@/shared/infra/use-services";
+import {
+  useDispatches,
+  useDrones,
+  useServices,
+  useSources,
+  useAttached,
+} from "@/shared/infra/use-services";
 import type { DispatchStatus } from "@/entities/dispatch/types";
 import { getSyncState, type SyncState } from "@/shared/infra/sources/source-sync.functions";
 import { fetchDispatchCounts } from "@/shared/infra/storage/store.functions";
@@ -159,6 +165,7 @@ export function DispatchesPage({
   const svc = useServices();
   const attached = useAttached();
   const dispatches = useDispatches();
+  const drones = useDrones();
   const sources = useSources();
   const stateFn = useServerFn(getSyncState);
   const state = useMemo(() => fromFeedParams(url), [url]);
@@ -219,6 +226,18 @@ export function DispatchesPage({
     return c;
   }, [dispatches]);
 
+  // Names a post is linked under, so a search for "Geran-2" also finds the posts the pipeline
+  // attached to that system by an alias or its Cyrillic name, not only those that spell it out.
+  const systemNames = useMemo(
+    () =>
+      new Map(
+        drones.map((d) => [
+          d.id,
+          [d.name, d.cyrillic ?? "", ...d.aliases].join(" | ").toLowerCase(),
+        ]),
+      ),
+    [drones],
+  );
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
     return dispatches.filter(
@@ -227,9 +246,14 @@ export function DispatchesPage({
         (!sourceId || d.sourceId === sourceId) &&
         (!needle ||
           d.text.toLowerCase().includes(needle) ||
-          d.sourceName.toLowerCase().includes(needle)),
+          d.sourceName.toLowerCase().includes(needle) ||
+          // Links from the dossier and the provenance sheet search by a post's address or id.
+          d.url.toLowerCase().includes(needle) ||
+          d.externalId.toLowerCase().includes(needle) ||
+          d.id.toLowerCase().includes(needle) ||
+          (d.droneIds ?? []).some((id) => systemNames.get(id)?.includes(needle))),
     );
-  }, [dispatches, status, sourceId, q]);
+  }, [dispatches, status, sourceId, q, systemNames]);
   const shown = filtered.slice(0, limit);
   const remote = syncState?.progress;
   const workingId = remote?.phase === "analysing" ? remote.currentId : undefined;
@@ -290,7 +314,7 @@ export function DispatchesPage({
       {shown.length === 0 ? (
         attached ? (
           <Panel>
-            {dispatches.length > 0 && q.trim() === "" && status === "all" && !sourceId ? (
+            {dispatches.length === 0 ? (
               <p className="text-sm text-muted-foreground">
                 Nothing here yet.{" "}
                 <Link to="/sources" className="text-primary underline">

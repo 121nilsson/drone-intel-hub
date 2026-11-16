@@ -1,4 +1,3 @@
-import { db, dbConfigured } from "@/shared/infra/postgres/db.server";
 import { HeuristicExtractor } from "@/shared/infra/heuristic-ai";
 import { getOrRefreshRuleSnapshot } from "@/shared/infra/heuristics/rule-registry.server";
 import { mineHypotheses } from "@/shared/infra/evaluation/hypotheses";
@@ -9,7 +8,11 @@ import {
   reviewedCandidates,
 } from "@/shared/infra/evaluation/rule-sandbox-candidates.server";
 import { loadFixtures } from "@/shared/infra/evaluation/rule-sandbox-fixtures.server";
-import { loadCatalog } from "@/shared/infra/evaluation/rule-sandbox-store.server";
+import {
+  loadCatalog,
+  rulesRepo,
+  rulesSqlAvailable,
+} from "@/shared/infra/evaluation/rule-sandbox-store.server";
 import { proposeRule } from "@/shared/infra/evaluation/rule-sandbox-propose.server";
 import { sandboxRule } from "@/shared/infra/evaluation/rule-sandbox-sandbox.server";
 
@@ -32,7 +35,7 @@ export interface MineRunResult {
  */
 export async function mineAndSandbox(): Promise<MineRunResult> {
   const none = { mined: 0, proposed: 0, sandboxed: 0, passed: 0, parserDefects: 0 };
-  if (!dbConfigured()) return { ran: false, reason: "no database configured", ...none };
+  if (!rulesSqlAvailable()) return { ran: false, reason: "no database configured", ...none };
   try {
     const drones = await loadCatalog();
     const fixtures = await loadFixtures(drones);
@@ -42,7 +45,7 @@ export async function mineAndSandbox(): Promise<MineRunResult> {
     // Reviewed reports join the miner's pool, which always samples them (mineHypotheses).
     const pool = mergeById(await reviewedCandidates(drones), control);
     const mined = await mineHypotheses(pool, drones, heuristic, { sampleSize: 400, seed: 1 });
-    const known = new Set((await db()`select id from dynamic_rules`).map((r) => r["id"] as string));
+    const known = new Set(await rulesRepo().ruleIds());
     let proposed = 0;
     let sandboxed = 0;
     let passed = 0;

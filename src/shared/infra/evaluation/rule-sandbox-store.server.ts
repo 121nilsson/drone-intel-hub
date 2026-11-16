@@ -1,35 +1,32 @@
-import { db } from "@/shared/infra/postgres/db.server";
-import { PostgresStore } from "@/shared/infra/postgres/postgres-store.server";
+import { serverServices } from "@/shared/infra/server-services.server";
 import { getOrRefreshRuleSnapshot } from "@/shared/infra/heuristics/rule-registry.server";
-import { sanitizeJson } from "@/shared/infra/json-sanitize";
 import { documentsOf } from "@/shared/contracts/store";
-import type { DynamicRuleRow } from "@/shared/contracts/rules";
-import type { DecisionActor, DecisionKind } from "@/shared/infra/evaluation/autonomy";
+import type { DecisionActor, DecisionKind } from "@/shared/contracts/rules-repo";
 import type { Drone } from "@/entities/drone/types";
-import type { JSONValue } from "postgres";
 
 export const iso = (v: unknown) => (v instanceof Date ? v.toISOString() : v ? String(v) : null);
-export const json = (v: unknown) => db().json(sanitizeJson(v as JSONValue));
+
+/** The rule persistence port. Resolved per call: the backend is chosen by the environment. */
+export const rulesRepo = () => serverServices().rules;
+
+/** Whether the backend has the SQL database the rule loops need (what dbConfigured() asked). */
+export const rulesSqlAvailable = () => serverServices().backend.capabilities.sql;
 
 export async function loadCatalog() {
-  return (documentsOf(await new PostgresStore().load("drones")) ?? []) as unknown as Drone[];
+  const store = await serverServices().backend.documents();
+  return (documentsOf(await store.load("drones")) ?? []) as unknown as Drone[];
 }
 
 export async function loadRule(id: string) {
-  const [r] =
-    await db()`select id, kind, language, payload, status, origin from dynamic_rules where id = ${id}`;
-  return r ? (r as unknown as DynamicRuleRow & { status: string; origin: string }) : null;
+  return rulesRepo().findRule(id);
 }
 
 export async function activeRows(exceptId?: string) {
-  const rows =
-    await db()`select id, kind, language, payload from dynamic_rules where status = 'active'`;
-  return (rows as unknown as DynamicRuleRow[]).filter((r) => r.id !== exceptId);
+  return rulesRepo().activeRules(exceptId);
 }
 
 export async function rulesVersion() {
-  const [v] = await db()`select coalesce(max(version), 0)::int as v from dynamic_rules_version`;
-  return Number(v?.["v"] ?? 0);
+  return rulesRepo().rulesVersion();
 }
 
 export async function recordDecision(
@@ -38,14 +35,10 @@ export async function recordDecision(
   actor: DecisionActor,
   note: string | null = null,
 ) {
-  await db()`
-    insert into rule_decisions (rule_id, category, origin, decision, actor, note)
-    select id, kind || ':' || coalesce(target_key, '*'), origin, ${decision}, ${actor}, ${note}
-    from dynamic_rules where id = ${id}`;
+  await rulesRepo().recordDecision(id, decision, actor, note);
 }
 
 export async function bumpRuleVersion(note: string) {
-  await db()`insert into dynamic_rules_version (version, note)
-    select coalesce(max(version), 0) + 1, ${note} from dynamic_rules_version`;
+  await rulesRepo().appendVersion(note);
   await getOrRefreshRuleSnapshot({ force: true });
 }

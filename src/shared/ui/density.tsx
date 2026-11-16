@@ -12,20 +12,32 @@ const DensityContext = createContext<DensityContextValue | null>(null);
 const STORAGE_KEY = "drone-intel-density";
 
 export function DensityProvider({ children }: { children: ReactNode }) {
-  const [density, setDensityState] = useState<Density>(() => {
-    if (typeof window === "undefined") return "comfortable";
-    const stored = window.localStorage.getItem(STORAGE_KEY);
-    return stored === "compact" || stored === "analyst" ? stored : "comfortable";
-  });
+  // The first render matches the server's markup; the stored choice is applied after mount.
+  // Reading storage during render would disagree with the server's HTML, and it throws where
+  // site data is blocked.
+  const [density, setDensityState] = useState<Density>("comfortable");
+  const [restored, setRestored] = useState(false);
+
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem(STORAGE_KEY);
+      if (stored === "compact" || stored === "analyst") setDensityState(stored);
+    } catch {
+      // Storage unavailable: the default applies and the choice is simply not remembered.
+    }
+    setRestored(true);
+  }, []);
 
   useEffect(() => {
     document.documentElement.dataset["density"] = density;
+    // Not before the stored choice is read, or the default would overwrite it.
+    if (!restored) return;
     try {
       window.localStorage.setItem(STORAGE_KEY, density);
     } catch {
       // localStorage may be unavailable (private mode); the in-memory value still applies.
     }
-  }, [density]);
+  }, [density, restored]);
 
   const value: DensityContextValue = {
     density,

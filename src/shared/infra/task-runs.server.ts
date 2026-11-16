@@ -1,11 +1,10 @@
-import { db, dbConfigured } from "@/shared/infra/postgres/db.server";
 import { SCHEDULED_TASKS } from "@/shared/contracts/scheduled-tasks";
+import type { TaskRunRow, TaskRunStatus, TaskTrigger } from "@/shared/contracts/task-run-repo";
 import type { SecondReaderRun, VerifierControlRun } from "@/shared/contracts/verification";
 import { nextCronRun } from "@/shared/infra/cron";
+import { serverServices } from "@/shared/infra/server-services.server";
 
-export type TaskTrigger = "schedule" | "manual";
-/** `alert`: the job ran fine and found something a person should look at (a health regression). */
-export type TaskRunStatus = "running" | "ok" | "skipped" | "alert" | "failed" | "interrupted";
+export type { TaskRunStatus, TaskTrigger };
 
 export interface TaskOutcome {
   status: "ok" | "skipped" | "alert";
@@ -143,13 +142,10 @@ export const rulesOutcome = (r: {
 };
 
 async function start(task: string, trigger: TaskTrigger): Promise<number | undefined> {
-  if (!dbConfigured()) return undefined;
   try {
-    const sql = db();
-    await sql`delete from task_runs where started_at < now() - make_interval(days => ${KEEP_DAYS})`;
-    const [row] = await sql<{ id: string }[]>`
-      insert into task_runs (task, trigger) values (${task}, ${trigger}) returning id`;
-    return row ? Number(row.id) : undefined;
+    const runs = serverServices().taskRuns;
+    await runs.prune(KEEP_DAYS);
+    return await runs.begin(task, trigger);
   } catch (e) {
     console.error(`[task-runs] could not record start of ${task}`, e);
     return undefined;
@@ -165,35 +161,26 @@ async function finish(
 ) {
   if (id === undefined) return;
   try {
-    await db()`
-      update task_runs
-         set finished_at = now(), duration_ms = ${durationMs}, status = ${status},
-             summary = ${summary?.slice(0, 500) ?? null}, error = ${error?.slice(0, 2000) ?? null}
-       where id = ${id}`;
+    await serverServices().taskRuns.finish(id, {
+      durationMs,
+      status,
+      summary: summary?.slice(0, 500) ?? null,
+      error: error?.slice(0, 2000) ?? null,
+    });
   } catch (e) {
     console.error("[task-runs] could not record finish", e);
   }
 }
 
-interface Row {
-  task: string;
-  trigger: TaskTrigger;
-  started_at: Date;
-  duration_ms: number | null;
-  status: TaskRunStatus;
-  summary: string | null;
-  error: string | null;
-}
-
-function toRun(r: Row, now: number): TaskRun {
-  const started = r.started_at.getTime();
+function toRun(r: TaskRunRow, now: number): TaskRun {
+  const started = r.startedAt.getTime();
   const status =
     r.status === "running" && now - started > INTERRUPTED_AFTER_MS ? "interrupted" : r.status;
   return {
     trigger: r.trigger,
-    startedAt: r.started_at.toISOString(),
+    startedAt: r.startedAt.toISOString(),
     status,
-    ...(r.duration_ms !== null ? { durationMs: r.duration_ms } : {}),
+    ...(r.durationMs !== null ? { durationMs: r.durationMs } : {}),
     ...(r.summary ? { summary: r.summary } : {}),
     ...(r.error ? { error: r.error } : {}),
   };
@@ -207,21 +194,11 @@ const median = (xs: number[]) => {
 
 /** Status of every scheduled job; recorded history is empty without a database. */
 export async function listTaskStatus(now = new Date()): Promise<TaskStatus[]> {
-  let rows: Row[] = [];
-  if (dbConfigured()) {
-    try {
-      // The last 20 runs per job, plus the last 20 that did work: the sync is throttled, so
-      // its recent history can be all skips while the runs that matter sit further back.
-      rows = await db()<Row[]>`
-        select task, trigger, started_at, duration_ms, status, summary, error from (
-          select *, row_number() over (partition by task order by started_at desc) as n,
-                    row_number() over (partition by task, status = 'skipped' order by started_at desc) as w
-            from task_runs) r
-         where n <= 20 or (w <= 20 and status <> 'skipped')
-         order by started_at desc`;
-    } catch (e) {
-      console.error("[task-runs] could not read status", e);
-    }
+  let rows: TaskRunRow[] = [];
+  try {
+    rows = await serverServices().taskRuns.recent();
+  } catch (e) {
+    console.error("[task-runs] could not read status", e);
   }
   const t = now.getTime();
   return SCHEDULED_TASKS.map((task) => {

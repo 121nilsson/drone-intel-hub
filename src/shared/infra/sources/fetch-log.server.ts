@@ -1,4 +1,4 @@
-import { db, dbConfigured } from "@/shared/infra/postgres/db.server";
+import { serverServices } from "@/shared/infra/server-services.server";
 import { yieldDrift, type FetchHistoryEntry } from "@/entities/source/health";
 import type { SourceFetchHealth } from "@/shared/contracts/autonomy-insights";
 
@@ -21,12 +21,14 @@ const DRIFT_ROWS = 200;
  * does nothing.
  */
 export async function recordSourceFetch(entry: SourceFetchEntry): Promise<void> {
-  if (!dbConfigured()) return;
   try {
-    await db()`
-      insert into source_fetch_log (source_id, ok, fetched, duplicates, error)
-      values (${entry.sourceId}, ${entry.ok}, ${entry.fetched}, ${entry.duplicates},
-              ${entry.error?.slice(0, 500) ?? null})`;
+    await serverServices().sourceLog.append({
+      sourceId: entry.sourceId,
+      ok: entry.ok,
+      fetched: entry.fetched,
+      duplicates: entry.duplicates,
+      error: entry.error?.slice(0, 500) ?? null,
+    });
   } catch (e) {
     console.error(`[source-fetch-log] could not record fetch of ${entry.sourceId}`, e);
   }
@@ -37,30 +39,11 @@ export async function recordSourceFetch(entry: SourceFetchEntry): Promise<void> 
  * ~80 sources issues one delete instead of eighty. Same best-effort rules as recordSourceFetch.
  */
 export async function pruneSourceFetchLog(): Promise<void> {
-  if (!dbConfigured()) return;
   try {
-    await db()`delete from source_fetch_log where at < now() - make_interval(days => ${KEEP_DAYS})`;
+    await serverServices().sourceLog.prune(KEEP_DAYS);
   } catch (e) {
     console.error("[source-fetch-log] could not prune", e);
   }
-}
-
-interface TotalsRow {
-  source_id: string;
-  fetches: number;
-  failures: number;
-  fetched: number;
-  relevant: number;
-  last_ok_at: Date | null;
-}
-
-interface HistoryRow {
-  source_id: string;
-  at: Date;
-  ok: boolean;
-  fetched: number;
-  relevant: number;
-  error: string | null;
 }
 
 /** Per-source health over the last `days`: totals, the last success and failure, and a drift flag. */
@@ -68,49 +51,34 @@ export async function listSourceFetchHealth(
   days = 30,
   now = new Date(),
 ): Promise<SourceFetchHealth[]> {
-  if (!dbConfigured()) return [];
   try {
-    const sql = db();
-    const totals = await sql<TotalsRow[]>`
-      select source_id,
-             count(*)::int as fetches,
-             count(*) filter (where not ok)::int as failures,
-             coalesce(sum(fetched), 0)::int as fetched,
-             coalesce(sum(relevant), 0)::int as relevant,
-             max(at) filter (where ok) as last_ok_at
-        from source_fetch_log
-       where at >= now() - make_interval(days => ${days})
-       group by source_id`;
-    const history = await sql<HistoryRow[]>`
-      select source_id, at, ok, fetched, relevant, error from (
-        select *, row_number() over (partition by source_id order by at desc) as n
-          from source_fetch_log
-         where at >= now() - make_interval(days => ${days})) r
-       where n <= ${DRIFT_ROWS}`;
+    const log = serverServices().sourceLog;
+    const totals = await log.totals(days);
+    const history = await log.history(days, DRIFT_ROWS);
 
     const bySource = new Map<string, FetchHistoryEntry[]>();
     const lastError = new Map<string, { at: number; error: string }>();
     for (const r of history) {
-      const list = bySource.get(r.source_id) ?? [];
+      const list = bySource.get(r.sourceId) ?? [];
       list.push({ at: r.at.toISOString(), ok: r.ok, fetched: r.fetched, relevant: r.relevant });
-      bySource.set(r.source_id, list);
+      bySource.set(r.sourceId, list);
       if (!r.ok && r.error) {
-        const prev = lastError.get(r.source_id);
+        const prev = lastError.get(r.sourceId);
         if (!prev || r.at.getTime() > prev.at)
-          lastError.set(r.source_id, { at: r.at.getTime(), error: r.error });
+          lastError.set(r.sourceId, { at: r.at.getTime(), error: r.error });
       }
     }
 
     return totals.map((t) => {
-      const drift = yieldDrift(bySource.get(t.source_id) ?? [], now.getTime());
-      const err = lastError.get(t.source_id)?.error;
+      const drift = yieldDrift(bySource.get(t.sourceId) ?? [], now.getTime());
+      const err = lastError.get(t.sourceId)?.error;
       return {
-        sourceId: t.source_id,
+        sourceId: t.sourceId,
         fetches: t.fetches,
         failures: t.failures,
         fetched: t.fetched,
         relevant: t.relevant,
-        ...(t.last_ok_at ? { lastOkAt: t.last_ok_at.toISOString() } : {}),
+        ...(t.lastOkAt ? { lastOkAt: t.lastOkAt.toISOString() } : {}),
         ...(err ? { lastError: err } : {}),
         ...(drift ? { drift } : {}),
       };

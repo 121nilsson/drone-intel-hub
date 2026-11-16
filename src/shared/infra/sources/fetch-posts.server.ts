@@ -22,8 +22,7 @@ import { autoCorrect } from "@/shared/infra/ingest/auto-correct";
 import { autonomySwitchEnabled } from "@/shared/infra/autonomy/switches.server";
 import { pruneRepeatedCandidates } from "@/shared/infra/ingest/prune-candidates";
 import { repairCatalog } from "@/shared/infra/ingest/repair-catalog";
-import { dbConfigured } from "../postgres/db.server";
-import { PostgresStore } from "../postgres/postgres-store.server";
+import { serverServices } from "../server-services.server";
 import { DEFAULT_SETTINGS } from "../settings-defaults";
 import { readProviderEnvConfig } from "../provider-env.server";
 import {
@@ -148,7 +147,7 @@ export async function runSourceProbes(deps: ProbeDeps, now = Date.now()): Promis
 /**
  * Server-side auto-ingest: the body the scheduled task invokes.
  *
- * Reuses the same write-through repositories the browser uses, attached to PostgresStore,
+ * Reuses the same write-through repositories the browser uses, attached to the backend's document store,
  * so candidates and merged specs persist exactly as on a manual sync. Only the transport
  * is server-side; collectSource, processPending and the two-tier pipeline are shared with the UI.
  */
@@ -161,9 +160,10 @@ export async function fetchAllSources(
     force?: boolean;
   } = {},
 ): Promise<{ reports: SyncReport[]; stopReason?: string }> {
-  if (!dbConfigured()) throw new Error("Auto-sync needs DATABASE_URL (PostgreSQL)");
+  const { backend } = serverServices();
+  if (!backend.capabilities.sql) throw new Error("Auto-sync needs DATABASE_URL (PostgreSQL)");
 
-  const store = new PostgresStore();
+  const store = await backend.documents();
   const sources = new LocalSourceRepository();
   const drones = new LocalDroneRepository();
   const candidates = new LocalCandidateRepository();

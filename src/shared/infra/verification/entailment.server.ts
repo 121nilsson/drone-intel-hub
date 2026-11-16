@@ -18,14 +18,12 @@ import type { SecondReaderRun, TokenUsageToday } from "@/shared/contracts/verifi
 import { chatCompletionOnce } from "@/shared/infra/ai-proxy.server";
 import { getAvailableProviders, getProviderModel } from "@/shared/infra/ai-providers";
 import { autonomySwitchEnabled } from "@/shared/infra/autonomy/switches.server";
-import { db, dbConfigured, type Sql } from "@/shared/infra/postgres/db.server";
+import { serverServices } from "@/shared/infra/server-services.server";
 import {
-  appendReaderRows,
   claimFingerprint,
   readerInputHash,
   readerRow,
 } from "@/shared/infra/verification/audit-freeze.server";
-import { PostgresStore } from "@/shared/infra/postgres/postgres-store.server";
 import { LocalDroneRepository } from "@/shared/infra/storage/local-repository";
 
 /**
@@ -99,19 +97,11 @@ const isAiExtracted = (c: SpecClaim) =>
   c.extractionEngine !== "heuristic" && c.extractionEngine !== "reference";
 
 export async function usedToday(): Promise<{ input: number; output: number }> {
-  const [row] = await db()<{ input: string | null; output: string | null }[]>`
-    select sum(input) as input, sum(output) as output from ai_token_usage
-     where day = current_date and purpose = any(${BUDGETED})`;
-  return { input: Number(row?.input ?? 0), output: Number(row?.output ?? 0) };
+  return await serverServices().verification.usedToday(BUDGETED);
 }
 
 export async function recordUsage(purpose: string, used: { input: number; output: number }) {
-  await db()`insert into ai_token_usage (day, purpose, input, output, calls)
-    values (current_date, ${purpose}, ${used.input}, ${used.output}, 1)
-    on conflict (day, purpose) do update
-      set input = ai_token_usage.input + excluded.input,
-          output = ai_token_usage.output + excluded.output,
-          calls = ai_token_usage.calls + 1`;
+  await serverServices().verification.recordUsage(purpose, used);
 }
 
 interface Target {
@@ -126,7 +116,8 @@ const isMachineClaim = (c: SpecClaim) =>
 
 /** Today's spend against the ceiling, for the Autonomy page. */
 export async function tokenUsageToday(): Promise<TokenUsageToday> {
-  const used = dbConfigured() ? await usedToday() : { input: 0, output: 0 };
+  // Without a database the repository reports nothing spent.
+  const used = await usedToday();
   return { ...used, ceiling: CEILING };
 }
 
@@ -171,21 +162,17 @@ export async function runEntailment(): Promise<SecondReaderRun> {
     deferred: 0,
   };
   const tokens = { input: 0, output: 0 };
-  if (!dbConfigured()) return { ran: false, reason: "no database configured", ...empty, tokens };
+  const { backend, verification, audit } = serverServices();
+  if (!backend.capabilities.sql)
+    return { ran: false, reason: "no database configured", ...empty, tokens };
   if (!autonomySwitchEnabled("ai_verifier"))
     return { ran: false, reason: "AI_VERIFIER=off", ...empty, tokens };
   const options = readerOptions();
   if (!options.length) return { ran: false, reason: "no AI provider configured", ...empty, tokens };
 
   const drones = new LocalDroneRepository();
-  await drones.attach(new PostgresStore());
-  const sql = db();
-  const audited = new Set(
-    (
-      await sql<{ claim_id: string }[]>`select distinct claim_id from verification_audit
-      where role <> 'control'`
-    ).map((r) => r.claim_id),
-  );
+  await drones.attach(await backend.documents());
+  const audited = new Set(await audit.auditedClaimIdsExceptControls());
 
   // Every candidate claim, grouped by the post it came from.
   const byPost = new Map<string, Target[]>();
@@ -207,10 +194,7 @@ export async function runEntailment(): Promise<SecondReaderRun> {
   const ids = [...byPost.keys()];
   const posts = new Map(
     ids.length
-      ? (
-          await sql<{ id: string; text: string | null; created_at: Date }[]>`
-            select id, data->>'text' as text, created_at from dispatches where id = any(${ids})`
-        ).flatMap((r) => (r.text ? [[r.id, r] as const] : []))
+      ? (await verification.postTexts(ids)).flatMap((r) => (r.text ? [[r.id, r] as const] : []))
       : [],
   );
   // Only what still needs reading against the post as it stands: audited claims first, because
@@ -313,7 +297,7 @@ export async function runEntailment(): Promise<SecondReaderRun> {
   } finally {
     // Whatever stopped the loop, the verdicts already paid for are written.
     await writeVerdicts(drones, verdicts);
-    await appendAuditHistory(sql, verdicts, postTexts);
+    await appendAuditHistory(verdicts, postTexts);
   }
 
   const all = [...verdicts.values()];
@@ -344,16 +328,13 @@ export async function runEntailment(): Promise<SecondReaderRun> {
  * draw itself (audit.server.ts) and never here, so a later reading cannot pose as one.
  */
 async function appendAuditHistory(
-  sql: Sql,
   verdicts: ReadonlyMap<string, ClaimEntailment>,
   postTexts: ReadonlyMap<string, string>,
 ): Promise<void> {
   const ids = [...verdicts.keys()];
   if (!ids.length) return;
-  const items = await sql<
-    { id: string; claim_id: string; claim_fingerprint: string | null; answered_at: Date | null }[]
-  >`select id, claim_id, claim_fingerprint, answered_at from verification_audit
-     where claim_id = any(${ids}) and role <> 'control' and claim_fingerprint is not null`;
+  const audit = serverServices().audit;
+  const items = await audit.fingerprintedItems(ids);
   const rows = items.flatMap((item) => {
     const e = verdicts.get(item.claim_id);
     if (!e || e.claimFingerprint !== item.claim_fingerprint) return [];
@@ -364,7 +345,7 @@ async function appendAuditHistory(
       }),
     ];
   });
-  await appendReaderRows(sql, rows);
+  await audit.appendReaderRows(rows);
 }
 
 /**

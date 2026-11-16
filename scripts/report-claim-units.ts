@@ -28,8 +28,11 @@ const isNumeric = (claim: SpecClaim) =>
 
 async function main() {
   // Imported here, not at the top: a *.server.ts module may only be loaded by a server entry.
-  const { PostgresStore } = await import("@/shared/infra/postgres/postgres-store.server");
-  const store = new PostgresStore();
+  const { serverServices } = await import("@/shared/infra/server-services.server");
+  const { backend } = serverServices();
+  // These always ran against PostgreSQL: the Cloud store is last-write-wins and has no post texts.
+  if (!backend.capabilities.sql) throw new Error("DATABASE_URL not set");
+  const store = await backend.documents();
   const loaded = (await store.load("drones")) ?? [];
 
   const counts = new Map<Basis, number>(BASES.map((b) => [b, 0]));

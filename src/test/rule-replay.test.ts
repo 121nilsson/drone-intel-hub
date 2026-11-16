@@ -1,4 +1,6 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { setServerServices } from "@/shared/infra/server-services.server";
+import { createBackend } from "@/shared/infra/storage/backend.server";
 import { recordAutonomyEvent } from "@/shared/infra/autonomy/ledger.server";
 import { replayRule, REPLAY_MAX_POSTS } from "@/shared/infra/evaluation/rule-sandbox-replay.server";
 
@@ -13,7 +15,14 @@ vi.mock("@/shared/infra/autonomy/ledger.server", () => ({
   recordAutonomyEvent: vi.fn(),
 }));
 
+// A backend that has SQL, so only the switch can end the call early (the domain asks
+// backend.capabilities.sql, not the environment).
+beforeEach(() => {
+  setServerServices({ backend: createBackend("postgres") });
+});
+
 afterEach(() => {
+  setServerServices(null);
   vi.unstubAllEnvs();
   vi.clearAllMocks();
 });

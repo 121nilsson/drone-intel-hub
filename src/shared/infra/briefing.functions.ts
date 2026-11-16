@@ -1,5 +1,4 @@
 import { createServerFn } from "@tanstack/react-start";
-import { dbConfigured } from "@/shared/infra/postgres/db.server";
 import {
   getSharedBriefingSummary,
   putSharedBriefingSummary,
@@ -17,7 +16,8 @@ export const fetchBriefingExecutiveSummary = createServerFn({ method: "POST" })
     return d;
   })
   .handler(async ({ data }): Promise<BriefingExecutiveSummaryResponse> => {
-    if (!dbConfigured()) return { status: "no_db" };
+    const { serverServices } = await import("@/shared/infra/server-services.server");
+    if (!serverServices().backend.capabilities.sql) return { status: "no_db" };
     const resolved = await resolveSharedBriefingSummary(data.context);
     if (!resolved) return { status: "miss" };
     return {
@@ -39,7 +39,8 @@ export const storeBriefingExecutiveSummary = createServerFn({ method: "POST" })
     return d;
   })
   .handler(async ({ data }): Promise<{ ok: boolean }> => {
-    if (!dbConfigured()) return { ok: false };
+    const { serverServices } = await import("@/shared/infra/server-services.server");
+    if (!serverServices().backend.capabilities.sql) return { ok: false };
     const existing = await getSharedBriefingSummary(data.context, Date.now());
     if (existing) return { ok: true };
     await putSharedBriefingSummary(data.context, data.summary, data.generatedAt);

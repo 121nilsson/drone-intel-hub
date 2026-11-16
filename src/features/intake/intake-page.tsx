@@ -16,6 +16,18 @@ import { INTAKE_PAGE_SIZE } from "./intake-search";
 
 const SAMPLE = `Telegram dispatch: Russia launched Geran-5 jet drones, one intercepted by a STING S interceptor. 4 jammers onboard and new 1575 MHz CRPA. Cruise 600 km/h, range 1000 km, 90 kg warhead. Unit cost $15,000-$20,000.`;
 
+/**
+ * The names a family group is titled by. Several candidates from one report are named by their
+ * own names; a single multi-system candidate is named by the systems it contains, since its own
+ * name is only one of them.
+ */
+function familyNames(family: readonly Candidate[]): string[] {
+  const only = family.length === 1 ? family[0] : undefined;
+  const systems = only?.extraction.systems ?? [];
+  if (only && systems.length > 1) return systems.map((s) => s.name);
+  return family.map((c) => c.extraction.name ?? "Unnamed system");
+}
+
 export function IntakePage({
   draft,
   draftSource,
@@ -114,8 +126,10 @@ export function IntakePage({
     setBusy(false);
     setStartedAt(null);
   };
-  const pending = candidates.filter((c) => c.status === "pending");
-  const resolved = candidates.filter((c) => c.status !== "pending");
+  // Memoised on the list itself: a fresh array every render would defeat every memo below, and
+  // each keystroke in the paste box would regroup the whole queue.
+  const pending = useMemo(() => candidates.filter((c) => c.status === "pending"), [candidates]);
+  const resolved = useMemo(() => candidates.filter((c) => c.status !== "pending"), [candidates]);
 
   // Queue candidates that came from the same raw report are often the same base/variant family
   // split during multi-system extraction. Group them together so an analyst can resolve one
@@ -144,6 +158,12 @@ export function IntakePage({
     () => pending.filter((c) => !familyCandidateIds.has(c.id)),
     [pending, familyCandidateIds],
   );
+
+  // Queue items are family groups and single candidates; both lists reveal one block per page.
+  const queueItems = unresolvedFamilies.length + ungroupedPending.length;
+  const shownCount =
+    Math.min(visible, unresolvedFamilies.length) + Math.min(visible, ungroupedPending.length);
+  const hiddenRemaining = queueItems - shownCount;
 
   // Repositories fill asynchronously after SSR; until they attach, "Queue clear" would be a lie.
   const detectedLang = /[Ѐ-ӿ]/.test(raw)
@@ -265,13 +285,13 @@ export function IntakePage({
               <p className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
                 Unresolved variant families
               </p>
-              {unresolvedFamilies.map((family) => (
+              {unresolvedFamilies.slice(0, visible).map((family) => (
                 <div
                   key={family.map((c) => c.id).join(":")}
                   className="border border-accent/40 bg-background/50 p-3"
                 >
                   <p className="font-mono text-xs text-accent">
-                    {family.map((c) => c.extraction.name ?? "Unnamed system").join(" / ")}
+                    {familyNames(family).join(" / ")}
                     {family.some((c) => (c.extraction.systems ?? []).some((s) => s.variantOf))
                       ? " - resolve one as the base and one as its variant"
                       : " - choose whether one is a variant of the other"}
@@ -291,13 +311,15 @@ export function IntakePage({
             ))}
           </ul>
           {!pending.length && <p className="text-sm text-muted-foreground">Queue clear.</p>}
-          {ungroupedPending.length > visible && (
+          {/* Families and single candidates page together, so a backlog of multi-system reports
+              cannot push the rest of the queue out of reach. */}
+          {hiddenRemaining > 0 && (
             <div className="mt-4 flex items-center gap-3">
               <Btn variant="ghost" onClick={() => onPageChange(page + 1)}>
-                Show {Math.min(INTAKE_PAGE_SIZE, ungroupedPending.length - visible)} more
+                Show {Math.min(INTAKE_PAGE_SIZE, hiddenRemaining)} more
               </Btn>
               <span className="font-mono text-xs text-muted-foreground">
-                {visible} of {ungroupedPending.length}
+                {shownCount} of {queueItems}
               </span>
             </div>
           )}

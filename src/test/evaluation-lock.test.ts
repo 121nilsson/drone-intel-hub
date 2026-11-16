@@ -15,6 +15,9 @@ vi.mock("@/shared/infra/postgres/db.server", () => ({
     throw new Error('relation "eval_lock" does not exist');
   },
 }));
+// The jobs reach storage through serverServices(), which picks the PostgreSQL adapter (the one
+// that calls the mocked db()) when a database URL is configured.
+vi.stubEnv("DATABASE_URL", "postgres://test.invalid/eval");
 
 const { runEvaluation, runEvaluationHealth, harvestCorpus } =
   await import("@/shared/infra/evaluation/evaluation.server");

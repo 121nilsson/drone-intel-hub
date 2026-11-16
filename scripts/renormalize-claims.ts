@@ -24,8 +24,11 @@ import { DocumentConflictError } from "@/shared/contracts/store";
 const apply = process.argv.includes("--apply");
 async function main() {
   // Imported here, not at the top: a *.server.ts module may only be loaded by a server entry.
-  const { PostgresStore } = await import("@/shared/infra/postgres/postgres-store.server");
-  const store = new PostgresStore();
+  const { serverServices } = await import("@/shared/infra/server-services.server");
+  const { backend } = serverServices();
+  // These always ran against PostgreSQL: the Cloud store is last-write-wins and has no post texts.
+  if (!backend.capabilities.sql) throw new Error("DATABASE_URL not set");
+  const store = await backend.documents();
   const loaded = (await store.load("drones")) ?? [];
   let claims = 0;
   let specsChanged = 0;
@@ -64,14 +67,12 @@ async function main() {
 
   // Verification also reads `normalized`: ask it about each changed claim before and after, against
   // the post the claim came from, so a verdict that would move shows up here and not after --apply.
-  const { db } = await import("@/shared/infra/postgres/db.server");
   const ids = [...new Set(pairs.flatMap((p) => (p.before.sourceId ? [p.before.sourceId] : [])))];
   const texts = new Map(
     ids.length
-      ? (
-          await db()<{ id: string; text: string | null }[]>`
-            select id, data->>'text' as text from dispatches where id = any(${ids})`
-        ).map((r) => [r.id, r.text ?? undefined] as const)
+      ? (await serverServices().verification.postTexts(ids)).map(
+          (r) => [r.id, r.text ?? undefined] as const,
+        )
       : [],
   );
   const catalog = loaded.map((l) => l.doc);

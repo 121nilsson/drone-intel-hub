@@ -1,4 +1,3 @@
-import { db } from "@/shared/infra/postgres/db.server";
 import {
   queueFixtures,
   verifiedFixtures,
@@ -10,6 +9,7 @@ import {
   analystResolvedCandidates,
   judgedCandidates,
 } from "@/shared/infra/evaluation/rule-sandbox-candidates.server";
+import { rulesRepo } from "@/shared/infra/evaluation/rule-sandbox-store.server";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -20,15 +20,13 @@ import path from "node:path";
  * verification gets "verified-").
  */
 export async function loadFixtures(drones: readonly Drone[]): Promise<EvalFixture[]> {
-  const rows = await db()`
-    select distinct on (id) id, status, fixture from eval_corpus
-    order by id, version desc`;
+  const rows = await rulesRepo().corpusFixtures();
   const byId = new Map<string, EvalFixture>();
   for (const r of rows) {
-    const status = r["status"] as string;
+    const status = r.status;
     if (status !== "approved" && status !== "pending_fix") continue;
-    const fx = r["fixture"] as EvalFixture;
-    byId.set(r["id"] as string, { ...fx, status });
+    const fx = r.fixture as EvalFixture;
+    byId.set(r.id, { ...fx, status });
   }
   for (const p of [
     "src/test/fixtures/eval-corpus.json",

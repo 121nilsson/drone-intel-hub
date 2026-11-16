@@ -137,42 +137,40 @@ function Briefing() {
     (async () => {
       try {
         if (!force) {
-          const remote = await fetchBriefingExecutiveSummary({ data: { context } });
-          if (remote.status === "hit") {
+          // A failing shared-cache lookup must not block the local cache or a fresh summary.
+          const remote = await fetchBriefingExecutiveSummary({ data: { context } }).catch(
+            () => null,
+          );
+          if (remote?.status === "hit") {
             apply(remote.summary, remote.generatedAt, true);
-            setGenerating(false);
             return;
           }
 
           const cached = readBriefingSummaryCache();
           if (cached) {
             apply(cached.summary, cached.generatedAt, false);
-            setGenerating(false);
             return;
           }
         }
 
-        if (id !== reqId.current) {
-          setGenerating(false);
-          return;
-        }
-        setSummary(null);
-        setSummaryAt(null);
-        setSummaryShared(false);
+        if (id !== reqId.current) return;
 
+        // The summary on screen stays until its replacement exists: if the provider is down, the
+        // analyst keeps the last good one next to the error instead of losing it.
         const s = await summarizerRef.current.summarize(context);
-        if (id !== reqId.current) {
-          setGenerating(false);
-          return;
-        }
+        if (id !== reqId.current) return;
         const generatedAt = Date.now();
         apply(s, generatedAt, false);
         void storeBriefingExecutiveSummary({
           data: { context, summary: s, generatedAt },
+        }).catch(() => {
+          // Sharing is best effort; the summary is already shown and cached locally.
         });
       } catch (e) {
         if (id === reqId.current) setErr(e instanceof Error ? e.message : String(e));
-        setGenerating(false);
+      } finally {
+        // Only the newest request owns the flag; a superseded one must not clear it.
+        if (id === reqId.current) setGenerating(false);
       }
     })();
 
@@ -267,9 +265,12 @@ function Briefing() {
           </div>
         }
       >
-        {err ? (
-          <p className="text-sm text-destructive">{err}</p>
-        ) : summary ? (
+        {err && (
+          <p className="mb-3 text-sm text-destructive" role="alert">
+            {summary ? `Could not refresh the summary: ${err}` : err}
+          </p>
+        )}
+        {summary ? (
           <>
             <Collapsible lines={BRIEFING_LINES} className="text-sm leading-relaxed">
               <SummaryText text={summary} />
@@ -284,9 +285,11 @@ function Briefing() {
             )}
           </>
         ) : (
-          <p className="animate-pulse font-mono text-sm text-muted-foreground">
-            Compiling briefing…
-          </p>
+          !err && (
+            <p className="animate-pulse font-mono text-sm text-muted-foreground">
+              Compiling briefing…
+            </p>
+          )
         )}
       </Panel>
 
