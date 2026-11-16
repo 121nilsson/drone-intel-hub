@@ -40,6 +40,7 @@ export default tseslint.config(
       "@repo/no-server-import-from-client": "error",
       "@repo/no-nordic-ui-copy": "error",
       "@repo/no-raw-controls": "error",
+      "@repo/no-raw-db-import": "error",
       "no-restricted-imports": [
         "error",
         {

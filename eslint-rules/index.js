@@ -25,6 +25,12 @@
  *    textareas and tables come from src/shared/ui, so the look and the mobile behaviour are
  *    defined once instead of re-styled per page.
  *
+ * 6. `no-raw-db-import` - the database driver, the connection pool, the Supabase service client and
+ *    the concrete stores are reached only from their adapters (src/shared/infra/postgres and
+ *    src/shared/infra/cloud) and from the two places that choose between them
+ *    (storage/backend.server.ts, server-services.server.ts). Domain code asks `serverServices()`
+ *    for a port, so the storage can change without touching it.
+ *
  * The layer map these rules enforce:
  *
  *   src/entities/        pure domain. Imports nothing outside src/entities.
@@ -267,6 +273,64 @@ const noRawControls = {
   },
 };
 
+/** Modules only an adapter may import: the driver, the pool, the concrete stores, the Supabase client. */
+const RAW_DB_MODULES = [
+  "shared/infra/postgres/db.server",
+  "shared/infra/postgres/postgres-store.server",
+  "shared/infra/cloud/cloud-store.server",
+  "integrations/supabase/client.server",
+  "integrations/supabase/client",
+];
+const RAW_DB_PACKAGES = ["postgres", "@supabase/supabase-js"];
+/** Where raw access is allowed: the adapters, and the two modules that select between them. */
+const RAW_DB_HOMES = [
+  path.join(SRC, "shared", "infra", "postgres") + path.sep,
+  path.join(SRC, "shared", "infra", "cloud") + path.sep,
+  path.join(SRC, "shared", "infra", "storage", "backend.server."),
+  path.join(SRC, "shared", "infra", "server-services.server."),
+  path.join(SRC, "integrations") + path.sep,
+  path.join(SRC, "test") + path.sep,
+];
+
+const noRawDbImport = {
+  meta: {
+    type: "problem",
+    docs: "https://eslint.org/docs/latest/use/configure/rules",
+    schema: [],
+    messages: {
+      rawDb:
+        'Domain code must not import "{{source}}". Ask serverServices() (src/shared/infra/server-services.server.ts) for a port; SQL lives in an adapter under src/shared/infra/postgres.',
+    },
+  },
+  create(context) {
+    if (RAW_DB_HOMES.some((home) => context.filename.startsWith(home))) return {};
+    const check = (node) => {
+      const source = node.source?.value;
+      if (typeof source !== "string") return;
+      if (node.importKind === "type" && !RAW_DB_PACKAGES.includes(source)) {
+        // A type-only import of an adapter module is erased at build time; the driver's own
+        // types still count, because they pull the driver's vocabulary into domain code.
+        return;
+      }
+      if (RAW_DB_PACKAGES.includes(source)) {
+        context.report({ node: node.source, messageId: "rawDb", data: { source } });
+        return;
+      }
+      const resolved = resolveSource(context.filename, source);
+      if (!resolved) return;
+      const rel = path.relative(SRC, resolved).split(path.sep).join("/");
+      if (RAW_DB_MODULES.includes(rel))
+        context.report({ node: node.source, messageId: "rawDb", data: { source } });
+    };
+    return {
+      ImportDeclaration: check,
+      ImportExpression(node) {
+        check(node);
+      },
+    };
+  },
+};
+
 export default {
   rules: {
     "no-raw-controls": noRawControls,
@@ -274,5 +338,6 @@ export default {
     "no-lower-layer-feature-import": noLowerLayerFeatureImport,
     "no-server-import-from-client": noServerImportFromClient,
     "no-nordic-ui-copy": noNordicUiCopy,
+    "no-raw-db-import": noRawDbImport,
   },
 };
