@@ -1151,6 +1151,18 @@ To maintain architectural decoupling, each pipeline stage enforces strict bounda
 
 ## 15. Offline Shadow Evaluation and Observability
 
+> **Amendment — Phase 3.2 human-efficient evaluation (rev. 3).** The sampling and acceptance numbers below are the original Phase 3 target. They are superseded for Phase 3.2 by `docs/phase-3-2-human-efficient-evaluation-plan.md`:
+>
+> - **2,160 examples and 60/stratum are an aspirational future benchmark, not a prerequisite for continuing development.**
+> - A small pilot may be used **exploratively**; its metrics carry evidence labels (`exploratory`, `target_not_demonstrated`), never "passed".
+> - **Insufficient evidence is reported as insufficient**, never as approval. In the primary worst-case view it is counted against the resolver; the conditional view is descriptive and carries no confidence bound.
+> - The 98% / 95% / 99% targets remain the long-term acceptance criteria for any **autonomy or production-integration decision**. Those phases keep their own quality gates and are **not unlocked by 3.2**.
+> - Tier 1 (unit/adversarial safety fixtures) stays a **100% hard blocker**.
+> - The stratification matrix is a **proposed pilot frame**: 4 languages (including `unknown`) × 12 families × 2 resolver statuses = 96 possible cells, with a **total ceiling** (72 draws) instead of a per-cell quota; empty and unsampled cells are reported.
+> - **Blind verdicts are the primary labels; post-reveal revisions are diagnostics only.**
+>
+> The 3.2 implementation freezes a frame, runs the resolver on the whole frame, and samples a seeded simple random sample within each non-empty cell. When a non-empty cell receives no draw, the exact bound is refused rather than caveated; only the covered fraction of the population is reported as measured.
+
 To satisfy the non-destructive safety requirement, the new resolver will **not** be integrated into production ingest during initial implementation.
 
 ### Isolated Evaluation Harness
@@ -1203,7 +1215,7 @@ To guarantee that the historical evaluation sample can be reconstructed identica
 1. **Population and Cutoff Window:** The sampling population comprises all dispatches and extracted specifications stored in PostgreSQL up to a frozen cutoff timestamp (`2026-11-01T00:00:00Z`). Later posts are excluded.
 2. **Post-Level Deduplication:** Ingestion feeds frequently syndicate identical dispatches across multiple outlets. Posts are deduplicated prior to stratification using the dispatch `contentHash` (SimHash) and text hash. A syndicated report contributes to the sampling pool only once.
 3. **Stratification Matrix (Language × Attribute Family):**
-   - _Languages (3):_ English (`en`), Ukrainian (`uk`), Russian (`ru`).
+   - _Languages (4 in the Phase 3.2 pilot):_ English (`en`), Ukrainian (`uk`), Russian (`ru`), and `unknown` (a reported stratum, not a discarded bucket).
    - _Semantic Families & Programme Metadata (12):_
      1. `speed.` (max, cruise, dive, stated, target)
      2. `range.` (max, operational, combat radius, link, engagement, detection)
@@ -1217,19 +1229,21 @@ To guarantee that the historical evaluation sample can be reconstructed identica
      10. `capacity.` (fuel volume, target channels)
      11. `cost.` (unit procurement price)
      12. `other_programme_metadata` (explicit category capturing `production.rate_monthly`, `inventory.deployed_count`, `guidance.system`, and long-tail unclassified raw extraction keys, preventing them from falling outside the sampling plan).
-   - _Total Strata Cells:_ $3 \times 12 = 36\text{ cells}$.
-4. **Sample Quota per Cell:**
-   - Target quota: 60 unique extraction instances per stratum cell (nominal target $\approx 2,160$ extraction contexts).
-5. **Handling of Small or Empty Strata:**
-   - If a stratum contains fewer than 60 instances (e.g. Ukrainian load factor `maneuver.` or Russian fuel capacity `capacity.`), **100% of available unique instances** in that cell are sampled.
-   - Deficits are never backfilled with common attributes (`speed` or `range`), as doing so would distort family representation.
-   - Empty or undersaturated strata are explicitly recorded in the sampling manifest metadata.
+   - _Total Strata Cells:_ $4 \times 12 \times 2 = 96\text{ possible cells}$ in the Phase 3.2 pilot (language × family × resolver status). The resolver is run on the whole frame, so each cell's population $N_h$ is known. Many cells are empty; empty cells are reported.
+4. **Sample Ceiling, not a per-cell quota (Phase 3.2):**
+   - At most **72 examples in total** may be _drawn_, never auto-exported (review export defaults to `--limit 5`). This is a ceiling for a small exploratory pilot; the former 60-per-cell / 2,160-context target is aspirational future work, not a prerequisite.
+   - Within each non-empty cell the draw is a plain seeded simple random sample; allocation across cells uses largest remainder with small cells taken whole. Because 72 < 96, some non-empty cells legitimately receive no draw — these are reported as `unsampled`, never backfilled from another cell.
+5. **Handling of Small or Empty Strata (Phase 3.2):**
+   - A cell with fewer instances than its allocation is taken whole. Deficits are never backfilled with common attributes (`speed` or `range`), as doing so would distort family representation.
+   - Empty, undersaturated and unsampled strata are explicitly recorded in the sampling manifest and the sampling report, together with the covered fraction of the population.
+   - An overall population bound is emitted only when every non-empty cell of the relevant subpopulation was sampled. Otherwise the report gives per-cell results plus the covered fraction and states that the unsampled remainder is unmeasured.
 6. **Fixed Random Seed and Content Hash:**
    - The sampling script (`scripts/sample-historical-evaluation-set.ts`) uses a deterministic PRNG initialized with a fixed constant seed string:
      `SEED = "drone-intel-hub-phase3-eval-20261115"`.
    - The sampled records are serialized to a versioned fixture file: `src/test/fixtures/historical-stratified-sample.json`.
    - The fixture is stamped with a computed SHA-256 content hash in a companion manifest (`historical-stratified-sample.manifest.json`).
    - Running the sampling script against the frozen database cutoff produces a bitwise identical dataset.
+   - The Phase 3.2 implementation realises this as `examples.jsonl`, `predictions.jsonl` and `manifest.json` in `src/test/fixtures/semantic-eval/`; the fixture above remains a planned future form.
 
 ### Reference Corpus Ground Truth and Review Model
 
@@ -1288,14 +1302,14 @@ export interface SemanticReferenceCase {
 
 #### Stratum-Level Reporting and Population-Weighted Error Estimation
 
-Because the historical evaluation set uses a balanced quota (target 60 items per stratum cell) rather than a proportional sample of the production database, raw aggregated metric averages would misrepresent operational performance: rare strata (e.g. load factor) would have equal weight with high-volume strata (e.g. speed).
+Because the Phase 3.2 frame is sampled with a **total ceiling and no per-cell quota**, raw aggregated metric averages would misrepresent the frozen population: common strata would dominate and unsampled cells would be silently treated as measured. Rare strata (e.g. load factor) must not be given equal weight with high-volume strata (e.g. speed) merely because a few were drawn.
 
 To avoid this distortion, evaluation telemetry enforces two reporting standards:
 
-1. **Stratum-Level Metric Breakdown:** All metrics (resolution coverage, withholding recall/precision, resolution precision) must be reported individually across each of the 36 strata ($3\text{ languages} \times 12\text{ attribute families}$).
-2. **Stratum-Weighted Population Error Estimation:** When computing overall estimated production error and coverage across the historical population, cell-level metrics must be weighted by actual stratum population counts ($N_h$):
-   $$\hat{P}_{\text{population}} = \sum_{h=1}^{36} W_h \hat{p}_h, \quad \text{where } W_h = \frac{N_h}{N}$$
-   This ensures that production estimates accurately reflect real-world data volume without compromising the depth of inspection on rare attributes.
+1. **Cell-Level Metric Breakdown:** All metrics (resolution precision, withholding precision, withholding recall) are reported individually across the sampled cells of the 96-cell frame ($4\text{ languages} \times 12\text{ families} \times 2\text{ resolver statuses}$), with empty and unsampled cells listed separately.
+2. **Count-Based Population Estimation:** Weights are applied to **counts** ($N_h \times$ share), never to a ratio of ratios. For an error share in a finite population with known $N_h$ and a seeded SRS within each cell, the exact hypergeometric stratified bound applies to the error count; the bound is divided by the known population total. Withholding recall is a ratio of two estimated counts from the resolved (R) and withheld (W) subpopulations, so it is bounded **componentwise** at $\alpha/2$ and reported as conservative — no single-population bound is claimed for the ratio.
+   $$\text{Recall}_{\text{lower}} = \frac{L_{TN,W}}{L_{TN,W} + U_{FN,R}}$$
+   Conditional performance among assessable units is descriptive only and carries no confidence bound. A bound is refused when a non-empty cell has no draw, the search is incomplete, or protocol versions are mixed.
 
 ### Measuring Actual Semantic Correctness
 
@@ -1377,7 +1391,7 @@ Evaluation strictly separates:
 Testing is structured into two clearly separated verification tiers to eliminate any ambiguity between unit-level invariants and corpus-level benchmarks:
 
 - **Tier 1 (Deterministic & Adversarial Safety Fixtures):** Requires a **100% pass rate** on all explicit unit tests in `src/test/semantic-registry-isolated.test.ts`. Any failure in Gate 0–5 precedence, manifest validation, immutability, or adversarial pair non-conflation is a hard blocker.
-- **Tier 2 (Corpus-Level Benchmark on Human Ground Truth):** Evaluated against the larger human-reviewed reference corpus (`src/test/fixtures/semantic-reference-corpus.ts`), satisfying the statistical quality thresholds specified below.
+- **Tier 2 (Corpus-Level Benchmark on Human Ground Truth):** Evaluated against human-reviewed decisions on the frozen pilot frame. This tier is the long-term acceptance gate for **autonomy or production-integration decisions**, which keep their own quality gates and are **not unlocked by Phase 3.2**. A 3.2 pilot is exploratory: its metrics carry evidence labels (`exploratory`, `target_not_demonstrated`), never "passed". Insufficient evidence is reported as insufficient, never as approval.
 
 A dedicated test suite (`src/test/semantic-registry-isolated.test.ts`) must prove the following invariants:
 
@@ -1409,11 +1423,10 @@ A dedicated test suite (`src/test/semantic-registry-isolated.test.ts`) must prov
    - Under no circumstances does the resolver fall back to `semanticKeyFor()` or return the raw input key as a canonical ID.
    - Spy/mock assertions verify that `semanticKeyFor` execution count is zero during hybrid resolver runs.
 
-6. **Withholding Precision and Recall on Ground Truth Reference Set (Phase 3.2; the Phase 3.1 unit tests are only a 100% regression guard and do not measure these thresholds):**
-   - Evaluated against `src/test/fixtures/semantic-reference-corpus.ts`:
-     - **Withholding Recall $\ge 98\%$** across all declared negative and ambiguous test cases (proves near-zero ungrounded guessing on under-specified inputs).
-     - **Withholding Precision $\ge 95\%$** across all instances where the resolver outputs an unresolved state (proves the resolver does not over-withhold on valid synonyms).
-     - **Resolution Precision $\ge 99\%$** on positive assignments to canonical concepts.
+6. **Withholding Precision and Recall on Human Decisions (Phase 3.2; the Phase 3.1 unit tests are only a 100% regression guard and do not measure these thresholds):**
+   - The long-term targets remain **Withholding Recall $\ge 98\%$**, **Withholding Precision $\ge 95\%$** and **Resolution Precision $\ge 99\%$**, measured against human **blind** verdicts on the frozen frame. Post-reveal revisions are diagnostics only.
+   - For a 3.2 pilot these are **estimands with evidence labels, not passes**. A small sample may only emit `exploratory` or `target_not_demonstrated`; a bound is refused when a non-empty cell has no draw or protocols are mixed.
+   - Tier 1 (deterministic/adversarial safety fixtures) stays a **100% hard blocker** regardless of any corpus-level figure.
 
 ---
 
@@ -1441,13 +1454,14 @@ Implementation must proceed in decoupled, independently reviewable stages:
                                                   │
                                                   ▼
 +──────────────────────────────────────────────────────────────────────────────────────────────────+
-| Phase 3.2: Reference Corpus & Adversarial Benchmarks                                             |
-| - Construct src/test/fixtures/semantic-reference-corpus.ts (human-reviewed ground truth)         |
-| - Replay 100% of normalization-corpus.ts fixtures against the isolated resolver                  |
-| - Execute three-tier evaluation: fixtures + stratified historical sample + adversarial set       |
-| - 100% pass rate on safety fixtures; meet corpus thresholds (Recall >=98%, Precision >=95%/99%)  |
-| - Stratum-level breakdown & population-weighted error estimation; document legacy deviations     |
-| - Non-goals: Production claims unchanged.                                                        |
+| Phase 3.2: Human-Efficient Evaluation Infrastructure                                             |
+| - S0 automated replay + property suite (100% on Tier 1 safety invariants)                        |
+| - S1/S2 data model, protocol v1, whole-frame replay, seeded sampler (dry run)                     |
+| - S3/S4 AI suggestions and two-step blind/reveal CSV review; export defaults to --limit 5         |
+| - S5 evidence-labelled metrics with exact, refused-when-unsupported finite-population bounds     |
+| - Five-card feasibility gate G3 decides whether ANY further annotation is justified              |
+| - 2,160 examples / 60 per stratum and the 98/95/99% targets are long-term criteria, NOT a 3.2 gate|
+| - Non-goals: Production claims, ingest, consensus, gates and AUTO_APPLY_TIERS unchanged.          |
 +──────────────────────────────────────────────────────────────────────────────────────────────────+
                                                   │
                                                   ▼
@@ -1583,9 +1597,9 @@ The following three architectural decisions have been explicitly reviewed and ap
 18. **Unicode-Aware Key Normalization and Gate 0 Separation:**
     - _Previous:_ Restricted ASCII/Cyrillic regex that stripped Swedish (å, ä, ö), Persian, and Chinese, while Gate 0 stripped dots from canonical IDs.
     - _Revised:_ Replaced with Unicode property escapes (`\p{L}`, `\p{N}`) for aliases; separated Gate 0 so canonical IDs are validated in their exact dot-notated form.
-19. **Two-Tier Quality Gates and Stratum-Weighted Estimation:**
-    - _Previous:_ Contradiction between 100% roadmap goal and statistical thresholds; no weighting.
-    - _Revised:_ 100% strictly required on deterministic/adversarial unit safety fixtures; statistical thresholds (>=98%, >=95%, >=99%) on reference corpus with stratum breakdown and population-weighted error estimation.
+19. **Two-Tier Quality Gates and Count-Based Estimation (amended for Phase 3.2):**
+    - _Previous:_ Thresholds (>=98%, >=95%, >=99%) read as required to complete Phase 3.2, alongside a contradictory 100% roadmap goal.
+    - _Revised:_ 100% is strictly required on deterministic/adversarial unit safety fixtures (Tier 1, a hard blocker). The statistical targets are long-term acceptance criteria for autonomy/production-integration decisions and are not unlocked by 3.2. A 3.2 pilot is exploratory, labelled never "passed"; 2,160 examples / 60 per stratum are aspirational. Weights apply to counts, blind verdicts are the primary labels, and exact bounds are refused when sampling assumptions fail.
 20. **Comprehensive Core Metadata Hash Binding:**
     - _Previous:_ Composite hash bound only `CORE_DIMENSIONS`.
     - _Revised:_ Expanded to `coreMetadataHash` binding `CORE_DIMENSIONS` and all attribute-specific tolerances, domains, and dimensions in `ENTRY_LIST` from `core-registry.ts`.

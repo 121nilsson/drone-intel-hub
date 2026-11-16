@@ -1,6 +1,21 @@
 # Phase 3.2 — Human-Efficient Evaluation Infrastructure (plan, rev. 3)
 
-> **Status:** approved direction (rev. 3). Only S0 is implemented; S1–S5 are planned. The Phase 3 spec amendment (D5, section C) is part of S1 and is **not** applied yet, so until then this document overrides the evaluation numbers in `docs/phase-3-hybrid-semantic-registry.md` sections 15–17 for Phase 3.2 planning purposes.
+> **Status:** approved direction (rev. 3). S0–S5 (the automated infrastructure) are implemented; the human steps remain: confirm D1–D5, review the five cards, and decide at G3. The Phase 3 spec amendment (D5, section C) has been applied to `docs/phase-3-hybrid-semantic-registry.md` sections 15, 17, 18 and the revision log; the amended spec and this plan now agree. No human labels are fabricated — `decisions.jsonl` is created only by the reviewer.
+
+## Implemented infrastructure (S0–S5)
+
+Pure modules live in `src/entities/normalization/semantic-eval/` (`types`, `validate`, `csv`, `sampling`, `metrics`, plus the S0 `replay`). CLIs and generated evidence:
+
+```
+npx tsx scripts/sample-historical-evaluation-set.ts --apply   # freeze frame, whole-frame replay, SRS sample
+npx tsx scripts/prepare-semantic-suggestions.ts --ai --apply --model <id>   # real AI suggestions (offline mode exists)
+npx tsx scripts/semantic-review.ts export --step blind --limit 5            # fill in the five cards
+npx tsx scripts/semantic-review.ts export --step reveal                     # same ids, with resolver/AI revealed
+npx tsx scripts/semantic-review.ts import --file <the filled CSV> --reviewer "Name"
+npx tsx scripts/evaluate-semantic-registry.ts --report                      # S5 evidence-labelled metrics
+```
+
+No `decisions.jsonl` is committed: human labels are created only by the reviewer. Re-running the sampler and replay is bit-identical and the generators write prettier-formatted reports, so `npm run green` stays green. The adversarial property checks are the S0 invariant suite (INV-01–INV-13); items promoted from it use `origin: "adversarial_ai"` and are reported separately.
 
 ## Design principle
 

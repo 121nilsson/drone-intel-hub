@@ -945,6 +945,22 @@ describe("Isolation from legacy and production code", () => {
     walk(SRC);
     expect(offenders).toEqual([]);
   });
+
+  it("the evaluation module's own import graph stays free of DB, server, env and legacy code", () => {
+    const EVAL_DIR = join(NORM_DIR, "semantic-eval");
+    const files = readdirSync(EVAL_DIR).filter((f) => f.endsWith(".ts"));
+    expect(files.length).toBeGreaterThan(0);
+    const allowed = /^(\.\.?\/|@\/entities\/)/;
+    for (const name of files) {
+      const file = join(EVAL_DIR, name);
+      const src = readFileSync(file, "utf8");
+      const code = src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+      expect(code, file).not.toMatch(/semanticKeyFor|process\.env|\.server|verification_audit/);
+      for (const spec of importsOf(src)) {
+        expect(spec, `${file} imports '${spec}'`).toMatch(allowed);
+      }
+    }
+  });
 });
 
 // ─── 17. Manifest is genuinely immutable ──────────────────────────────────

@@ -1,0 +1,329 @@
+{
+  "manifestVersion": "1.0.0",
+  "frameId": "9d1107e45d166578a6a75ebfd252b1a7562e0a4cd3ca37ba8cfa7eb5a0f93fab",
+  "seed": "drone-intel-hub-phase3-eval-20261115",
+  "cutoff": "2026-11-01T00:00:00Z",
+  "ceiling": 72,
+  "familyCount": 12,
+  "languageCount": 4,
+  "resolverStatusCount": 2,
+  "resolverVersion": "1.1.0",
+  "snapshotHash": "c1494d11c0555a4d4b6b8a7e46c17fd35debfda3a9ab36119ecef0a1db23d19f",
+  "populationCount": 24,
+  "drawnCount": 24,
+  "cells": [
+    {
+      "stratum": "en|altitude|resolved",
+      "language": "en",
+      "family": "altitude",
+      "resolverStatus": "resolved",
+      "population": 1,
+      "drawn": 1,
+      "sampledExampleIds": ["8ef22f1833e58722ee60b3fd170b0ef6d0768f2fe21342082dde775aa77f5971"]
+    },
+    {
+      "stratum": "en|capacity|withheld",
+      "language": "en",
+      "family": "capacity",
+      "resolverStatus": "withheld",
+      "population": 1,
+      "drawn": 1,
+      "sampledExampleIds": ["5c065031c7601947562d56962ed877d452800cdb67815b8ee1c7a120b940f861"]
+    },
+    {
+      "stratum": "en|cost|withheld",
+      "language": "en",
+      "family": "cost",
+      "resolverStatus": "withheld",
+      "population": 1,
+      "drawn": 1,
+      "sampledExampleIds": ["18a48c9d2bc88ed15fc61d8fcabb5d4faf70a15a12c5979bdc88aac9a99462b8"]
+    },
+    {
+      "stratum": "en|dimension|resolved",
+      "language": "en",
+      "family": "dimension",
+      "resolverStatus": "resolved",
+      "population": 1,
+      "drawn": 1,
+      "sampledExampleIds": ["531f3265f69c1526f4c068c0e43b5069a0cc725f0c86fd1dcda1890a8c402b8b"]
+    },
+    {
+      "stratum": "en|endurance|resolved",
+      "language": "en",
+      "family": "endurance",
+      "resolverStatus": "resolved",
+      "population": 1,
+      "drawn": 1,
+      "sampledExampleIds": ["cd85f61e8d0af0bbc217f2cb560f987ed1887131cd8078de8b28a702d1f447b9"]
+    },
+    {
+      "stratum": "en|other_programme_metadata|resolved",
+      "language": "en",
+      "family": "other_programme_metadata",
+      "resolverStatus": "resolved",
+      "population": 1,
+      "drawn": 1,
+      "sampledExampleIds": ["0f3325e1448e3c8de9b2fc48519305bcc99ed25ec27ed0cae99a92497364ff62"]
+    },
+    {
+      "stratum": "en|other_programme_metadata|withheld",
+      "language": "en",
+      "family": "other_programme_metadata",
+      "resolverStatus": "withheld",
+      "population": 1,
+      "drawn": 1,
+      "sampledExampleIds": ["7ff964fbb42378f68881faeed8cc6af1fcf4e0c9b7e5105e15134e88dd4863d9"]
+    },
+    {
+      "stratum": "en|payload|resolved",
+      "language": "en",
+      "family": "payload",
+      "resolverStatus": "resolved",
+      "population": 1,
+      "drawn": 1,
+      "sampledExampleIds": ["9298446ad2c275f4592b1c575264a4f10f867eb6b74060d7d7e6db73a2d92dd3"]
+    },
+    {
+      "stratum": "en|power|resolved",
+      "language": "en",
+      "family": "power",
+      "resolverStatus": "resolved",
+      "population": 1,
+      "drawn": 1,
+      "sampledExampleIds": ["3faaaff7cac7ceb538da85b67429e30c93893ff62704a1c619025bf902423ce3"]
+    },
+    {
+      "stratum": "en|range|resolved",
+      "language": "en",
+      "family": "range",
+      "resolverStatus": "resolved",
+      "population": 1,
+      "drawn": 1,
+      "sampledExampleIds": ["9e14fe85cae53772c042251f3e868af410c8940029af8d3bd823e9dd4a09ea59"]
+    },
+    {
+      "stratum": "en|range|withheld",
+      "language": "en",
+      "family": "range",
+      "resolverStatus": "withheld",
+      "population": 1,
+      "drawn": 1,
+      "sampledExampleIds": ["e8f713b0cb437358708b998bb01600fae597de72d50c69c26c74d9ca00610565"]
+    },
+    {
+      "stratum": "en|speed|resolved",
+      "language": "en",
+      "family": "speed",
+      "resolverStatus": "resolved",
+      "population": 2,
+      "drawn": 2,
+      "sampledExampleIds": [
+        "f00935b9d0cd8fd75545d445c6485acd90e63b4a3cd9d4532cf2c271c6badc1a",
+        "fbcfb447b37aedda738a451ccaa2f393b2f2cfc828f9df74b6acb344b1271379"
+      ]
+    },
+    {
+      "stratum": "ru|altitude|withheld",
+      "language": "ru",
+      "family": "altitude",
+      "resolverStatus": "withheld",
+      "population": 1,
+      "drawn": 1,
+      "sampledExampleIds": ["6abe3a702c3b65561e14136b1af2c1caabfefdbccc0b65a0b376b6e675dd7fd7"]
+    },
+    {
+      "stratum": "ru|other_programme_metadata|withheld",
+      "language": "ru",
+      "family": "other_programme_metadata",
+      "resolverStatus": "withheld",
+      "population": 1,
+      "drawn": 1,
+      "sampledExampleIds": ["32035e7d204ca671078c80515b80f15a9545f1479098f96a3ddc6c5651d8fe0f"]
+    },
+    {
+      "stratum": "ru|power|withheld",
+      "language": "ru",
+      "family": "power",
+      "resolverStatus": "withheld",
+      "population": 1,
+      "drawn": 1,
+      "sampledExampleIds": ["9583066aca322771097df2a6ae6a8c35e36699dc9d6ea712c4dc592c0134b328"]
+    },
+    {
+      "stratum": "ru|range|withheld",
+      "language": "ru",
+      "family": "range",
+      "resolverStatus": "withheld",
+      "population": 1,
+      "drawn": 1,
+      "sampledExampleIds": ["766f24775889068757b4bdf12386765b20a13ac0012f4725faa2ac06cbdc1207"]
+    },
+    {
+      "stratum": "ru|speed|withheld",
+      "language": "ru",
+      "family": "speed",
+      "resolverStatus": "withheld",
+      "population": 1,
+      "drawn": 1,
+      "sampledExampleIds": ["9fb280e3997d0c88095c17a2b0d9885eac4709d3299cded178aa5fb96257035e"]
+    },
+    {
+      "stratum": "uk|payload|withheld",
+      "language": "uk",
+      "family": "payload",
+      "resolverStatus": "withheld",
+      "population": 1,
+      "drawn": 1,
+      "sampledExampleIds": ["efa0137f7b02020f78fb8af253c25eee64a3c92c7339b13f54eb3e4f0d934b52"]
+    },
+    {
+      "stratum": "uk|power|withheld",
+      "language": "uk",
+      "family": "power",
+      "resolverStatus": "withheld",
+      "population": 1,
+      "drawn": 1,
+      "sampledExampleIds": ["8f7e4266032995afd4220547b5e9b2a13004628298f9af5baa6babf690f6cc8b"]
+    },
+    {
+      "stratum": "uk|range|withheld",
+      "language": "uk",
+      "family": "range",
+      "resolverStatus": "withheld",
+      "population": 1,
+      "drawn": 1,
+      "sampledExampleIds": ["6379446d62b9a072c62021d09c8ab34ce9b91b0ee2bd59a77979b216256233e4"]
+    },
+    {
+      "stratum": "uk|speed|withheld",
+      "language": "uk",
+      "family": "speed",
+      "resolverStatus": "withheld",
+      "population": 1,
+      "drawn": 1,
+      "sampledExampleIds": ["6c7fa1d77ea8a064672a76f4ead01551ba7a41104c3cdc181c0726b8b07dc87b"]
+    },
+    {
+      "stratum": "unknown|other_programme_metadata|withheld",
+      "language": "unknown",
+      "family": "other_programme_metadata",
+      "resolverStatus": "withheld",
+      "population": 2,
+      "drawn": 2,
+      "sampledExampleIds": [
+        "427d7a24faf4ac5cc4269bf9576b0971cf14ee478e513c43cac8e87dfc60b872",
+        "70ffcee21b13d67871a42cd68616ca4b0243eeaf26828776856e2562d0557665"
+      ]
+    }
+  ],
+  "emptyCells": [
+    "en|altitude|withheld",
+    "en|capacity|resolved",
+    "en|cost|resolved",
+    "en|dimension|withheld",
+    "en|endurance|withheld",
+    "en|maneuver|resolved",
+    "en|maneuver|withheld",
+    "en|payload|withheld",
+    "en|power|withheld",
+    "en|speed|withheld",
+    "en|weight|resolved",
+    "en|weight|withheld",
+    "ru|altitude|resolved",
+    "ru|capacity|resolved",
+    "ru|capacity|withheld",
+    "ru|cost|resolved",
+    "ru|cost|withheld",
+    "ru|dimension|resolved",
+    "ru|dimension|withheld",
+    "ru|endurance|resolved",
+    "ru|endurance|withheld",
+    "ru|maneuver|resolved",
+    "ru|maneuver|withheld",
+    "ru|other_programme_metadata|resolved",
+    "ru|payload|resolved",
+    "ru|payload|withheld",
+    "ru|power|resolved",
+    "ru|range|resolved",
+    "ru|speed|resolved",
+    "ru|weight|resolved",
+    "ru|weight|withheld",
+    "uk|altitude|resolved",
+    "uk|altitude|withheld",
+    "uk|capacity|resolved",
+    "uk|capacity|withheld",
+    "uk|cost|resolved",
+    "uk|cost|withheld",
+    "uk|dimension|resolved",
+    "uk|dimension|withheld",
+    "uk|endurance|resolved",
+    "uk|endurance|withheld",
+    "uk|maneuver|resolved",
+    "uk|maneuver|withheld",
+    "uk|other_programme_metadata|resolved",
+    "uk|other_programme_metadata|withheld",
+    "uk|payload|resolved",
+    "uk|power|resolved",
+    "uk|range|resolved",
+    "uk|speed|resolved",
+    "uk|weight|resolved",
+    "uk|weight|withheld",
+    "unknown|altitude|resolved",
+    "unknown|altitude|withheld",
+    "unknown|capacity|resolved",
+    "unknown|capacity|withheld",
+    "unknown|cost|resolved",
+    "unknown|cost|withheld",
+    "unknown|dimension|resolved",
+    "unknown|dimension|withheld",
+    "unknown|endurance|resolved",
+    "unknown|endurance|withheld",
+    "unknown|maneuver|resolved",
+    "unknown|maneuver|withheld",
+    "unknown|other_programme_metadata|resolved",
+    "unknown|payload|resolved",
+    "unknown|payload|withheld",
+    "unknown|power|resolved",
+    "unknown|power|withheld",
+    "unknown|range|resolved",
+    "unknown|range|withheld",
+    "unknown|speed|resolved",
+    "unknown|speed|withheld",
+    "unknown|weight|resolved",
+    "unknown|weight|withheld"
+  ],
+  "unsampledCells": [],
+  "coveredFraction": 1,
+  "concentration": [
+    {
+      "sourceClusterId": "03752cce5cd76d3124a3b7d15d392f294439012b6d8cbc278d7b0b5492a594f6",
+      "units": 1
+    },
+    {
+      "sourceClusterId": "0cf5df77d23b1754cab2bd1ce8fd79ccc41f579d4288f196b79c394792f4cedc",
+      "units": 1
+    },
+    {
+      "sourceClusterId": "2b0d358665b7f9982cb4cbfd2570e83c69a9635d5502d1be96e1a9f08ef51866",
+      "units": 1
+    },
+    {
+      "sourceClusterId": "2c800f891b53aaf83114c1e03c5c6bc39dc7e4558f5c38b8a451bc8b1d50d492",
+      "units": 1
+    },
+    {
+      "sourceClusterId": "2f251dfc94a5989da4439b53d14af78531ecd53a74fc1e4b6db9e740a49fbc6d",
+      "units": 1
+    }
+  ],
+  "topShare": 0.20833333333333334,
+  "exclusions": [
+    {
+      "reason": "duplicate_evidence",
+      "count": 1
+    }
+  ],
+  "examplesSha256": "a49d1def1103138d3c7b1ab22b388ded49fb7f854c69f7392ff8975e2177f80b",
+  "predictionsSha256": "c477789ee147f2cd78b284cd3dc856df971b49c6f15f1a5530b4d8db19d59ca6"
+}
