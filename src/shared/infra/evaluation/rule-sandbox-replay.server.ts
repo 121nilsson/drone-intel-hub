@@ -2,8 +2,7 @@ import { replayTargets } from "@/entities/drone/claim-lineage";
 import { recordAutonomyEvent } from "@/shared/infra/autonomy/ledger.server";
 import { autonomySwitchEnabled } from "@/shared/infra/autonomy/switches.server";
 import { ruleCategory } from "@/shared/infra/evaluation/autonomy";
-import { db, dbConfigured } from "@/shared/infra/postgres/db.server";
-import { PostgresStore } from "@/shared/infra/postgres/postgres-store.server";
+import { serverServices } from "@/shared/infra/server-services.server";
 import {
   LocalDispatchRepository,
   LocalDroneRepository,
@@ -48,20 +47,20 @@ function aliasOf(payload: unknown): { droneId: string; aliases: string[] } | nul
  * Never throws: a failure is logged and returned in `skipped`, and the quarantine stands.
  */
 export async function replayRule(ruleId: string): Promise<ReplayResult> {
-  if (!autonomySwitchEnabled("rule_replay") || !dbConfigured())
+  const services = serverServices();
+  if (!autonomySwitchEnabled("rule_replay") || !services.backend.capabilities.sql)
     return EMPTY("switched off or no database");
   try {
-    const [row] =
-      await db()`select id, kind, payload, target_key from dynamic_rules where id = ${ruleId}`;
+    const row = await services.rules.ruleTarget(ruleId);
     if (!row) return EMPTY("no such rule");
-    const kind = row["kind"] as string;
-    const targetKey = (row["target_key"] as string | null) ?? null;
+    const { kind, targetKey } = row;
     if (!REPLAYABLE.has(kind)) return EMPTY(`${kind} leaves no claim lineage`);
-    const alias = kind === "add_alias" ? aliasOf(row["payload"]) : null;
+    const alias = kind === "add_alias" ? aliasOf(row.payload) : null;
     if (kind === "add_alias" && !alias) return EMPTY("alias payload has no drone or term");
 
+    const documents = await services.backend.documents();
     const drones = new LocalDroneRepository();
-    await drones.attach(new PostgresStore());
+    await drones.attach(documents);
     const { claimIds, dispatchIds } = replayTargets(drones.list(), {
       ruleId,
       ...(alias ? { alias } : {}),
@@ -75,7 +74,7 @@ export async function replayRule(ruleId: string): Promise<ReplayResult> {
     // revision of each is then the one this write is based on, see CachedRepository.persist).
     const dispatches = new LocalDispatchRepository();
     const failures: string[] = [];
-    await dispatches.attach(new PostgresStore());
+    await dispatches.attach(documents);
     const off = dispatches.onStorageError((message) => failures.push(message));
     let requeued: string[] = [];
     try {

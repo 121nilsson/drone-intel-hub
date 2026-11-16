@@ -1,7 +1,6 @@
-import { db, dbConfigured } from "@/shared/infra/postgres/db.server";
 import { compileRuleSnapshot, RULE_LANGUAGES, type RuleKind } from "@/shared/contracts/rules";
 import { hypothesisId } from "@/shared/infra/evaluation/hypotheses";
-import { json } from "@/shared/infra/evaluation/rule-sandbox-store.server";
+import { rulesRepo, rulesSqlAvailable } from "@/shared/infra/evaluation/rule-sandbox-store.server";
 import type { ProposeInput } from "@/shared/infra/evaluation/rule-sandbox-types.server";
 
 export const KINDS: readonly RuleKind[] = [
@@ -28,7 +27,7 @@ export function defaultTargetKey(kind: RuleKind, p: Record<string, unknown>): st
 export async function proposeRule(
   input: ProposeInput,
 ): Promise<{ ok: boolean; id?: string; reason?: string }> {
-  if (!dbConfigured()) return { ok: false, reason: "no database configured" };
+  if (!rulesSqlAvailable()) return { ok: false, reason: "no database configured" };
   if (!KINDS.includes(input.kind)) return { ok: false, reason: `unknown kind ${input.kind}` };
   const language = input.language ?? "all";
   if (!RULE_LANGUAGES.includes(language))
@@ -39,11 +38,15 @@ export async function proposeRule(
   if (compiled.invalid.includes(id)) return { ok: false, reason: "payload does not compile" };
   const origin = input.origin ?? "analyst";
   const targetKey = input.targetKey ?? defaultTargetKey(input.kind, input.payload);
-  // Re-proposing a rejected or quarantined pattern does not resurrect it; a human must.
-  await db()`
-    insert into dynamic_rules (id, kind, language, payload, status, origin, target_key, rationale, evidence, decided_by)
-    values (${id}, ${input.kind}, ${language}, ${json(input.payload)}, 'candidate', ${origin},
-      ${targetKey}, ${input.rationale ?? null}, ${json(input.evidence ?? null)}, ${origin})
-    on conflict (id) do nothing`;
+  await rulesRepo().insertCandidate({
+    id,
+    kind: input.kind,
+    language,
+    payload: input.payload,
+    origin,
+    targetKey,
+    rationale: input.rationale ?? null,
+    evidence: input.evidence ?? null,
+  });
   return { ok: true, id };
 }

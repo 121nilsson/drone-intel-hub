@@ -1,4 +1,3 @@
-import { db, dbConfigured } from "@/shared/infra/postgres/db.server";
 import { compileRuleSnapshot, ruleTerms } from "@/shared/contracts/rules";
 import { HeuristicExtractor } from "@/shared/infra/heuristic-ai";
 import { runSandbox, type SandboxResult } from "@/shared/infra/evaluation/sandbox";
@@ -7,10 +6,11 @@ import type { EvalFixture } from "@/shared/infra/evaluation/evaluation";
 import type { Candidate, Drone } from "@/entities/drone/types";
 import {
   activeRows,
-  json,
   loadCatalog,
   loadRule,
   recordDecision,
+  rulesRepo,
+  rulesSqlAvailable,
   rulesVersion,
 } from "@/shared/infra/evaluation/rule-sandbox-store.server";
 import {
@@ -27,7 +27,7 @@ export async function sandboxRule(
   mode: "fast" | "full" = "fast",
   world?: { drones: Drone[]; control: Candidate[]; fixtures: EvalFixture[] },
 ): Promise<{ ok: boolean; reason?: string; result?: SandboxResult }> {
-  if (!dbConfigured()) return { ok: false, reason: "no database configured" };
+  if (!rulesSqlAvailable()) return { ok: false, reason: "no database configured" };
   const rule = await loadRule(id);
   if (!rule) return { ok: false, reason: "rule not found" };
   const version = await rulesVersion();
@@ -53,10 +53,16 @@ export async function sandboxRule(
     mode,
   });
 
-  await db()`
-    insert into rule_evaluations (rule_id, passed, corpus_size, regressions, broken_fixtures, f1_delta, mode, rules_version, report)
-    values (${id}, ${result.passed}, ${result.corpusSize}, ${result.regressions.length},
-      ${json(result.regressions.map((r) => r.id))}, ${result.f1Delta}, ${mode}, ${version}, ${json(result)})`;
+  await rulesRepo().recordEvaluation({
+    ruleId: id,
+    passed: result.passed,
+    corpusSize: result.corpusSize,
+    brokenFixtures: result.regressions.map((r) => r.id),
+    f1Delta: result.f1Delta,
+    mode,
+    rulesVersion: version,
+    report: result,
+  });
   // Only a rule still awaiting a decision changes state; shadow and active rules keep theirs.
   // A generated rule that passes goes straight to shadow: it cannot affect production there,
   // and shadow is where it has to prove itself on reports it has never seen.
@@ -65,11 +71,11 @@ export async function sandboxRule(
     : rule.origin === "autonomous_sandbox"
       ? "shadow"
       : "candidate_passed";
-  const [moved] = await db()`
-    update dynamic_rules set status = ${next},
-      shadow_metrics = ${next === "shadow" ? json(newShadowMetrics(new Date().toISOString())) : null}
-    where id = ${id} and status in ('candidate', 'evaluating', 'candidate_passed')
-    returning status`;
+  const moved = await rulesRepo().settleCandidate(
+    id,
+    next,
+    next === "shadow" ? newShadowMetrics(new Date().toISOString()) : null,
+  );
   if (moved && next === "rejected")
     await recordDecision(id, "rejected", "sandbox", result.reasons.join("; "));
   if (moved && next === "shadow") await recordDecision(id, "shadowed", "autonomous");

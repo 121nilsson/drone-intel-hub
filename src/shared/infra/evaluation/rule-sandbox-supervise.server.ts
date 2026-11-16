@@ -1,4 +1,3 @@
-import { db, dbConfigured } from "@/shared/infra/postgres/db.server";
 import { compileRuleSnapshot, ruleTerms, type DynamicRuleRow } from "@/shared/contracts/rules";
 import { HeuristicExtractor } from "@/shared/infra/heuristic-ai";
 import { breakerTrips } from "@/shared/infra/evaluation/autonomy";
@@ -11,8 +10,9 @@ import {
 } from "@/shared/infra/evaluation/rule-sandbox-candidates.server";
 import { loadFixtures } from "@/shared/infra/evaluation/rule-sandbox-fixtures.server";
 import {
-  json,
   loadCatalog,
+  rulesRepo,
+  rulesSqlAvailable,
   rulesVersion,
 } from "@/shared/infra/evaluation/rule-sandbox-store.server";
 import { quarantine } from "@/shared/infra/evaluation/rule-sandbox-lifecycle.server";
@@ -41,13 +41,9 @@ export async function superviseActiveRules(): Promise<SuperviseResult> {
     audited: 0,
     quarantined: [] as string[],
   };
-  if (!dbConfigured()) return { ran: false, reason: "no database configured", ...empty };
+  if (!rulesSqlAvailable()) return { ran: false, reason: "no database configured", ...empty };
   try {
-    const rows = await db()`
-      select id, kind, language, payload,
-        coalesce(promoted_at > now() - interval '24 hours', false) as recent
-      from dynamic_rules where status = 'active' order by promoted_at desc nulls last`;
-    const all = rows as unknown as (DynamicRuleRow & { recent: boolean })[];
+    const all = await rulesRepo().activeRulesWithRecency();
     if (!all.length) return { ran: true, reason: "no active rules", ...empty };
     const drones = await loadCatalog();
     const fixtures = await loadFixtures(drones);
@@ -76,10 +72,16 @@ export async function superviseActiveRules(): Promise<SuperviseResult> {
         mode: mode === "breaker" ? "full" : "fast",
       });
       for (const r of suspects)
-        await db()`
-          insert into rule_evaluations (rule_id, passed, corpus_size, regressions, broken_fixtures, f1_delta, mode, rules_version, report)
-          values (${r.id}, ${result.regressions.length === 0}, ${result.corpusSize}, ${result.regressions.length},
-            ${json(result.regressions.map((x) => x.id))}, ${result.f1Delta}, ${mode}, ${version}, ${json(result)})`;
+        await rulesRepo().recordEvaluation({
+          ruleId: r.id,
+          passed: result.regressions.length === 0,
+          corpusSize: result.corpusSize,
+          brokenFixtures: result.regressions.map((x) => x.id),
+          f1Delta: result.f1Delta,
+          mode,
+          rulesVersion: version,
+          report: result,
+        });
       return result;
     };
 
