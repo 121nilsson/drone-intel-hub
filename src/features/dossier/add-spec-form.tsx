@@ -67,11 +67,16 @@ export function AddSpecForm({ droneId, droneName, specs }: AddSpecFormProps) {
       try {
         const at = new Date().toISOString();
         const key = mode === "new" ? newKey.trim() : activeKey;
-        const label =
-          mode === "new" ? newLabel.trim() : specs.find((s) => s.key === key)?.label || key;
+        const existing = specs.find((s) => s.key === key);
+        const label = mode === "new" ? newLabel.trim() : existing?.label || key;
 
         if (!key || !label) throw new Error("Key and label are required");
         if (!value.trim()) throw new Error("Value is required");
+
+        // Read the stored semantic before normalising: an attribute saved under a key that does
+        // not name it (a load factor filed as "structural ceiling") would otherwise be read as a
+        // mass, turning "9 g" of load into 9 grams.
+        const semantic = attributeSemantic(existing ?? { key, label });
 
         // A bare number plus a unit is read as the figure in that unit ("150" + "km/h"), so the
         // unit field takes part in normalisation for an existing attribute as well as a new one.
@@ -80,9 +85,7 @@ export function AddSpecForm({ droneId, droneName, specs }: AddSpecFormProps) {
         const text = unit.trim() && Number.isFinite(numeric) ? `${typed} ${unit.trim()}` : typed;
 
         // Parse the value like addAnalystClaim does: quantity first, then bare number, then text.
-        const normalized = normalizeQuantity(text, {
-          semantic: attributeSemantic({ key, label }),
-        });
+        const normalized = normalizeQuantity(text, { semantic });
         const claimValue =
           normalized?.canonicalValue ?? (Number.isFinite(numeric) ? numeric : typed);
 
@@ -105,9 +108,8 @@ export function AddSpecForm({ droneId, droneName, specs }: AddSpecFormProps) {
           review: { verdict: "confirmed", at, by: "analyst" },
         };
 
-        // Compute semantic/canonicalUnit for a new attribute; reuse the existing spec's for a known one.
-        const existing = specs.find((s) => s.key === key);
-        const semantic = existing?.semantic ?? attributeSemantic({ key, label });
+        // The semantic above is the one normalisation used; a new attribute keeps the derived one
+        // and a known one keeps its stored unit, so the claim and the spec never disagree.
         const canonicalUnit = existing?.canonicalUnit ?? canonicalUnitForSemantic(semantic);
 
         const spec: SpecAttribute = {

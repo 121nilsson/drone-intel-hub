@@ -12,6 +12,7 @@ import { Btn, Loading, Panel, Tag } from "@/shared/ui/primitives";
 import { runTwoTier } from "@/shared/infra/ingest/pipeline";
 import type { Candidate } from "@/entities/drone/types";
 import { CandidateRow } from "./candidate-row";
+import { groupUnresolvedFamilies, pageQueue } from "./intake-queue";
 import { INTAKE_PAGE_SIZE } from "./intake-search";
 
 const SAMPLE = `Telegram dispatch: Russia launched Geran-5 jet drones, one intercepted by a STING S interceptor. 4 jammers onboard and new 1575 MHz CRPA. Cruise 600 km/h, range 1000 km, 90 kg warhead. Unit cost $15,000-$20,000.`;
@@ -131,25 +132,9 @@ export function IntakePage({
   const pending = useMemo(() => candidates.filter((c) => c.status === "pending"), [candidates]);
   const resolved = useMemo(() => candidates.filter((c) => c.status !== "pending"), [candidates]);
 
-  // Queue candidates that came from the same raw report are often the same base/variant family
-  // split during multi-system extraction. Group them together so an analyst can resolve one
-  // against the other instead of seeing them as unrelated queue items.
-  const unresolvedFamilies = useMemo(() => {
-    const families = new Map<string, Candidate[]>();
-    for (const c of pending) {
-      const hasUnresolvedRelation = (c.extraction.systems ?? []).some(
-        (s) => !s.matchId && Boolean(s.variantOf),
-      );
-      const isMultiSystem = (c.extraction.systems?.length ?? 0) > 1;
-      if (!hasUnresolvedRelation && !isMultiSystem) continue;
-      const key = c.raw.trim().slice(0, 240).toLowerCase();
-      const group = families.get(key) ?? [];
-      group.push(c);
-      families.set(key, group);
-    }
-    return [...families.values()].filter((g) => g.length > 0);
-  }, [pending]);
-
+  // Queue candidates that came from the same report are often the same base/variant family split
+  // during multi-system extraction. Group them so an analyst can resolve one against the other.
+  const unresolvedFamilies = useMemo(() => groupUnresolvedFamilies(pending), [pending]);
   const familyCandidateIds = useMemo(
     () => new Set(unresolvedFamilies.flat().map((c) => c.id)),
     [unresolvedFamilies],
@@ -159,11 +144,12 @@ export function IntakePage({
     [pending, familyCandidateIds],
   );
 
-  // Queue items are family groups and single candidates; both lists reveal one block per page.
+  // Families and single candidates share one page, so "Show 20 more" reveals at most 20 items.
   const queueItems = unresolvedFamilies.length + ungroupedPending.length;
-  const shownCount =
-    Math.min(visible, unresolvedFamilies.length) + Math.min(visible, ungroupedPending.length);
-  const hiddenRemaining = queueItems - shownCount;
+  const shown = useMemo(
+    () => pageQueue(unresolvedFamilies, ungroupedPending, visible),
+    [unresolvedFamilies, ungroupedPending, visible],
+  );
 
   // Repositories fill asynchronously after SSR; until they attach, "Queue clear" would be a lie.
   const detectedLang = /[Ѐ-ӿ]/.test(raw)
@@ -280,12 +266,12 @@ export function IntakePage({
       </Panel>
       <div className="min-w-0 space-y-6">
         <Panel title={`Triage queue · ${pending.length}`}>
-          {unresolvedFamilies.length > 0 && (
+          {shown.families.length > 0 && (
             <div className="mb-4 space-y-3">
               <p className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
                 Unresolved variant families
               </p>
-              {unresolvedFamilies.slice(0, visible).map((family) => (
+              {shown.families.map((family) => (
                 <div
                   key={family.map((c) => c.id).join(":")}
                   className="border border-accent/40 bg-background/50 p-3"
@@ -306,20 +292,20 @@ export function IntakePage({
             </div>
           )}
           <ul className="space-y-3">
-            {ungroupedPending.slice(0, visible).map((c) => (
+            {shown.singles.map((c) => (
               <CandidateRow key={c.id} c={c} />
             ))}
           </ul>
           {!pending.length && <p className="text-sm text-muted-foreground">Queue clear.</p>}
-          {/* Families and single candidates page together, so a backlog of multi-system reports
-              cannot push the rest of the queue out of reach. */}
-          {hiddenRemaining > 0 && (
+          {/* One shared page across both lists, so a backlog of multi-system reports cannot push
+              the rest of the queue out of reach or make "Show 20 more" reveal up to 40. */}
+          {shown.hiddenRemaining > 0 && (
             <div className="mt-4 flex items-center gap-3">
               <Btn variant="ghost" onClick={() => onPageChange(page + 1)}>
-                Show {Math.min(INTAKE_PAGE_SIZE, hiddenRemaining)} more
+                Show {Math.min(INTAKE_PAGE_SIZE, shown.hiddenRemaining)} more
               </Btn>
               <span className="font-mono text-xs text-muted-foreground">
-                {shownCount} of {queueItems}
+                {shown.shownCount} of {queueItems}
               </span>
             </div>
           )}
