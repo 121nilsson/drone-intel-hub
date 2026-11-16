@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { storageEnv } from "@/shared/infra/config.server";
 import { db, dbConfigured } from "./db.server";
 
 /**
@@ -22,7 +23,7 @@ export interface MigrationFile {
 const LOCK_KEY = 7_301_001;
 
 export function migrationsDir(): string {
-  return process.env["MIGRATIONS_DIR"] ?? path.resolve(process.cwd(), "migrations");
+  return storageEnv().migrationsDir ?? path.resolve(process.cwd(), "migrations");
 }
 
 export function listMigrations(dir = migrationsDir()): MigrationFile[] {

@@ -2,6 +2,7 @@ import {
   DocumentConflictError,
   type Collection,
   type CollectionMap,
+  type DispatchCounts,
   type DocumentStore,
   type StorePage,
   type StorePageOptions,
@@ -166,6 +167,15 @@ export class PostgresStore implements DocumentStore {
 
   async remove(c: Collection, id: string) {
     await db().unsafe(`delete from ${c} where id = $1`, [id]);
+  }
+
+  /** Counts the whole archive through the hot status column (indexed, migration 003). */
+  async archiveCounts(): Promise<DispatchCounts> {
+    const [row] = await db()<DispatchCounts[]>`
+      select count(*)::int as total,
+             count(*) filter (where status = 'pending')::int as pending
+        from dispatches`;
+    return row ?? { total: 0, pending: 0 };
   }
 
   private async upsert<C extends Collection>(

@@ -1,15 +1,18 @@
 import type {
   Collection,
   CollectionMap,
+  DispatchCounts,
   DocumentStore,
   StorePage,
   StorePageOptions,
   VersionedDoc,
 } from "@/shared/contracts/store";
+import { storageEnv } from "@/shared/infra/config.server";
 
 /** True when the server has Lovable Cloud credentials. */
 export function cloudConfigured() {
-  return !!process.env["SUPABASE_URL"] && !!process.env["SUPABASE_SERVICE_ROLE_KEY"];
+  const env = storageEnv();
+  return !!env.supabaseUrl && !!env.supabaseServiceRoleKey;
 }
 
 async function client() {
@@ -220,6 +223,22 @@ export class CloudStore implements DocumentStore {
 
   async remove(c: Collection, id: string) {
     check(await (await client()).from(c).delete().eq("id", id));
+  }
+
+  /** A service-role head count on the mirrored status column: the count rides on the response. */
+  async archiveCounts(): Promise<DispatchCounts> {
+    const db = await client();
+    const count = async (status: string | null) => {
+      let q = db.from("dispatches").select("id", { count: "exact", head: true });
+      if (status) q = q.eq("status", status);
+      const { count: n, error } = (await q) as {
+        count: number | null;
+        error: { message: string } | null;
+      };
+      if (error) throw new Error(error.message);
+      return n ?? 0;
+    };
+    return { total: await count(null), pending: await count("pending") };
   }
 
   async claim(c: Collection, opts: { limit: number; leaseMs: number; owner: string }) {
