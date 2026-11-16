@@ -14,6 +14,7 @@ import { fetchWikipediaReference } from "@/shared/infra/wikipedia/functions";
 import { DataTable, type Column } from "@/shared/ui/data-table";
 import { useRememberedChoice, useRememberedSearch } from "@/shared/ui/remembered";
 import { TimeAgo } from "@/shared/ui/time-ago";
+import { useSeen } from "@/shared/ui/use-seen";
 import { byFrequency } from "@/shared/ui/facets";
 import { SearchInput, Select } from "@/shared/ui/fields";
 import {
@@ -56,10 +57,13 @@ function CatalogCard({ d, cp }: { d: Drone; cp: Drone | undefined }) {
     .flatMap((g) => g.specs)
     .slice(0, 2)
     .map((x) => `${x.label} ${consensus(x).display}`);
-  const relatedIntel = useRelatedIntel(d.id);
+  // The catalogue is not paged, and each card's related intel is a scan of the whole catalogue:
+  // compute it for the cards that have come into view, not for all of them up front.
+  const [ref, seen] = useSeen<HTMLAnchorElement>();
+  const relatedIntel = useRelatedIntel(d.id, { enabled: seen });
   return (
     <Card interactive>
-      <Link to="/systems/$id" params={{ id: d.id }} className="block min-w-0 flex-1 p-4">
+      <Link ref={ref} to="/systems/$id" params={{ id: d.id }} className="block min-w-0 flex-1 p-4">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
             <h3 className="break-words font-semibold">

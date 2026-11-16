@@ -1,8 +1,7 @@
 import { useState } from "react";
-import { useServerFn } from "@tanstack/react-start";
 import { useServices } from "@/shared/infra/use-services";
-import { translateText } from "@/shared/infra/ai-proxy.functions";
 import { Btn, ChipButton, Tag } from "@/shared/ui/primitives";
+import { TranslateButton } from "@/shared/ui/translate-button";
 import { runTwoTier } from "@/shared/infra/ingest/pipeline";
 import type { Candidate } from "@/entities/drone/types";
 import { ExpandableText } from "@/shared/ui/expandable-text";
@@ -10,35 +9,16 @@ import { CandidateDecision } from "./candidate-decision";
 
 export function CandidateRow({ c }: { c: Candidate }) {
   const svc = useServices();
-  const translateFn = useServerFn(translateText);
   const e = c.extraction;
   const systems = e.systems ?? [];
   const [target, setTarget] = useState(e.matchId ?? "");
   const [name, setName] = useState(e.name ?? systems.find((s) => !s.matchId)?.name ?? "");
-  const [translating, setTranslating] = useState(false);
-  const [translated, setTranslated] = useState<string | null>(null);
-  const [translateError, setTranslateError] = useState<string | null>(null);
+  const [deepError, setDeepError] = useState<string | null>(null);
   const [deepAnalyzing, setDeepAnalyzing] = useState(false);
-
-  const handleTranslate = async () => {
-    setTranslating(true);
-    setTranslateError(null);
-    try {
-      const res = await translateFn({ data: { text: c.raw } });
-      if (res.ok) {
-        setTranslated(res.translated);
-      } else {
-        setTranslateError(res.error);
-      }
-    } catch (err) {
-      setTranslateError(err instanceof Error ? err.message : "Translation failed");
-    }
-    setTranslating(false);
-  };
 
   const handleDeepAnalysis = async () => {
     setDeepAnalyzing(true);
-    setTranslateError(null);
+    setDeepError(null);
     try {
       const result = await runTwoTier(c.raw, c.source, {
         ...svc,
@@ -55,7 +35,7 @@ export function CandidateRow({ c }: { c: Candidate }) {
         supersededBy: result.candidate.id,
       });
     } catch (err) {
-      setTranslateError(err instanceof Error ? err.message : "Deep analysis failed");
+      setDeepError(err instanceof Error ? err.message : "Deep analysis failed");
     } finally {
       setDeepAnalyzing(false);
     }
@@ -108,9 +88,7 @@ export function CandidateRow({ c }: { c: Candidate }) {
       )}
       <ExpandableText text={c.raw} className="mt-2 text-sm" />
       <div className="mt-2 flex flex-wrap items-center gap-2">
-        <Btn variant="ghost" onClick={handleTranslate} disabled={translating || !c.raw.trim()}>
-          {translating ? "Translating…" : "Translate"}
-        </Btn>
+        {c.raw.trim() && <TranslateButton text={c.raw} />}
         {c.status === "pending" && (
           <Btn
             variant="ghost"
@@ -120,18 +98,8 @@ export function CandidateRow({ c }: { c: Candidate }) {
             {deepAnalyzing ? "Deep analyzing…" : "Deep analyze"}
           </Btn>
         )}
-        {translateError && (
-          <span className="font-mono text-xs text-destructive">{translateError}</span>
-        )}
+        {deepError && <span className="font-mono text-xs text-destructive">{deepError}</span>}
       </div>
-      {translated && (
-        <div className="mt-2 min-w-0 border-l-2 border-primary/30 pl-3">
-          <p className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
-            English translation
-          </p>
-          <p className="mt-1 break-words text-sm">{translated}</p>
-        </div>
-      )}
       <div className="mt-2 flex flex-wrap gap-1.5">
         {e.specs.map((s, i) => (
           <Tag key={i} tone="primary">
