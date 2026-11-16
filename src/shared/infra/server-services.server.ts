@@ -27,6 +27,9 @@ import { nullEvaluationRepo } from "@/shared/infra/null-repos/evaluation";
 import type { VerificationRepo } from "@/shared/contracts/verification-repo";
 import { createPostgresVerificationRepo } from "@/shared/infra/postgres/verification-repo.server";
 import { nullVerificationRepo } from "@/shared/infra/null-repos/verification";
+import type { SeedAuditReader } from "@/shared/contracts/evaluation-repo";
+import { createPostgresSeedAuditReader } from "@/shared/infra/postgres/evaluation-repo-reports.server";
+import { nullSeedAuditReader } from "@/shared/infra/null-repos/seedAudit";
 import type { AuditRepo } from "@/shared/contracts/audit-repo";
 import { createPostgresAuditRepo } from "@/shared/infra/postgres/audit-repo.server";
 import { nullAuditRepo } from "@/shared/infra/null-repos/audit";
@@ -49,6 +52,8 @@ export interface ServerServices {
   evaluation: EvaluationRepo;
   verification: VerificationRepo;
   audit: AuditRepo;
+  /** The frozen seed set; only the seed measurement reads it. */
+  seedAudit: SeedAuditReader;
 }
 
 function build(kind: BackendKind): ServerServices {
@@ -66,6 +71,7 @@ function build(kind: BackendKind): ServerServices {
         evaluation: createPostgresEvaluationRepo(),
         verification: createPostgresVerificationRepo(),
         audit: createPostgresAuditRepo(),
+        seedAudit: createPostgresSeedAuditReader(),
       }
     : {
         backend,
@@ -79,6 +85,7 @@ function build(kind: BackendKind): ServerServices {
         evaluation: nullEvaluationRepo,
         verification: nullVerificationRepo,
         audit: nullAuditRepo,
+        seedAudit: nullSeedAuditReader,
       };
 }
 

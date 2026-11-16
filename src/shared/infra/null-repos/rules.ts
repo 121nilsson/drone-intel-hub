@@ -1,9 +1,12 @@
 import type { RulesRepo } from "@/shared/contracts/rules-repo";
 
 /**
- * Used when the backend has no SQL database. Every rule flow was guarded by dbConfigured() and
- * returned empty-handed, so reads are empty, writes move nothing and the lock reports the
- * "no database configured" reason that activation always gave.
+ * Used when the backend has no SQL database. Every entry point to the rule loops checks
+ * `backend.capabilities.sql` first and returns empty-handed, so this adapter is only reached by a
+ * caller that skipped that check; it answers neutrally (reads are empty, writes move nothing, the
+ * lock reports "no database configured"). Unlike the evaluation, audit and verification adapters
+ * it does not throw: the old rule helpers that never guarded threw "DATABASE_URL not set", so a
+ * future unguarded caller gets a silent no-op here and must keep the capability check.
  */
 export const nullRulesRepo: RulesRepo = {
   async findRule() {

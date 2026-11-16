@@ -31,9 +31,31 @@ tester.run("no-raw-db-import", repoRules.rules["no-raw-db-import"]!, {
       code: 'import { serverServices } from "@/shared/infra/server-services.server";',
       filename: domain,
     },
-    { code: 'import { x } from "@/shared/infra/postgres/ledger-repo.server";', filename: domain },
+    {
+      code: 'import type { X } from "@/shared/infra/postgres/ledger-repo.server";',
+      filename: domain,
+    },
+    {
+      code: 'import { ensureMigrated } from "@/shared/infra/postgres/migrate.server";',
+      filename: domain,
+    },
   ],
   invalid: [
+    {
+      code: 'import { createPostgresLedgerRepo } from "@/shared/infra/postgres/ledger-repo.server";',
+      filename: domain,
+      errors: [{ messageId: "rawDb" }],
+    },
+    {
+      code: 'export { db } from "@/shared/infra/postgres/db.server";',
+      filename: domain,
+      errors: [{ messageId: "rawDb" }],
+    },
+    {
+      code: 'export * from "@/shared/infra/cloud/cloud-store.server";',
+      filename: domain,
+      errors: [{ messageId: "rawDb" }],
+    },
     {
       code: 'import { db } from "@/shared/infra/postgres/db.server";',
       filename: domain,

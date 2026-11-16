@@ -87,7 +87,6 @@ function fakeRepo(state: FakeState): EvaluationRepo {
     latestReport: async () => state.reports[0]?.report ?? null,
     newestReportsAscending: async (limit) => state.reports.slice(0, limit).reverse(),
     recentReports: async (limit) => state.reports.slice(0, limit),
-    seedAuditRows: async () => [],
   };
 }
 
@@ -127,7 +126,11 @@ describe("the evaluation jobs against an in-memory EvaluationRepo", () => {
   let state: FakeState;
   beforeEach(() => {
     state = freshState();
-    setServerServices({ backend: sqlBackend(), evaluation: fakeRepo(state) });
+    setServerServices({
+      backend: sqlBackend(),
+      evaluation: fakeRepo(state),
+      seedAudit: { seedAuditRows: async () => [] },
+    });
   });
 
   it("takes the named lock for its ttl and releases it after a run", async () => {

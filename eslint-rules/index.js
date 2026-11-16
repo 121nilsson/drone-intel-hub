@@ -319,11 +319,18 @@ const noRawDbImport = {
       const resolved = resolveSource(context.filename, source);
       if (!resolved) return;
       const rel = path.relative(SRC, resolved).split(path.sep).join("/");
-      if (RAW_DB_MODULES.includes(rel))
+      // Any adapter module, not only the pool: a domain module that imports an adapter factory
+      // skips serverServices() and with it the choice between the SQL and the null adapter. The
+      // migration runner is the one adapter module a job entry point may call directly.
+      const inAdapterDir = /^shared\/infra\/(postgres|cloud)\//.test(rel);
+      const isMigrationRunner = rel === "shared/infra/postgres/migrate.server";
+      if (RAW_DB_MODULES.includes(rel) || (inAdapterDir && !isMigrationRunner))
         context.report({ node: node.source, messageId: "rawDb", data: { source } });
     };
     return {
       ImportDeclaration: check,
+      ExportNamedDeclaration: check,
+      ExportAllDeclaration: check,
       ImportExpression(node) {
         check(node);
       },

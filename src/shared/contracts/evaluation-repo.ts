@@ -116,7 +116,11 @@ export interface SeedAuditRow extends ControlledRow {
   obviously_wrong: boolean;
 }
 
-/** Read-only access to the frozen seed set; only the Evaluation page's measurement uses it. */
+/**
+ * Read-only access to the frozen audit seed set. Its own port on `serverServices().seedAudit`,
+ * not part of EvaluationRepo: nothing that learns may read it (docs/architecture.md), and only
+ * seed-agreement.server.ts does. src/test/seed-audit-isolation.test.ts pins who may touch it.
+ */
 export interface SeedAuditReader {
   /** Every audit row, or null when the backend has no database. */
   seedAuditRows(): Promise<SeedAuditRow[] | null>;
@@ -130,5 +134,4 @@ export interface EvaluationRepo
     HarvestStore,
     AdjudicationStore,
     PendingFixtureStore,
-    EvaluationReportStore,
-    SeedAuditReader {}
+    EvaluationReportStore {}

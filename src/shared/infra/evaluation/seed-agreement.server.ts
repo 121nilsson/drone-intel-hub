@@ -27,7 +27,7 @@ export async function seedAgreement(): Promise<
   try {
     // Every row, not only the seed's: a failed control voids the seed answers next to it, as it
     // voids audit answers (entities/drone/audit.ts), and the controls are not in the seed.
-    const all = await serverServices().evaluation.seedAuditRows();
+    const all = await serverServices().seedAudit.seedAuditRows();
     if (all === null)
       return { ...emptySeedAgreement(), available: false, reason: "no database configured" };
     const voided = voidedByControls(all);

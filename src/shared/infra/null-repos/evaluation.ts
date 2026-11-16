@@ -34,5 +34,4 @@ export const nullEvaluationRepo: EvaluationRepo = {
   latestReport: async () => noDatabase(),
   newestReportsAscending: async () => [],
   recentReports: async () => [],
-  seedAuditRows: async () => null,
 };
