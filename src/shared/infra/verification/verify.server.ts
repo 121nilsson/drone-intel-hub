@@ -3,8 +3,7 @@ import { ANALYST_SOURCE } from "@/entities/drone/claim-review";
 import type { Drone, SpecClaim } from "@/entities/drone/types";
 import type { VerificationRunReport } from "@/shared/contracts/verification";
 import { recordVerificationRunEvent } from "@/shared/infra/autonomy/ledger.server";
-import { db, dbConfigured } from "@/shared/infra/postgres/db.server";
-import { PostgresStore } from "@/shared/infra/postgres/postgres-store.server";
+import { serverServices } from "@/shared/infra/server-services.server";
 import { LocalDroneRepository } from "@/shared/infra/storage/local-repository";
 import { needsVerification } from "./backfill";
 import { runCatalogueVerification, verificationReport } from "./run";
@@ -31,14 +30,6 @@ const sourceUrl = (source: string) => {
   return at >= 0 ? source.slice(at + 3).trim() : "";
 };
 
-interface PostRow {
-  id: string;
-  sourceName: string | null;
-  url: string | null;
-  text: string;
-  contentHash: string | null;
-}
-
 /**
  * The posts the pending claims of `drones` can be checked against: each claim's own post, and
  * for a claim written without one, every post carrying its URL - all of them, so the backfill
@@ -54,13 +45,7 @@ export async function postsFor(drones: readonly Drone[]): Promise<RawDispatch[]>
     ...new Set(claims.flatMap((c) => (c.sourceId ? [] : [sourceUrl(c.source)]).filter(Boolean))),
   ];
   if (!ids.length && !urls.length) return [];
-  const rows = await db()<PostRow[]>`
-    select id, data->>'sourceName' as "sourceName", data->>'url' as url, data->>'text' as text,
-           content_hash as "contentHash"
-      from dispatches
-     where (coalesce(data->>'text', '') <> ''
-            and (id = any(${ids}) or data->>'url' = any(${urls})))
-        or (content_hash is not null and id = any(${ids}))`;
+  const rows = await serverServices().verification.postsForVerification(ids, urls);
   return rows.map(
     (r) =>
       ({
@@ -74,9 +59,11 @@ export async function postsFor(drones: readonly Drone[]): Promise<RawDispatch[]>
 }
 
 export async function runServerVerification(): Promise<VerificationRunReport> {
-  if (!dbConfigured()) throw new Error("Server verification needs DATABASE_URL (PostgreSQL)");
+  const { backend } = serverServices();
+  if (!backend.capabilities.sql)
+    throw new Error("Server verification needs DATABASE_URL (PostgreSQL)");
   const drones = new LocalDroneRepository();
-  await drones.attach(new PostgresStore());
+  await drones.attach(await backend.documents());
   if (!drones.list().some((d) => d.specs.some((s) => s.claims.some(pending))))
     // Nothing for this verifier to judge: report the stored coverage, read nothing, write nothing.
     return verificationReport(drones.list(), {

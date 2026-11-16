@@ -15,40 +15,18 @@
  *   npx tsx --env-file=.env.local scripts/backfill-audit-reader.ts           # dry run
  *   npx tsx --env-file=.env.local scripts/backfill-audit-reader.ts --apply   # write
  */
-import type { ClaimEntailment } from "@/entities/drone/types";
-
 const apply = process.argv.includes("--apply");
 
 async function main() {
   // Imported here, not at the top: a *.server.ts module may only be loaded by a server entry.
-  const { db } = await import("@/shared/infra/postgres/db.server");
-  const { appendReaderRows, readerRow } =
-    await import("@/shared/infra/verification/audit-freeze.server");
-  const sql = db();
-  const items = await sql<
-    {
-      id: string;
-      claim_id: string;
-      drone_id: string;
-      post_text: string | null;
-      answered_at: Date | null;
-    }[]
-  >`select a.id, a.claim_id, a.drone_id, a.post_text, a.answered_at
-      from verification_audit a
-     where a.role <> 'control'
-       and a.sampling_purpose = 'legacy'
-       and not exists (select 1 from verification_audit_reader r where r.audit_id = a.id)`;
+  const { serverServices } = await import("@/shared/infra/server-services.server");
+  const { readerRow } = await import("@/shared/infra/verification/audit-freeze.server");
+  const { audit } = serverServices();
+  const items = await audit.legacyItemsWithoutHistory();
   const droneIds = [...new Set(items.map((i) => i.drone_id))];
   const readings = new Map(
     droneIds.length
-      ? (
-          await sql<{ id: string; entailment: ClaimEntailment }[]>`
-            select c->>'id' as id, c->'entailment' as entailment
-              from drones d,
-                   jsonb_array_elements(d.data->'specs') s,
-                   jsonb_array_elements(s->'claims') c
-             where d.id = any(${droneIds}) and c ? 'entailment'`
-        ).map((r) => [r.id, r.entailment] as const)
+      ? (await audit.currentReadings(droneIds)).map((r) => [r.id, r.entailment] as const)
       : [],
   );
   const rows = items.flatMap((item) => {
@@ -71,12 +49,10 @@ async function main() {
     return;
   }
   // In slices: one statement per few hundred rows keeps the parameter count well under the limit.
-  for (let i = 0; i < rows.length; i += 200) await appendReaderRows(sql, rows.slice(i, i + 200));
+  for (let i = 0; i < rows.length; i += 200) await audit.appendReaderRows(rows.slice(i, i + 200));
   // The draw never recorded what the reader had then: say so on the item, once, where it is unset.
   const ids = rows.map((r) => r.audit_id);
-  if (ids.length)
-    await sql`update verification_audit set reader_state_at_draw = 'legacy_unverified'
-       where id = any(${ids}) and reader_state_at_draw is null`;
+  if (ids.length) await audit.markReaderStateLegacy(ids);
   console.log(`Appended ${rows.length} row(s).`);
 }
 

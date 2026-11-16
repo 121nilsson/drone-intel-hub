@@ -1,6 +1,6 @@
 import { defineTask } from "nitro/task";
 import { ensureMigrated } from "../../src/shared/infra/postgres/migrate.server";
-import { dbConfigured } from "../../src/shared/infra/postgres/db.server";
+import { serverServices } from "../../src/shared/infra/server-services.server";
 import { runEntailment } from "../../src/shared/infra/verification/entailment.server";
 import { entailmentOutcome, recordTaskRun } from "../../src/shared/infra/task-runs.server";
 
@@ -10,7 +10,7 @@ export default defineTask({
     description: "Second reader: an independent model checks uncertain and audited claims",
   },
   async run() {
-    if (!dbConfigured()) {
+    if (!serverServices().backend.capabilities.sql) {
       console.log("[verification:ai] skipped - no database configured");
       return { result: "skipped: no database configured" };
     }

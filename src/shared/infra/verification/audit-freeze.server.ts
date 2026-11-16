@@ -10,7 +10,7 @@ import type {
   StoredEntailmentVerdict,
 } from "@/entities/drone/types";
 import { claimSourceUnit } from "@/entities/normalization/claim-source-unit";
-import type { Sql } from "@/shared/infra/postgres/db.server";
+import type { ReaderRow, ReaderStateAtDraw } from "@/shared/contracts/audit-repo";
 
 /**
  * What the audit freezes when it draws a claim (migrations/026): which claim exactly, which post
@@ -51,7 +51,7 @@ export function claimFingerprint(
 export const readerInputHash = (system: string, prompt: string): string =>
   sha256(`${system}\u0000${prompt}`);
 
-export type ReaderStateAtDraw = "verified_snapshot" | "legacy_unverified" | "stale" | "none";
+export type { ReaderRow, ReaderStateAtDraw };
 
 /**
  * What the reader had on a claim at the moment it is drawn. Only a reading made for this version
@@ -83,7 +83,7 @@ export function readerRow(
   e: ClaimEntailment,
   phase: ReaderPhase,
   context: { postText: string; fallbackFingerprint?: string; answeredAt?: Date | null },
-) {
+): ReaderRow {
   const verdict: StoredEntailmentVerdict = e.verdict;
   const fingerprint = e.claimFingerprint ?? context.fallbackFingerprint ?? null;
   const evaluated = new Date(e.at);
@@ -106,12 +106,4 @@ export function readerRow(
     note: e.note ?? null,
     evaluated_at: evaluated,
   };
-}
-
-export type ReaderRow = ReturnType<typeof readerRow>;
-
-/** Append readings; a duplicate at_draw for an audit item is refused by the unique index. */
-export async function appendReaderRows(sql: Sql, rows: readonly ReaderRow[]): Promise<void> {
-  if (!rows.length) return;
-  await sql`insert into verification_audit_reader ${sql(rows as unknown as Record<string, unknown>[])}`;
 }
