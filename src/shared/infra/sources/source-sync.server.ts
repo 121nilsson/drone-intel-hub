@@ -1,4 +1,3 @@
-import type { JSONValue } from "postgres";
 import {
   PROVIDER_OUTAGE_KINDS,
   QUEUE_ROW,
@@ -8,96 +7,49 @@ import {
   type SyncReport,
   type WorkProgress,
 } from "@/shared/infra/ingest/auto-ingest";
-import { db, dbConfigured } from "../postgres/db.server";
-import { sanitizeJson } from "@/shared/infra/json-sanitize";
-import {
-  parseSyncCooldown,
-  parseSyncProgress,
-  readSyncState,
-  SYNC_COOLDOWN_SLOT,
-  SYNC_PROGRESS_SLOT,
-  SYNC_SLOT,
-} from "../sync-state-read.server";
+import { serverServices } from "../server-services.server";
+import { parseSyncCooldown, readSyncState } from "../sync-state-read.server";
 
 export type { SyncState } from "../sync-state-read.server";
 export { readSyncState };
-
-const SLOT = SYNC_SLOT;
-const PROGRESS_SLOT = SYNC_PROGRESS_SLOT;
-const COOLDOWN_SLOT = SYNC_COOLDOWN_SLOT;
 
 function parseCooldown(raw: unknown): Cooldown | null {
   return parseSyncCooldown(raw);
 }
 
 async function readCooldown(): Promise<Cooldown | null> {
-  const rows = await db()`select last_result from sync_state where name = ${COOLDOWN_SLOT}`;
-  return rows.length ? parseCooldown(rows[0]!["last_result"]) : null;
+  return parseCooldown(await serverServices().sourceSync.readCooldown());
 }
 
 async function writeCooldown(cooldown: Cooldown) {
-  const conn = db();
-  await conn`
-    insert into sync_state (name, last_sync, last_result)
-    values (${COOLDOWN_SLOT}, now(), ${conn.json(sanitizeJson(cooldown as unknown as JSONValue))})
-    on conflict (name) do update
-      set last_sync = excluded.last_sync,
-          last_result = excluded.last_result`;
+  await serverServices().sourceSync.writeCooldown(cooldown);
 }
 
 async function clearCooldown() {
-  await db()`delete from sync_state where name = ${COOLDOWN_SLOT}`;
-}
-
-function parseProgress(raw: unknown): WorkProgress | null {
-  return parseSyncProgress(raw);
+  await serverServices().sourceSync.clearCooldown();
 }
 
 async function writeProgress(progress: WorkProgress) {
-  const conn = db();
-  await conn`
-    insert into sync_state (name, last_sync, last_result)
-    values (${PROGRESS_SLOT}, now(), ${conn.json(sanitizeJson(progress as unknown as JSONValue))})
-    on conflict (name) do update
-      set last_sync = excluded.last_sync,
-          last_result = excluded.last_result`;
+  await serverServices().sourceSync.writeProgress(progress);
 }
 
 /**
- * Claim the throttle slot. The WHERE clause on the conflict branch makes this a
- * compare-and-swap: overlapping cron ticks or a manual click cannot both win, so a second
- * run cannot start while one is in flight. Returns false when the minimum interval has not
- * elapsed. Timestamps the *start* of a run, which also bounds retry frequency after a
- * slow or failing run.
+ * Claim the throttle slot (the adapter makes this a compare-and-swap): overlapping cron ticks or
+ * a manual click cannot both win, so a second run cannot start while one is in flight. Returns
+ * false when the minimum interval has not elapsed. Timestamps the *start* of a run, which also
+ * bounds retry frequency after a slow or failing run.
  */
 async function claimSlot(minIntervalMs: number, force: boolean): Promise<boolean> {
-  // A forced run still has to stamp last_sync, otherwise the slot stays free and the next
-  // cron tick could start immediately after a manual sync. Forcing drops the interval
-  // check (the WHERE clause), not the bookkeeping.
-  if (force) {
-    const rows = await db()`
-      insert into sync_state (name, last_sync) values (${SLOT}, now())
-      on conflict (name) do update set last_sync = excluded.last_sync
-      returning last_sync`;
-    return rows.length > 0;
-  }
-  const rows = await db()`
-    insert into sync_state (name, last_sync) values (${SLOT}, now())
-    on conflict (name) do update set last_sync = excluded.last_sync
-    where sync_state.last_sync <= now() - ${`${minIntervalMs} milliseconds`}::interval
-    returning last_sync`;
-  return rows.length > 0;
+  return serverServices().sourceSync.claimSlot(minIntervalMs, force);
 }
 
 async function storeResult(result: SyncReport[]) {
-  const conn = db();
-  // Interface types lack an index signature, so postgres.js' JSONValue rejects them.
-  await conn`update sync_state set last_result = ${conn.json(sanitizeJson(result as unknown as JSONValue))} where name = ${SLOT}`;
+  await serverServices().sourceSync.storeResult(result);
 }
 
 async function releaseSlot() {
   try {
-    await db()`delete from sync_state where name = ${SLOT}`;
+    await serverServices().sourceSync.releaseSlot();
   } catch {
     /* nothing to release */
   }
@@ -117,7 +69,8 @@ export async function runAutoSync(opts?: {
       : 60_000;
   const force = opts?.force === true;
 
-  if (!dbConfigured()) return { ran: false, reason: "Auto-sync needs DATABASE_URL (PostgreSQL)" };
+  if (!serverServices().backend.capabilities.sql)
+    return { ran: false, reason: "Auto-sync needs DATABASE_URL (PostgreSQL)" };
 
   let claimed: boolean;
   try {

@@ -1,10 +1,13 @@
 import type { WorkProgress } from "@/shared/infra/ingest/auto-ingest";
-import { db, dbConfigured } from "./postgres/db.server";
+import {
+  SYNC_COOLDOWN_SLOT,
+  SYNC_PROGRESS_SLOT,
+  SYNC_SLOT,
+} from "@/shared/contracts/sync-state-repo";
+import { serverServices } from "./server-services.server";
 
-/** Single global throttle slot for the auto-ingest job. */
-export const SYNC_SLOT = "sources:auto";
-export const SYNC_PROGRESS_SLOT = "sources:progress";
-export const SYNC_COOLDOWN_SLOT = "sources:cooldown";
+/** The slot names live in the port's contract so the adapters that write them share them. */
+export { SYNC_COOLDOWN_SLOT, SYNC_PROGRESS_SLOT, SYNC_SLOT };
 
 export interface SyncCooldown {
   level: number;
@@ -96,7 +99,6 @@ export async function readSyncState(): Promise<SyncState> {
     progress: null,
     cooldownUntil: null,
   };
-  if (!dbConfigured()) return unavailable;
   const partial: SyncState = {
     lastSync: null,
     configured: true,
@@ -104,20 +106,24 @@ export async function readSyncState(): Promise<SyncState> {
     cooldownUntil: null,
   };
   try {
-    const rows = await db()`
-      select name, last_sync, last_result from sync_state
-      where name in (${SYNC_SLOT}, ${SYNC_PROGRESS_SLOT}, ${SYNC_COOLDOWN_SLOT})`;
+    const rows = await serverServices().syncState.readSlots([
+      SYNC_SLOT,
+      SYNC_PROGRESS_SLOT,
+      SYNC_COOLDOWN_SLOT,
+    ]);
+    // null: the backend has no database.
+    if (!rows) return unavailable;
     let lastSync: string | null = null;
     let progress: WorkProgress | null = null;
     let cooldownUntil: string | null = null;
     for (const row of rows) {
-      if (row["name"] === SYNC_SLOT) {
-        const raw = row["last_sync"];
-        lastSync = raw ? new Date(raw as Date).toISOString() : null;
-      } else if (row["name"] === SYNC_PROGRESS_SLOT) {
-        progress = parseSyncProgress(row["last_result"]);
-      } else if (row["name"] === SYNC_COOLDOWN_SLOT) {
-        const c = parseSyncCooldown(row["last_result"]);
+      if (row.name === SYNC_SLOT) {
+        const raw = row.lastSync;
+        lastSync = raw ? new Date(raw).toISOString() : null;
+      } else if (row.name === SYNC_PROGRESS_SLOT) {
+        progress = parseSyncProgress(row.lastResult);
+      } else if (row.name === SYNC_COOLDOWN_SLOT) {
+        const c = parseSyncCooldown(row.lastResult);
         if (c && Date.parse(c.until) > Date.now()) cooldownUntil = c.until;
       }
     }

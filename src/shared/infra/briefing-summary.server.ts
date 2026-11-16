@@ -1,5 +1,4 @@
 import { createHash } from "node:crypto";
-import type { JSONValue } from "postgres";
 import {
   isBriefingSummaryFresh,
   parseBriefingSummaryStored,
@@ -9,38 +8,28 @@ import { DEFAULT_SETTINGS } from "@/shared/infra/settings-defaults";
 import { BRIEFING_SUMMARY_SYSTEM } from "@/shared/contracts/ai";
 import { chatCompletionOnce } from "@/shared/infra/ai-proxy.server";
 import { readProviderEnvConfig } from "@/shared/infra/provider-env.server";
-import { db, dbConfigured } from "@/shared/infra/postgres/db.server";
-import { sanitizeJson } from "@/shared/infra/json-sanitize";
+import { BRIEFING_SUMMARY_SLOT } from "@/shared/contracts/briefing-repo";
+import { serverServices } from "@/shared/infra/server-services.server";
 
-export const BRIEFING_SUMMARY_SLOT = "briefing:executive_summary";
+export { BRIEFING_SUMMARY_SLOT };
 
 export function briefingContextFingerprint(context: string): string {
   return createHash("sha256").update(context, "utf8").digest("hex");
 }
 
 async function readStored(): Promise<BriefingSummaryStored | null> {
-  const rows = await db()`
-    select last_result from sync_state where name = ${BRIEFING_SUMMARY_SLOT}`;
-  const row = rows[0];
-  if (!row) return null;
-  return parseBriefingSummaryStored(row["last_result"]);
+  // An absent row and an unparseable one are both "nothing stored".
+  return parseBriefingSummaryStored(await serverServices().briefing.readSummary());
 }
 
 async function writeStored(entry: BriefingSummaryStored) {
-  const conn = db();
-  await conn`
-    insert into sync_state (name, last_sync, last_result)
-    values (${BRIEFING_SUMMARY_SLOT}, now(), ${conn.json(sanitizeJson(entry as unknown as JSONValue))})
-    on conflict (name) do update
-      set last_sync = excluded.last_sync,
-          last_result = excluded.last_result`;
+  await serverServices().briefing.writeSummary(entry);
 }
 
 export async function getSharedBriefingSummary(
   context: string,
   now = Date.now(),
 ): Promise<BriefingSummaryStored | null> {
-  if (!dbConfigured()) return null;
   // Freshness alone decides. The context is built from the week's posts and changes on every
   // sync; keying reuse on its fingerprint would regenerate the summary (a tier-2 call) on nearly
   // every page view. The summary may lag the live panels by up to the TTL. `context` is kept in
@@ -57,7 +46,6 @@ export async function putSharedBriefingSummary(
   summary: string,
   generatedAt: number,
 ): Promise<void> {
-  if (!dbConfigured()) return;
   const trimmed = summary.trim();
   if (trimmed.length < 20 || trimmed.length > 20_000) return;
   await writeStored({
@@ -94,7 +82,8 @@ export async function resolveSharedBriefingSummary(
 ): Promise<BriefingSummaryStored | null> {
   const hit = await getSharedBriefingSummary(context, now);
   if (hit) return hit;
-  if (!dbConfigured()) return null;
+  // Without a database there is nowhere to share a summary, so do not spend a tier-2 call on one.
+  if (!serverServices().backend.capabilities.sql) return null;
 
   const env = await readProviderEnvConfig();
   if (!env.hasKey) return null;

@@ -1,12 +1,9 @@
-import type { JSONValue } from "postgres";
-import { db, dbConfigured } from "@/shared/infra/postgres/db.server";
-import { sanitizeJson } from "@/shared/infra/json-sanitize";
+import { serverServices } from "@/shared/infra/server-services.server";
 import {
   HEARTBEAT_EVENT_KINDS,
   type AutonomyActorKind,
   type AutonomyEvent,
   type AutonomyEventKind,
-  type LedgerJson,
   type VerificationRunRecord,
 } from "@/shared/contracts/verification";
 
@@ -36,29 +33,28 @@ export interface AutonomyEventInput {
   correlationId?: string | null;
 }
 
-const json = (v: unknown) =>
-  v === undefined || v === null ? null : db().json(sanitizeJson(v as JSONValue));
-
 export async function recordAutonomyEvent(input: AutonomyEventInput): Promise<void> {
-  if (!dbConfigured()) return;
   try {
-    const sql = db();
-    await sql`insert into autonomy_events (action, actor, actor_kind, target_collection, target_id,
-        category, verdict, before, after, reason, checks, confidence, reversible, correlation_id)
-      values (${input.action}, ${input.actor.slice(0, 200)}, ${input.actorKind},
-        ${input.targetCollection.slice(0, 100)}, ${input.targetId.slice(0, 200)},
-        ${input.category ?? null}, ${input.verdict ?? null}, ${json(input.before)},
-        ${json(input.after)}, ${input.reason?.slice(0, 2000) ?? null}, ${json(input.checks)},
-        ${input.confidence ?? null}, ${input.reversible ?? true}, ${input.correlationId ?? null})`;
+    const ledger = serverServices().ledger;
+    await ledger.append({
+      action: input.action,
+      actor: input.actor.slice(0, 200),
+      actorKind: input.actorKind,
+      targetCollection: input.targetCollection.slice(0, 100),
+      targetId: input.targetId.slice(0, 200),
+      category: input.category ?? null,
+      verdict: input.verdict ?? null,
+      before: input.before,
+      after: input.after,
+      reason: input.reason?.slice(0, 2000) ?? null,
+      checks: input.checks,
+      confidence: input.confidence ?? null,
+      reversible: input.reversible ?? true,
+      correlationId: input.correlationId ?? null,
+    });
     if ((HEARTBEAT_EVENT_KINDS as readonly string[]).includes(input.action)) {
       // Only heartbeat kinds, by explicit list, and never a row another event points back at.
-      const kinds = [...HEARTBEAT_EVENT_KINDS];
-      await sql`delete from autonomy_events e
-        where e.action = any(${kinds})
-          and e.id in (
-            select id from autonomy_events where action = any(${kinds})
-              order by at desc offset ${KEEP_HEARTBEATS})
-          and not exists (select 1 from autonomy_events r where r.reversed_by = e.id)`;
+      await ledger.pruneHeartbeats([...HEARTBEAT_EVENT_KINDS], KEEP_HEARTBEATS);
     }
   } catch (e) {
     console.error("[autonomy] could not record event", e);
@@ -84,50 +80,9 @@ export async function recordVerificationRunEvent(run: VerificationRunRecord): Pr
   });
 }
 
-interface Row {
-  id: string;
-  at: Date;
-  action: string;
-  actor: string;
-  actor_kind: string;
-  target_collection: string;
-  target_id: string;
-  category: string | null;
-  verdict: string | null;
-  before: LedgerJson | null;
-  after: LedgerJson | null;
-  reason: string | null;
-  confidence: number | null;
-  reversible: boolean;
-  reversed_by: string | null;
-  correlation_id: string | null;
-}
-
 export async function listAutonomyEvents(limit = 100): Promise<AutonomyEvent[]> {
-  if (!dbConfigured()) return [];
   try {
-    const rows = await db()<Row[]>`
-      select id, at, action, actor, actor_kind, target_collection, target_id, category, verdict,
-             before, after, reason, confidence, reversible, reversed_by, correlation_id
-        from autonomy_events order by at desc limit ${Math.min(Math.max(limit, 1), 500)}`;
-    return rows.map((r) => ({
-      id: r.id,
-      at: r.at.toISOString(),
-      action: r.action as AutonomyEventKind,
-      actor: r.actor,
-      actorKind: r.actor_kind as AutonomyActorKind,
-      targetCollection: r.target_collection,
-      targetId: r.target_id,
-      ...(r.category ? { category: r.category } : {}),
-      ...(r.verdict ? { verdict: r.verdict } : {}),
-      ...(r.before != null ? { before: r.before } : {}),
-      ...(r.after != null ? { after: r.after } : {}),
-      ...(r.reason ? { reason: r.reason } : {}),
-      ...(r.confidence != null ? { confidence: Number(r.confidence) } : {}),
-      reversible: r.reversible,
-      ...(r.reversed_by ? { reversedBy: r.reversed_by } : {}),
-      ...(r.correlation_id ? { correlationId: r.correlation_id } : {}),
-    }));
+    return await serverServices().ledger.recent(Math.min(Math.max(limit, 1), 500));
   } catch (e) {
     console.error("[autonomy] could not read events", e);
     return [];
