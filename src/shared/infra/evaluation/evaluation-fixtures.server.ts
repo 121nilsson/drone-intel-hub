@@ -1,4 +1,5 @@
-import { db, dbConfigured } from "@/shared/infra/postgres/db.server";
+import { serverServices } from "@/shared/infra/server-services.server";
+import type { CorpusFixtureRow } from "@/shared/contracts/evaluation-repo";
 import type { EvalFixture } from "@/shared/infra/evaluation/evaluation";
 import type { TrustState, TrustTally } from "@/shared/infra/ingest/earned-trust";
 import { adjudicationTrust } from "@/shared/infra/evaluation/evaluation-adjudication.server";
@@ -12,6 +13,17 @@ export interface PendingFixture {
   fixture: EvalFixture;
 }
 
+function pendingFixture(r: CorpusFixtureRow): PendingFixture {
+  return {
+    id: r.id,
+    version: r.version,
+    kind: r.kind,
+    origin: r.origin,
+    observedAt: r.observedAt.toISOString(),
+    fixture: r.fixture as EvalFixture,
+  };
+}
+
 /** Fixtures waiting for an analyst, newest first. The sandbox does not use them until approved. */
 export async function listPendingFixtures(limit = 25): Promise<{
   total: number;
@@ -21,44 +33,17 @@ export async function listPendingFixtures(limit = 25): Promise<{
   autoApprovedRecent: PendingFixture[];
 }> {
   const trust = await adjudicationTrust();
-  if (!dbConfigured())
-    return { total: 0, items: [], trust, autoApproved: 0, autoApprovedRecent: [] };
-  const [{ n } = { n: 0 }] = (await db()`
-    select count(*)::int as n from eval_corpus where status = 'pending'`) as unknown as {
-    n: number;
-  }[];
-  const rows = await db()`
-    select id, version, kind, origin, observed_at, fixture from eval_corpus
-    where status = 'pending' order by observed_at desc limit ${limit}`;
-  const [{ ac } = { ac: 0 }] = (await db()`
-    select count(*)::int as ac from eval_corpus
-    where origin = 'adjudication' and decided_by = 'autonomous' and status = 'approved'`) as unknown as {
-    ac: number;
-  }[];
-  const autoRows = await db()`
-    select id, version, kind, origin, observed_at, fixture from eval_corpus
-    where origin = 'adjudication' and decided_by = 'autonomous' and status = 'approved'
-    order by decided_at desc limit ${limit}`;
+  const { evaluation } = serverServices();
+  const n = await evaluation.countPending();
+  const rows = await evaluation.listPending(limit);
+  const ac = await evaluation.countAutoApproved();
+  const autoRows = await evaluation.listAutoApproved(limit);
   return {
     total: n,
     trust,
-    items: rows.map((r) => ({
-      id: r["id"] as string,
-      version: r["version"] as number,
-      kind: r["kind"] as "positive" | "negative",
-      origin: r["origin"] as string,
-      observedAt: (r["observed_at"] as Date).toISOString(),
-      fixture: r["fixture"] as EvalFixture,
-    })),
+    items: rows.map(pendingFixture),
     autoApproved: ac,
-    autoApprovedRecent: autoRows.map((r) => ({
-      id: r["id"] as string,
-      version: r["version"] as number,
-      kind: r["kind"] as "positive" | "negative",
-      origin: r["origin"] as string,
-      observedAt: (r["observed_at"] as Date).toISOString(),
-      fixture: r["fixture"] as EvalFixture,
-    })),
+    autoApprovedRecent: autoRows.map(pendingFixture),
   };
 }
 
@@ -74,12 +59,6 @@ export async function decidePendingFixture(
   version: number,
   approve: boolean,
 ): Promise<{ ok: boolean }> {
-  if (!dbConfigured()) return { ok: false };
   const status = approve ? "approved" : "rejected";
-  const rows = await db()`
-    update eval_corpus set status = ${status}, decided_at = now(), decided_by = 'analyst'
-    where id = ${id} and version = ${version}
-      and (status = 'pending' or (status = 'approved' and decided_by = 'autonomous'))
-    returning id`;
-  return { ok: rows.length > 0 };
+  return { ok: await serverServices().evaluation.decide(id, version, status) };
 }

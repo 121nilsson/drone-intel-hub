@@ -1,9 +1,7 @@
-import { db, dbConfigured } from "@/shared/infra/postgres/db.server";
-import { PostgresStore } from "@/shared/infra/postgres/postgres-store.server";
+import { serverServices } from "@/shared/infra/server-services.server";
 import { HeuristicExtractor } from "@/shared/infra/heuristic-ai";
 import { getOrRefreshRuleSnapshot } from "@/shared/infra/heuristics/rule-registry.server";
 import { normalizeExtraction } from "@/entities/normalization/apply";
-import { sanitizeJson } from "@/shared/infra/json-sanitize";
 import { documentsOf } from "@/shared/contracts/store";
 import {
   comparableSpecs,
@@ -12,7 +10,6 @@ import {
   verifiedVerdicts,
   type EvalFixture,
 } from "@/shared/infra/evaluation/evaluation";
-import type { JSONValue } from "postgres";
 import type { Candidate, Drone } from "@/entities/drone/types";
 import { readProviderEnvConfig } from "@/shared/infra/provider-env.server";
 import { trustState, type TrustState, type TrustTally } from "@/shared/infra/ingest/earned-trust";
@@ -33,7 +30,7 @@ export async function runAdjudication(): Promise<{
   adjudicated: number;
   inserted: number;
 }> {
-  if (!dbConfigured())
+  if (!serverServices().backend.capabilities.sql)
     return { ran: false, reason: "no database configured", adjudicated: 0, inserted: 0 };
   const env = await (await import("@/shared/infra/provider-env.server")).readProviderEnvConfig();
   if (!env.hasKey) return { ran: false, reason: "no AI provider key", adjudicated: 0, inserted: 0 };
@@ -42,7 +39,7 @@ export async function runAdjudication(): Promise<{
   if (!lock.ok) return { ran: false, reason: lock.reason, adjudicated: 0, inserted: 0 };
 
   try {
-    const store = new PostgresStore();
+    const store = await serverServices().backend.documents();
     const drones = (documentsOf(await store.load("drones")) ?? []) as unknown as Drone[];
     const candidates = (documentsOf(await store.load("candidates")) ??
       []) as unknown as Candidate[];
@@ -67,9 +64,7 @@ export async function runAdjudication(): Promise<{
     // judged can be recognised and left to the model no more. They are read in one query: the
     // candidate list is thousands long, and a query per candidate would be thousands of round
     // trips to learn what a set lookup answers.
-    const judged = new Set(
-      (await db()`select id from eval_corpus where id like 'adj-%'`).map((r) => r["id"] as string),
-    );
+    const judged = new Set(await serverServices().evaluation.adjudicatedIds());
 
     for (const c of candidates) {
       if (adjudicated >= MAX) break;
@@ -119,9 +114,13 @@ export async function runAdjudication(): Promise<{
             ],
             status: "pending",
           };
-          await db()`insert into eval_corpus (id, version, kind, fixture, status, origin, observed_at, decided_at, decided_by)
-            values (${fx.id}, 1, 'positive', ${db().json(sanitizeJson({ ...fx, status: positiveStatus } as unknown as JSONValue))}, ${positiveStatus}, 'adjudication', now(), ${decidedBy ? new Date() : null}, ${decidedBy})
-            on conflict (id, version) do nothing`;
+          await serverServices().evaluation.insertAdjudicatedPositive({
+            id: fx.id,
+            fixture: { ...fx, status: positiveStatus },
+            status: positiveStatus,
+            decidedAt: decidedBy ? new Date() : null,
+            decidedBy,
+          });
           judged.add(fx.id);
           inserted++;
         } else if (answer === "ai" && r) {
@@ -138,9 +137,13 @@ export async function runAdjudication(): Promise<{
             ],
             status: "pending",
           };
-          await db()`insert into eval_corpus (id, version, kind, fixture, status, origin, observed_at, decided_at, decided_by)
-            values (${fx.id}, 1, 'positive', ${db().json(sanitizeJson({ ...fx, status: positiveStatus } as unknown as JSONValue))}, ${positiveStatus}, 'adjudication', now(), ${decidedBy ? new Date() : null}, ${decidedBy})
-            on conflict (id, version) do nothing`;
+          await serverServices().evaluation.insertAdjudicatedPositive({
+            id: fx.id,
+            fixture: { ...fx, status: positiveStatus },
+            status: positiveStatus,
+            decidedAt: decidedBy ? new Date() : null,
+            decidedBy,
+          });
           judged.add(fx.id);
           inserted++;
           // negative against heuristic's value
@@ -159,9 +162,10 @@ export async function runAdjudication(): Promise<{
             status: "pending_fix",
             // origin stored in DB column, not fixture
           };
-          await db()`insert into eval_corpus (id, version, kind, fixture, status, origin, observed_at)
-            values (${neg.id}, 1, 'negative', ${db().json(sanitizeJson(neg as unknown as JSONValue))}, 'pending_fix', 'adjudication', now())
-            on conflict (id, version) do nothing`;
+          await serverServices().evaluation.insertAdjudicatedNegative({
+            id: neg.id,
+            fixture: neg,
+          });
         }
       }
     }
@@ -181,21 +185,13 @@ export async function runAdjudication(): Promise<{
 
 /** Analyst decisions on AI-adjudicated positive fixtures: an approval agrees with the model. */
 export async function adjudicationTrust(): Promise<TrustTally & { state: TrustState }> {
-  const empty = { agreed: 0, disagreed: 0 };
-  if (!dbConfigured()) return { ...empty, state: trustState(empty) };
-  const rows = await db()`
-    select status, count(*)::int as n from eval_corpus
-    where origin = 'adjudication' and kind = 'positive' and decided_by = 'analyst'
-      and status in ('approved', 'rejected')
-    group by status`;
-  const count = (s: string) => (rows.find((r) => r["status"] === s)?.["n"] as number) ?? 0;
+  const rows = await serverServices().evaluation.analystTally();
+  const count = (s: string) => rows.find((r) => r.status === s)?.n ?? 0;
   const t = { agreed: count("approved"), disagreed: count("rejected") };
   return { ...t, state: trustState(t) };
 }
 
 /** Approvals the adjudicator made on its own go back to "pending" once it lost the trust. */
 export async function revokeAutonomousApprovals() {
-  await db()`
-    update eval_corpus set status = 'pending', decided_at = null, decided_by = null
-    where origin = 'adjudication' and decided_by = 'autonomous' and status = 'approved'`;
+  await serverServices().evaluation.revokeAutonomousApprovals();
 }

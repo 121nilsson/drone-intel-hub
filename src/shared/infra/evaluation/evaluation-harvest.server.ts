@@ -1,11 +1,8 @@
-import { db, dbConfigured } from "@/shared/infra/postgres/db.server";
-import { PostgresStore } from "@/shared/infra/postgres/postgres-store.server";
+import { serverServices } from "@/shared/infra/server-services.server";
 import { HeuristicExtractor } from "@/shared/infra/heuristic-ai";
 import { getOrRefreshRuleSnapshot } from "@/shared/infra/heuristics/rule-registry.server";
 import { comparableSpecs, evaluateHeuristic } from "@/shared/infra/evaluation/evaluation";
-import { sanitizeJson } from "@/shared/infra/json-sanitize";
 import { documentsOf } from "@/shared/contracts/store";
-import type { JSONValue } from "postgres";
 import type { Candidate, Drone } from "@/entities/drone/types";
 import { claimLock, releaseLock } from "@/shared/infra/evaluation/evaluation-lock.server";
 import { EVAL_SEED, pinnedCorpusVersion } from "@/shared/infra/evaluation/evaluation-corpus.server";
@@ -26,13 +23,13 @@ export async function harvestCorpus(): Promise<{
   skipped: number;
   corpusVersion?: number;
 }> {
-  if (!dbConfigured())
+  if (!serverServices().backend.capabilities.sql)
     return { ran: false, reason: "no database configured", inserted: 0, skipped: 0 };
   const lock = await claimLock();
   if (!lock.ok) return { ran: false, reason: lock.reason, inserted: 0, skipped: 0 };
 
   try {
-    const store = new PostgresStore();
+    const store = await serverServices().backend.documents();
     const drones = (documentsOf(await store.load("drones")) ?? []) as unknown as Drone[];
     const candidates = (documentsOf(await store.load("candidates")) ??
       []) as unknown as Candidate[];
@@ -77,21 +74,22 @@ export async function harvestCorpus(): Promise<{
         continue;
       }
 
-      const exists = await db()`select 1 from eval_corpus where id = ${fx.id}`;
-      if (exists.length) {
+      if (await serverServices().evaluation.fixtureIdExists(fx.id)) {
         skipped++;
         continue;
       }
 
-      await db()`
-        insert into eval_corpus (id, version, kind, fixture, status, origin, source_report, observed_at)
-        values (${fx.id}, ${nextVersion}, 'positive', ${db().json(sanitizeJson(fx as unknown as JSONValue))}, 'approved', 'agreement', null, now())`;
+      await serverServices().evaluation.insertHarvestedFixture({
+        id: fx.id,
+        version: nextVersion,
+        fixture: fx,
+      });
       perKeyCount.set(key, (perKeyCount.get(key) ?? 0) + 1);
       inserted++;
     }
 
     if (inserted > 0) {
-      await db()`insert into eval_corpus_version (version, created_at, note) values (${nextVersion}, now(), 'harvest')`;
+      await serverServices().evaluation.recordVersion(nextVersion, "harvest");
     }
 
     return {

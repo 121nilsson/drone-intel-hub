@@ -1,4 +1,4 @@
-import { db, dbConfigured } from "@/shared/infra/postgres/db.server";
+import { serverServices } from "@/shared/infra/server-services.server";
 import type { ReferenceCoverage } from "@/shared/infra/evaluation/evaluation";
 
 export interface EvalReportRow {
@@ -19,18 +19,14 @@ export interface EvalKeyTrend {
 }
 
 export async function getEvalKeyTrends(limit = 20): Promise<EvalKeyTrend[]> {
-  if (!dbConfigured()) return [];
   // The newest `limit` reports, oldest first for the sparkline. Ordering ascending before the
   // limit took the oldest ones, so the trend froze once there were more than `limit` reports.
-  const rows = await db()`
-    select generated_at, report from (
-      select generated_at, report from eval_reports order by generated_at desc limit ${limit}
-    ) newest order by generated_at asc`;
+  const rows = await serverServices().evaluation.newestReportsAscending(limit);
   const byKey = new Map<string, { values: number[]; dates: string[] }>();
   for (const r of rows) {
-    const rep = r["report"] as Record<string, unknown>;
+    const rep = r.report;
     const perKey = (rep["perKey"] ?? {}) as Record<string, { f1: number }>;
-    const date = (r["generated_at"] as Date).toISOString();
+    const date = r.generatedAt.toISOString();
     for (const [k, v] of Object.entries(perKey)) {
       const e = byKey.get(k) ?? { values: [], dates: [] };
       e.values.push(typeof v.f1 === "number" ? v.f1 : 0);
@@ -45,16 +41,14 @@ export async function getEvalKeyTrends(limit = 20): Promise<EvalKeyTrend[]> {
 }
 
 export async function getEvalReports(limit = 20): Promise<EvalReportRow[]> {
-  if (!dbConfigured()) return [];
-  const rows =
-    await db()`select id, generated_at, report from eval_reports order by generated_at desc limit ${limit}`;
+  const rows = await serverServices().evaluation.recentReports(limit);
   return rows.map((r) => {
-    const rep = r["report"] as Record<string, unknown>;
+    const rep = r.report;
     const summary = (rep["summary"] ?? {}) as Record<string, unknown>;
     const reference = rep["reference"] as ReferenceCoverage | undefined;
     return {
-      id: r["id"] as string,
-      generatedAt: (r["generated_at"] as Date).toISOString(),
+      id: r.id,
+      generatedAt: r.generatedAt.toISOString(),
       totalItems: (rep["totalItems"] as number) ?? 0,
       f1: typeof summary["f1"] === "number" ? (summary["f1"] as number) : 0,
       precision: typeof summary["precision"] === "number" ? (summary["precision"] as number) : 0,
