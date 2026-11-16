@@ -14,6 +14,7 @@ import { seededRandom, shuffle } from "../../drone/audit";
 import { detectLanguage } from "../language";
 import { sha256Hex } from "../sha256";
 import type { ReadonlySemanticSnapshot } from "../semantic-resolver";
+import { canonicalJson } from "./validate";
 import {
   FAMILY_COUNT,
   FRAME_CUTOFF,
@@ -164,12 +165,9 @@ export function freezeFrame(rows: readonly FrameRow[], options: FreezeOptions): 
   let truncated = 0;
   const candidates: FrozenUnit[] = [];
 
-  // Sorting first makes "first occurrence wins" in the dedupe deterministic.
-  const ordered = [...rows].sort((a, b) =>
-    `${a.sourceId}|${a.occurrenceIndex ?? 0}|${a.rawKey}`.localeCompare(
-      `${b.sourceId}|${b.occurrenceIndex ?? 0}|${b.rawKey}`,
-    ),
-  );
+  // Full-row stable key: a shorter key leaves ties that depend on input order, which would make
+  // "first occurrence wins" in the dedupe non-reproducible across exports of the same records.
+  const ordered = [...rows].sort((a, b) => canonicalJson(a).localeCompare(canonicalJson(b)));
 
   for (const row of ordered) {
     if (row.rawKey.trim().length === 0) {
@@ -220,10 +218,38 @@ export function freezeFrame(rows: readonly FrameRow[], options: FreezeOptions): 
     });
   }
 
+  // Rows with the same evidence id but different stratification/context metadata are a conflict,
+  // not a harmless duplicate: silently keeping one by sort order would make the frame depend on
+  // input order in substance. Reject the whole cluster instead.
+  const byEvidence = new Map<string, FrozenUnit[]>();
+  for (const unit of candidates) {
+    byEvidence.set(unit.evidenceClusterId, [
+      ...(byEvidence.get(unit.evidenceClusterId) ?? []),
+      unit,
+    ]);
+  }
+  const conflictingEvidence = new Set<string>();
+  for (const [id, group] of byEvidence) {
+    const signatures = new Set(
+      group.map((u) =>
+        canonicalJson({
+          language: u.language,
+          context: u.context,
+          ...(u.priorAnalystReview !== undefined
+            ? { priorAnalystReview: u.priorAnalystReview }
+            : {}),
+        }),
+      ),
+    );
+    if (signatures.size > 1) conflictingEvidence.add(id);
+  }
+  conflictingEvidence.forEach(() => addExclusion(exclusions, "conflicting_evidence_metadata"));
+
   const seenEvidence = new Set<string>();
   const seenIds = new Set<string>();
   const units: FrozenUnit[] = [];
   for (const unit of candidates) {
+    if (conflictingEvidence.has(unit.evidenceClusterId)) continue;
     if (seenEvidence.has(unit.evidenceClusterId)) {
       addExclusion(exclusions, "duplicate_evidence");
       continue;

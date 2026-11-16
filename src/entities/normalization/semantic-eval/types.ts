@@ -177,8 +177,6 @@ export interface Decision {
   readonly reviewedAt: string;
   readonly protocolVersion: EvalProtocolVersion;
   readonly status: "human_reviewed";
-  /** exampleId of an earlier decision this one replaces. A re-review is a new record. */
-  readonly supersedes?: string | undefined;
 }
 
 // ─── Frame input and manifest ──────────────────────────────────────────────

@@ -32,7 +32,8 @@ import {
   renderMetricsReport,
 } from "../src/entities/normalization/semantic-eval/metrics";
 import type { MetricsContext } from "../src/entities/normalization/semantic-eval/metrics";
-import type { SamplingManifest } from "../src/entities/normalization/semantic-eval/types";
+import type { Origin, SamplingManifest } from "../src/entities/normalization/semantic-eval/types";
+import { verifyEvaluationInputs } from "../src/entities/normalization/semantic-eval/verify";
 import {
   canonicalJson,
   parseJsonl,
@@ -92,37 +93,67 @@ if (failed.length > 0) {
 
 // ── S5: evidence-labelled metrics report (needs real human decisions) ─────
 if (args.includes("--report")) {
-  const dataDir = resolve(value("--data-dir", "src/test/fixtures/semantic-eval"));
-  const decisionsPath = resolve(value("--decisions", resolve(dataDir, "decisions.jsonl")));
-  if (!existsSync(decisionsPath)) {
-    process.stderr.write(
-      `no decisions at ${decisionsPath}. No human labels are fabricated: review the CSV queue with semantic-review.ts first.\n`,
+  try {
+    const dataDir = resolve(value("--data-dir", "src/test/fixtures/semantic-eval"));
+    const decisionsPath = resolve(value("--decisions", resolve(dataDir, "decisions.jsonl")));
+    const read = (p: string): string => {
+      if (!existsSync(p)) throw new Error(`missing ${p} — run the sampler and reviewer first`);
+      return readFileSync(p, "utf8");
+    };
+    const readOrEmpty = (p: string): string => (existsSync(p) ? readFileSync(p, "utf8") : "");
+    // The manifest is mandatory. Without it there is no verified frame, snapshot or sample to
+    // report on, and no acceptable fallback to the current resolver version.
+    const examplesText = read(resolve(dataDir, "examples.jsonl"));
+    const predictionsText = read(resolve(dataDir, "predictions.jsonl"));
+    const manifestText = read(resolve(dataDir, "manifest.json"));
+    const decisionsText = read(decisionsPath);
+    let parsedManifest: unknown;
+    try {
+      parsedManifest = JSON.parse(manifestText);
+    } catch (e) {
+      throw new Error(`invalid manifest.json: ${(e as Error).message}`);
+    }
+    const examples = parseJsonl(examplesText, validateExample, "examples.jsonl");
+    const predictions = parseJsonl(predictionsText, validatePrediction, "predictions.jsonl");
+    const suggestions = parseJsonl(
+      readOrEmpty(resolve(dataDir, "suggestions.jsonl")),
+      validateSuggestion,
+      "suggestions.jsonl",
     );
-    process.exit(2);
-  }
-  const read = (p: string) => (existsSync(p) ? readFileSync(p, "utf8") : "");
-  const examples = parseJsonl(
-    read(resolve(dataDir, "examples.jsonl")),
-    validateExample,
-    "examples.jsonl",
-  );
-  const predictions = parseJsonl(
-    read(resolve(dataDir, "predictions.jsonl")),
-    validatePrediction,
-    "predictions.jsonl",
-  );
-  const suggestions = parseJsonl(
-    read(resolve(dataDir, "suggestions.jsonl")),
-    validateSuggestion,
-    "suggestions.jsonl",
-  );
-  const decisions = parseJsonl(read(decisionsPath), validateDecision, "decisions.jsonl");
-  const manifest: SamplingManifest | undefined = existsSync(resolve(dataDir, "manifest.json"))
-    ? (JSON.parse(read(resolve(dataDir, "manifest.json"))) as SamplingManifest)
-    : undefined;
-  const manifestHash = manifest === undefined ? "" : sha256Hex(canonicalJson(manifest));
-  const context: MetricsContext | undefined = manifest
-    ? {
+    const decisions = parseJsonl(decisionsText, validateDecision, "decisions.jsonl");
+    const violations = verifyEvaluationInputs({
+      manifest: parsedManifest,
+      examples,
+      predictions,
+      decisions,
+      examplesText,
+      predictionsText,
+    });
+    if (violations.length > 0) {
+      for (const v of violations) process.stderr.write(`manifest check: ${v}\n`);
+      process.exit(1);
+    }
+    const manifest = parsedManifest as SamplingManifest;
+    const manifestHash = sha256Hex(canonicalJson(manifest));
+    const metricsInput = {
+      examples,
+      predictions,
+      decisions,
+      suggestions,
+      sampledExampleIds: manifest.cells.flatMap((c) => c.sampledExampleIds),
+      frameId: manifest.frameId,
+      seed: manifest.seed,
+      cutoff: manifest.cutoff,
+      snapshotHash: manifest.snapshotHash,
+      resolverVersion: manifest.resolverVersion,
+      manifestHash,
+      pilot: true,
+      origins: value("--origins", "historical")
+        .split(",")
+        .map((o) => o.trim())
+        .filter((o) => o.length > 0) as Origin[],
+      allowMixedProtocol: args.includes("--allow-mixed-protocol"),
+      context: {
         cells: manifest.cells,
         emptyCells: manifest.emptyCells,
         unsampledCells: manifest.unsampledCells,
@@ -130,26 +161,9 @@ if (args.includes("--report")) {
         exclusions: manifest.exclusions,
         concentration: manifest.concentration,
         topShare: manifest.topShare,
-      }
-    : undefined;
-  const metricsInput = {
-    examples,
-    predictions,
-    decisions,
-    suggestions,
-    sampledExampleIds: manifest?.cells.flatMap((c) => c.sampledExampleIds),
-    frameId: manifest?.frameId ?? "",
-    seed: manifest?.seed ?? "",
-    cutoff: manifest?.cutoff ?? "",
-    snapshotHash: manifest?.snapshotHash ?? CODE_SEED_SNAPSHOT.contentHash,
-    resolverVersion: manifest?.resolverVersion ?? SEMANTIC_RESOLVER_VERSION,
-    manifestHash,
-    pilot: true,
-    allowMixedProtocol: args.includes("--allow-mixed-protocol"),
-    context,
-  };
-  const reportOut = resolve(value("--report-out", "scripts/output/semantic-metrics.md"));
-  try {
+      },
+    };
+    const reportOut = resolve(value("--report-out", "scripts/output/semantic-metrics.md"));
     const report = renderMetricsReport(metricsInput, computeMetrics(metricsInput));
     await writeFormatted(reportOut, report);
     process.stdout.write(`wrote ${reportOut}\n`);

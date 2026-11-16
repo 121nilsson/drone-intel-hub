@@ -12,10 +12,12 @@ import {
   drawSample,
   exampleIdFor,
   evidenceClusterIdFor,
+  freezeFrame,
   frameIdFor,
   renderSamplingReport,
   sourceConcentration,
 } from "@/entities/normalization/semantic-eval/sampling";
+import { canonicalJson } from "@/entities/normalization/semantic-eval/validate";
 import {
   FAMILY_COUNT,
   FRAME_CUTOFF,
@@ -118,6 +120,38 @@ describe("frame freeze and whole-frame replay", () => {
     );
     expect(built.predictions[0]!.result.snapshotHash).toBe(built.predictions[0]!.snapshotHash);
     expect(FRAME_CUTOFF).toBe("2026-11-01T00:00:00Z");
+  });
+
+  it("freezes the same frame regardless of input row order", () => {
+    const rows = [
+      row({ sourceId: "a", rawUnit: "km/h", excerpt: "Same evidence, first source." }),
+      row({ sourceId: "b", rawUnit: "km/h", excerpt: "Same evidence, first source." }),
+      row({ sourceId: "c", rawKey: "combat_radius", rawValue: "10" }),
+    ];
+    const forward = freezeFrame(rows, { frameId: "f" });
+    const reversed = freezeFrame([...rows].reverse(), { frameId: "f" });
+    expect(canonicalJson(forward)).toBe(canonicalJson(reversed));
+  });
+
+  it("rejects rows with one evidence id but conflicting language or context", () => {
+    const shared = {
+      sourceId: "same",
+      rawKey: "max_speed",
+      rawValue: "120",
+      excerpt: "The same evidence.",
+    };
+    const built = freezeFrame(
+      [
+        row({ ...shared, language: "en", domain: "Air" }),
+        row({ ...shared, language: "ru", domain: "Air" }),
+      ],
+      { frameId: "f" },
+    );
+    expect(built.units).toHaveLength(0);
+    expect(built.exclusions).toContainEqual({
+      reason: "conflicting_evidence_metadata",
+      count: 1,
+    });
   });
 
   it("truncates long excerpts and never stores the prior analyst verdict as a label", () => {

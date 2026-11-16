@@ -31,10 +31,12 @@ import {
   checkDecisionSet,
 } from "./validate";
 import {
+  ORIGINS,
   isWithholdingVerdict,
   type Decision,
   type EvidenceLabel,
   type Example,
+  type Origin,
   type Prediction,
   type Suggestion,
 } from "./types";
@@ -494,6 +496,8 @@ export interface MetricsInput {
   readonly resolverVersion: string;
   readonly manifestHash: string;
   readonly pilot: boolean;
+  /** Only these origins are eligible. Defaults to historical; fixtures never enter silently. */
+  readonly origins?: readonly Origin[];
   readonly alpha?: number;
   readonly allowMixedProtocol?: boolean;
   readonly context?: MetricsContext;
@@ -518,29 +522,40 @@ export interface MetricsResult {
 export function computeMetrics(input: MetricsInput): MetricsResult {
   const alpha = input.alpha ?? ALPHA;
   if (!(alpha > 0 && alpha < 1)) throw new RangeError(`alpha must lie in (0, 1), got ${alpha}`);
+  const origins = input.origins ?? (["historical"] as const);
+  for (const origin of origins) {
+    if (!ORIGINS.includes(origin)) throw new RangeError(`unknown origin: ${origin}`);
+  }
+  // Fixtures and adversarial items must never be pooled into historical quality figures by
+  // accident. Filtering here also drops their decisions before any bound is computed.
+  const examples = input.examples.filter((e) => origins.includes(e.origin));
+  const eligible = new Set(examples.map((e) => e.exampleId));
+  const predictions = input.predictions.filter((p) => eligible.has(p.exampleId));
+  const decisions = input.decisions.filter((d) => eligible.has(d.exampleId));
+
   let protocolVersions: string[];
   try {
-    checkDecisionSet(input.decisions, {
+    checkDecisionSet(decisions, {
       allowMixedProtocol: input.allowMixedProtocol === true,
     });
-    protocolVersions = [...new Set(input.decisions.map((d) => d.protocolVersion))].sort();
+    protocolVersions = [...new Set(decisions.map((d) => d.protocolVersion))].sort();
   } catch (e) {
     throw new Error(`bound not available: ${(e as Error).message}`);
   }
   if (input.sampledExampleIds !== undefined) {
     const drawn = new Set(input.sampledExampleIds);
-    const unexpected = input.decisions.filter((d) => !drawn.has(d.exampleId));
+    const unexpected = decisions.filter((d) => !drawn.has(d.exampleId));
     if (unexpected.length > 0) {
       throw new Error("bound not available: decisions include examples outside the seeded sample");
     }
   }
 
-  const resolved = subpopulation(input.examples, input.predictions, "resolved");
-  const withheld = subpopulation(input.examples, input.predictions, "withheld");
+  const resolved = subpopulation(examples, predictions, "resolved");
+  const withheld = subpopulation(examples, predictions, "withheld");
   const resolution = precisionMetric(
     "resolutionPrecision",
     resolved,
-    input.decisions,
+    decisions,
     TARGETS.resolutionPrecision,
     input.pilot,
     alpha,
@@ -548,7 +563,7 @@ export function computeMetrics(input: MetricsInput): MetricsResult {
   const withholding = precisionMetric(
     "withholdingPrecision",
     withheld,
-    input.decisions,
+    decisions,
     TARGETS.withholdingPrecision,
     input.pilot,
     alpha,
@@ -556,22 +571,20 @@ export function computeMetrics(input: MetricsInput): MetricsResult {
   const recall = recallMetric(
     resolved,
     withheld,
-    input.decisions,
+    decisions,
     TARGETS.withholdingRecall,
     input.pilot,
     alpha,
   );
-  const unassessable = input.decisions.filter(
-    (d) => d.blindVerdict === "insufficient_evidence",
-  ).length;
+  const unassessable = decisions.filter((d) => d.blindVerdict === "insufficient_evidence").length;
   return {
     precision: { resolution, withholding },
     recall,
     diagnostics: {
-      blindVsFinalChangeRate: blindVsFinalChangeRate(input.decisions),
-      aiAgreementRate: aiAgreementRate(input.decisions, input.suggestions ?? []),
+      blindVsFinalChangeRate: blindVsFinalChangeRate(decisions),
+      aiAgreementRate: aiAgreementRate(decisions, input.suggestions ?? []),
       protocolVersions,
-      decided: input.decisions.length,
+      decided: decisions.length,
       unassessable,
     },
   };
@@ -596,7 +609,7 @@ export function renderMetricsReport(input: MetricsInput, result: MetricsResult):
   lines.push(
     `- Frame \`${input.frameId}\`, cutoff \`${input.cutoff}\`, seed \`${input.seed}\``,
     `- Snapshot hash \`${input.snapshotHash}\`, resolver version ${input.resolverVersion}, manifest hash \`${input.manifestHash}\``,
-    `- ${input.pilot ? "Pilot (exploratory)" : "Full evaluation"}; protocol versions ${diagnostics.protocolVersions.join(", ") || "none"}`,
+    `- ${input.pilot ? "Pilot (exploratory)" : "Full evaluation"}; origins ${(input.origins ?? ["historical"]).join(", ")}; protocol versions ${diagnostics.protocolVersions.join(", ") || "none"}`,
     `- Decisions ${diagnostics.decided}; insufficient_evidence ${diagnostics.unassessable}`,
     "",
   );

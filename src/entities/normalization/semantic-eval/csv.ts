@@ -24,6 +24,9 @@ import { ValidationError } from "./validate";
 export const BLIND_COLUMNS = [
   "example_id",
   "protocol_version",
+  "source_id",
+  "source_url",
+  "source_published_at",
   "language",
   "family",
   "excerpt",
@@ -37,7 +40,6 @@ export const BLIND_COLUMNS = [
   "verdict",
   "canonical_id",
   "note",
-  "supersedes",
 ] as const;
 
 export const REVEAL_ONLY_COLUMNS = [
@@ -150,6 +152,9 @@ function exampleRow(
   const base = [
     e.exampleId,
     protocolVersion,
+    e.source.id,
+    e.source.url ?? "",
+    e.source.publishedAt ?? "",
     e.language,
     e.family,
     e.excerpt,
@@ -163,7 +168,6 @@ function exampleRow(
     d?.blindVerdict ?? "",
     d?.blindCanonicalId ?? "",
     d?.blindNote ?? "",
-    d?.supersedes ?? "",
   ];
   if (step === "blind") return base;
   return [
@@ -209,13 +213,15 @@ export function exportRevealCsv(input: RevealCsvInput): string {
     const row = exampleRow(e, dec.get(e.exampleId), "reveal");
     const p = pred.get(e.exampleId);
     const s = sugg.get(e.exampleId);
-    row[16] = p?.result.status ?? "";
-    row[17] = p?.result.canonicalId ?? "";
-    row[18] = (p?.result.candidateCanonicalIds ?? []).join(";");
-    row[19] = s?.proposed.verdict ?? "";
-    row[20] = s?.proposed.canonicalId ?? "";
-    row[21] = s?.rationale ?? "";
-    row[22] = (s?.missingInfo ?? []).join(";");
+    const at = (name: string): number =>
+      REVEAL_COLUMNS.indexOf(name as (typeof REVEAL_COLUMNS)[number]);
+    row[at("resolver_status")] = p?.result.status ?? "";
+    row[at("resolver_canonical_id")] = p?.result.canonicalId ?? "";
+    row[at("resolver_candidates")] = (p?.result.candidateCanonicalIds ?? []).join(";");
+    row[at("ai_verdict")] = s?.proposed.verdict ?? "";
+    row[at("ai_canonical_id")] = s?.proposed.canonicalId ?? "";
+    row[at("ai_rationale")] = s?.rationale ?? "";
+    row[at("ai_missing_info")] = (s?.missingInfo ?? []).join(";");
     return row;
   });
   return encodeCsv([[...REVEAL_COLUMNS], ...rows]);
@@ -333,10 +339,6 @@ export function importCsv(csv: string, options: ImportOptions): ImportResult {
         }
         if (revised) revisionReason = reason;
       }
-      const supersedes = get(row, "supersedes").trim();
-      if (supersedes.length > 0 && !/^[0-9a-f]{64}$/.test(supersedes)) {
-        throw new ValidationError("invalid supersedes id");
-      }
       const revisedAfterReveal =
         finalVerdict !== blindVerdict || finalCanonicalId !== blindCanonicalId;
       decisions.push({
@@ -352,7 +354,6 @@ export function importCsv(csv: string, options: ImportOptions): ImportResult {
         reviewedAt: options.reviewedAt,
         protocolVersion,
         status: "human_reviewed",
-        ...(supersedes.length > 0 ? { supersedes } : {}),
       });
     } catch (e) {
       const msg = e instanceof ValidationError ? e.message : (e as Error).message;

@@ -20,9 +20,11 @@ import {
   type EvalProtocolVersion,
   type Example,
   type ExampleContext,
+  type CellStat,
   type ExampleSource,
   type Exclusion,
   type FrameRow,
+  type SamplingManifest,
   type PriorAnalystReview,
   type Language,
   type Origin,
@@ -58,7 +60,9 @@ type KnownKey =
   | keyof FrameRow
   | keyof PriorAnalystReview
   | keyof Suggestion["proposed"]
-  | keyof SemanticResolutionResult;
+  | keyof SemanticResolutionResult
+  | keyof SamplingManifest
+  | keyof CellStat;
 type LooseRecord = { [K in KnownKey]?: unknown };
 
 function isObject(x: unknown): x is LooseRecord {
@@ -294,12 +298,6 @@ export function validateDecision(value: unknown): Decision {
   if (!actuallyRevised && revisionReason !== undefined) {
     fail(`${w}.revisionReason`, "must be absent when nothing was revised");
   }
-  let supersedes: string | undefined;
-  if (o.supersedes !== undefined) {
-    supersedes = str(`${w}.supersedes`, o.supersedes);
-    if (!HEX64.test(supersedes)) fail(`${w}.supersedes`, "must be a 64-char lowercase hex sha256");
-    if (supersedes === exampleId) fail(`${w}.supersedes`, "cannot supersede itself");
-  }
   return {
     exampleId,
     blindVerdict,
@@ -313,7 +311,6 @@ export function validateDecision(value: unknown): Decision {
     reviewedAt: isoDate(`${w}.reviewedAt`, o.reviewedAt),
     protocolVersion: protocol(`${w}.protocolVersion`, o.protocolVersion),
     status: "human_reviewed",
-    ...(supersedes !== undefined ? { supersedes } : {}),
   };
 }
 
@@ -368,6 +365,34 @@ export function validateExclusion(value: unknown): Exclusion {
     fail(`${w}.count`, "must be a non-negative integer");
   }
   return { reason: str(`${w}.reason`, value.reason, { min: 1 }), count: count as number };
+}
+
+/**
+ * The drawn sample lives in the manifest, not in examples.jsonl (which is the whole frozen
+ * frame). Review tooling must filter by this set before picking cards, otherwise it can export
+ * examples the metrics layer later refuses as out-of-sample. Rejects a missing or malformed
+ * manifest rather than silently falling back to the full population.
+ */
+export function drawnIdsFromManifest(value: unknown): Set<string> {
+  const w = "SamplingManifest";
+  if (!isObject(value)) fail(w, "expected an object");
+  if (!Array.isArray(value.cells)) fail(`${w}.cells`, "expected an array");
+  const ids = new Set<string>();
+  value.cells.forEach((cell, i) => {
+    if (!isObject(cell)) fail(`${w}.cells[${i}]`, "expected an object");
+    const list = cell.sampledExampleIds;
+    if (!Array.isArray(list)) {
+      fail(`${w}.cells[${i}].sampledExampleIds`, "expected an array");
+    }
+    list.forEach((id, j) => {
+      if (typeof id !== "string" || !HEX64.test(id)) {
+        fail(`${w}.cells[${i}].sampledExampleIds[${j}]`, "invalid example id");
+      }
+      ids.add(id);
+    });
+  });
+  if (ids.size === 0) fail(`${w}.cells`, "no drawn example ids");
+  return ids;
 }
 
 // ─── JSONL ─────────────────────────────────────────────────────────────────

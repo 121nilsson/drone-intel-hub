@@ -21,6 +21,7 @@ import {
   ValidationError,
   canonicalJson,
   checkDecisionSet,
+  drawnIdsFromManifest,
   parseJsonl,
   sameDecision,
   toJsonl,
@@ -250,6 +251,13 @@ describe("review CSV", () => {
     const csv = exportBlindCsv([e]);
     for (const col of REVEAL_ONLY_COLUMNS) expect(csv).not.toContain(col);
     expect(csv.split("\n")[0]).toBe(BLIND_COLUMNS.join(","));
+    // Provenance helps the reviewer trace evidence without revealing resolver or AI output.
+    const table = parseCsv(csv);
+    const header = table[0]!;
+    const row = table[1]!;
+    expect(row[header.indexOf("source_id")]).toBe("dispatch-1");
+    expect(row[header.indexOf("source_url")]).toBe("https://example.test/a");
+    expect(row[header.indexOf("source_published_at")]).toBe("");
   });
 
   it("reveal schema adds resolver/AI columns and a blank final verdict", () => {
@@ -362,6 +370,26 @@ describe("review CSV", () => {
     expect(decisions[0]!.blindVerdict).toBe("resolve");
     expect(decisions[0]!.finalVerdict).toBe("resolve");
     expect(decisions[0]!.revisedAfterReveal).toBe(false);
+  });
+});
+
+describe("manifest drawn ids", () => {
+  it("extracts the drawn sample from cells", () => {
+    const other = sha256Hex("example-2");
+    expect(
+      drawnIdsFromManifest({
+        cells: [{ sampledExampleIds: [ID] }, { sampledExampleIds: [other] }],
+      }),
+    ).toEqual(new Set([ID, other]));
+  });
+
+  it("rejects a missing, malformed or empty drawn sample", () => {
+    expect(() => drawnIdsFromManifest({})).toThrow(/cells/);
+    expect(() => drawnIdsFromManifest({ cells: [{}] })).toThrow(/sampledExampleIds/);
+    expect(() =>
+      drawnIdsFromManifest({ cells: [{ sampledExampleIds: ["not-a-hex-id"] }] }),
+    ).toThrow(/invalid example id/);
+    expect(() => drawnIdsFromManifest({ cells: [] })).toThrow(/no drawn example ids/);
   });
 });
 

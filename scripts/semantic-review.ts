@@ -14,6 +14,7 @@
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import {
+  encodeCsv,
   exportBlindCsv,
   exportRevealCsv,
   importCsv,
@@ -26,6 +27,7 @@ import type {
   Suggestion,
 } from "../src/entities/normalization/semantic-eval/types";
 import {
+  drawnIdsFromManifest,
   parseJsonl,
   toJsonl,
   validateDecision,
@@ -44,6 +46,7 @@ const value = (flag: string, fallback: string): string => {
 const DATA_DIR = resolve("src/test/fixtures/semantic-eval");
 const OUT_DIR = resolve("scripts/output");
 const examplesPath = resolve(value("--examples", resolve(DATA_DIR, "examples.jsonl")));
+const manifestPath = resolve(value("--manifest", resolve(dirname(examplesPath), "manifest.json")));
 const predictionsPath = resolve(value("--predictions", resolve(DATA_DIR, "predictions.jsonl")));
 const suggestionsPath = resolve(value("--suggestions", resolve(DATA_DIR, "suggestions.jsonl")));
 const decisionsPath = resolve(value("--decisions", resolve(DATA_DIR, "decisions.jsonl")));
@@ -52,11 +55,27 @@ function readOrEmpty(path: string): string {
   return existsSync(path) ? readFileSync(path, "utf8") : "";
 }
 
+function loadDrawnIds(): Set<string> {
+  if (!existsSync(manifestPath)) {
+    throw new Error(`missing ${manifestPath} — run the sampler first`);
+  }
+  try {
+    return drawnIdsFromManifest(JSON.parse(readFileSync(manifestPath, "utf8")));
+  } catch (e) {
+    throw new Error(`invalid manifest ${manifestPath}: ${(e as Error).message}`);
+  }
+}
+
 function loadExamples(): Example[] {
   if (!existsSync(examplesPath)) {
     throw new Error(`missing ${examplesPath} — run the sampler first`);
   }
-  return parseJsonl(readFileSync(examplesPath, "utf8"), validateExample, "examples.jsonl");
+  // examples.jsonl is the whole frozen frame. Only manifest-selected examples may be reviewed;
+  // S5 rejects decisions outside that set, so exporting from all examples would be a dead end.
+  const drawn = loadDrawnIds();
+  return parseJsonl(readFileSync(examplesPath, "utf8"), validateExample, "examples.jsonl").filter(
+    (e) => drawn.has(e.exampleId),
+  );
 }
 
 function loadPredictions(): Prediction[] {
@@ -114,9 +133,17 @@ function exportQueue(): void {
     const e = byId.get(id);
     return e === undefined ? [] : [e];
   });
+  if (selected.length !== ids.length) {
+    throw new Error(
+      `blind queue has ${ids.length - selected.length} id(s) outside the manifest's drawn sample; re-export the blind queue`,
+    );
+  }
   const path = resolve(OUT_DIR, "semantic-review-reveal.csv");
-  writeFileSync(
-    path,
+  // The filled blind CSV is the source of truth for the blind verdict at this point: it may not
+  // have been imported yet. Copy its answers into the reveal sheet so import never sees blanks.
+  const blindRows = new Map(table.slice(1).map((r) => [r[idIdx]!, r] as const));
+  const answerColumns = ["verdict", "canonical_id", "note"];
+  const revealTable = parseCsv(
     exportRevealCsv({
       examples: selected,
       predictions: loadPredictions(),
@@ -124,6 +151,17 @@ function exportQueue(): void {
       existing: loadDecisions(),
     }),
   );
+  const revealHeader = revealTable[0]!;
+  for (const row of revealTable.slice(1)) {
+    const blindRow = blindRows.get(row[revealHeader.indexOf("example_id")]!);
+    if (!blindRow) continue;
+    for (const name of answerColumns) {
+      const to = revealHeader.indexOf(name);
+      const from = header.indexOf(name);
+      if (to >= 0 && from >= 0) row[to] = blindRow[from]!;
+    }
+  }
+  writeFileSync(path, encodeCsv(revealTable));
   process.stdout.write(`wrote ${selected.length} reveal card(s) to ${path}\n`);
 }
 
@@ -141,8 +179,7 @@ function importQueue(): void {
   const existing = loadDecisions();
   const merged = new Map(existing.map((d) => [d.exampleId, d]));
   for (const d of loaded.decisions) merged.set(d.exampleId, d);
-  // `supersedes` is reserved for a re-review that names an EARLIER decision. A repeated import
-  // replaces the active decision for that example; the previous record is not silently kept.
+  // 3.2 keeps one active decision per example. Re-review replaces it; no history is retained.
   const decisions = [...merged.values()]
     .map(validateDecision)
     .sort((a, b) => a.exampleId.localeCompare(b.exampleId));

@@ -184,6 +184,26 @@ describe("primary metrics", () => {
     expect(result.diagnostics.unassessable).toBe(1);
   });
 
+  it("keeps fixture-origin examples out of historical metrics unless explicitly included", () => {
+    const historical = unit(1000, "resolved");
+    const fixture = unit(1001, "resolved", { origin: "fixture" });
+    const base = input({
+      examples: [historical.example, fixture.example],
+      predictions: [historical.prediction, fixture.prediction],
+      decisions: [
+        decision(historical.example.exampleId, "resolve", "speed.max"),
+        decision(fixture.example.exampleId, "withhold_context"),
+      ],
+    });
+    const defaultMetrics = computeMetrics(base);
+    expect(defaultMetrics.diagnostics.decided).toBe(1);
+    expect(defaultMetrics.precision.resolution.bound.upperCount).toBe(0);
+
+    const explicit = computeMetrics({ ...base, origins: ["historical", "fixture"] });
+    expect(explicit.diagnostics.decided).toBe(2);
+    expect(explicit.precision.resolution.bound.upperCount).toBeGreaterThanOrEqual(1);
+  });
+
   it("does not count an insufficient_evidence verdict twice in conditional recall", () => {
     const w1 = unit(600, "withheld");
     const w2 = unit(601, "withheld");
@@ -298,13 +318,14 @@ describe("primary metrics", () => {
   });
 
   it("refuses decisions outside the seeded sample", () => {
-    const outside = decision(sha256Hex("not-drawn"), "resolve", "speed.max");
+    // The example is in the frame and eligible by origin, but was not drawn.
+    const outside = unit(9999, "resolved");
     expect(() =>
       computeMetrics(
         input({
-          examples: all.map((u) => u.example),
-          predictions: all.map((u) => u.prediction),
-          decisions: [outside],
+          examples: [...all.map((u) => u.example), outside.example],
+          predictions: [...all.map((u) => u.prediction), outside.prediction],
+          decisions: [decision(outside.example.exampleId, "resolve", "speed.max")],
           sampledExampleIds: [resolved[0]!.example.exampleId],
         }),
       ),

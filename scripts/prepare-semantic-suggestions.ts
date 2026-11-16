@@ -16,6 +16,7 @@ import { CANONICAL_CONCEPTS } from "../src/entities/normalization/canonical-mani
 import type { Suggestion } from "../src/entities/normalization/semantic-eval/types";
 import { VERDICTS } from "../src/entities/normalization/semantic-eval/types";
 import {
+  drawnIdsFromManifest,
   parseJsonl,
   toJsonl,
   validateExample,
@@ -33,6 +34,7 @@ const useAi = args.includes("--ai");
 const offline = args.includes("--offline");
 
 const examplesPath = resolve(value("--examples", "src/test/fixtures/semantic-eval/examples.jsonl"));
+const manifestPath = resolve(value("--manifest", resolve(dirname(examplesPath), "manifest.json")));
 const outPath = resolve(value("--out", "src/test/fixtures/semantic-eval/suggestions.jsonl"));
 const limit = Number(value("--limit", "72"));
 const model = value("--model", process.env.TIER2_MODEL ?? "tier2");
@@ -50,12 +52,25 @@ if (!existsSync(examplesPath)) {
   process.stderr.write(`missing ${examplesPath} — run the sampler first\n`);
   process.exit(2);
 }
+let drawnIds: Set<string>;
+try {
+  if (!existsSync(manifestPath)) throw new Error(`missing ${manifestPath} — run the sampler first`);
+  drawnIds = drawnIdsFromManifest(JSON.parse(readFileSync(manifestPath, "utf8")));
+} catch (e) {
+  process.stderr.write(`${(e as Error).message}\n`);
+  process.exit(2);
+}
+
+// examples.jsonl is the whole frozen frame. Only manifest-selected examples may be reviewed.
 const examples = parseJsonl(readFileSync(examplesPath, "utf8"), validateExample, "examples.jsonl")
+  .filter((e) => drawnIds.has(e.exampleId))
   .slice()
   .sort((a, b) => a.exampleId.localeCompare(b.exampleId))
   .slice(0, limit);
 if (examples.length === 0) {
-  process.stderr.write(`no examples in ${examplesPath} — run the sampler first\n`);
+  process.stderr.write(
+    `no drawn examples in ${examplesPath} — check the manifest and sampler output\n`,
+  );
   process.exit(2);
 }
 

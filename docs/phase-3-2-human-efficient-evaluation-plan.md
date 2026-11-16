@@ -4,18 +4,18 @@
 
 ## Implemented infrastructure (S0–S5)
 
-Pure modules live in `src/entities/normalization/semantic-eval/` (`types`, `validate`, `csv`, `sampling`, `metrics`, plus the S0 `replay`). CLIs and generated evidence:
+Pure modules live in `src/entities/normalization/semantic-eval/` (`types`, `validate`, `csv`, `sampling`, `metrics`, `verify`, plus the S0 `replay`). CLIs and generated evidence:
 
 ```
 npx tsx scripts/sample-historical-evaluation-set.ts --apply   # freeze frame, whole-frame replay, SRS sample
 npx tsx scripts/prepare-semantic-suggestions.ts --ai --apply --model <id>   # real AI suggestions (offline mode exists)
 npx tsx scripts/semantic-review.ts export --step blind --limit 5            # fill in the five cards
-npx tsx scripts/semantic-review.ts export --step reveal                     # same ids, with resolver/AI revealed
+npx tsx scripts/semantic-review.ts export --step reveal                     # reads the filled blind CSV, adds resolver/AI
 npx tsx scripts/semantic-review.ts import --file <the filled CSV> --reviewer "Name"
-npx tsx scripts/evaluate-semantic-registry.ts --report                      # S5 evidence-labelled metrics
+npx tsx scripts/evaluate-semantic-registry.ts --report                      # S5 evidence-labelled metrics (historical only)
 ```
 
-No `decisions.jsonl` is committed: human labels are created only by the reviewer. Re-running the sampler and replay is bit-identical and the generators write prettier-formatted reports, so `npm run green` stays green. The adversarial property checks are the S0 invariant suite (INV-01–INV-13); items promoted from it use `origin: "adversarial_ai"` and are reported separately.
+No `decisions.jsonl` is committed: human labels are created only by the reviewer. `examples.jsonl` is the whole frozen frame; S3 and S4 read the `manifest.json` next to it (or `--manifest`) and process only the drawn sample. S5 requires that manifest and verifies the file hashes, frame id, snapshot/version stamps, resolver statuses, cell counts and drawn ids before emitting a report; there is no fallback to current versions or to an unverified sample. Metrics use `origin: "historical"` by default — the committed demo frame is synthetic (`fixture`), so evaluating it needs `--origins fixture` and never produces a historical claim. Re-review replaces the one active decision per example; no history chain is kept in 3.2. Re-running the sampler and replay is bit-identical and the generators write prettier-formatted reports, so `npm run green` stays green. The adversarial property checks are the S0 invariant suite (INV-01–INV-13); items promoted from it use `origin: "adversarial_ai"` and are reported separately.
 
 ## Design principle
 
@@ -82,7 +82,7 @@ Four record kinds, separate files, never merged in place:
 
 `Prediction` (resolver): `exampleId`, full `SemanticResolutionResult`, `snapshotHash`, `resolverVersion`.
 
-**States:** `unreviewed` → `suggested` → `human_reviewed`. `adjudicated` reserved (needs a second reviewer); a re-review is a new Decision with `supersedes`.
+**States:** `unreviewed` → `suggested` → `human_reviewed`. `adjudicated` is reserved (needs a second reviewer). One active Decision is kept per example: importing a re-review replaces it, and no historical re-review chain is retained in 3.2 (a `supersedes` chain would need per-decision IDs, deferred with the DB-backed run store in 3.4).
 
 ### Annotation rules (protocol v1, one page)
 
