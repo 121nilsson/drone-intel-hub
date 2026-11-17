@@ -24,6 +24,7 @@ import {
   stratifiedUpperBound,
   type StratumSample,
 } from "../../drone/audit-statistics";
+import { FAMILIES, sourceConcentration } from "./sampling";
 import {
   aiAgreementRate,
   blindVsFinalChangeRate,
@@ -31,13 +32,17 @@ import {
   checkDecisionSet,
 } from "./validate";
 import {
+  LANGUAGES,
   ORIGINS,
+  RESOLVER_STATUSES,
   isWithholdingVerdict,
+  stratumKey,
   type Decision,
   type EvidenceLabel,
   type Example,
   type Origin,
   type Prediction,
+  type SamplingManifest,
   type Suggestion,
 } from "./types";
 
@@ -482,6 +487,47 @@ export interface MetricsContext {
   readonly topShare: number;
 }
 
+/**
+ * Derive the report's design/coverage figures for exactly the examples the metrics used, not for
+ * the whole manifest. Otherwise a historical-only report could print coverage and concentration
+ * that include fixture or adversarial rows.
+ */
+export function metricsContextFor(
+  manifest: SamplingManifest,
+  selectedExamples: readonly Example[],
+): MetricsContext {
+  const selectedIds = new Set(selectedExamples.map((e) => e.exampleId));
+  const byCell = new Map<string, Example[]>();
+  for (const e of selectedExamples) byCell.set(e.stratum, [...(byCell.get(e.stratum) ?? []), e]);
+  const cells = manifest.cells.flatMap((c) => {
+    const group = byCell.get(c.stratum) ?? [];
+    if (group.length === 0) return [];
+    return [
+      {
+        stratum: c.stratum,
+        population: group.length,
+        drawn: c.sampledExampleIds.filter((id) => selectedIds.has(id)).length,
+      },
+    ];
+  });
+  const covered = cells.filter((c) => c.drawn > 0).reduce((sum, c) => sum + c.population, 0);
+  const possible: string[] = [];
+  for (const language of LANGUAGES)
+    for (const family of FAMILIES)
+      for (const resolverStatus of RESOLVER_STATUSES)
+        possible.push(stratumKey({ language, family, resolverStatus }));
+  const concentration = sourceConcentration(selectedExamples);
+  return {
+    cells,
+    emptyCells: possible.filter((k) => !byCell.has(k)),
+    unsampledCells: cells.filter((c) => c.drawn === 0).map((c) => c.stratum),
+    coveredFraction: selectedExamples.length === 0 ? 0 : covered / selectedExamples.length,
+    exclusions: manifest.exclusions,
+    concentration: concentration.rows,
+    topShare: concentration.topShare,
+  };
+}
+
 export interface MetricsInput {
   readonly examples: readonly Example[];
   readonly predictions: readonly Prediction[];
@@ -529,6 +575,9 @@ export function computeMetrics(input: MetricsInput): MetricsResult {
   // Fixtures and adversarial items must never be pooled into historical quality figures by
   // accident. Filtering here also drops their decisions before any bound is computed.
   const examples = input.examples.filter((e) => origins.includes(e.origin));
+  if (examples.length === 0) {
+    throw new Error(`no examples for origins ${origins.join(", ")}; refusing an empty report`);
+  }
   const eligible = new Set(examples.map((e) => e.exampleId));
   const predictions = input.predictions.filter((p) => eligible.has(p.exampleId));
   const decisions = input.decisions.filter((d) => eligible.has(d.exampleId));

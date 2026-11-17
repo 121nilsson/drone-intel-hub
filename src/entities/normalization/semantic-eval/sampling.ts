@@ -108,7 +108,13 @@ export function classifyFamily(rawKey: string, rawLabel?: string): string {
 
 const norm = (s: string): string => s.normalize("NFKC").trim().replace(/\s+/g, " ").toLowerCase();
 
-/** Identical evidence collapses before the frame is frozen. */
+/**
+ * Identical evidence collapses before the frame is frozen. The rule is intentionally
+ * source-independent: normalized quote + key + value + unit only. Two outlets carrying the same
+ * syndicated measurement therefore become one unit, while two genuinely independent observations
+ * that happen to share the exact wording also collapse. That is the accepted rule for this pilot;
+ * source and sourceClusterId are reported separately instead of entering the evidence key.
+ */
 export function evidenceClusterIdFor(row: FrameRow): string {
   return sha256Hex(
     [norm(row.excerpt), norm(row.rawKey), norm(row.rawValue ?? ""), norm(row.rawUnit ?? "")].join(
@@ -178,7 +184,20 @@ export function freezeFrame(rows: readonly FrameRow[], options: FreezeOptions): 
       addExclusion(exclusions, "empty_excerpt");
       continue;
     }
-    if (row.publishedAt !== undefined && row.publishedAt > cutoff) {
+    // Compare instants, not strings: an offset timestamp can be before the UTC cutoff even when
+    // its local calendar date looks later (and vice versa).
+    if (row.publishedAt === undefined) {
+      addExclusion(exclusions, "missing_published_at");
+      continue;
+    }
+    const publishedMs = Date.parse(row.publishedAt);
+    const cutoffMs = Date.parse(cutoff);
+    if (Number.isNaN(cutoffMs)) throw new Error(`invalid cutoff: ${cutoff}`);
+    if (Number.isNaN(publishedMs)) {
+      addExclusion(exclusions, "invalid_published_at");
+      continue;
+    }
+    if (publishedMs > cutoffMs) {
       addExclusion(exclusions, "after_cutoff");
       continue;
     }

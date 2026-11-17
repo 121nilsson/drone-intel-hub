@@ -3,6 +3,7 @@ import { sha256Hex } from "@/entities/normalization/sha256";
 import {
   TARGETS,
   computeMetrics,
+  metricsContextFor,
   renderMetricsReport,
   requiredSampleSize,
   type MetricsInput,
@@ -11,6 +12,7 @@ import {
   EVAL_PROTOCOL_VERSION,
   SEMANTIC_EVAL_SCHEMA_VERSION,
   type Decision,
+  type SamplingManifest,
   type Example,
   type Prediction,
   type Verdict,
@@ -330,6 +332,62 @@ describe("primary metrics", () => {
         }),
       ),
     ).toThrow(/outside the seeded sample/);
+  });
+});
+
+describe("origin-specific report context", () => {
+  it("derives coverage, cells and concentration from the selected origins only", () => {
+    const historical = unit(1, "resolved", { family: "speed" });
+    const fixture = unit(2, "resolved", { family: "range", origin: "fixture" });
+    const manifest: SamplingManifest = {
+      manifestVersion: "1.0.0",
+      frameId: "f",
+      seed: "s",
+      cutoff: "2026-11-01T00:00:00Z",
+      ceiling: 72,
+      familyCount: 12,
+      languageCount: 4,
+      resolverStatusCount: 2,
+      resolverVersion: "1.1.0",
+      snapshotHash: SNAP,
+      populationCount: 2,
+      drawnCount: 2,
+      cells: [
+        {
+          stratum: historical.example.stratum,
+          language: "en",
+          family: "speed",
+          resolverStatus: "resolved",
+          population: 1,
+          drawn: 1,
+          sampledExampleIds: [historical.example.exampleId],
+        },
+        {
+          stratum: fixture.example.stratum,
+          language: "en",
+          family: "range",
+          resolverStatus: "resolved",
+          population: 1,
+          drawn: 1,
+          sampledExampleIds: [fixture.example.exampleId],
+        },
+      ],
+      emptyCells: [],
+      unsampledCells: [],
+      coveredFraction: 1,
+      concentration: [],
+      topShare: 0,
+      exclusions: [],
+      examplesSha256: "a",
+      predictionsSha256: "b",
+    };
+    const context = metricsContextFor(manifest, [historical.example]);
+    expect(context.cells).toEqual([
+      { stratum: historical.example.stratum, population: 1, drawn: 1 },
+    ]);
+    expect(context.coveredFraction).toBe(1);
+    expect(context.concentration).toHaveLength(1);
+    expect(context.emptyCells).toContain(fixture.example.stratum);
   });
 });
 

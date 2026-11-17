@@ -60,6 +60,17 @@ if (!Number.isSafeInteger(ceiling) || ceiling < 0) {
   process.stderr.write("--ceiling must be a non-negative integer\n");
   process.exit(2);
 }
+if (ceiling > PILOT_CEILING) {
+  if (!args.includes("--allow-ceiling-override")) {
+    process.stderr.write(
+      `--ceiling ${ceiling} exceeds the Phase 3.2 pilot ceiling of ${PILOT_CEILING}. Expansion is a decision after G3; pass --allow-ceiling-override only if you are leaving pilot mode.\n`,
+    );
+    process.exit(2);
+  }
+  process.stderr.write(
+    `WARNING: ceiling ${ceiling} exceeds the pilot ceiling; leaving pilot mode.\n`,
+  );
+}
 
 const rows: FrameRow[] = parseJsonl(
   readFileSync(inPath, "utf8"),

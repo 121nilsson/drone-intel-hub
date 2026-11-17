@@ -89,6 +89,27 @@ describe("frame classifier and ids", () => {
 });
 
 describe("frame freeze and whole-frame replay", () => {
+  it("documented dedupe rule: identical evidence from two sources collapses", () => {
+    const shared = {
+      rawKey: "max_speed",
+      rawValue: "120",
+      rawUnit: "km/h",
+      excerpt: "Maximum speed 120 km/h was reported for the airframe.",
+    };
+    const built = frame([
+      row({ ...shared, sourceId: "outlet-a" }),
+      row({ ...shared, sourceId: "outlet-b" }),
+    ]);
+    expect(built.examples).toHaveLength(1);
+    expect(built.exclusions).toContainEqual({ reason: "duplicate_evidence", count: 1 });
+    // Distinct measurements in one source are still kept.
+    const distinct = frame([
+      row({ ...shared, sourceId: "outlet-a" }),
+      row({ ...shared, sourceId: "outlet-a", rawValue: "130", occurrenceIndex: 1 }),
+    ]);
+    expect(distinct.examples).toHaveLength(2);
+  });
+
   it("dedupes identical evidence but keeps every distinct attribute of one document", () => {
     const rows = [
       row(),
@@ -120,6 +141,21 @@ describe("frame freeze and whole-frame replay", () => {
     );
     expect(built.predictions[0]!.result.snapshotHash).toBe(built.predictions[0]!.snapshotHash);
     expect(FRAME_CUTOFF).toBe("2026-11-01T00:00:00Z");
+  });
+
+  it("compares the cutoff as a UTC instant and excludes undated rows", () => {
+    const before = freezeFrame(
+      [
+        row({ publishedAt: "2026-11-01T00:30:00+02:00", rawValue: "1" }), // 31 Oct 22:30 UTC
+        row({ publishedAt: "2026-10-31T23:30:00-02:00", rawValue: "2" }), // 1 Nov 01:30 UTC
+        row({ publishedAt: undefined, rawValue: "3" }),
+      ],
+      { frameId: "f" },
+    );
+    expect(before.units).toHaveLength(1);
+    expect(before.units[0]!.rawValue).toBe("1");
+    expect(before.exclusions).toContainEqual({ reason: "after_cutoff", count: 1 });
+    expect(before.exclusions).toContainEqual({ reason: "missing_published_at", count: 1 });
   });
 
   it("freezes the same frame regardless of input row order", () => {

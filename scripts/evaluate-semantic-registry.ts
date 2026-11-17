@@ -29,9 +29,9 @@ import {
 import { UNIT_NORMALIZER_VERSION } from "../src/entities/normalization/units";
 import {
   computeMetrics,
+  metricsContextFor,
   renderMetricsReport,
 } from "../src/entities/normalization/semantic-eval/metrics";
-import type { MetricsContext } from "../src/entities/normalization/semantic-eval/metrics";
 import type { Origin, SamplingManifest } from "../src/entities/normalization/semantic-eval/types";
 import { verifyEvaluationInputs } from "../src/entities/normalization/semantic-eval/verify";
 import {
@@ -135,6 +135,14 @@ if (args.includes("--report")) {
     }
     const manifest = parsedManifest as SamplingManifest;
     const manifestHash = sha256Hex(canonicalJson(manifest));
+    const origins = value("--origins", "historical")
+      .split(",")
+      .map((o) => o.trim())
+      .filter((o) => o.length > 0) as Origin[];
+    const selectedExamples = examples.filter((e) => origins.includes(e.origin));
+    if (selectedExamples.length === 0) {
+      throw new Error(`no examples for origins ${origins.join(", ")}; refusing an empty report`);
+    }
     const metricsInput = {
       examples,
       predictions,
@@ -148,20 +156,9 @@ if (args.includes("--report")) {
       resolverVersion: manifest.resolverVersion,
       manifestHash,
       pilot: true,
-      origins: value("--origins", "historical")
-        .split(",")
-        .map((o) => o.trim())
-        .filter((o) => o.length > 0) as Origin[],
+      origins,
       allowMixedProtocol: args.includes("--allow-mixed-protocol"),
-      context: {
-        cells: manifest.cells,
-        emptyCells: manifest.emptyCells,
-        unsampledCells: manifest.unsampledCells,
-        coveredFraction: manifest.coveredFraction,
-        exclusions: manifest.exclusions,
-        concentration: manifest.concentration,
-        topShare: manifest.topShare,
-      },
+      context: metricsContextFor(manifest, selectedExamples),
     };
     const reportOut = resolve(value("--report-out", "scripts/output/semantic-metrics.md"));
     const report = renderMetricsReport(metricsInput, computeMetrics(metricsInput));

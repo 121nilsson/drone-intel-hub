@@ -8,8 +8,9 @@
  */
 
 import { sha256Hex } from "../sha256";
+import { drawSample } from "./sampling";
 import type { Decision, Example, Prediction, SamplingManifest } from "./types";
-import { drawnIdsFromManifest } from "./validate";
+import { canonicalJson, drawnIdsFromManifest } from "./validate";
 
 export interface EvaluationInputs {
   readonly manifest: unknown;
@@ -122,6 +123,61 @@ export function verifyEvaluationInputs(input: EvaluationInputs): string[] {
     for (const id of cell.sampledExampleIds) {
       if (!groupIds.has(id)) errors.push(`sampled id ${id} is not in cell ${cell.stratum}`);
     }
+  }
+
+  // Internal consistency is not enough: a tampered manifest can swap drawn ids inside the same
+  // cells and still pass every check above. Re-run the declared SRS and require an exact match.
+  const replay = drawSample(input.examples, {
+    seed: manifest.seed,
+    ceiling: manifest.ceiling,
+  });
+  if (replay.drawnCount !== manifest.drawnCount) {
+    errors.push(
+      `replaying the seed draws ${replay.drawnCount}, manifest says ${manifest.drawnCount}`,
+    );
+  }
+  if (replay.coveredFraction !== manifest.coveredFraction) {
+    errors.push("replayed covered fraction does not match the manifest");
+  }
+  if (
+    canonicalJson(
+      replay.cells.map((c) => ({
+        stratum: c.stratum,
+        population: c.population,
+        drawn: c.drawn,
+        sampledExampleIds: c.sampledExampleIds,
+      })),
+    ) !==
+    canonicalJson(
+      manifest.cells.map((c) => ({
+        stratum: c.stratum,
+        population: c.population,
+        drawn: c.drawn,
+        sampledExampleIds: c.sampledExampleIds,
+      })),
+    )
+  ) {
+    errors.push("replaying the seed does not reproduce the manifest's cells and drawn ids");
+  }
+  if (
+    canonicalJson([...replay.emptyCells].sort()) !== canonicalJson([...manifest.emptyCells].sort())
+  ) {
+    errors.push("replayed empty cells do not match the manifest");
+  }
+  if (
+    canonicalJson([...replay.unsampledCells].sort()) !==
+    canonicalJson([...manifest.unsampledCells].sort())
+  ) {
+    errors.push("replayed unsampled cells do not match the manifest");
+  }
+  const replayIds = replay.cells.flatMap((c) => c.sampledExampleIds);
+  if (new Set(replayIds).size !== replayIds.length)
+    errors.push("replayed sample has duplicate ids");
+  if (new Set(replay.cells.map((c) => c.stratum)).size !== replay.cells.length) {
+    errors.push("replayed sample has duplicate strata");
+  }
+  if (replayIds.length !== replay.drawnCount) {
+    errors.push("replayed cell draw counts do not sum to drawnCount");
   }
 
   for (const d of input.decisions) {

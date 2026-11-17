@@ -6,6 +6,7 @@ import type {
   Prediction,
   SamplingManifest,
 } from "@/entities/normalization/semantic-eval/types";
+import { drawSample } from "@/entities/normalization/semantic-eval/sampling";
 import { toJsonl } from "@/entities/normalization/semantic-eval/validate";
 import {
   verifyEvaluationInputs,
@@ -74,6 +75,7 @@ function inputs(over: Partial<EvaluationInputs> = {}): EvaluationInputs {
   const predictions = [prediction()];
   const examplesText = toJsonl(examples);
   const predictionsText = toJsonl(predictions);
+  const replay = drawSample(examples, { seed: "seed", ceiling: 72 });
   const manifest: SamplingManifest = {
     manifestVersion: "1.0.0",
     frameId: examples[0]!.frameId,
@@ -98,9 +100,9 @@ function inputs(over: Partial<EvaluationInputs> = {}): EvaluationInputs {
         sampledExampleIds: [ID],
       },
     ],
-    emptyCells: [],
-    unsampledCells: [],
-    coveredFraction: 1,
+    emptyCells: replay.emptyCells,
+    unsampledCells: replay.unsampledCells,
+    coveredFraction: replay.coveredFraction,
     concentration: [],
     topShare: 0,
     exclusions: [],
@@ -161,6 +163,49 @@ describe("evaluation input verification", () => {
         examples: [example({ resolverStatus: "withheld", stratum: "en|speed|withheld" })],
       }),
     ).toContain(`example ${ID} resolverStatus does not match its prediction`);
+  });
+
+  it("detects a drawn sample that cannot be reproduced from the declared seed", () => {
+    const base = inputs();
+    const two = example({ exampleId: sha256Hex("example-2") });
+    const examples = [base.examples[0]!, two];
+    const predictions = [base.predictions[0]!, prediction({ exampleId: two.exampleId })];
+    const examplesText = toJsonl(examples);
+    const predictionsText = toJsonl(predictions);
+    const original = base.manifest as SamplingManifest;
+    const replay = drawSample(examples, { seed: original.seed, ceiling: 1 });
+    const trueId = replay.cells[0]!.sampledExampleIds[0]!;
+    const substitutedId =
+      trueId === examples[0]!.exampleId ? two.exampleId : examples[0]!.exampleId;
+    // Both ids are in the same cell, so every internal-consistency check still passes. The file
+    // hashes also still match; only replaying the seed reveals the substituted id.
+    const manifest: SamplingManifest = {
+      ...original,
+      ceiling: 1,
+      populationCount: 2,
+      drawnCount: 1,
+      examplesSha256: sha256Hex(examplesText),
+      predictionsSha256: sha256Hex(predictionsText),
+      cells: [
+        {
+          ...original.cells[0]!,
+          population: 2,
+          sampledExampleIds: [substitutedId],
+        },
+      ],
+    };
+    const violations = verifyEvaluationInputs({
+      ...base,
+      manifest,
+      examples,
+      predictions,
+      decisions: [],
+      examplesText,
+      predictionsText,
+    });
+    expect(violations).toContain(
+      "replaying the seed does not reproduce the manifest's cells and drawn ids",
+    );
   });
 
   it("detects decisions outside the drawn sample", () => {
