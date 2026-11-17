@@ -345,6 +345,7 @@ describe("origin-specific report context", () => {
       seed: "s",
       cutoff: "2026-11-01T00:00:00Z",
       ceiling: 72,
+      pilot: true,
       familyCount: 12,
       languageCount: 4,
       resolverStatusCount: 2,

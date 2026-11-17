@@ -155,7 +155,7 @@ if (args.includes("--report")) {
       snapshotHash: manifest.snapshotHash,
       resolverVersion: manifest.resolverVersion,
       manifestHash,
-      pilot: true,
+      pilot: manifest.pilot,
       origins,
       allowMixedProtocol: args.includes("--allow-mixed-protocol"),
       context: metricsContextFor(manifest, selectedExamples),

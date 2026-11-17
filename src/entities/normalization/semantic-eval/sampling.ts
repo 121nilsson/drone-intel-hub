@@ -498,6 +498,7 @@ export interface SamplingReportInput {
   readonly seed: string;
   readonly cutoff: string;
   readonly ceiling: number;
+  readonly pilot: boolean;
   readonly snapshotHash: string;
   readonly resolverVersion: string;
   readonly sample: SampleResult;
@@ -522,7 +523,7 @@ export function renderSamplingReport(input: SamplingReportInput): string {
     `- Frame: \`${input.frameId}\`, cutoff \`${input.cutoff}\``,
     `- Seed \`${input.seed}\`; snapshot hash \`${input.snapshotHash}\`; resolver version ${input.resolverVersion}`,
     `- Manifest hash \`${input.manifestHash}\``,
-    `- Population ${sample.populationCount}; drawn ${sample.drawnCount}; ceiling ${input.ceiling}`,
+    `- Population ${sample.populationCount}; drawn ${sample.drawnCount}; ceiling ${input.ceiling}; mode ${input.pilot ? "pilot" : "post-pilot expansion"}`,
     `- Covered fraction of population (cells with a draw): ${(sample.coveredFraction * 100).toFixed(1)}%`,
     `- Family cells on the frame: ${FAMILY_COUNT}; languages: ${LANGUAGES.length}; resolver statuses: ${RESOLVER_STATUS_COUNT}`,
     "",

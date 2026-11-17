@@ -4,8 +4,8 @@
 
 - Frame: `9d1107e45d166578a6a75ebfd252b1a7562e0a4cd3ca37ba8cfa7eb5a0f93fab`, cutoff `2026-11-01T00:00:00Z`
 - Seed `drone-intel-hub-phase3-eval-20261115`; snapshot hash `c1494d11c0555a4d4b6b8a7e46c17fd35debfda3a9ab36119ecef0a1db23d19f`; resolver version 1.1.0
-- Manifest hash `b0b20591cdf69aec301a1c756f6ba476402a3e21d2081bd9822a070a28335144`
-- Population 24; drawn 24; ceiling 72
+- Manifest hash `9b6acbc74a2300bb57ccc9cfd20850d5b9c8604905f407b473a2866d81885da4`
+- Population 24; drawn 24; ceiling 72; mode pilot
 - Covered fraction of population (cells with a draw): 100.0%
 - Family cells on the frame: 12; languages: 4; resolver statuses: 2
 

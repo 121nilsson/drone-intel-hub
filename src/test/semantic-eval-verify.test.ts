@@ -82,6 +82,7 @@ function inputs(over: Partial<EvaluationInputs> = {}): EvaluationInputs {
     seed: "seed",
     cutoff: "2026-11-01T00:00:00Z",
     ceiling: 72,
+    pilot: true,
     familyCount: 12,
     languageCount: 4,
     resolverStatusCount: 2,
@@ -163,6 +164,21 @@ describe("evaluation input verification", () => {
         examples: [example({ resolverStatus: "withheld", stratum: "en|speed|withheld" })],
       }),
     ).toContain(`example ${ID} resolverStatus does not match its prediction`);
+  });
+
+  it("independently enforces the pilot ceiling and its declared pilot status", () => {
+    const base = inputs();
+    const original = base.manifest as SamplingManifest;
+    const overCeiling: SamplingManifest = { ...original, ceiling: 500 };
+    expect(verifyEvaluationInputs({ ...base, manifest: overCeiling })).toContain(
+      "manifest ceiling 500 exceeds the pilot ceiling of 72 but pilot mode is still declared",
+    );
+    // A documented departure from pilot mode is accepted when the examples agree.
+    const postPilot: SamplingManifest = { ...overCeiling, pilot: false };
+    const examples = base.examples.map((e) => ({ ...e, isPilot: false }));
+    expect(verifyEvaluationInputs({ ...base, manifest: postPilot, examples })).not.toContain(
+      "manifest ceiling 500 exceeds the pilot ceiling of 72 but pilot mode is still declared",
+    );
   });
 
   it("detects a drawn sample that cannot be reproduced from the declared seed", () => {

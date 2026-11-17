@@ -229,6 +229,8 @@ export interface SamplingManifest {
   readonly seed: string;
   readonly cutoff: string;
   readonly ceiling: number;
+  /** False only when the sampler explicitly left pilot mode (ceiling above 72). */
+  readonly pilot: boolean;
   readonly familyCount: number;
   readonly languageCount: number;
   readonly resolverStatusCount: number;

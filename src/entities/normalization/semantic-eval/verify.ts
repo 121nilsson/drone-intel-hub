@@ -9,7 +9,13 @@
 
 import { sha256Hex } from "../sha256";
 import { drawSample } from "./sampling";
-import type { Decision, Example, Prediction, SamplingManifest } from "./types";
+import {
+  PILOT_CEILING,
+  type Decision,
+  type Example,
+  type Prediction,
+  type SamplingManifest,
+} from "./types";
 import { canonicalJson, drawnIdsFromManifest } from "./validate";
 
 export interface EvaluationInputs {
@@ -36,6 +42,8 @@ function asManifest(value: unknown): SamplingManifest | undefined {
   ] as const) {
     if (typeof m[key] !== "string" || (m[key] as string).length === 0) return undefined;
   }
+  if (typeof m["pilot"] !== "boolean") return undefined;
+  if (!Number.isSafeInteger(m["ceiling"]) || (m["ceiling"] as number) < 0) return undefined;
   if (!Array.isArray(m["cells"])) return undefined;
   return value as SamplingManifest;
 }
@@ -51,6 +59,15 @@ export function verifyEvaluationInputs(input: EvaluationInputs): string[] {
   }
   if (sha256Hex(input.predictionsText) !== manifest.predictionsSha256) {
     errors.push("predictions.jsonl does not match manifest.predictionsSha256");
+  }
+  // S5 is the independent check: it does not trust S2 to have enforced the pilot ceiling.
+  if (manifest.ceiling > PILOT_CEILING && manifest.pilot) {
+    errors.push(
+      `manifest ceiling ${manifest.ceiling} exceeds the pilot ceiling of ${PILOT_CEILING} but pilot mode is still declared`,
+    );
+  }
+  if (input.examples.some((e) => (manifest.pilot ? !e.isPilot : e.isPilot))) {
+    errors.push("example isPilot flags do not match the manifest's pilot status");
   }
   if (input.examples.some((e) => e.frameId !== manifest.frameId)) {
     errors.push("an example does not belong to manifest.frameId");

@@ -728,7 +728,7 @@ export function renderMetricsReport(input: MetricsInput, result: MetricsResult):
   if (ctx) {
     lines.push(
       `- ${ctx.cells.length} non-empty cells; ${ctx.emptyCells.length} empty; ${ctx.unsampledCells.length} unsampled non-empty; covered fraction of population ${pct(ctx.coveredFraction)}`,
-      `- Exclusions: ${ctx.exclusions.length === 0 ? "none" : ctx.exclusions.map((e) => `${e.reason} ${e.count}`).join("; ")}`,
+      `- Frame-wide exclusions (all origins, not specific to the metrics' origin filter): ${ctx.exclusions.length === 0 ? "none" : ctx.exclusions.map((e) => `${e.reason} ${e.count}`).join("; ")}`,
       `- Source-cluster concentration (transparency only, not a design-effect correction): top ${ctx.concentration.length} clusters ${pct(ctx.topShare)}`,
     );
   }

@@ -55,6 +55,8 @@ const reportPath = resolve(value("--report", "scripts/output/semantic-sampling.m
 const ceiling = Number(value("--ceiling", String(PILOT_CEILING)));
 const seed = value("--seed", SAMPLING_SEED);
 const cutoff = value("--cutoff", FRAME_CUTOFF);
+// Pilot status follows the configuration, so the report never has to guess from the ceiling.
+const pilot = ceiling <= PILOT_CEILING;
 
 if (!Number.isSafeInteger(ceiling) || ceiling < 0) {
   process.stderr.write("--ceiling must be a non-negative integer\n");
@@ -82,7 +84,7 @@ const built = buildFrame(rows, {
   snapshot: CODE_SEED_SNAPSHOT,
   resolverVersion: SEMANTIC_RESOLVER_VERSION,
   cutoff,
-  isPilot: true,
+  isPilot: pilot,
   defaultOrigin: "historical",
 });
 const frameId = frameIdFor(built.examples);
@@ -98,6 +100,7 @@ const manifest: SamplingManifest = {
   seed,
   cutoff,
   ceiling,
+  pilot,
   familyCount: FAMILY_COUNT,
   languageCount: LANGUAGE_COUNT,
   resolverStatusCount: RESOLVER_STATUS_COUNT,
@@ -121,6 +124,7 @@ const report = renderSamplingReport({
   seed,
   cutoff,
   ceiling,
+  pilot,
   snapshotHash: CODE_SEED_SNAPSHOT.contentHash,
   resolverVersion: SEMANTIC_RESOLVER_VERSION,
   sample,
