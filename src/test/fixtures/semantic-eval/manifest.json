@@ -59,9 +59,9 @@
       "sampledExampleIds": ["cd85f61e8d0af0bbc217f2cb560f987ed1887131cd8078de8b28a702d1f447b9"]
     },
     {
-      "stratum": "en|other_programme_metadata|resolved",
+      "stratum": "en|maneuver|resolved",
       "language": "en",
-      "family": "other_programme_metadata",
+      "family": "maneuver",
       "resolverStatus": "resolved",
       "population": 1,
       "drawn": 1,
@@ -134,9 +134,9 @@
       "sampledExampleIds": ["6abe3a702c3b65561e14136b1af2c1caabfefdbccc0b65a0b376b6e675dd7fd7"]
     },
     {
-      "stratum": "ru|other_programme_metadata|withheld",
+      "stratum": "ru|payload|withheld",
       "language": "ru",
-      "family": "other_programme_metadata",
+      "family": "payload",
       "resolverStatus": "withheld",
       "population": 1,
       "drawn": 1,
@@ -224,8 +224,8 @@
     "en|cost|resolved",
     "en|dimension|withheld",
     "en|endurance|withheld",
-    "en|maneuver|resolved",
     "en|maneuver|withheld",
+    "en|other_programme_metadata|resolved",
     "en|payload|withheld",
     "en|power|withheld",
     "en|speed|withheld",
@@ -243,8 +243,8 @@
     "ru|maneuver|resolved",
     "ru|maneuver|withheld",
     "ru|other_programme_metadata|resolved",
+    "ru|other_programme_metadata|withheld",
     "ru|payload|resolved",
-    "ru|payload|withheld",
     "ru|power|resolved",
     "ru|range|resolved",
     "ru|speed|resolved",
@@ -325,6 +325,6 @@
       "count": 1
     }
   ],
-  "examplesSha256": "a49d1def1103138d3c7b1ab22b388ded49fb7f854c69f7392ff8975e2177f80b",
+  "examplesSha256": "5c35e9eb466d4252c940e1ee9ef6a2e0f13a6f629a93b1a7bd29d0527ac0be8e",
   "predictionsSha256": "c477789ee147f2cd78b284cd3dc856df971b49c6f15f1a5530b4d8db19d59ca6"
 }

@@ -59,16 +59,27 @@ interface FamilyRule {
 
 /**
  * Deterministic keyword classifier, independent of the resolver (no alias rules, no snapshot).
+ * Keys arrive with underscores, hyphens and mixed scripts, so text is delimited-normalised before
+ * matching — otherwise `load_factor` and `боевая_часть` silently land in the long-tail bucket.
  * Order matters: specific families are tested before broad ones (`warhead weight` -> payload,
- * not weight). This is a documented bias — it uses words, not the resolver's concept map.
+ * not weight; `масса боевой части` -> payload, not weight). Documented bias: words, not the
+ * resolver's concept map, and the same rules for every language.
  */
+const classifyText = (s: string): string =>
+  s
+    .normalize("NFKC")
+    .replace(/[_\-.\\/]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+
 const FAMILY_RULES: readonly FamilyRule[] = [
   {
     family: "payload",
     pattern:
-      /warhead|payload|munition|explosive|charge|боев(ая|ої) част|корисн(е|ий) навантаж|навантаж/i,
+      /warhead|payload|munition|explosive|charge|боев(ая|ой|ої) част|боевой части|боєвої частини|корисн(е|ий) навантаж|навантаженн[яи]|навантаж/i,
   },
-  { family: "weight", pattern: /weight|\bmtow\b|takeoff|take-off|mass|мас[аи]|ваг[аи]/i },
+  { family: "weight", pattern: /weight|mtow|take ?off|mass|мас[аи]|ваг[аи]/i },
   {
     family: "speed",
     pattern: /speed|velocity|cruise|dive|\bvne\b|mach|knot|швидкіст|скорост/i,
@@ -94,14 +105,14 @@ const FAMILY_RULES: readonly FamilyRule[] = [
   },
   {
     family: "maneuver",
-    pattern: /load factor|g[- ]?limit|maneuver|manoeuvre|acceleration|перевантаж/i,
+    pattern: /load factor|g[- ]?limit|maximum g|max g|maneuver|manoeuvre|acceleration|перевантаж/i,
   },
   { family: "capacity", pattern: /capacity|fuel|channels|volume|seats|палив|ємніст|емкост|канал/i },
   { family: "cost", pattern: /cost|price|procurement|вартіст|ціна|стоїм/i },
 ];
 
 export function classifyFamily(rawKey: string, rawLabel?: string): string {
-  const text = `${rawKey} ${rawLabel ?? ""}`;
+  const text = classifyText(`${rawKey} ${rawLabel ?? ""}`);
   for (const rule of FAMILY_RULES) if (rule.pattern.test(text)) return rule.family;
   return OTHER_FAMILY;
 }

@@ -54,6 +54,23 @@ describe("frame classifier and ids", () => {
     expect(classifyFamily("something_unheard_of")).toBe("other_programme_metadata");
   });
 
+  it("classifies multilingual, delimiter-heavy attribute names before stratifying", () => {
+    // English
+    expect(classifyFamily("load_factor")).toBe("maneuver");
+    expect(classifyFamily("maximum_g")).toBe("maneuver");
+    expect(classifyFamily("warhead_weight")).toBe("payload");
+    // Russian
+    expect(classifyFamily("боевая_часть")).toBe("payload");
+    expect(classifyFamily("масса_боевой_части")).toBe("payload");
+    expect(classifyFamily("дальность_полета")).toBe("range");
+    // Ukrainian
+    expect(classifyFamily("корисне_навантаження")).toBe("payload");
+    expect(classifyFamily("максимальна_швидкість")).toBe("speed");
+    expect(classifyFamily("навантаження")).toBe("payload");
+    // The classifier never consults the resolver: an unrecognised term stays in the long tail.
+    expect(classifyFamily("zorblax_rating")).toBe("other_programme_metadata");
+  });
+
   it("gives two occurrences of the same attribute in one text two distinct ids", () => {
     const first = row({ occurrenceIndex: 0 });
     const second = row({ occurrenceIndex: 1 });
@@ -141,6 +158,24 @@ describe("frame freeze and whole-frame replay", () => {
     );
     expect(built.predictions[0]!.result.snapshotHash).toBe(built.predictions[0]!.snapshotHash);
     expect(FRAME_CUTOFF).toBe("2026-11-01T00:00:00Z");
+  });
+
+  it("preserves source id, URL and publication date from a real-style frame row", () => {
+    const built = freezeFrame(
+      [
+        row({
+          sourceId: "dispatch-8841",
+          url: "https://example.test/reports/8841",
+          publishedAt: "2026-03-02T09:15:00.000Z",
+        }),
+      ],
+      { frameId: "f" },
+    );
+    expect(built.units[0]!.source).toEqual({
+      id: "dispatch-8841",
+      url: "https://example.test/reports/8841",
+      publishedAt: "2026-03-02T09:15:00.000Z",
+    });
   });
 
   it("compares the cutoff as a UTC instant and excludes undated rows", () => {
