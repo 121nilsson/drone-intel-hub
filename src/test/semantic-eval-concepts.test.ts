@@ -80,16 +80,19 @@ describe("canonical concept reference", () => {
   });
 
   it("includes every id the snapshot resolves via gate 0, even without an alias rule", () => {
-    // CODE_SEED_RULES has no cost rule, but the resolver accepts any manifest id by exact identity.
-    for (const id of ["cost.unit", "guidance.system", "speed.dive"]) {
+    // These ids still have no alias rule, but the resolver accepts any manifest id by identity.
+    for (const id of ["guidance.system", "speed.dive"]) {
       const resolved = CODE_SEED_SNAPSHOT.resolve({ rawKey: id });
       expect(resolved.status, id).toBe("resolved");
       expect(resolved.canonicalId, id).toBe(id);
       expect(isValidCanonicalId(id)).toBe(true);
       expect(canonicalIdsInCatalog(catalog).has(id)).toBe(true);
     }
-    const noRule = catalog.concepts.find((c) => c.id === "cost.unit")!;
-    expect(noRule.aliases).toEqual([]);
+    const cost = CODE_SEED_SNAPSHOT.resolve({ rawKey: "cost.unit" });
+    expect(cost.status).toBe("resolved");
+    expect(cost.canonicalId).toBe("cost.unit");
+    expect(catalog.concepts.find((c) => c.id === "guidance.system")!.aliases).toEqual([]);
+    expect(catalog.concepts.find((c) => c.id === "cost.unit")!.aliases).toContain("unit_cost");
   });
 
   it("is deterministic: same rules and snapshot give the same export", () => {

@@ -191,9 +191,16 @@ const UNKNOWN_PROBES: readonly string[] = [
   "最大幻想速度",
   "x",
   "unit_cost_of_nothing",
+  "zorblax_rating",
+  "total_cost",
+  "programme_cost",
+  "project_cost",
   "range_of_motion_in_yoga",
   "speed.fake",
   "range.hypothetical",
+  "масса",
+  "нагрузка",
+  "боевые_части",
 ];
 
 /** Near-miss canonical identifiers: must not be accepted by Gate 0. */

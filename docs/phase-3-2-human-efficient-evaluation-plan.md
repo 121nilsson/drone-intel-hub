@@ -176,8 +176,34 @@ The three targets are **conditional ratios with different, outcome-defined denom
   2. **Conditional performance — descriptive only, NO confidence bound.** Each metric among _assessable_ units (verdict ≠ `insufficient_evidence`), always printed next to the **coverage rate** (assessable share of the sample, per cell and subpopulation). The denominator of this ratio (how many population units would be assessable) is unknown, so `stratifiedUpperBound()` does not give an exact bound for it, and none is reported. If the unassessable share is material the report states that the conditional figure may be optimistic, because the hardest cases tend to land in `insufficient_evidence`. An exact bound for conditional performance would need its own derivation and a tested estimator — explicitly out of scope for 3.2.
 - **Sample-size reality — simple zero-error cases only:** for a plain ratio in which every sampled unit is assessable, 0 errors in n gives a 95% one-sided error bound of 1 − 0.05^(1/n); that needs n ≥ 299 for a 1% bound (Resolution Precision) and n ≥ 59 for a 5% bound (Withholding Precision). These numbers are **not** the sample sizes needed for the worst-case sensitivity analysis: there each unassessable unit counts as an error, so the usable n shrinks with the unassessable share. With 24 sampled and 0 errors the bound is still ≈11.7%. **No required n is stated for Withholding Recall** until S5 has derived the two-population estimator's behaviour; the tool prints the realised bound and what it would take, not a number guessed in advance.
 - **Scope of every result:** figures describe the **frozen frame only** — historical material up to the cutoff `2026-11-01T00:00:00Z`. They do not establish the same quality for future reports, new languages, new sources or new attributes, and every report says so explicitly.
-- Reports always list N_h/n_h/weights, exclusions + reasons, empty and unsampled cells and covered fraction, blind-vs-final change rate (diagnostic), AI-agreement rate, source-cluster concentration (reported for transparency only; the frame is a fixed finite population sampled at random within strata, so it is **not** used as a design-effect correction of the bounds), protocol versions, snapshot hash, seed, manifest hash. No point estimate appears alone. The primary metrics use `blindVerdict` only. Tier 1 stays 100%.
+- Reports always list N_h/n_h/weights, exclusions + reasons, empty and unsampled cells, blind-vs-final change rate (diagnostic), AI-agreement rate, source-cluster concentration (reported for transparency only; the frame is a fixed finite population sampled at random within strata, so it is **not** used as a design-effect correction of the bounds), protocol versions, snapshot hash, seed, manifest hash. No point estimate appears alone. The primary metrics use `blindVerdict` only. Tier 1 stays 100%.
 - **Refusal conditions for exact bounds:** any non-empty cell without a draw (see coverage rule above), a sample not drawn as a seeded SRS within cells, an `incomplete` search from `stratifiedUpperBound`, or mixed protocol versions. The tool then reports "bound not available: <reason>" instead of a number.
+
+### Coverage vocabulary used in the report
+
+The word "coverage" is never used on its own. The report prints each figure with its denominator:
+
+| Figure                                        | Denominator                                   | Meaning                                                                                    |
+| --------------------------------------------- | --------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| Population (eligible examples)                | frozen frame filtered to the selected origins | How many units could be evaluated.                                                         |
+| Drawn sample                                  | population                                    | How many the seeded sampler actually selected.                                             |
+| Human-reviewed decisions                      | drawn sample                                  | How many have a valid protocol-v1 blind decision.                                          |
+| Sampling coverage of population               | population                                    | drawn / population.                                                                        |
+| Human-review coverage of drawn sample         | drawn sample                                  | human-reviewed / drawn.                                                                    |
+| Sampling inclusion coverage (cell-level)      | population                                    | Population share in cells that received at least one draw; this is _not_ a review rate.    |
+| Assessable decisions (per metric)             | reviewed decisions in that metric's strata    | Eligible human blind verdicts used for the conditional view.                               |
+| Conditional performance coverage (per metric) | reviewed decisions in that metric's strata    | Assessable / reviewed; descriptive only, no bound, and never a claim about the population. |
+
+In the five-card fixture pilot these are population 24, drawn 24, human-reviewed 5, sampling coverage of population 100 %, and human-review coverage of drawn sample 20.8 %. A conditional result such as "100 % over 2/2 assessable" describes those two cards only; it does not mean the population was reviewed. With zero human decisions no performance estimate or confidence bound is printed at all.
+
+### Resolver coverage follow-up (resolver 1.2.0)
+
+The pilot's two false-withholding cases were alias-recognition gaps, not registry gaps: both target concepts were already in the frozen manifest. Resolver `1.2.0` adds two rules to the single code-seed rule set:
+
+- `unit_cost` → `cost.unit` (Class 1, language `all`): unit procurement price only; total programme/project cost is deliberately not aliased.
+- `боевая_часть` → `payload.warhead` (Class 3, language `ru`): the Russian warhead-mass term from `Масса боевой части равна 50 кг.`; it is not mapped to `payload.mass`, `payload.capacity`, or a new concept, and is only applied for a Russian caller.
+
+`zorblax_rating` remains unrecognised. The resolver version and the content hash distinguish this run from the `1.1.0` pilot; the pilot's frame, predictions, manifest and five human decisions are unchanged and remain the evaluation of the previous resolver version. A five-card fixture run is exploratory evidence and cannot demonstrate the 99 % / 95 % precision targets.
 
 ## G. Human effort (audit has priority; all work in short sessions)
 

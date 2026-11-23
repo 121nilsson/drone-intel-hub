@@ -103,7 +103,7 @@ export interface ReadonlySemanticSnapshot {
  * changing normalisation or gate logic changes the hash. Bump on any change to
  * normalizeAliasKey, label matching, or gate order.
  */
-export const SEMANTIC_RESOLVER_VERSION = "1.1.0";
+export const SEMANTIC_RESOLVER_VERSION = "1.2.0";
 
 const TRAILING_UNIT = /_(km|kmh|kg|m)$/;
 
@@ -840,6 +840,16 @@ export const CODE_SEED_RULES: readonly SemanticAliasDefinition[] = Object.freeze
     rationale: "Warhead mass synonym.",
     author: "phase3-seed",
   },
+  {
+    ruleId: "seed-payload-warhead-ru-1",
+    canonicalId: "payload.warhead",
+    aliasClass: "class3_qualified",
+    language: "ru",
+    rawKey: "боевая_часть",
+    rationale:
+      "Russian 'боевая часть' (as in 'масса боевой части') names the warhead explosive charge, distinct from general payload mass or capacity. Language-scoped so an unrelated payload term in another language never inherits this mapping.",
+    author: "phase3-seed",
+  },
 
   // ── Class 1: Weight ───────────────────────────────────────────────────────
   {
@@ -982,6 +992,18 @@ export const CODE_SEED_RULES: readonly SemanticAliasDefinition[] = Object.freeze
     language: "all",
     rawKey: "load_factor",
     rationale: "Load factor — ratio of lift to weight, measured in g.",
+    author: "phase3-seed",
+  },
+
+  // ── Class 1: Cost ──────────────────────────────────────────────────────────
+  {
+    ruleId: "seed-cost-unit-en-1",
+    canonicalId: "cost.unit",
+    aliasClass: "class1_synonym",
+    language: "all",
+    rawKey: "unit_cost",
+    rationale:
+      "Unit procurement price per system. Total programme/project cost is a different datum and has no canonical id; it is deliberately not aliased to cost.unit.",
     author: "phase3-seed",
   },
 

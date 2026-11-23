@@ -12,6 +12,16 @@ Files here are generated evaluation data, never production data and never audit 
 - `decisions.jsonl` — human verdicts imported by `semantic-review.ts import`. **Not committed**: no
   human labels are fabricated. The maintainer creates this file by reviewing the CSV queue.
 
+The files here are the frozen resolver `1.1.0` pilot. They are never regenerated to make a later
+resolver look correct. A later resolver is evaluated in its own directory
+(`semantic-eval-v1.2.0/`) with its own snapshot hash, predictions and manifest; the five human
+decisions are reused unchanged, and the two reports are written to separate files:
+
+```
+npx tsx scripts/sample-historical-evaluation-set.ts --in src/test/fixtures/semantic-eval/frame-rows.jsonl --out src/test/fixtures/semantic-eval-v1.2.0 --report scripts/output/semantic-sampling-v1.2.0.md --apply
+npx tsx scripts/evaluate-semantic-registry.ts --report --data-dir src/test/fixtures/semantic-eval-v1.2.0 --decisions src/test/fixtures/semantic-eval/decisions.jsonl --report-out scripts/output/semantic-metrics-v1.2.0.md --origins fixture
+```
+
 `exampleId` names one occurrence: the same attribute twice in one source gets two ids. Identical
 evidence is collapsed before the frame is frozen; different attributes of one document are kept.
 

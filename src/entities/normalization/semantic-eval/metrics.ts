@@ -376,6 +376,8 @@ export interface RecallResult {
   readonly conditional: {
     readonly pointEstimate: number | undefined;
     readonly coverageRate: number;
+    readonly assessed: number;
+    readonly sampled: number;
     readonly mayBeOptimistic: boolean;
   };
   readonly evidence: EvidenceLabel;
@@ -447,6 +449,8 @@ function recallMetric(
       rTally.sampledCount + wTally.sampledCount === 0
         ? 0
         : (assessedR + assessedW) / (rTally.sampledCount + wTally.sampledCount),
+    assessed: assessedR + assessedW,
+    sampled: rTally.sampledCount + wTally.sampledCount,
     mayBeOptimistic: rTally.unassessableCount + wTally.unassessableCount > 0,
   };
   const evidence: EvidenceLabel =
@@ -482,7 +486,14 @@ export interface MetricsContext {
   }[];
   readonly emptyCells: readonly string[];
   readonly unsampledCells: readonly string[];
+  /** Population share lying in cells that received at least one draw (cell-level inclusion). */
   readonly coveredFraction: number;
+  /** Eligible examples for the selected origins: the population these metrics describe. */
+  readonly populationCount: number;
+  /** Examples actually selected by the seeded sampler within the selected origins. */
+  readonly drawnCount: number;
+  /** Example-level sampling coverage: drawn / population. */
+  readonly samplingCoverage: number;
   readonly exclusions: readonly { readonly reason: string; readonly count: number }[];
   readonly concentration: readonly { readonly sourceClusterId: string; readonly units: number }[];
   readonly topShare: number;
@@ -512,6 +523,8 @@ export function metricsContextFor(
     ];
   });
   const covered = cells.filter((c) => c.drawn > 0).reduce((sum, c) => sum + c.population, 0);
+  const populationCount = selectedExamples.length;
+  const drawnCount = cells.reduce((sum, c) => sum + c.drawn, 0);
   const possible: string[] = [];
   for (const language of LANGUAGES)
     for (const family of FAMILIES)
@@ -522,7 +535,10 @@ export function metricsContextFor(
     cells,
     emptyCells: possible.filter((k) => !byCell.has(k)),
     unsampledCells: cells.filter((c) => c.drawn === 0).map((c) => c.stratum),
-    coveredFraction: selectedExamples.length === 0 ? 0 : covered / selectedExamples.length,
+    coveredFraction: populationCount === 0 ? 0 : covered / populationCount,
+    populationCount,
+    drawnCount,
+    samplingCoverage: populationCount === 0 ? 0 : drawnCount / populationCount,
     exclusions: manifest.exclusions,
     concentration: concentration.rows,
     topShare: concentration.topShare,
@@ -650,6 +666,20 @@ export { allocateProportional };
 const pct = (x: number): string => `${(x * 100).toFixed(1)}%`;
 const mdCell = (s: string) => s.replace(/\|/g, "\\|");
 
+/** A conditional figure without any eligible human blind decision is not a performance estimate. */
+function conditionalText(c: MetricResult["conditional"]): string {
+  if (c.assessed === 0) {
+    return "not available (no eligible human blind decisions in this metric's stratum)";
+  }
+  return (
+    `${pct(c.pointEstimate)} over ${c.assessed}/${c.sampled} human-assessable decisions; ` +
+    `conditional performance coverage ${pct(c.coverageRate)}` +
+    (c.mayBeOptimistic
+      ? "; may be optimistic because hard cases tend to land in insufficient_evidence"
+      : "")
+  );
+}
+
 /** Deterministic markdown. No point estimate is ever printed without its bound and label. */
 export function renderMetricsReport(input: MetricsInput, result: MetricsResult): string {
   const { precision, recall, diagnostics } = result;
@@ -664,10 +694,59 @@ export function renderMetricsReport(input: MetricsInput, result: MetricsResult):
     `- Frame \`${input.frameId}\`, cutoff \`${input.cutoff}\`, seed \`${input.seed}\``,
     `- Snapshot hash \`${input.snapshotHash}\`, resolver version ${input.resolverVersion}, manifest hash \`${input.manifestHash}\``,
     `- ${input.pilot ? "Pilot (exploratory)" : "Full evaluation"}; origins ${(input.origins ?? ["historical"]).join(", ")}; protocol versions ${diagnostics.protocolVersions.join(", ") || "none"}`,
-    `- Decisions ${diagnostics.decided}; insufficient_evidence ${diagnostics.unassessable}`,
-    `- Registry gaps ${diagnostics.registryGaps}: meaningful concepts absent from the frozen registry; reported as coverage, never a resolution or a canonical id`,
+    `- Human-reviewed decisions ${diagnostics.decided}; insufficient_evidence ${diagnostics.unassessable}`,
+    `- Registry gaps ${diagnostics.registryGaps}: meaningful concepts absent from the frozen registry; reported as a registry-coverage finding, never a resolution or a canonical id`,
     "",
   );
+
+  // Sampling coverage and human-review coverage answer different questions. Print both, with
+  // their denominators, before any performance figure so a fully drawn frame cannot be read as
+  // a fully reviewed one.
+  const ctx = input.context;
+  const drawnForCoverage = ctx?.drawnCount ?? 0;
+  const humanReviewCoverage = drawnForCoverage === 0 ? 0 : diagnostics.decided / drawnForCoverage;
+  const origins = (input.origins ?? ["historical"]).join(", ");
+  lines.push("## Coverage and sample sizes (read before any performance figure)", "");
+  lines.push(
+    "Sampling coverage is drawn / eligible population. Human-review coverage is human-reviewed decisions / drawn. Neither is a quality estimate, and neither says that the whole population was reviewed.",
+    "",
+  );
+  if (ctx) {
+    lines.push("| Quantity | Value | Denominator / meaning |", "|---|---:|---|");
+    lines.push(
+      `| Population (eligible examples) | ${ctx.populationCount} | frozen frame restricted to origins ${mdCell(origins)} |`,
+      `| Drawn sample | ${ctx.drawnCount} | examples selected by the seeded sampler |`,
+      `| Human-reviewed decisions | ${diagnostics.decided} | valid protocol-v1 blind decisions for these origins |`,
+      `| Sampling coverage of population | ${pct(ctx.samplingCoverage)} | drawn / population |`,
+      `| Human-review coverage of drawn sample | ${pct(humanReviewCoverage)} | human-reviewed / drawn |`,
+      `| Sampling inclusion coverage (cell-level) | ${pct(ctx.coveredFraction)} | population in cells with at least one draw / population |`,
+    );
+    lines.push("");
+  } else {
+    lines.push(
+      `- Population, drawn sample and sampling coverage: not available (no verified sampling context supplied).`,
+      `- Human-reviewed decisions ${diagnostics.decided}; human-review coverage of drawn sample: not available (drawn sample unknown).`,
+      "",
+    );
+  }
+  lines.push(
+    "| Metric | Assessable human decisions | Reviewed in metric's strata | Conditional performance coverage |",
+    "|---|---:|---:|---:|",
+    `| resolutionPrecision | ${precision.resolution.conditional.assessed} | ${precision.resolution.conditional.sampled} | ${pct(precision.resolution.conditional.coverageRate)} |`,
+    `| withholdingPrecision | ${precision.withholding.conditional.assessed} | ${precision.withholding.conditional.sampled} | ${pct(precision.withholding.conditional.coverageRate)} |`,
+    `| withholdingRecall | ${recall.conditional.assessed} | ${recall.conditional.sampled} | ${pct(recall.conditional.coverageRate)} |`,
+    "",
+  );
+  lines.push(
+    "Assessable decisions are human blind verdicts only; unreviewed drawn examples are not counted as correct, incorrect or abstentions. Conditional performance coverage is assessable / human-reviewed decisions inside that metric's strata and carries no confidence bound. A rate here never means the population was reviewed.",
+    "",
+  );
+  if (diagnostics.decided === 0) {
+    lines.push(
+      "**No performance estimate or confidence bound is reported: there are zero eligible human blind decisions.**",
+      "",
+    );
+  }
 
   lines.push("## Primary metrics (blind verdict only, worst-case sensitivity)", "");
   lines.push(
@@ -676,14 +755,26 @@ export function renderMetricsReport(input: MetricsInput, result: MetricsResult):
   );
   for (const m of [precision.resolution, precision.withholding]) {
     lines.push(`### ${m.name} — target ${pct(m.target)}`, "");
+    const point =
+      diagnostics.decided === 0
+        ? "not available (no eligible human blind decisions)"
+        : m.pointEstimate === undefined
+          ? "not available (a non-empty stratum has no reviewed draw)"
+          : pct(m.pointEstimate);
+    const bound =
+      diagnostics.decided === 0
+        ? "**bound not available**: no eligible human blind decisions"
+        : m.bound.available
+          ? `Exact finite-population bound: error count ≤ ${m.bound.upperCount}, error rate ≤ ${pct(m.bound.upperRate ?? 0)}`
+          : `**bound not available**: ${m.bound.reason?.replace(/^bound not available: /, "")}`;
     lines.push(
-      `- Point estimate (worst-case, expanded by N_h/n_h): ${m.pointEstimate === undefined ? "not available (uncovered stratum)" : pct(m.pointEstimate)}`,
-      `- ${m.bound.available ? `Exact finite-population bound: error count ≤ ${m.bound.upperCount}, error rate ≤ ${pct(m.bound.upperRate ?? 0)}` : `**bound not available**: ${m.bound.reason?.replace(/^bound not available: /, "")}`}`,
+      `- Point estimate (worst-case, expanded by N_h/n_h): ${point}`,
+      `- ${bound}`,
       `- Evidence label: **${m.evidence}**`,
-      `- Conditional performance (descriptive, NO bound): ${pct(m.conditional.pointEstimate)} over ${m.conditional.assessed}/${m.conditional.sampled} assessable; coverage ${pct(m.conditional.coverageRate)}${m.conditional.mayBeOptimistic ? "; the conditional figure may be optimistic because hard cases tend to land in insufficient_evidence" : ""}`,
+      `- Conditional performance (descriptive, NO bound): ${conditionalText(m.conditional)}`,
       "",
     );
-    lines.push("| Cell | N_h | n_h | worst errors |", "|---|---:|---:|---:|");
+    lines.push("| Cell | N_h | n_h (human-reviewed) | worst errors |", "|---|---:|---:|---:|");
     for (const c of m.cells) {
       lines.push(`| ${mdCell(c.cell)} | ${c.population} | ${c.sampled} | ${c.errors} |`);
     }
@@ -691,13 +782,29 @@ export function renderMetricsReport(input: MetricsInput, result: MetricsResult):
   }
 
   lines.push("### withholdingRecall — target " + pct(recall.target), "");
+  const recallBound =
+    diagnostics.decided === 0
+      ? "- **bound not available**: no eligible human blind decisions"
+      : recall.conservativeLower === undefined
+        ? `- **bound not available**: ${(recall.refusal ?? "component unavailable").replace(/^bound not available: /, "")}`
+        : `- Conservative lower bound: **${pct(recall.conservativeLower)}**; Recall_lower = L_TN,W / (L_TN,W + U_FN,R)`;
+  const recallPoint =
+    diagnostics.decided === 0
+      ? "not available (no eligible human blind decisions)"
+      : recall.pointEstimate === undefined
+        ? "not available (a non-empty stratum has no reviewed draw)"
+        : pct(recall.pointEstimate);
+  const recallConditional =
+    recall.conditional.assessed === 0
+      ? "not available (no eligible human blind decisions for this metric's strata)"
+      : recall.conditional.pointEstimate === undefined
+        ? "not available (a non-empty stratum has no reviewed decision)"
+        : `${pct(recall.conditional.pointEstimate)} over ${recall.conditional.assessed}/${recall.conditional.sampled} human-assessable decisions; conditional performance coverage ${pct(recall.conditional.coverageRate)}${recall.conditional.mayBeOptimistic ? "; may be optimistic" : ""}`;
   lines.push(
-    recall.conservativeLower === undefined
-      ? `- **bound not available**: ${(recall.refusal ?? "component unavailable").replace(/^bound not available: /, "")}`
-      : `- Conservative lower bound: **${pct(recall.conservativeLower)}**; Recall_lower = L_TN,W / (L_TN,W + U_FN,R)`,
+    recallBound,
     `- Components: N_R ${recall.components.nR}, N_W ${recall.components.nW}, U_FN,R ${recall.components.uFnR ?? "n/a"}, upper non-negatives in W ${recall.components.upperNonNegW ?? "n/a"}, L_TN,W ${recall.components.lTnW ?? "n/a"}`,
-    `- Point estimate (count-weighted, no bound): ${recall.pointEstimate === undefined ? "not available (uncovered stratum)" : pct(recall.pointEstimate)}`,
-    `- Conditional performance (descriptive, NO bound): ${recall.conditional.pointEstimate === undefined ? "not available (uncovered stratum)" : pct(recall.conditional.pointEstimate)}; coverage ${pct(recall.conditional.coverageRate)}${recall.conditional.mayBeOptimistic ? "; may be optimistic" : ""}`,
+    `- Point estimate (count-weighted, no bound): ${recallPoint}`,
+    `- Conditional performance (descriptive, NO bound): ${recallConditional}`,
     `- Evidence label: **${recall.evidence}**`,
     "",
   );
@@ -730,10 +837,9 @@ export function renderMetricsReport(input: MetricsInput, result: MetricsResult):
     "- Tier 1 (unit/adversarial safety fixtures) remains a 100% hard blocker, reported by S0.",
     `- Weights are applied to counts (N_h x share), never to a ratio of ratios.`,
   );
-  const ctx = input.context;
   if (ctx) {
     lines.push(
-      `- ${ctx.cells.length} non-empty cells; ${ctx.emptyCells.length} empty; ${ctx.unsampledCells.length} unsampled non-empty; covered fraction of population ${pct(ctx.coveredFraction)}`,
+      `- ${ctx.cells.length} non-empty cells; ${ctx.emptyCells.length} empty; ${ctx.unsampledCells.length} unsampled non-empty`,
       `- Frame-wide exclusions (all origins, not specific to the metrics' origin filter): ${ctx.exclusions.length === 0 ? "none" : ctx.exclusions.map((e) => `${e.reason} ${e.count}`).join("; ")}`,
       `- Source-cluster concentration (transparency only, not a design-effect correction): top ${ctx.concentration.length} clusters ${pct(ctx.topShare)}`,
     );

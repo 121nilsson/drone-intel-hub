@@ -573,6 +573,7 @@ In the revised model, `speed.cruise`, `speed.max`, `altitude.service_ceiling`, a
   - `top_speed`, `maximum_speed`, `vitesse_maximale`, `максимальная_скорость` $\rightarrow$ `speed.max`
   - `wingspan`, `wing_span`, `рамах_крила` $\rightarrow$ `dimension.wingspan`
   - `mtow`, `max_takeoff_weight`, `максимальный_взлетный_вес` $\rightarrow$ `weight.mtow`
+  - `unit_cost` $\rightarrow$ `cost.unit` (unit procurement price per system only). Total programme/project cost is a different datum with no canonical id and must not be aliased here.
 
 #### Class 2: Context-Conditioned Synonym (Scoped Equivalent)
 
@@ -598,7 +599,7 @@ In the revised model, `speed.cruise`, `speed.max`, `altitude.service_ceiling`, a
 - **Representative Examples:**
   - `cruising_speed`, `speed_cruise`, `крейсерська швидкість` $\rightarrow$ `speed.cruise` (NOT `speed.max`).
   - `service_ceiling`, `практический_потолок` $\rightarrow$ `altitude.service_ceiling` (NOT `altitude.max`).
-  - `warhead_weight`, `боевая_часть`, `вага_бойової_частини` $\rightarrow$ `payload.warhead` (NOT `payload.capacity`).
+  - `warhead_weight`, `боевая_часть`, `вага_бойової_частини` $\rightarrow$ `payload.warhead` (NOT `payload.capacity` or `payload.mass`). `боевая_часть` is a Russian-language alias (`language: "ru"`): it resolves only for a Russian caller and never licenses a guess from an unscoped or differently scoped term.
   - `combat_radius`, `боевой_радиус` $\rightarrow$ `range.combat_radius` (NOT `range.max`).
 
 #### Class 4: Known Ambiguous Candidate (Contested / Polysemous Term)
