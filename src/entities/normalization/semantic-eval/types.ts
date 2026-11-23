@@ -48,14 +48,23 @@ export const ORIGINS: readonly Origin[] = ["historical", "fixture", "adversarial
 
 /**
  * Protocol v1 verdicts. `insufficient_evidence` is a genuine answer, not a missing one: it is
- * reported as coverage loss and never silently dropped or treated as approval.
+ * reported as coverage loss and never silently dropped or treated as approval. `registry_gap` was
+ * added to v1 after the first five-card pilot: the term is meaningful but has no id in the frozen
+ * snapshot. It is a coverage finding, not a semantic one — never a resolution, never converted to
+ * a canonical id, and never mislabelled as `unknown_term`. Existing v1 decisions stay valid.
  */
 export type Verdict =
-  "resolve" | "withhold_context" | "withhold_ambiguous" | "unknown_term" | "insufficient_evidence";
+  | "resolve"
+  | "withhold_context"
+  | "withhold_ambiguous"
+  | "registry_gap"
+  | "unknown_term"
+  | "insufficient_evidence";
 export const VERDICTS: readonly Verdict[] = [
   "resolve",
   "withhold_context",
   "withhold_ambiguous",
+  "registry_gap",
   "unknown_term",
   "insufficient_evidence",
 ];
@@ -63,6 +72,16 @@ export const VERDICTS: readonly Verdict[] = [
 /** A verdict withholds (a true negative case) when it is not a resolution and not unassessable. */
 export function isWithholdingVerdict(v: Verdict): boolean {
   return v === "withhold_context" || v === "withhold_ambiguous" || v === "unknown_term";
+}
+
+/**
+ * A verdict for which no semantic correctness can be credited either way: the excerpt cannot
+ * support a call (`insufficient_evidence`) or the concept is absent from the frozen registry
+ * (`registry_gap`). Both are counted against the resolver in the worst-case view so neither can
+ * inflate a bound; `registry_gap` is reported separately as a registry-coverage finding.
+ */
+export function isUnassessableVerdict(v: Verdict): boolean {
+  return v === "insufficient_evidence" || v === "registry_gap";
 }
 
 /** Evidence labels are never "passed"/"failed" — a pilot is exploratory evidence only. */
@@ -171,6 +190,8 @@ export interface Decision {
   readonly blindNote: string;
   readonly finalVerdict: Verdict;
   readonly finalCanonicalId?: string | undefined;
+  /** Description of a gap or other annotation introduced only after reveal; blank means none. */
+  readonly finalNote?: string | undefined;
   readonly revisedAfterReveal: boolean;
   readonly revisionReason?: string | undefined;
   readonly reviewer: string;

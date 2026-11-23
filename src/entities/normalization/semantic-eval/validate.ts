@@ -9,6 +9,12 @@
 import { isValidCanonicalId } from "../canonical-manifest";
 import type { SemanticResolutionResult } from "../semantic-result";
 import {
+  REGISTRY_GUIDANCE,
+  canonicalIdNotInSnapshotMessage,
+  canonicalIdsInCatalog,
+  type CanonicalConceptCatalog,
+} from "./concepts";
+import {
   MAX_EXCERPT_CHARS,
   ORIGINS,
   PROTOCOL_VERSIONS,
@@ -92,9 +98,15 @@ function optionalStr(where: string, x: unknown): string | undefined {
   return str(where, x);
 }
 
-function canonicalId(where: string, x: unknown): string {
+function canonicalId(where: string, x: unknown, catalog?: CanonicalConceptCatalog): string {
   const id = str(where, x, { min: 1 });
-  if (!isValidCanonicalId(id)) fail(where, `not a canonical concept id: ${id}`);
+  if (!isValidCanonicalId(id))
+    fail(where, `not a canonical concept id: ${id}. ${REGISTRY_GUIDANCE}`);
+  // A manifest-valid id can still be absent from the snapshot that resolved this frame. The CLI
+  // passes the frozen snapshot's catalog; callers without one keep the manifest-level check.
+  if (catalog !== undefined && !canonicalIdsInCatalog(catalog).has(id)) {
+    fail(where, canonicalIdNotInSnapshotMessage(id, catalog));
+  }
   return id;
 }
 
@@ -106,10 +118,15 @@ function protocol(where: string, x: unknown): EvalProtocolVersion {
   return enumOf(where, x, PROTOCOL_VERSIONS);
 }
 
-function checkCanonicalPair(where: string, v: Verdict, id: string | undefined): void {
+function checkCanonicalPair(
+  where: string,
+  v: Verdict,
+  id: string | undefined,
+  catalog?: CanonicalConceptCatalog,
+): void {
   if (v === "resolve") {
     if (id === undefined) fail(where, "verdict resolve requires a canonical_id");
-    canonicalId(`${where}.canonical_id`, id);
+    canonicalId(`${where}.canonical_id`, id, catalog);
   } else if (id !== undefined) {
     fail(where, `canonical_id is not allowed for verdict ${v}`);
   }
@@ -269,8 +286,12 @@ export function validateSuggestion(value: unknown): Suggestion {
   };
 }
 
-export function validateDecision(value: unknown): Decision {
+export function validateDecision(
+  value: unknown,
+  options: { catalog?: CanonicalConceptCatalog } = {},
+): Decision {
   const w = "Decision";
+  const catalog = options.catalog;
   if (!isObject(value)) fail(w, "expected an object");
   const o = value;
   const exampleId = str(`${w}.exampleId`, o.exampleId);
@@ -282,8 +303,8 @@ export function validateDecision(value: unknown): Decision {
   const finalVerdict = verdict(`${w}.finalVerdict`, o.finalVerdict);
   const blindCanonicalId = optionalStr(`${w}.blindCanonicalId`, o.blindCanonicalId);
   const finalCanonicalId = optionalStr(`${w}.finalCanonicalId`, o.finalCanonicalId);
-  checkCanonicalPair(`${w}.blind`, blindVerdict, blindCanonicalId);
-  checkCanonicalPair(`${w}.final`, finalVerdict, finalCanonicalId);
+  checkCanonicalPair(`${w}.blind`, blindVerdict, blindCanonicalId, catalog);
+  checkCanonicalPair(`${w}.final`, finalVerdict, finalCanonicalId, catalog);
   if (typeof o.revisedAfterReveal !== "boolean") {
     fail(`${w}.revisedAfterReveal`, "expected a boolean");
   }
@@ -298,13 +319,29 @@ export function validateDecision(value: unknown): Decision {
   if (!actuallyRevised && revisionReason !== undefined) {
     fail(`${w}.revisionReason`, "must be absent when nothing was revised");
   }
+  const blindNote = str(`${w}.blindNote`, o.blindNote);
+  const finalNote = optionalStr(`${w}.finalNote`, o.finalNote);
+  // A registry gap is a claim that a real concept is missing from the frozen registry. It needs a
+  // written description attached to the stage that introduced it; the blind note describes the
+  // blind judgement and cannot stand in for a gap first recorded after reveal.
+  if (blindVerdict === "registry_gap" && blindNote.trim().length === 0) {
+    fail(`${w}.blindNote`, "registry_gap requires a note describing the missing concept");
+  }
+  if (
+    finalVerdict === "registry_gap" &&
+    blindVerdict !== "registry_gap" &&
+    (finalNote === undefined || finalNote.trim().length === 0)
+  ) {
+    fail(`${w}.finalNote`, "final_note is required when registry_gap is introduced after reveal");
+  }
   return {
     exampleId,
     blindVerdict,
     ...(blindCanonicalId !== undefined ? { blindCanonicalId } : {}),
-    blindNote: str(`${w}.blindNote`, o.blindNote),
+    blindNote,
     finalVerdict,
     ...(finalCanonicalId !== undefined ? { finalCanonicalId } : {}),
+    ...(finalNote !== undefined ? { finalNote } : {}),
     revisedAfterReveal: o.revisedAfterReveal,
     ...(revisionReason !== undefined ? { revisionReason } : {}),
     reviewer: str(`${w}.reviewer`, o.reviewer, { min: 1 }),

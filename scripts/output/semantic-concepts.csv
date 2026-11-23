@@ -1,0 +1,43 @@
+canonical_id,label,family,description,aliases
+altitude.max,Maximum Altitude,altitude,Absolute operational ceiling,max_altitude;maximum_altitude;operational_altitude
+altitude.service_ceiling,Service Ceiling,altitude,Aeronautical ceiling (climb rate decay bound),service_ceiling
+altitude.target_max,Max Target Altitude,altitude,Ceiling of engageable target (C-UAS),
+altitude.target_min,Min Target Altitude,altitude,Floor of engageable target (C-UAS),
+capacity.fuel,Fuel Capacity,capacity,Internal liquid fuel volume,capacity
+capacity.target_channels,Target Channels,capacity,Simultaneous target tracking/engagement channels,capacity
+cost.unit,Unit Cost,cost,Procurement price per unit,
+dimension.caliber,Caliber,dimension,Bore or munition caliber,
+dimension.depth,Draft/Depth,dimension,Subsurface draft or depth,
+dimension.diameter,Diameter,dimension,Fuselage or body diameter,
+dimension.height,Height,dimension,Overall height,
+dimension.length,Length,dimension,Overall airframe/hull length,
+dimension.width,Width,dimension,Beam or fuselage width,beam
+dimension.wingspan,Wingspan,dimension,Total wing span,wing_span;wingspan
+endurance.flight,Flight Endurance,endurance,Total operating duration in flight,endurance;flight_endurance
+guidance.system,Guidance System,guidance,Navigation and terminal homing technology,
+inventory.deployed_count,Deployed Units,inventory,Active operational inventory count,
+maneuver.load_factor_max,Max Load Factor,maneuver,Normal structural acceleration limit (g),g_limit;load_factor;max_g
+payload.capacity,Payload Capacity,payload,Maximum carrying capacity for equipment/stores,capacity;max_payload;payload_capacity
+payload.mass,Payload Mass,payload,Nominal carried payload weight,
+payload.warhead,Warhead Mass,payload,Net explosive charge weight,warhead_mass;warhead_weight
+power.engine,Engine Power,power,Propulsion motor or engine output,engine_power;power
+power.rf,RF Jamming Power,power,Transmitter/jammer output power,jamming_power;power
+production.rate_monthly,Monthly Production,production,Manufacturing output per month,
+range.combat,Combat Range,range,Mission range under combat load,
+range.combat_radius,Combat Radius,range,Outbound-only combat mission radius,combat_radius;radius
+range.detection,Detection Range,range,Sensor detection distance,
+range.engagement,Engagement Range,range,Effective engagement or suppression envelope (C-UAS),radius
+range.ferry,Ferry Range,range,Maximum range without payload/stores,
+range.fiber_spool,Fiber Spool Length,range,Physical tether or optical fiber payout length,
+range.link,Link/Control Range,range,Line-of-sight communication or data link limit,
+range.max,Maximum Range,range,Maximum stated operational or ferry range,max_range;maximum_range
+range.min,Minimum Range,range,"Minimum arming, engagement or operating distance",
+range.operational,Operational Range,range,Practical range under mission load,
+speed.cruise,Cruise Speed,speed,Nominal sustained cruise airspeed,cruise_speed;cruising_speed;speed_cruise
+speed.dive,Dive Speed,speed,Terminal dive or never-exceed speed (Vne),
+speed.max,Maximum Speed,speed,Highest rated or demonstrated airspeed,max_speed;maximum_speed;top_speed;vmax
+speed.target_max,Max Target Speed,speed,Maximum engageable target speed (C-UAS),
+weight.empty,Empty Weight,weight,Airframe weight without fuel or payload,
+weight.launch,Launch Weight,weight,Total weight at moment of launch,
+weight.mtow,MTOW,weight,Maximum takeoff weight,max_takeoff_weight;mtow
+weight.total,Total Weight,weight,Stated gross system weight,total_weight;weight

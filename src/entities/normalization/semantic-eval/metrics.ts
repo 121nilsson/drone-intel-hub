@@ -35,6 +35,7 @@ import {
   LANGUAGES,
   ORIGINS,
   RESOLVER_STATUSES,
+  isUnassessableVerdict,
   isWithholdingVerdict,
   stratumKey,
   type Decision,
@@ -148,7 +149,7 @@ function tally(
     for (const d of inCell) {
       const pair = population.get(d.exampleId)!;
       if (isError(d, pair)) errors++;
-      if (d.blindVerdict === "insufficient_evidence") {
+      if (isUnassessableVerdict(d.blindVerdict)) {
         unassessable++;
         unassessableCount++;
       } else {
@@ -272,7 +273,7 @@ function classifyPrecision(name: "resolutionPrecision" | "withholdingPrecision")
     return (d, pair) =>
       d.blindVerdict !== "resolve" || d.blindCanonicalId !== pair.prediction.result.canonicalId;
   }
-  return (d) => d.blindVerdict === "resolve" || d.blindVerdict === "insufficient_evidence";
+  return (d) => d.blindVerdict === "resolve" || isUnassessableVerdict(d.blindVerdict);
 }
 
 interface PrecisionComputation {
@@ -393,13 +394,13 @@ function recallMetric(
   const rTally = tally(
     resolved,
     decisions,
-    (d) => isWithholdingVerdict(d.blindVerdict) || d.blindVerdict === "insufficient_evidence",
+    (d) => isWithholdingVerdict(d.blindVerdict) || isUnassessableVerdict(d.blindVerdict),
   );
   // In W, a resolution is a non-negative withhold; insufficient_evidence is the worst case too.
   const wTally = tally(
     withheld,
     decisions,
-    (d) => d.blindVerdict === "resolve" || d.blindVerdict === "insufficient_evidence",
+    (d) => d.blindVerdict === "resolve" || isUnassessableVerdict(d.blindVerdict),
   );
   const nR = rTally.strata.reduce((s, x) => s + x.population, 0);
   const nW = wTally.strata.reduce((s, x) => s + x.population, 0);
@@ -561,6 +562,8 @@ export interface MetricsResult {
     readonly protocolVersions: readonly string[];
     readonly decided: number;
     readonly unassessable: number;
+    /** Meaningful concepts absent from the frozen registry — a coverage finding, never a verdict. */
+    readonly registryGaps: number;
   };
 }
 
@@ -626,6 +629,7 @@ export function computeMetrics(input: MetricsInput): MetricsResult {
     alpha,
   );
   const unassessable = decisions.filter((d) => d.blindVerdict === "insufficient_evidence").length;
+  const registryGaps = decisions.filter((d) => d.blindVerdict === "registry_gap").length;
   return {
     precision: { resolution, withholding },
     recall,
@@ -635,6 +639,7 @@ export function computeMetrics(input: MetricsInput): MetricsResult {
       protocolVersions,
       decided: decisions.length,
       unassessable,
+      registryGaps,
     },
   };
 }
@@ -660,12 +665,13 @@ export function renderMetricsReport(input: MetricsInput, result: MetricsResult):
     `- Snapshot hash \`${input.snapshotHash}\`, resolver version ${input.resolverVersion}, manifest hash \`${input.manifestHash}\``,
     `- ${input.pilot ? "Pilot (exploratory)" : "Full evaluation"}; origins ${(input.origins ?? ["historical"]).join(", ")}; protocol versions ${diagnostics.protocolVersions.join(", ") || "none"}`,
     `- Decisions ${diagnostics.decided}; insufficient_evidence ${diagnostics.unassessable}`,
+    `- Registry gaps ${diagnostics.registryGaps}: meaningful concepts absent from the frozen registry; reported as coverage, never a resolution or a canonical id`,
     "",
   );
 
   lines.push("## Primary metrics (blind verdict only, worst-case sensitivity)", "");
   lines.push(
-    "The primary safety view: every sampled `insufficient_evidence` is counted AGAINST the resolver. The original human decision is never rewritten in any data file.",
+    "The primary safety view: every sampled `insufficient_evidence` and `registry_gap` is counted AGAINST the resolver (a gap is a registry-coverage finding, never a resolution). The original human decision is never rewritten in any data file.",
     "",
   );
   for (const m of [precision.resolution, precision.withholding]) {

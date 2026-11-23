@@ -9,6 +9,12 @@
 
 import { isValidCanonicalId } from "../canonical-manifest";
 import {
+  REGISTRY_GUIDANCE,
+  canonicalIdNotInSnapshotMessage,
+  canonicalIdsInCatalog,
+  type CanonicalConceptCatalog,
+} from "./concepts";
+import {
   EVAL_PROTOCOL_VERSION,
   PROTOCOL_VERSIONS,
   VERDICTS,
@@ -52,6 +58,7 @@ export const REVEAL_ONLY_COLUMNS = [
   "ai_missing_info",
   "final_verdict",
   "final_canonical_id",
+  "final_note",
   "revision_reason",
 ] as const;
 
@@ -181,6 +188,7 @@ function exampleRow(
     "",
     d?.finalVerdict === d?.blindVerdict ? "" : (d?.finalVerdict ?? ""),
     d?.finalCanonicalId === d?.blindCanonicalId ? "" : (d?.finalCanonicalId ?? ""),
+    d?.finalNote ?? "",
     d?.revisionReason ?? "",
   ];
 }
@@ -248,6 +256,8 @@ export interface ImportOptions {
   readonly reviewedAt: string;
   readonly allowMixedProtocol?: boolean;
   readonly step?: ReviewStep;
+  /** When present, canonical ids are checked against the frozen snapshot, not just the manifest. */
+  readonly catalog?: CanonicalConceptCatalog;
 }
 
 export interface ImportResult {
@@ -276,11 +286,17 @@ function readCanonical(
   row: Map<string, string>,
   key: string,
   v: Verdict | undefined,
+  catalog?: CanonicalConceptCatalog,
 ): string | undefined {
   const raw = get(row, key).trim();
   if (v === "resolve") {
     if (raw.length === 0) throw new ValidationError(`CSV row: ${key} required for verdict resolve`);
-    if (!isValidCanonicalId(raw)) throw new ValidationError(`CSV row: invalid ${key}: ${raw}`);
+    if (!isValidCanonicalId(raw)) {
+      throw new ValidationError(`CSV row: invalid ${key}: ${raw}. ${REGISTRY_GUIDANCE}`);
+    }
+    if (catalog !== undefined && !canonicalIdsInCatalog(catalog).has(raw)) {
+      throw new ValidationError(`CSV row ${key}: ${canonicalIdNotInSnapshotMessage(raw, catalog)}`);
+    }
     return raw;
   }
   if (raw.length > 0) throw new ValidationError(`CSV row: ${key} not allowed for verdict ${v}`);
@@ -320,17 +336,35 @@ export function importCsv(csv: string, options: ImportOptions): ImportResult {
       const exampleId = get(row, "example_id").trim();
       if (!/^[0-9a-f]{64}$/.test(exampleId)) throw new ValidationError("invalid example_id");
       const blindVerdict = readVerdict(row, "verdict", true)!;
-      const blindCanonicalId = readCanonical(row, "canonical_id", blindVerdict);
+      const blindCanonicalId = readCanonical(row, "canonical_id", blindVerdict, options.catalog);
+      const note = get(row, "note").trim();
+      // A gap recorded blind is described in the blind note. A gap first recorded after reveal
+      // needs its own column — reusing the blind note would describe a different judgement.
+      if (blindVerdict === "registry_gap" && note.length === 0) {
+        throw new ValidationError("registry_gap requires a note describing the missing concept");
+      }
       const protocolVersion = readProtocol(row);
       versions.add(protocolVersion);
       let finalVerdict = blindVerdict;
       let finalCanonicalId = blindCanonicalId;
+      let finalNote: string | undefined;
       let revisionReason: string | undefined;
       if (step === "reveal") {
         const typedFinal = readVerdict(row, "final_verdict", false);
+        const finalNoteText = get(row, "final_note").trim();
+        finalNote = finalNoteText.length > 0 ? finalNoteText : undefined;
         if (typedFinal !== undefined) {
           finalVerdict = typedFinal;
-          finalCanonicalId = readCanonical(row, "final_canonical_id", typedFinal);
+          finalCanonicalId = readCanonical(row, "final_canonical_id", typedFinal, options.catalog);
+          if (
+            typedFinal === "registry_gap" &&
+            blindVerdict !== "registry_gap" &&
+            finalNote === undefined
+          ) {
+            throw new ValidationError(
+              "final_note is required when registry_gap is introduced after reveal",
+            );
+          }
         }
         const reason = get(row, "revision_reason").trim();
         const revised = finalVerdict !== blindVerdict || finalCanonicalId !== blindCanonicalId;
@@ -348,6 +382,7 @@ export function importCsv(csv: string, options: ImportOptions): ImportResult {
         blindNote: get(row, "note"),
         finalVerdict,
         ...(finalCanonicalId !== undefined ? { finalCanonicalId } : {}),
+        ...(finalNote !== undefined ? { finalNote } : {}),
         revisedAfterReveal,
         ...(revisionReason !== undefined ? { revisionReason } : {}),
         reviewer: options.reviewer,

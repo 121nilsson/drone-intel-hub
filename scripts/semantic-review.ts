@@ -14,6 +14,14 @@
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import {
+  CODE_SEED_RULES,
+  CODE_SEED_SNAPSHOT,
+} from "../src/entities/normalization/semantic-resolver";
+import {
+  buildConceptCatalog,
+  type CanonicalConceptCatalog,
+} from "../src/entities/normalization/semantic-eval/concepts";
+import {
   encodeCsv,
   exportBlindCsv,
   exportRevealCsv,
@@ -88,6 +96,28 @@ function loadSuggestions(): Suggestion[] {
 
 function loadDecisions(): Decision[] {
   return parseJsonl(readOrEmpty(decisionsPath), validateDecision, "decisions.jsonl");
+}
+
+/**
+ * Canonical ids are validated against the snapshot stamped on THIS frame, never the live registry.
+ * Only the code-seed snapshot is available in this isolated CLI; refuse to guess a reference for
+ * any other snapshot hash instead of silently validating against the wrong concept set.
+ */
+function loadActiveCatalog(): CanonicalConceptCatalog {
+  let manifest: unknown;
+  try {
+    manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+  } catch (e) {
+    throw new Error(`cannot read manifest ${manifestPath}: ${(e as Error).message}`);
+  }
+  const hash = (manifest as { snapshotHash?: unknown })?.snapshotHash;
+  if (hash !== CODE_SEED_SNAPSHOT.contentHash) {
+    throw new Error(
+      `frame snapshot ${String(hash)} is not the available snapshot ${CODE_SEED_SNAPSHOT.snapshotId}; ` +
+        "cannot validate canonical ids against an unknown snapshot",
+    );
+  }
+  return buildConceptCatalog(CODE_SEED_RULES, CODE_SEED_SNAPSHOT);
 }
 
 function exportQueue(): void {
@@ -171,17 +201,19 @@ function importQueue(): void {
   const reviewedAt = value("--reviewed-at", new Date().toISOString());
   const allowMixedProtocol = args.includes("--allow-mixed-protocol");
   if (!existsSync(file)) throw new Error(`missing ${file}`);
+  const catalog = loadActiveCatalog();
   const loaded = importCsv(readFileSync(file, "utf8"), {
     reviewer,
     reviewedAt,
     allowMixedProtocol,
+    catalog,
   });
   const existing = loadDecisions();
   const merged = new Map(existing.map((d) => [d.exampleId, d]));
   for (const d of loaded.decisions) merged.set(d.exampleId, d);
   // 3.2 keeps one active decision per example. Re-review replaces it; no history is retained.
   const decisions = [...merged.values()]
-    .map(validateDecision)
+    .map((d) => validateDecision(d, { catalog }))
     .sort((a, b) => a.exampleId.localeCompare(b.exampleId));
   mkdirSync(dirname(decisionsPath), { recursive: true });
   writeFileSync(decisionsPath, toJsonl(decisions));

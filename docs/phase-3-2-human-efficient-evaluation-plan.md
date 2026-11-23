@@ -4,10 +4,11 @@
 
 ## Implemented infrastructure (S0–S5)
 
-Pure modules live in `src/entities/normalization/semantic-eval/` (`types`, `validate`, `csv`, `sampling`, `metrics`, `verify`, plus the S0 `replay`). CLIs and generated evidence:
+Pure modules live in `src/entities/normalization/semantic-eval/` (`types`, `validate`, `csv`, `concepts`, `sampling`, `metrics`, `verify`, plus the S0 `replay`). CLIs and generated evidence:
 
 ```
 npx tsx scripts/sample-historical-evaluation-set.ts --apply   # freeze frame, whole-frame replay, SRS sample
+npx tsx scripts/export-canonical-concepts.ts --report                      # canonical id reference for the frozen snapshot
 npx tsx scripts/prepare-semantic-suggestions.ts --ai --apply --model <id>   # real AI suggestions (offline mode exists)
 npx tsx scripts/semantic-review.ts export --step blind --limit 5            # fill in the five cards
 npx tsx scripts/semantic-review.ts export --step reveal                     # reads the filled blind CSV, adds resolver/AI
@@ -15,7 +16,7 @@ npx tsx scripts/semantic-review.ts import --file <the filled CSV> --reviewer "Na
 npx tsx scripts/evaluate-semantic-registry.ts --report                      # S5 evidence-labelled metrics (historical only)
 ```
 
-The one-page annotation rules, allowed verdicts and worked examples are in `docs/semantic-review-protocol.md`.
+The one-page annotation rules, allowed verdicts and worked examples are in `docs/semantic-review-protocol.md`. The canonical id reference (`scripts/output/semantic-concepts.md`, grouped by family, and `semantic-concepts.csv`, filterable) lists the snapshot's full canonical manifest with the aliases its rules provide, prints the snapshot id and hash, and is refused for any frame stamped with a different snapshot or manifest version. Every listed id is valid in that snapshot — including concepts with no alias rule, which the resolver accepts by exact canonical identity — and fabricated ids are rejected. Reviewers never guess ids: CSV import validates `canonical_id` against that same frozen snapshot, and the error explains how to look ids up and how to record a `registry_gap`. A `registry_gap` is a meaningful concept absent from the frozen registry: it has no canonical id, is never converted into one, is never counted as a successful resolution, and is reported separately as a coverage finding (distinct from `unknown_term` and `insufficient_evidence`).
 
 No `decisions.jsonl` is committed: human labels are created only by the reviewer. `examples.jsonl` is the whole frozen frame; S3 and S4 read the `manifest.json` next to it (or `--manifest`) and process only the drawn sample. S5 requires that manifest and verifies the file hashes, frame id, snapshot/version stamps, resolver statuses, cell counts and drawn ids, then **re-runs `drawSample` with the declared seed and ceiling and requires an exact replay** before emitting a report; there is no fallback to current versions or to an unverified sample. The ceiling is hard-capped at 72 — `--allow-ceiling-override` is required to leave pilot mode, and expansion is a G3 decision. Pilot status is explicit in the manifest and follows that configuration; S5 independently rejects a manifest that claims pilot mode with a ceiling above 72, and reports exclusions as frame-wide rather than origin-specific. Frame cutoff comparison uses UTC instants (`Date.parse`) and undated rows are excluded. Evidence dedupe is source-independent (normalized quote + key + value + unit): syndicated copies collapse, and source concentration is reported separately.
 
