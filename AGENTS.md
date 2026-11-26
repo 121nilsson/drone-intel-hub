@@ -28,6 +28,7 @@ Reasons, file names and history for every rule below are in [docs/architecture.m
 ## Working here
 
 - Run `npm run green` before and after a change; only new findings block. Skill `change-discipline`.
+- On Windows, run tests from `C:\dev\drone-intel-hub`, with an upper-case drive letter. From `c:\dev\...` every vitest file fails before collection with `Cannot read properties of undefined (reading 'config')`. The cause is not confirmed. Check `node -p "process.cwd()"` before treating that error as a broken runner.
 - Placing code, or fixing a lint boundary error: skill `layer-boundaries`.
 - A refactor that should only move code, or work delegated to agents: skill `refactor-waves`. Prove a move with `node scripts/verify-move.mjs`.
 - A new loop, switch, ledger event or `Proposal` kind: skill `autonomy-change`.

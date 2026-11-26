@@ -1,0 +1,389 @@
+# Semantic resolver v1.3.0: implementation plan
+
+> **Status:** direction approved; the open decisions were taken on 2026-11-26 (see the last section). G-0 is closed (2026-11-26): `npm run green` runs reliably from an upper-case `C:` working directory. No code may change until the approval criteria of the delivery in question are signed off. Source: [semantic-resolver-v1.2.0-false-withholding-rca.md](./semantic-resolver-v1.2.0-false-withholding-rca.md).
+>
+> **Direction:** v1.3.0 is built around (1) correct language detection and (2) controlled alias growth. Ambiguous concepts stay unresolved until a written semantic decision exists. A higher Resolution or Withholding Precision on known cases is not a goal in itself.
+
+## 0. Principles
+
+1. **Two questions, kept apart.** "Can we identify the term?" and "Can we identify which attribute the term describes?" are different questions. A recognised but under-specified term is a **Class 4 ambiguity** (`unresolved_ambiguous`), never a resolution. Examples: `потолок` ("ceiling") and `двигун` ("engine").
+2. **Declared language ≠ detected language.** Language from source metadata or the frame row and language computed by `detectLanguage` are stored, compared and reported separately. They are never merged into one field.
+3. **v1.2.0 stays frozen.** Nothing under `src/test/fixtures/semantic-eval/` or `semantic-eval-v1.2.0/` is regenerated or edited, including decisions.
+4. **The nine RCA cases are diagnostic, not proof.** The rules are designed after seeing them, so improvement on them is circular by construction. Generalisation is shown only on material the rules were not designed against.
+5. **One delivery = one reviewable change**, each with its own tests, its own resolver hash where relevant, and its own approval.
+
+## Prerequisite G-0: a working test runner — closed 2026-11-26
+
+**Observation.** Every vitest file failed before collection with `TypeError: Cannot read properties of undefined (reading 'config')`. This happens **only when vitest starts from a working directory with a lower-case drive letter** (`c:\dev\drone-intel-hub`). From `C:\dev\drone-intel-hub` the same command passes. This was reproduced by running vitest from both spellings in one run.
+
+**Mechanism: not confirmed.** One hypothesis is that the module is loaded twice, once per path spelling. It was not verified in the vitest source and is recorded here as a hypothesis only.
+
+**Result (run from `C:\`, vitest 4.1.12, node 24.22.1):**
+
+- `npm test`: 200 test files and 2332 tests passed (plus skipped and todo); no failures.
+- `npm run green`: no new findings against the baseline.
+- The 67 tests in these files passed when run separately: `docs-paths`, `language-detect`, `semantic-resolver-alias-coverage`, `semantic-replay`, `semantic-eval-verify`.
+- No code, configuration or dependency change was needed.
+
+**Known environment constraint:** run tests from a path with an upper-case `C:`. This is documented in `AGENTS.md` under "Working here".
+
+**Deferred:** a guard in `vitest.config.ts` that makes both spellings work. If wanted, it is a separate, isolated change, tested from both spellings.
+
+---
+
+## D0 (P0): language detection, fixed and measured on its own
+
+### Why first
+
+- `detectLanguage` ([language.ts:38](../src/entities/normalization/language.ts#L38)) requires at least 2 Ukrainian-only letters. Short Ukrainian text therefore becomes `ru`. Reproduced on the frame excerpts of demo-018, demo-019 and demo-020.
+- **It already affects production today, not only the resolver:**
+  - `riva.pairFor` ([ai-proxy.server.ts:455](../src/shared/infra/ai-proxy.server.ts#L455)) sends Ukrainian text to the translator as `ru-en`;
+  - the translation shortcut ([ai-proxy.functions.ts:56](../src/shared/infra/ai-proxy.functions.ts#L56)) and the dossier summary ([dossier-summary.tsx:95](../src/features/dossier/dossier-summary.tsx#L95)) also depend on it.
+- **In evaluation:** `FrameRow.language` is documented as "derived by the sampler when absent" ([types.ts:225](../src/entities/normalization/semantic-eval/types.ts#L225)). A declared language and a detected language end up in the same `Example.language` field, so their provenance is lost. The synthetic frame declares language, which hides the defect. The historical frame will not declare it (dispatches store no language).
+
+### Design (to approve before code)
+
+1. **Keep the public contract, add an evidence API.**
+   - `detectLanguage(text): DetectedLanguage` keeps its signature for current callers.
+   - A new pure function `detectLanguageWithEvidence(text)` returns a `LanguageDetection`:
+     - `language`;
+     - `decisive: boolean`;
+     - `reason`: a closed set of codes, including `cyrillic_undetermined` for Cyrillic text without decisive letters;
+     - `evidence`: Cyrillic/Latin counts, Ukrainian-only letters `іїєґ`, Russian-only letters `ыэъё`.
+   - `detectLanguage` becomes a thin wrapper, so the rule is defined once.
+   - **Uncertainty travels with the value.** Any module that hands a detected language to another module passes the whole `LanguageDetection`, never the bare string. A later component therefore cannot treat a guess as a fact.
+   - **Uncertain Cyrillic is logged.** The detector stays pure. The calling server code (`ai-proxy.server.ts`, the sampler report) records `cyrillic_undetermined` cases, so they are available for later improvement. The record holds only the reason and counts, not the text.
+2. **Rule change (candidate, tested in memory in the RCA):** when Cyrillic dominates, the language is
+   - `uk` if there is at least 1 Ukrainian-only letter and 0 Russian-only letters,
+   - `ru` in the mirror case,
+   - otherwise the current ratio rule, marked `decisive: false`.
+
+   On the 24 frame rows this fixes 019 and 020, leaves 018 as `ru` (non-decisive: the excerpt has no distinguishing letter), and changes no `en` or `ru` row.
+
+3. **D0-Q1, decided: option (a).** Cyrillic text without a decisive letter:
+   - translation callers keep today's behaviour (`ru`), for backward compatibility;
+   - the resolver and the evaluation treat it as language unknown (only `all` rules apply);
+   - it is never counted as a confident detection in any metric.
+4. **Provenance in evaluation (schema 1.1.0, decided).** Only new directories use it.
+   - `FrameRow.declaredLanguage?` holds language stated by a trustworthy source or its metadata. It replaces the overloaded `language`.
+   - `Example` gains:
+     - `declaredLanguage?`;
+     - `detectedLanguage`;
+     - `languageDetectionDecisive`;
+     - `languageDetectionReason`.
+   - **`declaredLanguage` is never written by automatic detection** and never overwritten by it.
+   - `Example.language` (the stratum language) follows one documented rule: declared if present; else detected if decisive; else `unknown`. The rule is recorded in the manifest.
+   - **Backward compatibility is absolute.** Readers accept schema 1.0.0 unchanged, v1.2.0 directories verify bit-identically, and old data is never reinterpreted.
+5. **Resolver caller rule:** a caller passes a language to `resolve()` only when it is declared, or detected _and_ decisive. This is documented next to `appliesToLanguage`.
+
+### End-to-end language provenance
+
+A better `detectLanguage` is not enough if the wrong language still reaches the translator, or if provenance is lost in the data model. The origin and certainty of the language must be traceable through the whole chain:
+
+```
+source metadata / original text
+  → language detection + decisiveness   (detectLanguageWithEvidence)
+  → translation routing                  (riva.pairFor)
+  → FrameRow language provenance         (declaredLanguage / detectedLanguage)
+  → semantic resolver                    (language passed only if declared or decisive)
+```
+
+Each step is checked separately, plus at least one **end-to-end test**. It takes a short Ukrainian sentence without declared language ("Дальність польоту становить 250 км.") through every step and verifies that:
+
+- detection gives `uk`, decisive;
+- `pairFor` gives `uk-en`;
+- the frozen example keeps `declaredLanguage` empty and `detectedLanguage = uk`;
+- the resolver receives `uk`.
+
+A second run uses an undecidable Ukrainian sentence ("Корисне навантаження становить 35 кг…"). It verifies that translation keeps `ru-en` (decision (a)), the reason `cyrillic_undetermined` is recorded, and the resolver receives **no** language.
+
+### Language test corpus (new fixture, `origin: "fixture"`)
+
+Hand-written, labelled sentences in a separate file, for example `src/test/fixtures/language-detect-corpus.ts`. Every row has an expected language **and** an expected `decisive`. Minimum coverage, with at least 5 rows per category:
+
+| Category                                                                          | Expected                                                          |
+| --------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| Short Ukrainian with 1 distinctive letter ("Дальність польоту становить 250 км.") | `uk`, decisive                                                    |
+| Short Russian with ы/э/ъ/ё                                                        | `ru`, decisive                                                    |
+| Ukrainian without distinctive letters ("Корисне навантаження становить 35 кг…")   | non-decisive (not a confident `ru`)                               |
+| Russian without distinctive letters                                               | non-decisive                                                      |
+| Mixed: Russian quoting a Ukrainian name or place, and the reverse                 | the matrix language; decisive only if the evidence is unambiguous |
+| Technical keys and English values ("max_speed 120 km/h", "Geran-2")               | `unknown`                                                         |
+| Transliterated terms (`dalnost`, `maksimalnaya skorost`)                          | `unknown` (not `en`)                                              |
+| Existing cases in `language-detect.test.ts`                                       | unchanged                                                         |
+
+### New metric: Language Detection Accuracy
+
+- Reported in its own section, **never combined** with Resolution or Withholding Precision.
+- Content:
+  - a confusion matrix (en/ru/uk/unknown × expected);
+  - the decisive rate;
+  - **ru↔uk confusions among decisive results** (the critical cell);
+  - for evaluation frames, declared-vs-detected agreement on rows that have a declared language.
+- On the fixture corpus it is a **Tier-1 test (100 %)**. On real data it is an exploratory measure that needs human-labelled language. No language labels are fabricated.
+
+### Approval criteria D0
+
+- [x] D0-Q1 answered: option (a).
+- [ ] The corpus passes 100 %, with 0 decisive ru↔uk confusions.
+- [ ] Schema tests:
+  - declared vs detected language;
+  - disagreement between the two (both kept, declared wins the stratum);
+  - unknown language;
+  - non-decisive detection;
+  - a v1.2.0 directory with no new fields reads and verifies unchanged.
+- [ ] Both end-to-end provenance runs pass.
+- [ ] `cyrillic_undetermined` cases are logged with reason and counts only.
+- [ ] Existing `language-detect.test.ts` passes unchanged.
+- [ ] Translation-routing regression tests: `pairFor` gives `uk-en` for decisive Ukrainian; undecidable text behaves as decided in D0-Q1; English still short-circuits.
+- [ ] v1.2.0 S5 verification still passes, bit-identically.
+- [ ] `npm run green` shows no new findings.
+
+---
+
+## D1 (P1): four safe improvements (resolver 1.3.0)
+
+Requires D0 to be merged first, so that the v1.3.0 frame records language provenance. The rules do not depend on D0, because none of them is Ukrainian-scoped.
+
+| Rule                                                                        | Class / scope                                 | RCA case | Why it is safe                                                            |
+| --------------------------------------------------------------------------- | --------------------------------------------- | -------- | ------------------------------------------------------------------------- |
+| `fuel_capacity` → `capacity.fuel`                                           | **Class 2**, `unitDimension: "volume"`, `all` | 008      | Kg or a missing unit fail safe (`unresolved_context`); tested in memory   |
+| `production_rate_monthly`, `monthly_production` → `production.rate_monthly` | Class 1, `all`                                | 010      | The period is stated in the term. Bare `production_rate` is **not** added |
+| `максимальная_скорость` → `speed.max`                                       | Class 1, `ru`                                 | 012      | Literal translation of the existing `maximum_speed`                       |
+| `мощность_двигателя` → `power.engine`                                       | Class 1, `ru`                                 | 015      | Literal translation of the existing `engine_power`                        |
+
+- `SEMANTIC_RESOLVER_VERSION` becomes 1.3.0, and each rule gets a rationale.
+- Tests are written **before** the rules (see §G of the RCA). Each rule gets:
+  - a positive test, case and delimiter variants;
+  - wrong-language and missing-language negatives (ru rules);
+  - a unit negative (fuel);
+  - collision probes: `максимальная_скорость_цели`, `скорость`, `крейсерская_скорость`, `мощность`, `мощность_передатчика`, `production_rate`, `fuel`, `fuel_consumption`.
+- The new keys are added to `replay.ts` probe lists. The unchanged negative controls are `total_cost`, `programme_cost`, `project_cost`, `zorblax_rating` and the whole `UNKNOWN_PROBES` list.
+- **Not in D1:**
+  - `максимальна_швидкість` (uk) waits until D0 has been in place one cycle;
+  - `потужність_двигуна` waits for a reviewed example.
+
+**Approval criteria D1**
+
+- [ ] INV-01…13 at 100 %.
+- [ ] Every v1.2.0 seed key resolves exactly as before (a snapshot-diff test over all 37 rule keys).
+- [ ] 0 new resolutions on rows whose blind verdict is not `resolve`.
+- [ ] 0 resolved→withheld transitions.
+- [ ] All negative controls unchanged.
+- [ ] The v1.3.0 evaluation (§E) is produced and reviewed.
+
+---
+
+## D2 (P2): semantic decision on range (decision first, code later)
+
+The deliverable is a **written policy**, not aliases. It specifies when a stated range may be classified as `range.max`, `range.operational`, `range.combat`, `range.combat_radius` or `range.ferry`, or must be withheld. Expressed as a decision table over the qualifiers present in key, label and unit:
+
+| Evidence in key/label                                                 | Outcome (proposal for discussion)                                                |
+| --------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| "maximum / максимальная / максимальна"                                | `range.max`                                                                      |
+| "operational / practical / операционная / практическая"               | `range.operational` (after the manifest wording is clarified)                    |
+| "combat radius / радиус действия"                                     | `range.combat_radius`                                                            |
+| "ferry / перегоночная"                                                | `range.ferry`                                                                    |
+| bare "range / дальность / дальність / дальность полета", no qualifier | **withhold**: `unresolved_context` or Class 4 [`range.max`, `range.operational`] |
+
+Steps:
+
+1. A human **reviews demo-014 and demo-019 before the policy is fixed.** The new definition must not decide automatically which of the two earlier verdicts was right. The review is recorded as a new decision in the v1.3.0 directory; the v1.2.0 `decisions.jsonl` is never edited.
+2. **Taxonomy change, approved in principle and gated separately.** Clarifying the manifest descriptions of `range.max` ("…operational or ferry range") and `range.operational` is its own decision point, never part of a resolver improvement. It changes `MANIFEST_HASH`. It requires:
+   - a written rationale;
+   - the definition before and after;
+   - examples of what is included and what is excluded;
+   - an assessment of overlap with neighbouring concepts (`range.combat`, `range.ferry`, `range.combat_radius`);
+   - approved positive and negative tests;
+   - a version bump of the canonical manifest;
+   - historical decisions left unchanged.
+3. Only then are aliases considered, in a separate change.
+
+**Approval:** both cards are reviewed; the taxonomy change, if any, is approved on its own; the policy is approved by the maintainer; the policy treats English, Russian and Ukrainian identically.
+
+---
+
+## D3 (P3): context-dependent keys (investigation, no aliases)
+
+Applies to `потолок` (demo-016), `двигун` (demo-020) and similar head-noun keys.
+
+1. **Measure before acting.** On the historical frame, find how often `rawLabel` exists and how often the key is a head noun with the qualifier only in the excerpt. If labels exist, Class 3 `labelTokens` rules (already supported) can carry the qualifier without giving the resolver the excerpt.
+2. **Candidate rules after review:**
+   - `потолок` (ru) as **Class 4** [`altitude.max`, `altitude.service_ceiling`]: the term is recognised, the attribute is not, and it is reported as ambiguous instead of unknown;
+   - `практический_потолок` (ru) → `altitude.service_ceiling`, Class 3.
+3. **Upstream:** a proposal to the extraction owner to keep the qualifier in the key or label (_потужність двигуна_, not _двигун_). Outside the resolver.
+4. **Explicitly not done:** a unit-guarded `двигун` → `power.engine`. It would reward a truncated key and create a Ukrainian rule with no English counterpart.
+
+**Approval:** measurement report read; any Class 4 rule passes INV-02/05 and never resolves.
+
+---
+
+## D4: inventory and migration plan for the 76 legacy keys
+
+Spec decision 1 (Option B) stays: one-by-one curation, never a bulk conversion.
+
+- **Work:** a generated, reproducible inventory (script plus report under `scripts/output/`). Each of the 97 legacy exact keys that map to a manifest concept gets one class:
+
+| Class             | Meaning                                                       | Example                                      |
+| ----------------- | ------------------------------------------------------------- | -------------------------------------------- |
+| `migrated`        | already in the seed (21)                                      | `max_speed`                                  |
+| `migrate`         | stable, unambiguous; candidate for a curated rule with a test | `ferry_range`, `empty_weight`, `dive_speed`  |
+| `migrate_guarded` | valid only with a Class 2 guard                               | `fuel_capacity` (volume), `mass` (mass unit) |
+| `ambiguous`       | recognised term, attribute undetermined → Class 4 candidate   | `range`, `altitude`, `cost`                  |
+| `superseded`      | better expressed by another concept or rule                   | to be determined per key                     |
+| `never`           | legacy heuristic that should not survive                      | to be determined per key                     |
+
+- Each row records the legacy behaviour, including label dependence (legacy often matched on the label, which the new resolver handles differently), a proposed class, rationale, and a reviewer field. **Classes are proposed by the tool and decided by a human.**
+- **Output:** a prioritised backlog, so the legacy implementation no longer hides lost functionality.
+- **Approval:** inventory reviewed; any `migrate` batch follows D1's rules (test first, one rule per reviewed key).
+
+---
+
+## D5: historical frame export (infrastructure for E2)
+
+The export is infrastructure, not resolver logic. Above all it must be deterministic, reproducible and safe.
+
+**Requirements:**
+
+- **Frozen sampling frame.** Build it from the historical store, read-only. `verification_audit` is never read (D1 of the Phase 3.2 plan).
+- **Population documented:** its size, the query or criteria, and the sampling method.
+- **Reproducible draw:** a seeded draw, with the stratification fixed in advance (§E2 method).
+- **Kept for every row:**
+  - the original text (≤ 300-character excerpts committed; full frames stay out of git, D3 of the Phase 3.2 plan);
+  - language provenance (schema 1.1.0);
+  - source references.
+- **Exclusions recorded** with a reason for every row that could not be included.
+- **Manifest with content hashes**, in the existing format, extended for schema 1.1.0.
+- **Never writes:** no rewrite of historical data or existing decisions. Read-only database access.
+- **No resolver output in blind material.** The blind CSV keeps having no resolver or AI columns.
+- **Exact re-creation.** The same database snapshot, seed and parameters give the same frame and draw.
+  - Because the database is live, the **frozen export file and its hash** are the reproducibility anchor.
+  - The manifest also records the snapshot boundary: cutoff timestamp, row count and a hash of the ordered source ids.
+  - A re-export that no longer matches (for example after a renormalisation) is reported as a mismatch, never silently accepted.
+  - **Content and order are both verified.** The same rows in a different order are not the same frozen artefact.
+    - The export writes rows in one canonical order, defined in the manifest (for example by `exampleId`).
+    - The file hash covers that ordered content.
+    - Verification fails on a reordering, even when the downstream draw sorts ids itself (`drawSample` sorts by `exampleId` within each stratum before shuffling). The draw's own order-insensitivity is never relied on in place of an ordered, hashed export.
+
+**Who:** the implementer is one agent session. The **code review is done by a separate session** that did not write the code. This session writes under the Opus model, so "Opus reviews" means a fresh Opus session, not this one.
+
+**Approval:**
+
+- [ ] Two exports from the same snapshot and parameters are bit-identical.
+- [ ] Tests cover exclusions, the stratification replay and the hashes.
+- [ ] No write path exists (verified by review and by the import-graph test).
+- [ ] The blind export has no resolver columns.
+- [ ] The independent review has signed off.
+
+---
+
+## E. v1.3.0 evaluation design
+
+New directory `src/test/fixtures/semantic-eval-v1.3.0/`, with five distinct test sets reported in separate sections and never pooled:
+
+| Set                      | Content                                                                                                                                                                                                | Status in the report                                                                 |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------ |
+| E1 Diagnostic regression | the nine RCA cases plus the other 15 v1.2.0 rows, using the **unchanged** v1.2.0 blind decisions                                                                                                       | "diagnostic, circular by construction"; per-example transition table v1.2.0 → v1.3.0 |
+| E2 Held-out              | new examples **not seen** while designing the rules: ideally a fresh draw from the real historical frame, otherwise rows written by someone other than the rule author **before** the rules are frozen | the only set that can show generalisation; exploratory labels only                   |
+| E3 Negative / ambiguous  | `UNKNOWN_PROBES`, cost controls, Class 4 terms, bare range terms, head nouns                                                                                                                           | must all stay unresolved (Tier 1, 100 %)                                             |
+| E4 Language detection    | the D0 corpus plus declared-vs-detected agreement on E1/E2                                                                                                                                             | Language Detection Accuracy, its own section                                         |
+| E5 Legacy parity         | the D4 inventory keys in classes `migrated`/`migrate`                                                                                                                                                  | parity is **not** correctness; reported as coverage only                             |
+
+**Rules:**
+
+- Report the same frame, seed and ceiling where comparability is claimed.
+- Stamp the new snapshot hash.
+- Report language both as declared and as detected.
+- No metric may say "passed".
+- **Blocking findings:**
+  - any resolved→withheld transition;
+  - any new resolution on a non-`resolve` blind verdict;
+  - any E3 failure;
+  - any decisive ru↔uk confusion in E4.
+
+Without E2, v1.3.0 can show at most "no regressions plus fixed known cases", not "better", and the report must say so.
+
+### E2 method (decided: stratified random draw from the historical store; human blind labels)
+
+**Order, fixed:**
+
+1. **Historical draw.** Examples are drawn by the D5 export and sampler. No resolver output influences which examples are chosen.
+2. **Blind human review.** The human judges the original text and records the blind verdict, which is the primary label.
+3. **Reveal.** Resolver output and any AI proposals are shown only now.
+4. **Reveal review.** Disagreements are analysed. Any change is stored as `finalVerdict` / `revisedAfterReveal`, separately from the blind verdict. A revision never replaces the blind label (D6 of the Phase 3.2 plan).
+5. **Freeze.** Dataset, decisions, sampling frame and manifest are versioned and hashed. Only then is v1.3.0 run against E2.
+
+**Stratification.**
+
+- The draw is a seeded **stratified** random sample over the strata **detected language** (en, ru, uk, unknown), with a minimum per language. Criteria are fixed in writing before the draw. A simple random draw could yield very few Russian or Ukrainian rows. Family is recorded and descriptive only. Details are in [semantic-resolver-v1.3.0-e2-sampling-design.md](./semantic-resolver-v1.3.0-e2-sampling-design.md).
+- Allocation and any weights are recorded in the manifest.
+- Language for stratification is the D0 detection: decisive languages are their own strata, and non-decisive rows go to `unknown`. D5 therefore depends on D0.
+- **Resolver status is not a stratum for E2.** Stratifying on it would let the resolver under test shape its own test set. The status is computed only after the freeze.
+- Consequence: the existing exact bound (§F of the Phase 3.2 plan) assumes resolver-status strata. For E2, a bound is valid only conditionally on the realised R/W counts per cell, and that needs its own written derivation and hand-computed tests before any bound is printed. Until then, E2 figures are descriptive only.
+
+The table and rules below cover the fallback external pool. For the historical draw, the "find sources" step is replaced by D5.
+
+| Step                                                                                                    | Responsible                                                                  |
+| ------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| Fix the sampling criteria in writing (languages, families, positive/ambiguous/negative mix, size, seed) | maintainer, **before** any collection                                        |
+| Find sources and candidate attributes; extract excerpts and provenance                                  | an AI agent that has **not** seen the RCA, this plan or the v1.3.0 rule list |
+| Stratified draw from the candidate pool                                                                 | deterministic sampler, with the fixed criteria and seed                      |
+| Propose language, family and difficulty                                                                 | AI (proposals only)                                                          |
+| **Gold labels**                                                                                         | human, **blind** (see below)                                                 |
+| Freeze dataset and manifest (hashes, provenance, review history)                                        | deterministic tooling                                                        |
+| Evaluate v1.3.0                                                                                         | the repository's normal evaluation                                           |
+
+Rules:
+
+1. **Preferred source: a seeded random draw from the app's own historical store.** It is the population the resolver will actually see, and a random draw has no human or AI selection bias. This requires the historical frame export, which does not exist yet. `verification_audit` is never read (D1 of the Phase 3.2 plan).
+2. **Fallback or complement: an external source pool.** Possible sources are manufacturers' and official product documents, government and defence bodies, technical publications and established news outlets. Each source is recorded with URL, publication date, language and access date. Excerpts are ≤ 300 characters (D3 of the Phase 3.2 plan). Rows from this pool are **not** labelled `origin: "historical"`: they did not come from the app's store. They get **`origin: "external_source"`** (decided; part of schema 1.1.0), whether collected by hand or by AI. External rows are **never** counted in a historical population estimate. They may be used for supplementary diagnostics and for language and concept tests, reported in their own section.
+3. **The collecting agent is isolated.** It gets a brief with only the fixed criteria. It is told not to read `docs/semantic-resolver-v1.2.0-false-withholding-rca.md`, this plan, or the resolver rule list. The session that wrote the RCA and this plan does **not** collect E2.
+4. **Gold labels follow the existing blind-then-reveal protocol.** The human gives a blind verdict from the source text **before** seeing any AI proposal or resolver output (D6 of the Phase 3.2 plan: the blind verdict is the primary label). Only then are AI proposals shown. Two models may propose independently; their disagreement is a review signal, and model agreement never replaces human verification.
+5. **Positive, ambiguous and negative examples** are all included. Language, family and difficulty are recorded. The set covers different ways of expressing the same property, and it is not nine rewrites of the known failures.
+6. **Frozen before use, used once.** E2 is frozen and versioned before v1.3.0 is run against it. E2 is never used to tune aliases. A finding in E2 is documented. Any rule change motivated by E2 retires that E2 version as a generalisation test, and a new version or a separate holdout is needed.
+7. If none of the above can be met, E2 waits. The same person or session never both designs the rules and writes the test material.
+
+---
+
+## Order and gates
+
+```
+G-0 test runner ─► D0 language (P0) ─► D1 four aliases (P1) ─► v1.3.0 evaluation (E1, E3, E4, E5; E2 when a frame exists)
+                                   └─► D2 range policy (P2, decision) ─► (later) range aliases
+                                   └─► D3 context-key measurement (P3)
+                    D4 legacy inventory (parallel, no resolver change)
+                    D0 ─► D5 historical export ─► E2 draw ─► blind review ─► reveal ─► freeze ─► E2 evaluation
+```
+
+## Explicitly out of scope for v1.3.0
+
+- Gate 0 accepting `_`-delimited canonical ids.
+- Cyrillic unit-suffix stripping.
+- Any `uk` alias before D0 has been in place for one cycle.
+- `двигун`.
+- Aliases for bare range in any language.
+- Bulk legacy migration.
+- Production integration of the resolver.
+- Any change to v1.2.0 fixtures, decisions or reports.
+
+## Decisions (2026-11-26)
+
+| #   | Question                                       | Decision                                                                                                                                                                                                                                                                                  |
+| --- | ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | What undecidable Cyrillic text returns (D0-Q1) | **Option (a).** Translation keeps today's behaviour; the resolver treats the language as unknown; never counted as a confident detection; logged as `cyrillic_undetermined`; uncertainty travels with the value between modules                                                           |
+| 2   | Schema 1.1.0 provenance fields                 | **Approved:** `declaredLanguage`, `detectedLanguage`, `languageDetectionDecisive`, `languageDetectionReason`. Declared is never overwritten by detection. Backward compatibility is absolute                                                                                              |
+| 3   | Who produces E2                                | **AI collects, a human sets the gold labels**, under the rules in §E2 method. An isolated agent collects; the human labels blind                                                                                                                                                          |
+| 4   | May D2 change manifest descriptions?           | **Yes, with separate approval**, under the requirements in D2 step 2. demo-014 and demo-019 are reviewed by a human first                                                                                                                                                                 |
+| –   | Added requirement                              | End-to-end language provenance check and test (D0)                                                                                                                                                                                                                                        |
+| –   | Ordering                                       | **G-0 before everything else**                                                                                                                                                                                                                                                            |
+| 5   | Origin for external-pool rows                  | **`external_source`**; never counted in a historical population estimate                                                                                                                                                                                                                  |
+| 6   | Who builds the historical export               | **D5:** one session implements; a separate session reviews the code                                                                                                                                                                                                                       |
+| 7   | E2 sampling                                    | **Stratified random draw from the historical store, strata = detected language only** (revised 2026-11-26, replacing language × family). Minimum m = 25 per language; n = 150 preliminary; family descriptive only; resolver status is not used for selection. See the E2 sampling design |
+| 9   | Difference census                              | **Yes, separate from E2**: all rows where v1.2.0 and v1.3.0 differ, reviewed blind, with outputs shown as A/B in random order; never pooled with E2                                                                                                                                       |
+| 8   | E2 gold labels                                 | **Human blind review before any reveal**; revisions after reveal are stored separately and never replace the blind label                                                                                                                                                                  |
+| –   | E2 after freeze                                | **Untouched.** Using E2 results to change rules retires that E2 version; the next evaluation needs a new independent test                                                                                                                                                                 |
+
+### Still open
+
+- The E2 sampling design is decided at method level ([semantic-resolver-v1.3.0-e2-sampling-design.md](./semantic-resolver-v1.3.0-e2-sampling-design.md)). Still open: the final n and m, fixed from the D5 counts before the draw, and the seed commit before D5.
+- The bound derivation for E2 (§6.3 of the sampling design). Until it exists and is tested, E2 reports no confidence bounds.
