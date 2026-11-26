@@ -34,6 +34,7 @@ import {
 } from "../src/entities/normalization/semantic-eval/metrics";
 import type { Origin, SamplingManifest } from "../src/entities/normalization/semantic-eval/types";
 import {
+  describeLanguageReplay,
   verifyEvaluationInputs,
   verifyLanguageProvenance,
 } from "../src/entities/normalization/semantic-eval/verify";
@@ -137,9 +138,10 @@ if (args.includes("--report")) {
       process.exit(1);
     }
     const manifest = parsedManifest as SamplingManifest;
-    for (const w of verifyLanguageProvenance(manifest, examples).warnings) {
-      process.stderr.write(`manifest warning: ${w}\n`);
-    }
+    const language = verifyLanguageProvenance(manifest, examples);
+    for (const w of language.warnings) process.stderr.write(`manifest warning: ${w}\n`);
+    const replayLine = describeLanguageReplay(language.replay);
+    process.stdout.write(`${replayLine}\n`);
     const manifestHash = sha256Hex(canonicalJson(manifest));
     const origins = value("--origins", "historical")
       .split(",")
@@ -167,7 +169,11 @@ if (args.includes("--report")) {
       context: metricsContextFor(manifest, selectedExamples),
     };
     const reportOut = resolve(value("--report-out", "scripts/output/semantic-metrics.md"));
-    const report = renderMetricsReport(metricsInput, computeMetrics(metricsInput));
+    const rendered = renderMetricsReport(metricsInput, computeMetrics(metricsInput));
+    // A 1.0.0 report stays byte-identical; a 1.1.0 report says whether its language strata were
+    // reproduced, so a report cannot pass as a reproduction it never performed.
+    const report =
+      language.replay.status === "not_applicable" ? rendered : `> ${replayLine}\n\n${rendered}`;
     await writeFormatted(reportOut, report);
     process.stdout.write(`wrote ${reportOut}\n`);
   } catch (e) {

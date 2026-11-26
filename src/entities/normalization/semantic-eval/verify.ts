@@ -11,6 +11,7 @@ import {
   LANGUAGE_DETECTOR_VERSION,
   LANGUAGE_REASON_OUTCOMES,
   detectLanguageWithEvidence,
+  type LanguageDetection,
 } from "../language";
 import { sha256Hex } from "../sha256";
 import { drawSample } from "./sampling";
@@ -56,22 +57,59 @@ function asManifest(value: unknown): SamplingManifest | undefined {
 }
 
 /**
+ * The detector implementations this verifier can replay, by the version a manifest is stamped
+ * with. Historical replay uses the stamped version's implementation, never the current one in its
+ * place. Only the current detector is kept: no committed frame is stamped with an older version.
+ * Add a frozen copy here before a frame stamped with an older version has to be replayed.
+ */
+export const LANGUAGE_DETECTORS_BY_VERSION: Readonly<
+  Record<string, (text: string) => LanguageDetection>
+> = { [LANGUAGE_DETECTOR_VERSION]: detectLanguageWithEvidence };
+
+/**
+ * Whether the stored language detections were reproduced. `replayed`: every stored excerpt was run
+ * through the stamped detector version (mismatches are errors). `not_replayed`: that version is not
+ * available, so the stored fields were checked for consistency only and nothing was reproduced.
+ * `not_applicable`: a schema 1.0.0 frame, which records no detection.
+ */
+export type LanguageReplay =
+  | { readonly status: "not_applicable" }
+  | { readonly status: "replayed"; readonly detectorVersion: string }
+  | { readonly status: "not_replayed"; readonly detectorVersion: string; readonly reason: string };
+
+/** One line for a report or a log; says plainly when nothing was reproduced. */
+export function describeLanguageReplay(r: LanguageReplay): string {
+  switch (r.status) {
+    case "not_applicable":
+      return "language replay: not applicable (schema 1.0.0 records no detection)";
+    case "replayed":
+      return `language replay: performed with detector ${r.detectorVersion}; every stored detection was reproduced`;
+    case "not_replayed":
+      return `language replay: NOT PERFORMED, ${r.reason}; stored detections were checked for consistency only and are not reproduced`;
+  }
+}
+
+/**
  * Language provenance of a frame. Schema 1.0.0 directories are read as they always were: nothing is
- * checked here. A 1.1.0 directory must be uniform, stamped, and internally consistent; when it was
- * stamped by the current detector every stored excerpt must also re-detect to the stored fields.
- * A frame stamped by another detector version cannot be re-verified with this one: that is a
- * warning, not an error (the stamp is honest and the fields are still checked for consistency;
- * an error would invalidate every committed frame at each detector bump).
+ * checked here. A 1.1.0 directory must be uniform, stamped, and internally consistent, and every
+ * stored excerpt is re-detected with the detector version the manifest is stamped with, never with
+ * the current one in its place. When that version is not available, `replay` says so and a warning
+ * is raised: an older frame stays verifiable for consistency after a detector bump, but the result
+ * never claims that its detections were reproduced.
  */
 export function verifyLanguageProvenance(
   manifest: Pick<SamplingManifest, "languageRule" | "languageDetectorVersion">,
   examples: readonly Example[],
-): { readonly errors: string[]; readonly warnings: string[] } {
+): {
+  readonly errors: string[];
+  readonly warnings: string[];
+  readonly replay: LanguageReplay;
+} {
   const errors: string[] = [];
   const warnings: string[] = [];
   const versions = new Set(examples.map((e) => e.schemaVersion));
   const provenance = examples.filter((e) => e.schemaVersion === SEMANTIC_EVAL_SCHEMA_VERSION_1_1);
-  if (provenance.length === 0) return { errors, warnings };
+  if (provenance.length === 0) return { errors, warnings, replay: { status: "not_applicable" } };
   if (versions.size > 1) {
     errors.push(
       `examples mix schema versions (${[...versions].sort().join(", ")}); one frame, one schema`,
@@ -88,7 +126,8 @@ export function verifyLanguageProvenance(
       `manifest languageRule "${manifest.languageRule}" is not the rule this verifier knows ("${LANGUAGE_STRATUM_RULE}")`,
     );
   }
-  const reverify = stamped === LANGUAGE_DETECTOR_VERSION;
+  const hasStamp = typeof stamped === "string" && stamped.length > 0;
+  const detector = hasStamp ? LANGUAGE_DETECTORS_BY_VERSION[stamped] : undefined;
   for (const e of provenance) {
     const reason = e.languageDetectionReason;
     const outcome = reason === undefined ? undefined : LANGUAGE_REASON_OUTCOMES[reason];
@@ -106,25 +145,34 @@ export function verifyLanguageProvenance(
     ) {
       errors.push(`example ${e.exampleId} has contradictory language provenance (${reason})`);
     }
-    if (reverify) {
-      const d = detectLanguageWithEvidence(e.excerpt);
+    if (detector) {
+      const d = detector(e.excerpt);
       if (
         d.language !== e.detectedLanguage ||
         d.decisive !== e.languageDetectionDecisive ||
         d.reason !== reason
       ) {
         errors.push(
-          `example ${e.exampleId} does not re-detect from its stored excerpt: stored ${e.detectedLanguage}/${e.languageDetectionDecisive}/${reason}, detector ${LANGUAGE_DETECTOR_VERSION} gives ${d.language}/${d.decisive}/${d.reason}`,
+          `example ${e.exampleId} does not re-detect from its stored excerpt: stored ${e.detectedLanguage}/${e.languageDetectionDecisive}/${reason}, detector ${stamped} gives ${d.language}/${d.decisive}/${d.reason}`,
         );
       }
     }
   }
-  if (typeof stamped === "string" && stamped.length > 0 && !reverify) {
-    warnings.push(
-      `language detector ${stamped} is not the current ${LANGUAGE_DETECTOR_VERSION}: stored detection is not re-verifiable with this detector`,
-    );
+  let replay: LanguageReplay;
+  if (detector && hasStamp) {
+    replay = { status: "replayed", detectorVersion: stamped };
+  } else {
+    replay = {
+      status: "not_replayed",
+      detectorVersion: hasStamp ? stamped : "(none)",
+      reason: hasStamp
+        ? `detector ${stamped} is not available to this verifier (current ${LANGUAGE_DETECTOR_VERSION})`
+        : "the manifest names no detector version",
+    };
+    // A missing stamp is already an error above; an unavailable version is a warning.
+    if (hasStamp) warnings.push(describeLanguageReplay(replay));
   }
-  return { errors, warnings };
+  return { errors, warnings, replay };
 }
 
 /** Returns every integrity violation; an empty array means the inputs can be reported on. */

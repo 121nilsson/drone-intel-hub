@@ -15,6 +15,8 @@ import {
 import { LANGUAGE_STRATUM_RULE, type FrameRow } from "@/entities/normalization/semantic-eval/types";
 import { toJsonl, validateExample } from "@/entities/normalization/semantic-eval/validate";
 import {
+  LANGUAGE_DETECTORS_BY_VERSION,
+  describeLanguageReplay,
   verifyEvaluationInputs,
   verifyLanguageProvenance,
 } from "@/entities/normalization/semantic-eval/verify";
@@ -138,7 +140,11 @@ describe("F2: detection fields of a 1.1.0 example must agree", () => {
           [e],
         ),
         text,
-      ).toEqual({ errors: [], warnings: [] });
+      ).toEqual({
+        errors: [],
+        warnings: [],
+        replay: { status: "replayed", detectorVersion: LANGUAGE_DETECTOR_VERSION },
+      });
     }
     // The property is only meaningful if the inputs reach every reason.
     expect([...reasons].sort()).toEqual([...LANGUAGE_DETECTION_REASONS].sort());
@@ -230,7 +236,11 @@ describe("F4: verifying language provenance", () => {
   const examples = () => build11([row(), row({ rawValue: "2", excerpt: UK_UNDECIDABLE })]).examples;
 
   it("passes a consistent frame stamped with the current detector", () => {
-    expect(verifyLanguageProvenance(stamp, examples())).toEqual({ errors: [], warnings: [] });
+    expect(verifyLanguageProvenance(stamp, examples())).toEqual({
+      errors: [],
+      warnings: [],
+      replay: { status: "replayed", detectorVersion: LANGUAGE_DETECTOR_VERSION },
+    });
   });
 
   it("requires the manifest's languageDetectorVersion and languageRule", () => {
@@ -276,14 +286,42 @@ describe("F4: verifying language provenance", () => {
     expect(errors.join()).toMatch(/does not re-detect from its stored excerpt/);
   });
 
-  it("reports another detector version as a warning, not an error, and does not re-detect", () => {
+  it("says replay was performed, and with which version, when the stamped detector is available", () => {
+    expect(verifyLanguageProvenance(stamp, examples()).replay).toEqual({
+      status: "replayed",
+      detectorVersion: LANGUAGE_DETECTOR_VERSION,
+    });
+  });
+
+  it("never replays an unavailable version with the current detector, and says so explicitly", () => {
     const [good] = examples();
+    // Would fail re-detection with the current detector: proves the current one is not used instead.
     const tampered = { ...good!, excerpt: "Дальність польоту становить 250 км." };
     const r = verifyLanguageProvenance({ ...stamp, languageDetectorVersion: "2.0.0" }, [tampered]);
     expect(r.errors).toEqual([]);
-    expect(r.warnings).toEqual([
-      `language detector 2.0.0 is not the current ${LANGUAGE_DETECTOR_VERSION}: stored detection is not re-verifiable with this detector`,
-    ]);
+    expect(r.replay).toEqual({
+      status: "not_replayed",
+      detectorVersion: "2.0.0",
+      reason: `detector 2.0.0 is not available to this verifier (current ${LANGUAGE_DETECTOR_VERSION})`,
+    });
+    expect(r.warnings).toEqual([describeLanguageReplay(r.replay)]);
+    expect(describeLanguageReplay(r.replay)).toMatch(/NOT PERFORMED.*not reproduced/);
+    expect(describeLanguageReplay(r.replay)).not.toMatch(/reproduced;|was reproduced/);
+  });
+
+  it("still checks an unreplayable frame for internal consistency", () => {
+    const [good] = examples();
+    const bad = { ...good!, languageDetectionDecisive: !good!.languageDetectionDecisive };
+    const r = verifyLanguageProvenance({ ...stamp, languageDetectorVersion: "2.0.0" }, [bad]);
+    expect(r.errors.join()).toMatch(/contradictory/);
+    expect(r.replay.status).toBe("not_replayed");
+  });
+
+  it("keeps a replay implementation for exactly the current detector version", () => {
+    expect(Object.keys(LANGUAGE_DETECTORS_BY_VERSION)).toEqual([LANGUAGE_DETECTOR_VERSION]);
+    expect(LANGUAGE_DETECTORS_BY_VERSION[LANGUAGE_DETECTOR_VERSION]).toBe(
+      detectLanguageWithEvidence,
+    );
   });
 
   it("does not look at a pure 1.0.0 directory", () => {
@@ -292,7 +330,11 @@ describe("F4: verifying language provenance", () => {
       snapshot: CODE_SEED_SNAPSHOT,
       resolverVersion: SEMANTIC_RESOLVER_VERSION,
     }).examples;
-    expect(verifyLanguageProvenance({}, e10)).toEqual({ errors: [], warnings: [] });
+    expect(verifyLanguageProvenance({}, e10)).toEqual({
+      errors: [],
+      warnings: [],
+      replay: { status: "not_applicable" },
+    });
   });
 
   it("is part of the whole-directory verification", () => {
