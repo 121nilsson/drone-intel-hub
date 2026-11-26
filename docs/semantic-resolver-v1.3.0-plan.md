@@ -193,9 +193,11 @@ Decided direction: alternatives 1 + 2 from the adversarial review. Sentence-leve
 - **Separate from L.** A marker word **never contains a distinctive letter**. W therefore uses different features than L and can fire in text that L cannot see, so it is not a second way of counting the same letters. That makes the channels **separate**, not statistically independent: both are driven by the same underlying language.
 - **Matching.** Case-insensitive, whole tokens only. Quoted text is excluded. A sentence-initial word counts, because function words are not names. Capitalised words in mid-sentence are still excluded.
 
-| Russian-only markers (no ыэъё)                                                                                                                                                                            | Ukrainian-only markers (no іїєґ)                                                                                                                       |
-| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| что, его, как, когда, только, сейчас, очень, даже, или, где, она, они, которая, которое, которого, сообщил, сообщила, сообщают, заявил, упал, летел, составляет, около, ночью, также, после, сегодня, нет | що, це, його, якщо, вже, дуже, або, але, вона, вони, був, була, було, який, яка, яке, якого, заявив, упав, близько, також, мають, можна, ще, теж, чому |
+| Russian-only markers (no ыэъё)                                                                                                                                                                            | Ukrainian-only markers (no іїєґ)                                                                                               |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| что, его, как, когда, только, сейчас, очень, даже, или, где, она, они, которая, которое, которого, сообщил, сообщила, сообщают, заявил, упал, летел, составляет, около, ночью, также, после, сегодня, нет | що, це, його, якщо, вже, дуже, або, але, вона, вони, був, була, було, який, якого, близько, також, мають, можна, ще, теж, чому |
+
+The table shows the list of detector 3.1.0: 28 Russian and 22 Ukrainian markers. Detector 3.0.0 also had яка, яке, заявив and упав on the Ukrainian side (finding F1, removed in package 2).
 
 **Excluded on purpose:**
 
@@ -206,6 +208,10 @@ Decided direction: alternatives 1 + 2 from the adversarial review. Sentence-leve
 - **Removed in design review:**
   - як: also the Russian noun "yak";
   - становить: also an older or less common Russian verb.
+- **Removed in package 2 (3.1.0, finding F1):**
+  - заявив, упав: also standard Russian perfective gerunds ("having stated", "having fallen");
+  - яка, яке: also case forms of the Russian noun "як", for the same reason як was removed.
+  - заявил and упал stay Russian markers: those forms are Russian only.
 
   A smaller, high-precision list is preferred over a larger one that needs exception logic.
 
@@ -310,15 +316,17 @@ Decided direction: alternatives 1 + 2 from the adversarial review. Sentence-leve
 
 ### D0 status (2026-11-27)
 
-| Version                               | Status                                                                                                              |
-| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| D0 3.0.0 (`acb6384`)                  | **Historically evaluated, with known risk F1.** The holdout result (0 false-decisive in 147) stands for 3.0.0 only. |
-| D0 3.1.0 (package 2, planned)         | Once implemented: **technically verified, not statistically approved.** It does not inherit 3.0.0's holdout result. |
-| D0 3.1.0 after holdout v2 (package 3) | Can become statistically approved after one evaluation of an unused holdout.                                        |
+| Version                               | Status                                                                                                                           |
+| ------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| D0 3.0.0 (`acb6384`)                  | **Historically evaluated, with known risk F1.** The holdout result (0 false-decisive in 147) stands for 3.0.0 only.              |
+| D0 3.1.0 (package 2)                  | **Technically verified (pending the technical review), not statistically approved.** It does not inherit 3.0.0's holdout result. |
+| D0 3.1.0 after holdout v2 (package 3) | Can become statistically approved after one evaluation of an unused holdout.                                                     |
+
+**Limitation that holds for every version:** D0 tells Russian from Ukrainian. It cannot decide whether a Cyrillic text is Russian or Ukrainian at all. Belarusian, Bulgarian and other Cyrillic text can get a false decisive `ru` or `uk`: 5 of 13 development rows do with both 3.0.0 and 3.1.0. These 5 stay in every report as known development failures. Holdout v1's 0 false-decisive (its other-Cyrillic category was 12 rows, 0 decisive) does not mean 0 errors for all Cyrillic languages.
 
 **Chain-review findings and their handling.**
 
-- **F1, should-fix (high), → package 2 (3.1.0).** заявив and упав are also standard Russian gerunds, and яка and яке are case forms of the Russian noun "як". Their documented cross-language check was wrong, and that is a design error. Two reproduced cases:
+- **F1, should-fix (high), done in package 2 (3.1.0, see below).** заявив and упав are also standard Russian gerunds, and яка and яке are case forms of the Russian noun "як". Their documented cross-language check was wrong, and that is a design error. Two reproduced cases:
   - "Беспилотник, упав в поле, загорелся; … обломки і детали." gives a decisive `uk` (false);
   - "Губернатор, заявив об атаке, сообщил, что…" is non-decisive although it is clearly Russian.
 - **F2–F4 and F6, done in package 1** (no detector change; `LANGUAGE_DETECTOR_VERSION` stays 3.0.0):
@@ -328,9 +336,9 @@ Decided direction: alternatives 1 + 2 from the adversarial review. Sentence-leve
     - `languageDetectorVersion` and the current `languageRule` in the manifest;
     - one schema version throughout;
     - consistent provenance fields;
-    - when the stamp equals the current detector version, an exact re-detection from each stored excerpt.
+    - an exact re-detection from each stored excerpt, **with the detector version the manifest is stamped with** (`LANGUAGE_DETECTORS_BY_VERSION`), never with the current one in its place.
 
-    A different detector version gives a **warning**: the stored detection is not re-verifiable with this detector. It is not an error, so historical 1.1.0 frames stay verifiable after a detector bump.
+    The result carries a replay status: `replayed`, `not_replayed` or `not_applicable` (1.0.0). When the stamped version is not available, the status is `not_replayed`, with a warning. `evaluate-semantic-registry` prints it and writes it at the top of a 1.1.0 report: "language replay: NOT PERFORMED … not reproduced". A historical 1.1.0 frame thus stays verifiable for consistency after a detector bump, but the report never claims to have reproduced it. Only the current detector is registered, because no committed frame carries an older stamp. A frozen copy is registered before an older-stamped frame has to be replayed. (The first version, package 1, ran the check only for the current version and otherwise raised a plain warning. It was changed after review on 2026-11-27.)
 
   - **F4: schema 1.0.0.** Directories verify exactly as before. A **new** 1.0.0 freeze of a row without `language` is refused, because 1.0.0 records no detector; use 1.1.0.
   - **F6:**
@@ -338,6 +346,29 @@ Decided direction: alternatives 1 + 2 from the adversarial review. Sentence-leve
     - The evidence key is case-insensitive while detection is case-sensitive. A case-only difference that detects differently excludes the whole cluster as `conflicting_evidence_metadata`, which is conservative.
     - When stratum languages match, the dropped duplicate's detection fields are discarded.
   - **Other Cyrillic languages:** 13 development rows added (5 Belarusian, 8 Bulgarian). **5 are false-decisive with 3.0.0** (1 Belarusian as `uk`, 4 Bulgarian as `ru`, partly through the shared words але, або, или, около and как). They are pinned as `it.fails`. Russian and Ukrainian are the only supported languages; this is a known risk outside the two-language model. The adversarial set is now 42 rows, with 5 known false-decisive, all in this category. The original 29 rows remain at 0.
+- **Package 2, detector 3.1.0 (2026-11-27).** заявив, упав, яка and яке were removed from the Ukrainian list. No marker was added, and the decision rule is unchanged. 3.0.0 (`b55ab34`) and 3.1.0 were compared on every development text. Every changed outcome traces to exactly one removed marker.
+  - **Development texts:** the 92-row corpus, the 42 earlier adversarial rows, and two groups of new rows:
+    - 13 rows in "Russian gerunds and Ukrainian homographs": the reviewer's 3 reproductions verbatim plus 10 rows by the implementer, partly variations of them;
+    - 18 rows in "…, independent author", written by a separate session that saw only the four words and the reason for their removal. It saw neither the reproductions, the other rows nor the detector.
+  - Changes from 3.0.0 to 3.1.0 by row set. Each cell counts rows (the removed marker that caused the change):
+
+    | Change                                                      | Reproductions + implementer (13) | Independent author (18)       |
+    | ----------------------------------------------------------- | -------------------------------- | ----------------------------- |
+    | Fixed false-decisive (3.0.0 wrong, 3.1.0 abstains or right) | 2 (упав)                         | 0                             |
+    | **New false-decisive**                                      | **0**                            | **0**                         |
+    | Coverage lost (correct decisive → non-decisive)             | 0                                | **1** (упав, a Ukrainian row) |
+    | Coverage gained (non-decisive → correct decisive)           | 1 (заявив)                       | 4 (заявив 2, упав 1, яка 1)   |
+    | Decisive in both, language changed                          | 0                                | 0                             |
+    | Reason only (spurious `conflicting_evidence` gone)          | 4 (заявив 2, упав 1, яка 1)      | 6                             |
+    | Unchanged                                                   | 6                                | 7                             |
+
+    The corpus and the 42 earlier adversarial rows have no transition. No marker was added to win back the lost row.
+
+  - **Figures** (rows / decisive / false-decisive / non-decisive), 3.0.0 → 3.1.0:
+    - corpus: 92 / 9 / 0 / 90.2 % → unchanged;
+    - adversarial, all 73 rows: 73 / 15 / 7 / 79.5 % → 73 / 17 / 5 / 76.7 %;
+    - the 5 remaining false-decisive rows are the Belarusian and Bulgarian rows (see the limitation above).
+  - **Checks:** all tests and `npm run green` pass, S5 exits 0 for both evaluation directories, and the holdout file was not opened.
 - **F5 and F7 (documentation), synced in this document:**
   - the decisive end-to-end sentence;
   - the corpus table note;
@@ -351,7 +382,7 @@ Decided direction: alternatives 1 + 2 from the adversarial review. Sentence-leve
 
 **Next:**
 
-1. **Package 2 (3.1.0):** remove заявив, упав, яка and яке with no replacement. Add the reviewer's reproductions to the development set. Test both directions: false-decisive results that disappear, and conflicts that removal could also make disappear. Bump the version.
+1. ~~Package 2 (3.1.0)~~: done (see above).
 2. Technical review: full regression, replay, backward compatibility, and a new chain review.
 3. **Package 3:** holdout v2 by an isolated author. Coverage includes:
    - Russian gerunds and Ukrainian homographs;
