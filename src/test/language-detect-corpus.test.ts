@@ -110,8 +110,13 @@ describe("language detection corpus (hand-written, origin fixture)", () => {
       } else if (uk > 0 && ru > 0) {
         expect(d.decisive, r.text).toBe(false);
       } else {
-        expect(d.decisive, r.text).toBe(true);
-        expect(d.language, r.text).toBe(uk > 0 ? "uk" : "ru");
+        // Since detector 3.0.0 one side's letters are necessary, not sufficient: when the result is
+        // decisive it is that side's language, and both channels stand behind it (variant B).
+        if (d.decisive) {
+          expect(d.language, r.text).toBe(uk > 0 ? "uk" : "ru");
+          const channels = uk > 0 ? d.evidence.ukrainianChannels : d.evidence.russianChannels;
+          expect(channels, r.text).toEqual(["L", "W"]);
+        }
       }
     }
     expect(checked).toBeGreaterThan(30);

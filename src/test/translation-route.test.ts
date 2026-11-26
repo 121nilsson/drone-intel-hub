@@ -240,14 +240,26 @@ describe("translation routing follows the language evidence (D0)", () => {
   const askWith = (prompt: string) =>
     translateCompletion({ system: "Translate to English.", prompt });
 
-  it("sends short Ukrainian with one distinguishing letter as uk-en", async () => {
+  it("sends short Ukrainian with evidence from both channels as uk-en", async () => {
+    riva();
+    const seen = stubFetch();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    await askWith("Дрон вже має дальність польоту 250 км.");
+    await askWith("Ця потужність вже становить 80 кВт.");
+    expect(seen.map((s) => s.system)).toEqual(["uk-en", "uk-en"]);
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it("logs short Ukrainian with evidence from one channel only as undetermined; routing follows the old rule (detector 3.0.0)", async () => {
     riva();
     const seen = stubFetch();
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     await askWith("Дрон має дальність польоту 250 км.");
     await askWith("Заявлена потужність двигуна — 80 кВт.");
-    expect(seen.map((s) => s.system)).toEqual(["uk-en", "uk-en"]);
-    expect(warn).not.toHaveBeenCalled();
+    expect(seen.map((s) => s.system)).toEqual(["uk-en", "ru-en"]);
+    expect(
+      warn.mock.calls.filter((c) => String(c[0]).includes("cyrillic_undetermined")),
+    ).toHaveLength(2);
   });
 
   it("does not let a sentence-initial word decide: ru-en as before D0, and logged", async () => {
@@ -329,7 +341,7 @@ describe("language provenance end to end (D0)", () => {
   };
 
   it("short decisive Ukrainian: uk, uk-en, detected not declared, resolver gets uk", async () => {
-    const r = await run("Дрон має дальність польоту 250 км.");
+    const r = await run("Дрон вже має дальність польоту 250 км.");
     expect(r.detection).toMatchObject({ language: "uk", decisive: true });
     expect(r.system).toBe("uk-en");
     expect(r.example.declaredLanguage).toBeUndefined();

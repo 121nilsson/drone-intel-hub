@@ -13,6 +13,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { format, resolveConfig } from "prettier";
+import { LANGUAGE_DETECTOR_VERSION } from "../src/entities/normalization/language";
 import {
   CODE_SEED_SNAPSHOT,
   SEMANTIC_RESOLVER_VERSION,
@@ -131,7 +132,10 @@ const manifest: SamplingManifest = {
   examplesSha256: sha256Hex(examplesJsonl),
   predictionsSha256: sha256Hex(predictionsJsonl),
   ...(schemaFlag === SEMANTIC_EVAL_SCHEMA_VERSION_1_1
-    ? { languageRule: LANGUAGE_STRATUM_RULE }
+    ? {
+        languageRule: LANGUAGE_STRATUM_RULE,
+        languageDetectorVersion: LANGUAGE_DETECTOR_VERSION,
+      }
     : {}),
 };
 const manifestHash = sha256Hex(canonicalJson(manifest));

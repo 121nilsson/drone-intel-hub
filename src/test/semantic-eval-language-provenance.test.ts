@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { LANGUAGE_DETECTOR_VERSION } from "@/entities/normalization/language";
 import {
   CODE_SEED_SNAPSHOT,
   SEMANTIC_RESOLVER_VERSION,
@@ -20,7 +21,7 @@ import {
 } from "@/entities/normalization/semantic-eval/validate";
 import { verifyEvaluationInputs } from "@/entities/normalization/semantic-eval/verify";
 
-const UK_DECISIVE = "Дрон має дальність польоту 250 км.";
+const UK_DECISIVE = "Дрон вже має дальність польоту 250 км.";
 const UK_INITIAL_ONLY = "Дальність польоту становить 250 км.";
 const UK_UNDECIDABLE = "Корисне навантаження становить 35 кг.";
 const RU_DECISIVE = "Дальность полёта составляет 250 км.";
@@ -210,6 +211,7 @@ describe("schema 1.1.0 language provenance", () => {
       examplesSha256: sha256Hex(examplesText),
       predictionsSha256: sha256Hex(predictionsText),
       languageRule: LANGUAGE_STRATUM_RULE,
+      languageDetectorVersion: LANGUAGE_DETECTOR_VERSION,
     };
     const parsed = parseJsonl(examplesText, validateExample, "examples.jsonl");
     expect(parsed.map((e) => e.language).sort()).toEqual(["uk", "unknown"]);

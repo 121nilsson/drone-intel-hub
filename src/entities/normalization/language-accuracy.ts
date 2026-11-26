@@ -59,3 +59,69 @@ export function languageDetectionAccuracy(
     decisiveRuUkConfusions,
   };
 }
+
+/** A labelled text for the decisive-claim check. `allowedDecisive: null` means no decisive claim is acceptable. */
+export interface DecisionRow {
+  readonly id: string;
+  readonly category: string;
+  readonly text: string;
+  readonly allowedDecisive: "ru" | "uk" | "en" | null;
+}
+
+export interface DecisionCounts {
+  readonly rows: number;
+  readonly decisive: number;
+  /** Decisive, and not the one allowed language (any decisive claim when none is allowed). */
+  readonly falseDecisive: number;
+  /** (rows - decisive) / rows, 0 when empty. */
+  readonly nonDecisiveRate: number;
+}
+
+export interface DecisionSummary {
+  readonly categories: readonly (DecisionCounts & { readonly category: string })[];
+  readonly total: DecisionCounts;
+  /** Ids only, never texts. */
+  readonly falseDecisiveIds: readonly string[];
+}
+
+const counts = (rows: number, decisive: number, falseDecisive: number): DecisionCounts => ({
+  rows,
+  decisive,
+  falseDecisive,
+  nonDecisiveRate: rows === 0 ? 0 : (rows - decisive) / rows,
+});
+
+/**
+ * Per-category and total counts of decisive and false-decisive results. Pure: the caller passes the
+ * detector, and the summary contains counts and row ids only, never text.
+ */
+export function summariseDecisions(
+  rows: readonly DecisionRow[],
+  detect: (text: string) => Pick<LanguageDetection, "language" | "decisive">,
+): DecisionSummary {
+  const byCategory = new Map<string, { rows: number; decisive: number; falseDecisive: number }>();
+  const falseDecisiveIds: string[] = [];
+  for (const row of rows) {
+    const d = detect(row.text);
+    const c = byCategory.get(row.category) ?? { rows: 0, decisive: 0, falseDecisive: 0 };
+    c.rows++;
+    if (d.decisive) {
+      c.decisive++;
+      if (row.allowedDecisive === null || d.language !== row.allowedDecisive) {
+        c.falseDecisive++;
+        falseDecisiveIds.push(row.id);
+      }
+    }
+    byCategory.set(row.category, c);
+  }
+  const all = [...byCategory.values()];
+  const sum = (k: "rows" | "decisive" | "falseDecisive") => all.reduce((n, c) => n + c[k], 0);
+  return {
+    categories: [...byCategory].map(([category, c]) => ({
+      category,
+      ...counts(c.rows, c.decisive, c.falseDecisive),
+    })),
+    total: counts(sum("rows"), sum("decisive"), sum("falseDecisive")),
+    falseDecisiveIds,
+  };
+}

@@ -318,6 +318,8 @@ export interface SamplingManifest {
   readonly predictionsSha256: string;
   /** Schema 1.1.0 frames only: the stratum language rule (LANGUAGE_STRATUM_RULE). */
   readonly languageRule?: string | undefined;
+  /** Schema 1.1.0 frames only: LANGUAGE_DETECTOR_VERSION of the detector that produced the strata. */
+  readonly languageDetectorVersion?: string | undefined;
 }
 
 export interface SourceConcentration {

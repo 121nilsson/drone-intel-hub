@@ -191,9 +191,9 @@ Decided direction: alternatives 1 + 2 from the adversarial review. Sentence-leve
 - **Separate from L.** A marker word **never contains a distinctive letter**. W therefore uses different features than L and can fire in text that L cannot see, so it is not a second way of counting the same letters. That makes the channels **separate**, not statistically independent: both are driven by the same underlying language.
 - **Matching.** Case-insensitive, whole tokens only. Quoted text is excluded. A sentence-initial word counts, because function words are not names. Capitalised words in mid-sentence are still excluded.
 
-| Russian-only markers (no ыэъё)                                                                                                                                                                            | Ukrainian-only markers (no іїєґ)                                                                                                                            |
-| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| что, его, как, когда, только, сейчас, очень, даже, или, где, она, они, которая, которое, которого, сообщил, сообщила, сообщают, заявил, упал, летел, составляет, около, ночью, также, после, сегодня, нет | що, це, його, якщо, вже, дуже, або, але, вона, вони, був, була, було, який, яка, яке, якого, заявив, упав, близько, також, має, мають, можна, ще, теж, чому |
+| Russian-only markers (no ыэъё)                                                                                                                                                                            | Ukrainian-only markers (no іїєґ)                                                                                                                       |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| что, его, как, когда, только, сейчас, очень, даже, или, где, она, они, которая, которое, которого, сообщил, сообщила, сообщают, заявил, упал, летел, составляет, около, ночью, также, после, сегодня, нет | що, це, його, якщо, вже, дуже, або, але, вона, вони, був, була, було, який, яка, яке, якого, заявив, упав, близько, також, мають, можна, ще, теж, чому |
 
 **Excluded on purpose:**
 
@@ -206,6 +206,8 @@ Decided direction: alternatives 1 + 2 from the adversarial review. Sentence-leve
   - становить: also an older or less common Russian verb.
 
   A smaller, high-precision list is preferred over a larger one that needs exception logic.
+
+- **Removed in implementation (correction of a design error, 2026-11-27):** має. It contains є, so it broke the list's own rule that no marker contains a distinctive letter. The implementer's enforcing test caught it. No replacement was added in the same change. має still counts as channel-L evidence where it is an ordinary word. The whole list was re-checked afterwards: every remaining marker has no distinctive letter and a documented check against the other language.
 
 **List rules:**
 
@@ -229,6 +231,17 @@ Decided direction: alternatives 1 + 2 from the adversarial review. Sentence-leve
    - B needs at least two distinct evidence words in total, at least one from L and at least one from W.
    - The choice is the best balance between false-decisive results (target 0) and the non-decisive rate. **If A and B perform the same on the development sets, B is chosen**, because it requires support from both channels.
    - The choice and the development-set figures behind it are recorded here before the holdout run.
+   - **Decided 2026-11-27: variant B, frozen.** Development sets only, one run each. The figures are shown with the erroneous marker має and without it:
+
+     | Set                  | Variant | Decisive (with має) | False-decisive (with має) | Non-decisive (with має) | Decisive (without має) | False-decisive (without має) | Non-decisive (without має) |
+     | -------------------- | ------- | ------------------- | ------------------------- | ----------------------- | ---------------------- | ---------------------------- | -------------------------- |
+     | Corpus, 92 rows      | A       | 17                  | 0                         | 81.5 %                  | 17                     | 0                            | 81.5 %                     |
+     | Corpus, 92 rows      | B       | 10                  | 0                         | 89.1 %                  | 9                      | 0                            | 90.2 %                     |
+     | Adversarial, 29 rows | A       | 3                   | **1**                     | 89.7 %                  | 3                      | **1**                        | 89.7 %                     |
+     | Adversarial, 29 rows | B       | 1                   | 0                         | 96.6 %                  | 0                      | 0                            | 100 %                      |
+     - A's false-decisive row is the sixth language-switch row. B gives 0 false-decisive results on both sets, so it meets the target and A does not.
+     - **B is conservative on purpose.** Its non-decisive rate is high. On the adversarial set it decides nothing, which is safe but has no coverage there.
+     - **Reservation:** 0 false-decisive on the development sets is a property of those samples, not evidence of zero errors in real use. The holdout is run exactly once by an unexposed session. If B fails there, the rules are not adjusted and the same holdout is not reused as approval evidence.
 
 #### Evaluation sets (kept apart)
 
@@ -265,7 +278,7 @@ Decided direction: alternatives 1 + 2 from the adversarial review. Sentence-leve
 
 - [x] Rule and word list reviewed and frozen in design (2026-11-26).
 - [ ] `LANGUAGE_DETECTOR_VERSION` introduced in code. The list in code carries a reason and a check of the other language for every word.
-- [ ] Variant A or B chosen on the development sets and recorded here, with the figures, before the holdout run.
+- [x] Variant chosen on the development sets and recorded with the figures: **B** (2026-11-27).
 - [ ] Corpus: 100 %, 0 false-decisive.
 - [ ] Adversarial set: 0 false-decisive. All `it.fails` rows pass and are converted.
 - [ ] Holdout, evaluated once: 0 false-decisive ru↔uk. Non-decisive rate reported per category.

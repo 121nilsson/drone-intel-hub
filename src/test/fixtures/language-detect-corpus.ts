@@ -54,26 +54,26 @@ export const LANGUAGE_CORPUS: readonly LanguageCorpusRow[] = [
   // Short Ukrainian whose distinctive letter is in an ordinary word (lower-case, not the first word
   // of a sentence, not quoted): decisive uk. A letter that only the first word carries is not enough
   // (see initial_word_only).
-  row("short_uk_one_letter", "Ця дальність польоту — 250 км.", "uk", "uk", true),
-  row("short_uk_one_letter", "Ця потужність двигуна — 80 кВт.", "uk", "uk", true),
-  row("short_uk_one_letter", "Заявлена швидкість польоту — 120 км/год.", "uk", "uk", true),
-  row("short_uk_one_letter", "Розрахункова вартість одного борту — 35 тисяч.", "uk", "uk", true),
+  row("short_uk_one_letter", "Ця дальність польоту — 250 км.", "uk", "ru", false),
+  row("short_uk_one_letter", "Ця потужність двигуна — 80 кВт.", "uk", "ru", false),
+  row("short_uk_one_letter", "Заявлена швидкість польоту — 120 км/год.", "uk", "ru", false),
+  row("short_uk_one_letter", "Розрахункова вартість одного борту — 35 тисяч.", "uk", "ru", false),
   row(
     "short_uk_one_letter",
     "Максимальна висота польоту — 4000 м, а швидкість мала.",
     "uk",
-    "uk",
-    true,
+    "ru",
+    false,
   ),
-  row("short_uk_one_letter", "Дрон має дальність польоту 250 км.", "uk", "uk", true),
+  row("short_uk_one_letter", "Дрон має дальність польоту 250 км.", "uk", "uk", false),
 
   // Short Russian with ы, э, ъ or ё in an ordinary word: decisive ru.
   row("short_ru_distinctive", "Дальность полёта составляет 250 км.", "ru", "ru", true),
   row("short_ru_distinctive", "Эта модель оснащена двигателем, а экипажа нет.", "ru", "ru", true),
-  row("short_ru_distinctive", "Аппарат имеет объём бака 12 литров.", "ru", "ru", true),
-  row("short_ru_distinctive", "Крылья аппарата складываются вдоль корпуса.", "ru", "ru", true),
-  row("short_ru_distinctive", "Время подъёма на высоту — шесть минут.", "ru", "ru", true),
-  row("short_ru_distinctive", "Ракета оснащена тяжёлой боевой частью.", "ru", "ru", true),
+  row("short_ru_distinctive", "Аппарат имеет объём бака 12 литров.", "ru", "ru", false),
+  row("short_ru_distinctive", "Крылья аппарата складываются вдоль корпуса.", "ru", "ru", false),
+  row("short_ru_distinctive", "Время подъёма на высоту — шесть минут.", "ru", "ru", false),
+  row("short_ru_distinctive", "Ракета оснащена тяжёлой боевой частью.", "ru", "ru", false),
 
   // Ukrainian with no Ukrainian-only letter (no і, ї, є, ґ): the detector must not claim certainty.
   row("uk_no_distinctive_letters", "Корисне навантаження становить 35 кг.", "uk", "ru", false),
@@ -110,14 +110,14 @@ export const LANGUAGE_CORPUS: readonly LanguageCorpusRow[] = [
     "Аппарат запустили из Київ, сообщили в штабе, дальность полёта 250 км.",
     "ru",
     "ru",
-    true,
+    false,
   ),
   row(
     "mixed_ru_uk",
     "Издание процитировало слова из Києва: объём поставок вырос втрое.",
     "ru",
     "ru",
-    true,
+    false,
   ),
   row(
     "mixed_ru_uk",
@@ -131,21 +131,21 @@ export const LANGUAGE_CORPUS: readonly LanguageCorpusRow[] = [
     "Видання навело слова «подъём» і «объём» з російського повідомлення про дрон.",
     "uk",
     "uk",
-    true,
+    false,
   ),
   row(
     "mixed_ru_uk",
     "У повідомленні, процитованому українською, сказано: «экипаж отсутствует», а дальність становить 40 км.",
     "uk",
     "uk",
-    true,
+    false,
   ),
   row(
     "mixed_ru_uk",
     "Російське видання вживає слово «объём», а українське — обсяг, їх легко сплутати.",
     "uk",
     "uk",
-    true,
+    false,
   ),
 
   // Technical keys and English values: never a Cyrillic or English claim.
@@ -252,11 +252,17 @@ export const LANGUAGE_CORPUS: readonly LanguageCorpusRow[] = [
   row("uk_mentions_ru_names", "Дрон збили над Крым, пише агентство.", "uk", "ru", false),
   row("uk_mentions_ru_names", "Ракета впала над Сызрань, пише агентство.", "uk", "ru", false),
   row("uk_mentions_ru_names", "Корисне навантаження вказано для Сызрань.", "uk", "ru", false),
-  row("uk_mentions_ru_names", "Завод Ростех випускає двигуни для апарата.", "uk", "uk", true),
-  row("uk_mentions_ru_names", "Агентство повідомляє про збій у Сызрань.", "uk", "uk", true),
-  row("uk_mentions_ru_names", "Про «объём» поставок написали українські ЗМІ.", "uk", "uk", true),
-  row("uk_mentions_ru_names", "Дані про масу апарата з Крым наведені у таблиці.", "uk", "uk", true),
-  row("uk_mentions_ru_names", "Дрон впав біля Ростех, повідомили у Ярославль.", "uk", "uk", true),
+  row("uk_mentions_ru_names", "Завод Ростех випускає двигуни для апарата.", "uk", "ru", false),
+  row("uk_mentions_ru_names", "Агентство повідомляє про збій у Сызрань.", "uk", "uk", false),
+  row("uk_mentions_ru_names", "Про «объём» поставок написали українські ЗМІ.", "uk", "uk", false),
+  row(
+    "uk_mentions_ru_names",
+    "Дані про масу апарата з Крым наведені у таблиці.",
+    "uk",
+    "uk",
+    false,
+  ),
+  row("uk_mentions_ru_names", "Дрон впав біля Ростех, повідомили у Ярославль.", "uk", "uk", false),
 
   // A distinctive letter that only the first word of a sentence carries is not evidence: that word
   // may be a name. Not decisive, and the language is the old rule's answer on the whole text.
@@ -317,10 +323,10 @@ export const LANGUAGE_CORPUS: readonly LanguageCorpusRow[] = [
     "uk_starts_with_ru_name",
     "Объединённая корпорація заявила про запуск дрона.",
     "uk",
-    "uk",
-    true,
+    "ru",
+    false,
   ),
-  row("uk_starts_with_ru_name", "Ёлкин повідомив про запуск дрона.", "uk", "uk", true),
+  row("uk_starts_with_ru_name", "Ёлкин повідомив про запуск дрона.", "uk", "ru", false),
   row("uk_starts_with_ru_name", "Крым: дрон збили над морем, пише агентство.", "uk", "ru", false),
 
   // Quotations never settle the language. Where the ordinary words have no distinctive letter the
