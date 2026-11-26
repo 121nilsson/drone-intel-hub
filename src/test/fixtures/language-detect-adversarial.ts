@@ -115,4 +115,75 @@ export const ADVERSARIAL_CATEGORIES: Readonly<Record<string, readonly Adversaria
       knownFalseDecisive: true,
     },
   ],
+  // Detector 3.1.0 (package 2, finding F1): заявив and упав are standard Russian perfective gerunds
+  // and яка, яке are case forms of the Russian noun "як" (yak), so none of them is Ukrainian
+  // evidence. The first three rows are the independent reviewer's reproductions, verbatim.
+  "Russian gerunds and Ukrainian homographs": [
+    { text: "Беспилотник, упав в поле, загорелся; позже нашли обломки і детали.", allowed: "ru" },
+    {
+      text: "Дрон, упав на поле, взорвался, о жертвах не сообщали і пожар потушен.",
+      allowed: "ru",
+    },
+    { text: "Губернатор, заявив об атаке, сообщил, что дрон был сбит.", allowed: "ru" },
+    { text: "Министр, заявив о задержке, сказал, что поставки продолжатся.", allowed: "ru" },
+    { text: "Ракета, упав в реку, не взорвалась, и экипаж остался жив.", allowed: "ru" },
+    {
+      text: "Мальчик, упав с велосипеда, сказал, что очень болит рука, і мама вызвала врача.",
+      allowed: "ru",
+    },
+    { text: "Командир, прочитав приказ и заявив протест, ушёл со сцены.", allowed: "ru" },
+    { text: "На ферме держат яка, а корма для яка хватает до весны.", allowed: "ru" },
+    {
+      text: "Туристы сфотографировали яка, пасшегося у перевала, и целое стадо яков.",
+      allowed: "ru",
+    },
+    { text: "Губернатор заявив про атаку і повідомив, що дрон було збито вночі.", allowed: "uk" },
+    { text: "Дрон упав на поле, яке належить фермеру, і вибухнув ще вночі.", allowed: "uk" },
+    { text: "Ракета, яка летіла над містом, була збита вже вночі.", allowed: "uk" },
+    { text: "Командир заявив, що дрон упав, а экипаж сообщил, что его нет.", allowed: null },
+  ],
+  // Package 2 independence check (2026-11-27): written by a separate author who was told only which
+  // four words were removed and why, and who saw neither the reviewer's reproductions, the rows
+  // above, the detector nor its word lists. Not tuned against the detector.
+  "Russian gerunds and Ukrainian homographs, independent author": [
+    {
+      text: "Заявив о готовности к переговорам, министр покинул зал заседаний, не ответив на вопросы журналистов.",
+      allowed: "ru",
+    },
+    {
+      text: "Дрон потерял управление и, упав на крышу склада, повредил антенну связи.",
+      allowed: "ru",
+    },
+    {
+      text: "Командир вышел к журналистам, заявив, что операция завершена. Позже он, не получив подтверждения, отказался от комментариев.",
+      allowed: "ru",
+    },
+    {
+      text: "Когда беспилотник, упав в поле, взорвался, жители соседней деревни услышали сильный хлопок.",
+      allowed: "ru",
+    },
+    { text: "Заявив протест и упав духом, он ушёл с собрания.", allowed: "ru" },
+    { text: "Эксперт ответил, заявив, что цены вырастут.", allowed: "ru" },
+    { text: "В зоопарке мы увидели яка, которого кормили сеном.", allowed: "ru" },
+    {
+      text: "Путешественники купили у пастуха молоко яка и сыр, сделанный из него.",
+      allowed: "ru",
+    },
+    { text: "Фермер рассказал о яке, который пасётся на склоне.", allowed: "ru" },
+    { text: "Туристы много говорили о яке, встреченном на перевале.", allowed: "ru" },
+    { text: "Речник заявив, що нові дрони надійдуть до війська наприкінці місяця.", allowed: "uk" },
+    { text: "Безпілотник втратив зв'язок і упав у річку неподалік від мосту.", allowed: "uk" },
+    { text: "Це була компанія, яка виробляє радіостанції для підрозділів зв'язку.", allowed: "uk" },
+    { text: "Це рішення, яке ухвалили вчора, викликало суперечки.", allowed: "uk" },
+    {
+      text: "Мер заявив про нову програму, яка допоможе родинам, що втратили домівки.",
+      allowed: "uk",
+    },
+    { text: "Заявив, що прийде.", allowed: "uk" },
+    {
+      text: "Президент заявил о новых мерах поддержки. Речник заявив, що підтримка надійде вже наступного тижня.",
+      allowed: null,
+    },
+    { text: "Упав с лестницы, он сломал руку.", allowed: "ru" },
+  ],
 };

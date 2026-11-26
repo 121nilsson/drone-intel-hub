@@ -31,7 +31,7 @@ const ENGLISH_WORDS = new Set(
  * (schema 1.1.0) that used language detection, so a frame says which detector produced its strata.
  * 3.0.0: revision 3, two evidence channels (distinctive letters L, marker words W).
  */
-export const LANGUAGE_DETECTOR_VERSION = "3.0.0";
+export const LANGUAGE_DETECTOR_VERSION = "3.1.0";
 
 /** One entry of a closed marker list: the word, why it is safe, and the check against the other language. */
 export interface LanguageMarker {
@@ -100,11 +100,7 @@ export const UKRAINIAN_MARKERS: readonly LanguageMarker[] = [
   m("була", "'was' (f.)", "ru uses была; була is not Russian"),
   m("було", "'was' (n.)", "ru uses было; було is not Russian"),
   m("який", "relative 'which' (m.)", "ru uses который, какой; який is not Russian"),
-  m("яка", "relative 'which' (f.)", "ru uses которая, какая; яка is not Russian"),
-  m("яке", "relative 'which' (n.)", "ru uses которое, какое; яке is not Russian"),
   m("якого", "relative 'which' (gen.)", "ru uses которого, какого; якого is not Russian"),
-  m("заявив", "'stated' (m.), news verb", "ru uses заявил; заявив is not Russian"),
-  m("упав", "'fell' (m.)", "ru uses упал; упав is not Russian"),
   m("близько", "'about, approximately'", "ru uses около, примерно; близько is not Russian"),
   m("також", "'also'", "ru uses также; також is not Russian"),
   m("мають", "'have' (3rd pl.)", "ru uses имеют; мають is not Russian"),

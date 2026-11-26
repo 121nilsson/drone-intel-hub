@@ -8,13 +8,16 @@ import {
 } from "@/entities/normalization/language";
 import { summariseDecisions } from "@/entities/normalization/language-accuracy";
 
-/** The frozen D0 revision 3 table (plan). A change here is a reviewed change and a version bump. */
+/**
+ * The frozen channel W table (D0 revision 3, corrected in detector 3.1.0). A change here is a
+ * reviewed change and a version bump. 3.1.0 removed заявив, упав, яка and яке from the Ukrainian side.
+ */
 const FROZEN_RU =
   "что его как когда только сейчас очень даже или где она они которая которое которого сообщил сообщила сообщают заявил упал летел составляет около ночью также после сегодня нет".split(
     " ",
   );
 const FROZEN_UK =
-  "що це його якщо вже дуже або але вона вони був була було який яка яке якого заявив упав близько також мають можна ще теж чому".split(
+  "що це його якщо вже дуже або але вона вони був була було який якого близько також мають можна ще теж чому".split(
     " ",
   );
 
@@ -45,8 +48,22 @@ describe("channel W marker lists (D0 revision 3)", () => {
     expect(new Set(all).size).toBe(all.length);
   });
 
+  it("has 28 Russian and 22 Ukrainian markers", () => {
+    expect(RUSSIAN_MARKERS).toHaveLength(28);
+    expect(UKRAINIAN_MARKERS).toHaveLength(22);
+  });
+
+  it("lists neither заявив, упав, яка nor яке in either list (F1, detector 3.1.0)", () => {
+    // заявив and упав are standard Russian perfective gerunds; яка and яке are case forms of the
+    // Russian noun "як" (yak). Their old cross-language check was wrong, and none is replaced.
+    const all = [...RUSSIAN_MARKERS, ...UKRAINIAN_MARKERS].map((x) => x.word);
+    for (const w of ["заявив", "упав", "яка", "яке"]) expect(all, w).not.toContain(w);
+    // The Russian perfect-tense forms stay: they are Russian-only.
+    expect(RUSSIAN_MARKERS.map((x) => x.word)).toEqual(expect.arrayContaining(["заявил", "упал"]));
+  });
+
   it("is versioned", () => {
-    expect(LANGUAGE_DETECTOR_VERSION).toBe("3.0.0");
+    expect(LANGUAGE_DETECTOR_VERSION).toBe("3.1.0");
   });
 });
 
@@ -166,5 +183,62 @@ describe("summariseDecisions", () => {
       falseDecisive: 0,
       nonDecisiveRate: 0,
     });
+  });
+});
+
+describe("Russian gerunds and Ukrainian homographs (detector 3.1.0)", () => {
+  // Reproduced with 3.0.0: Russian text with one stray Ukrainian letter was decisive uk.
+  const FIXED_FALSE_DECISIVE = [
+    "Беспилотник, упав в поле, загорелся; позже нашли обломки і детали.",
+    "Дрон, упав на поле, взорвался, о жертвах не сообщали і пожар потушен.",
+  ];
+
+  it("keeps Russian text with a stray Ukrainian letter and a Russian gerund non-decisive", () => {
+    for (const text of FIXED_FALSE_DECISIVE) {
+      const d = detectLanguageWithEvidence(text);
+      expect(d.decisive, text).toBe(false);
+      expect(d.reason, text).toBe("cyrillic_undetermined");
+      expect(d.language, text).toBe("ru");
+      expect(d.evidence.ukrainianChannels, text).toEqual(["L"]);
+    }
+  });
+
+  it("no longer reports a conflict for a Russian gerund or the noun як", () => {
+    for (const text of [
+      "Министр, заявив о задержке, сказал, что поставки продолжатся.",
+      "Ракета, упав в реку, не взорвалась, и экипаж остался жив.",
+      "На ферме держат яка, а корма для яка хватает до весны.",
+    ]) {
+      const d = detectLanguageWithEvidence(text);
+      expect(d.reason, text).not.toBe("conflicting_evidence");
+      expect(d.evidence.ukrainianEvidenceDistinct, text).toBe(0);
+    }
+    expect(
+      detectLanguageWithEvidence("Губернатор, заявив об атаке, сообщил, что дрон был сбит."),
+    ).toMatchObject({ language: "ru", decisive: true, reason: "cyrillic_ru_letters" });
+  });
+
+  it("stays non-decisive on a real conflict that still has Ukrainian evidence", () => {
+    for (const text of [
+      "Командир заявив, що дрон упав, а экипаж сообщил, что его нет.",
+      "Дрон має дальність польоту, он сообщил, что нет.",
+    ]) {
+      const d = detectLanguageWithEvidence(text);
+      expect(d.decisive, text).toBe(false);
+      expect(d.reason, text).toBe("conflicting_evidence");
+    }
+  });
+
+  it("stays decisive uk on Ukrainian text that uses заявив, упав, яка or яке next to other evidence", () => {
+    for (const text of [
+      "Губернатор заявив про атаку і повідомив, що дрон було збито вночі.",
+      "Дрон упав на поле, яке належить фермеру, і вибухнув ще вночі.",
+      "Ракета, яка летіла над містом, була збита вже вночі.",
+    ]) {
+      expect(detectLanguageWithEvidence(text), text).toMatchObject({
+        language: "uk",
+        decisive: true,
+      });
+    }
   });
 });

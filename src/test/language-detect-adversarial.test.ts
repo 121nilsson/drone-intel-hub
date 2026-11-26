@@ -35,9 +35,11 @@ describe("D0 adversarial review: every decisive language stamp is deserved", () 
 
   it("records the size of the open defect (update deliberately)", () => {
     const all = Object.values(CATEGORIES).flat();
-    expect(all).toHaveLength(42);
-    // Detector 3.0.0 cleared every row of the original 29; all open ones are other Cyrillic languages
-    // (Belarusian 1, Bulgarian 4), which the two-language model cannot tell apart. Not fixed here.
+    expect(all).toHaveLength(73);
+    // Detector 3.0.0 cleared every row of the original 29; 3.1.0 clears the 13 gerund and homograph
+    // rows and the 18 rows of the independent author (3.0.0 got two of the 13 wrong, none of the 18);
+    // all open ones are other Cyrillic languages (Belarusian 1, Bulgarian 4), which the two-language
+    // model cannot tell apart: a known limitation, kept visible here, not fixed.
     const open = all.filter((r) => r.knownFalseDecisive);
     expect(open).toHaveLength(5);
     expect(
