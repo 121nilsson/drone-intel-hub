@@ -167,6 +167,76 @@ Status 2026-11-26: implemented and committed (`a69ce6f`). **Not closed.** A seco
 - [x] v1.2.0 S5 verification still passes. The command exits 0, and the committed directories are untouched.
 - [x] `npm run green` shows no new findings.
 
+### D0 revision 3: two evidence channels (design, 2026-11-26; not implemented)
+
+Decided direction: alternatives 1 + 2 from the adversarial review. Sentence-level classification (alternative 3) is deferred until the results show it is needed.
+
+**Principle.** A decisive stamp must be deserved. The aim is not to classify as many texts as possible. The **non-decisive rate is always reported next to the false-decisive count**, because a detector that classifies almost nothing would be safe but useless.
+
+#### Channel L: distinctive letters (exists)
+
+- An **evidence word** for a language is an ordinary word that contains a letter only that language has: Ukrainian іїєґ, Russian ыэъё.
+- Ordinary means as today: not capitalised, not all-caps, not sentence-initial, not quoted.
+
+#### Channel W: marker words (new, independent of L)
+
+- **Source.** A closed, versioned list of high-frequency function words and verb forms that occur in only one of the two languages.
+- **Independence from L.** A marker word **never contains a distinctive letter**, so W can only fire in text that L cannot see. This makes the two channels independent rather than two ways of counting the same letters.
+- **Matching.** Case-insensitive, whole tokens only. Quoted text is excluded. A sentence-initial word counts, because function words are not names. Capitalised words in mid-sentence are still excluded.
+
+| Russian-only markers (no ыэъё)                                                                                                                                                                            | Ukrainian-only markers (no іїєґ)                                                                                                                                           |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| что, его, как, когда, только, сейчас, очень, даже, или, где, она, они, которая, которое, которого, сообщил, сообщила, сообщают, заявил, упал, летел, составляет, около, ночью, также, после, сегодня, нет | що, це, його, як, якщо, вже, дуже, або, але, вона, вони, був, була, було, який, яка, яке, якого, заявив, упав, становить, близько, також, має, мають, можна, ще, теж, чому |
+
+**Excluded on purpose:**
+
+- Words that occur in both languages or have common homographs: та, но, уже, коли, де, може, по, на, до, за, про, не, и/і.
+- Words that are also Russian words: зараз (Russian "at one go"), треба (Russian "rite").
+- Words that contain a distinctive letter, so they already belong to channel L: был, была, было (ы), летів, після, вночі (і).
+
+**Kept, but to be rechecked in list review:** як (also the Russian noun "yak") and становить (an archaic or colloquial Russian verb).
+
+**List rules:**
+
+- The list is frozen in code with a `LANGUAGE_DETECTOR_VERSION`. That version is stamped in every manifest that uses detection.
+- A word is added only with a written reason and a check that it is absent from the other language's ordinary vocabulary.
+- **The list never grows from the holdout set** (see below).
+
+#### Decision rule
+
+1. Collect the distinct evidence words per language, over both channels: E_uk and E_ru.
+2. **Conflict:** if both E_uk and E_ru are non-empty, the result is non-decisive. The reason is `conflicting_evidence`, or `cyrillic_mixed` when only channel L conflicts.
+3. **Sufficiency:** decisive `uk` needs |E_uk| ≥ 2 distinct words and E_ru empty. Decisive `ru` is the mirror case.
+4. **Absence is not evidence.** One word, no words, or a missing other-language signal can never make a result decisive.
+5. **Non-decisive Cyrillic** keeps the pre-D0 language from the old full-text rule, so translation routing for it does not change.
+6. **Not chosen in advance:** a stricter variant B also requires at least one evidence word from each channel. A vs B is decided on the **development sets only**, before the holdout is opened.
+
+#### Evaluation sets (kept apart)
+
+| Set                                                                                                                                                                                                                                                                                                                                                                                                 | Role                    | May drive rule changes?                                                                                                                       |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| Corpus (`src/test/fixtures/language-detect-corpus.ts`, 92 rows)                                                                                                                                                                                                                                                                                                                                     | development, regression | yes                                                                                                                                           |
+| Adversarial review set (`src/test/language-detect-adversarial.test.ts`, 29 rows)                                                                                                                                                                                                                                                                                                                    | development             | yes. Its `it.fails` rows must turn into passing rows                                                                                          |
+| **Independent holdout** (written 2026-11-26 by an isolated author who saw neither the detector, its corpus, nor this word list; `src/test/fixtures/language-detect-holdout.ts`, 147 rows in 12 categories: 50 ru, 51 uk, 14 en, 13 mixed, 19 other; 32 rows where no decisive claim is acceptable. Neither the word-list designer nor the implementer reads its texts before the single evaluation) | **approval only**       | **no.** Evaluated once, after the rule and the word list are frozen. A rule change prompted by a holdout failure retires that holdout version |
+
+**What is reported for every set and category:**
+
+- rows;
+- decisive count;
+- false-decisive count;
+- non-decisive rate.
+
+**The six multi-sentence language-switch rows** are reported on their own. If 1 + 2 does not make them non-decisive, sentence-level analysis (alternative 3) is the next step.
+
+#### Approval gate for revision 3
+
+- [ ] Rule and word list reviewed and frozen, with a `LANGUAGE_DETECTOR_VERSION` bump.
+- [ ] Corpus: 100 %, 0 false-decisive.
+- [ ] Adversarial set: 0 false-decisive. All `it.fails` rows pass and are converted.
+- [ ] Holdout, evaluated once: 0 false-decisive ru↔uk. Non-decisive rate reported per category.
+- [ ] All D0 checks above re-run, including provenance, translation routing, end-to-end tests and v1.2.0 S5.
+- [ ] Language provenance and translation routing reviewed again before D0 is closed.
+
 ---
 
 ## D1 (P1): four safe improvements (resolver 1.3.0)
