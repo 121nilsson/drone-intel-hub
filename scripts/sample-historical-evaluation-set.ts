@@ -33,6 +33,9 @@ import {
   SAMPLING_SEED,
   type FrameRow,
   type SamplingManifest,
+  LANGUAGE_STRATUM_RULE,
+  SEMANTIC_EVAL_SCHEMA_VERSION,
+  SEMANTIC_EVAL_SCHEMA_VERSION_1_1,
 } from "../src/entities/normalization/semantic-eval/types";
 import {
   canonicalJson,
@@ -48,6 +51,15 @@ const value = (flag: string, fallback: string): string => {
   return i >= 0 && args[i + 1] ? args[i + 1]! : fallback;
 };
 const apply = args.includes("--apply");
+// 1.0.0 stays the default; 1.1.0 (language provenance) is opt-in for new directories only.
+const schemaFlag = value("--schema-version", SEMANTIC_EVAL_SCHEMA_VERSION);
+if (
+  schemaFlag !== SEMANTIC_EVAL_SCHEMA_VERSION &&
+  schemaFlag !== SEMANTIC_EVAL_SCHEMA_VERSION_1_1
+) {
+  process.stderr.write("--schema-version must be 1.0.0 or 1.1.0\n");
+  process.exit(2);
+}
 
 const inPath = resolve(value("--in", "src/test/fixtures/semantic-eval/frame-rows.jsonl"));
 const outDir = resolve(value("--out", "src/test/fixtures/semantic-eval"));
@@ -86,6 +98,7 @@ const built = buildFrame(rows, {
   cutoff,
   isPilot: pilot,
   defaultOrigin: "historical",
+  schemaVersion: schemaFlag,
 });
 const frameId = frameIdFor(built.examples);
 const examples = built.examples.map((e) => ({ ...e, frameId }));
@@ -117,6 +130,9 @@ const manifest: SamplingManifest = {
   exclusions: built.exclusions,
   examplesSha256: sha256Hex(examplesJsonl),
   predictionsSha256: sha256Hex(predictionsJsonl),
+  ...(schemaFlag === SEMANTIC_EVAL_SCHEMA_VERSION_1_1
+    ? { languageRule: LANGUAGE_STRATUM_RULE }
+    : {}),
 };
 const manifestHash = sha256Hex(canonicalJson(manifest));
 const report = renderSamplingReport({

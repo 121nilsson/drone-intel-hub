@@ -11,7 +11,7 @@
  */
 
 import { seededRandom, shuffle } from "../../drone/audit";
-import { detectLanguage } from "../language";
+import { detectLanguageWithEvidence } from "../language";
 import { sha256Hex } from "../sha256";
 import type { ReadonlySemanticSnapshot } from "../semantic-resolver";
 import { canonicalJson } from "./validate";
@@ -21,12 +21,15 @@ import {
   LANGUAGES,
   RESOLVER_STATUSES,
   RESOLVER_STATUS_COUNT,
+  SEMANTIC_EVAL_SCHEMA_VERSION,
+  SEMANTIC_EVAL_SCHEMA_VERSION_1_1,
   parseStratumKey,
   stratumKey,
   type CellStat,
   type Exclusion,
   type Example,
   type FrameRow,
+  type Language,
   type Prediction,
   type SourceConcentration,
 } from "./types";
@@ -163,6 +166,15 @@ export interface FreezeOptions {
   readonly cutoff?: string;
   readonly isPilot?: boolean;
   readonly defaultOrigin?: FrameRow["origin"];
+  /**
+   * Which Example schema to write. Default 1.0.0, so every existing caller, test and committed
+   * directory is unchanged. 1.1.0 records language provenance (declared vs detected).
+   * With 1.1.0 the legacy `FrameRow.language` is read as a declaration (the committed fixture
+   * frames set it by hand, never from detection); `FrameRow.declaredLanguage` wins if both are set.
+   * With 1.0.0 a row carrying `declaredLanguage` is refused rather than silently flattened.
+   */
+  readonly schemaVersion?:
+    typeof SEMANTIC_EVAL_SCHEMA_VERSION | typeof SEMANTIC_EVAL_SCHEMA_VERSION_1_1;
 }
 
 export interface FreezeResult {
@@ -181,6 +193,7 @@ export function freezeFrame(rows: readonly FrameRow[], options: FreezeOptions): 
   const exclusions = new Map<string, number>();
   let truncated = 0;
   const candidates: FrozenUnit[] = [];
+  const provenance = options.schemaVersion === SEMANTIC_EVAL_SCHEMA_VERSION_1_1;
 
   // Full-row stable key: a shorter key leaves ties that depend on input order, which would make
   // "first occurrence wins" in the dedupe non-reproducible across exports of the same records.
@@ -219,6 +232,18 @@ export function freezeFrame(rows: readonly FrameRow[], options: FreezeOptions): 
       row.priorAnalystVerdict !== undefined && row.claimId !== undefined
         ? { claimId: row.claimId, verdict: row.priorAnalystVerdict }
         : undefined;
+    const detection = detectLanguageWithEvidence(row.excerpt);
+    if (!provenance && row.declaredLanguage !== undefined) {
+      throw new Error(
+        `row ${row.sourceId}/${row.rawKey} has declaredLanguage; freeze with schemaVersion 1.1.0`,
+      );
+    }
+    // 1.1.0: declared if present, else detected if decisive, else unknown. Never the reverse:
+    // detection is stored beside the declaration and cannot overwrite it.
+    const declared = provenance ? (row.declaredLanguage ?? row.language) : undefined;
+    const language: Language = provenance
+      ? (declared ?? (detection.decisive ? detection.language : "unknown"))
+      : (row.language ?? detection.language);
     candidates.push({
       exampleId,
       sourceClusterId: sourceClusterIdFor(row),
@@ -229,7 +254,15 @@ export function freezeFrame(rows: readonly FrameRow[], options: FreezeOptions): 
         ...(row.publishedAt !== undefined ? { publishedAt: row.publishedAt } : {}),
       },
       excerpt,
-      language: row.language ?? detectLanguage(row.excerpt),
+      language,
+      ...(provenance
+        ? {
+            ...(declared !== undefined ? { declaredLanguage: declared } : {}),
+            detectedLanguage: detection.language,
+            languageDetectionDecisive: detection.decisive,
+            languageDetectionReason: detection.reason,
+          }
+        : {}),
       rawKey: row.rawKey,
       ...(row.rawLabel !== undefined ? { rawLabel: row.rawLabel } : {}),
       ...(row.rawValue !== undefined ? { rawValue: row.rawValue } : {}),
@@ -244,7 +277,7 @@ export function freezeFrame(rows: readonly FrameRow[], options: FreezeOptions): 
       origin: row.origin ?? options.defaultOrigin ?? "historical",
       isPilot: options.isPilot ?? false,
       frameId: options.frameId,
-      schemaVersion: "1.0.0",
+      schemaVersion: provenance ? SEMANTIC_EVAL_SCHEMA_VERSION_1_1 : SEMANTIC_EVAL_SCHEMA_VERSION,
     });
   }
 
@@ -264,6 +297,7 @@ export function freezeFrame(rows: readonly FrameRow[], options: FreezeOptions): 
       group.map((u) =>
         canonicalJson({
           language: u.language,
+          ...(u.declaredLanguage !== undefined ? { declaredLanguage: u.declaredLanguage } : {}),
           context: u.context,
           ...(u.priorAnalystReview !== undefined
             ? { priorAnalystReview: u.priorAnalystReview }
@@ -308,6 +342,21 @@ export interface ResolvedFrame {
   readonly predictions: readonly Prediction[];
 }
 
+/**
+ * The language a frame replay hands to `resolve()`: only one that is known. A 1.1.0 unit passes
+ * its declared language, else its detected language when decisive; a non-decisive guess (for
+ * example a `ru` fallback for Cyrillic without distinguishing letters) is never passed, so only
+ * `all`-scoped rules apply. A 1.0.0 unit keeps its old rule: any language but `unknown`.
+ */
+export function languageForResolver(unit: FrozenUnit): Language | undefined {
+  const language =
+    unit.schemaVersion === SEMANTIC_EVAL_SCHEMA_VERSION_1_1
+      ? (unit.declaredLanguage ??
+        (unit.languageDetectionDecisive === true ? unit.detectedLanguage : undefined))
+      : unit.language;
+  return language === undefined || language === "unknown" ? undefined : language;
+}
+
 /** Whole-frame replay: every unit gets a frozen resolverStatus and a hash-stamped prediction. */
 export function resolveFrozenFrame(
   units: readonly FrozenUnit[],
@@ -317,6 +366,7 @@ export function resolveFrozenFrame(
   const examples: Example[] = [];
   const predictions: Prediction[] = [];
   for (const unit of units) {
+    const language = languageForResolver(unit);
     const result = snapshot.resolve({
       rawKey: unit.rawKey,
       ...(unit.rawLabel !== undefined ? { rawLabel: unit.rawLabel } : {}),
@@ -324,7 +374,7 @@ export function resolveFrozenFrame(
       ...(unit.context.domain !== undefined ? { domain: unit.context.domain } : {}),
       ...(unit.context.systemClass !== undefined ? { systemClass: unit.context.systemClass } : {}),
       ...(unit.context.subsystem !== undefined ? { subsystem: unit.context.subsystem } : {}),
-      ...(unit.language !== "unknown" ? { language: unit.language } : {}),
+      ...(language !== undefined ? { language } : {}),
     });
     const resolverStatus = result.status === "resolved" ? "resolved" : "withheld";
     examples.push({

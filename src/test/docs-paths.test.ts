@@ -37,8 +37,6 @@ const ALLOWED_MISSING: Record<string, string> = {
     "planned v1.3.0 evaluation directory; created by the sampler when resolver 1.3.0 is evaluated",
   "docs/semantic-resolver-v1.2.0-false-withholding-rca.md:scripts/output/semantic-metrics-v1.3.0.md":
     "planned v1.3.0 metrics report; written by evaluate-semantic-registry.ts for resolver 1.3.0",
-  "docs/semantic-resolver-v1.3.0-plan.md:src/test/fixtures/language-detect-corpus.ts":
-    "planned D0 language-detection corpus; created when D0 of the v1.3.0 plan is approved",
   "docs/semantic-resolver-v1.3.0-plan.md:src/test/fixtures/semantic-eval-v1.3.0":
     "planned v1.3.0 evaluation directory; created by the sampler when resolver 1.3.0 is evaluated",
 };

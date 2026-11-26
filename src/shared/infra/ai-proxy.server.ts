@@ -23,7 +23,7 @@ import {
   type AIProvider,
 } from "./ai-providers";
 import { parseModelJson } from "./model-json";
-import { detectLanguage } from "@/entities/normalization/language";
+import { detectLanguageWithEvidence } from "@/entities/normalization/language";
 
 export interface ChatInput {
   baseUrl?: string;
@@ -452,8 +452,15 @@ const riva = {
   is: (model: string) => /riva-translate/i.test(model),
   /** The system message that names the pair, for the sources this catalogue reads. */
   pairFor(text: string): string | null {
-    const lang = detectLanguage(text);
-    return lang === "ru" || lang === "uk" ? `${lang}-en` : null;
+    const { language, decisive, reason, evidence } = detectLanguageWithEvidence(text);
+    // Cyrillic with no letter that separates Russian from Ukrainian keeps the old answer, ru-en
+    // (D0-Q1 option a). It is a guess, so it is logged: reason and counts only, never the text.
+    if (!decisive && reason === "cyrillic_undetermined") {
+      console.warn(
+        `[ai-proxy] translation language undetermined — ${reason} — cyrillic=${evidence.cyrillic} latin=${evidence.latin} uk_only=${evidence.ukrainianOnly} ru_only=${evidence.russianOnly} uk_in_names=${evidence.ukrainianOnlyInNames} ru_in_names=${evidence.russianOnlyInNames}; routing as ${language}-en`,
+      );
+    }
+    return language === "ru" || language === "uk" ? `${language}-en` : null;
   },
 };
 

@@ -1,4 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { detectLanguageWithEvidence } from "@/entities/normalization/language";
+import { buildFrame } from "@/entities/normalization/semantic-eval/sampling";
+import {
+  CODE_SEED_SNAPSHOT,
+  SEMANTIC_RESOLVER_VERSION,
+} from "@/entities/normalization/semantic-resolver";
 
 /**
  * Translation has its own route: TRANSLATE_PROVIDER goes first with TRANSLATE_MODEL (or its own
@@ -223,5 +229,143 @@ describe("Riva-Translate gets its language pair, not an instruction", () => {
     await askWith("ВСУ сообщили, что ударные беспилотники атаковали Одессу ночью, потерь нет");
     // Riva got the pair; the instruct model behind it got the instruction.
     expect(seen.map((s) => s.system)).toEqual(["ru-en", "Translate to English."]);
+  });
+});
+
+describe("translation routing follows the language evidence (D0)", () => {
+  const riva = () => {
+    process.env["NVIDIA_API_KEY"] = "k-nv";
+    process.env["TRANSLATE_PROVIDER"] = "nvidia";
+  };
+  const askWith = (prompt: string) =>
+    translateCompletion({ system: "Translate to English.", prompt });
+
+  it("sends short Ukrainian with one distinguishing letter as uk-en", async () => {
+    riva();
+    const seen = stubFetch();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    await askWith("Дрон має дальність польоту 250 км.");
+    await askWith("Заявлена потужність двигуна — 80 кВт.");
+    expect(seen.map((s) => s.system)).toEqual(["uk-en", "uk-en"]);
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it("does not let a sentence-initial word decide: ru-en as before D0, and logged", async () => {
+    riva();
+    const seen = stubFetch();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    await askWith("Дальність польоту становить 250 км.");
+    await askWith("Укрзалізниця сообщила о задержке поезда.");
+    expect(seen.map((s) => s.system)).toEqual(["ru-en", "ru-en"]);
+    expect(
+      warn.mock.calls.filter((c) => String(c[0]).includes("cyrillic_undetermined")),
+    ).toHaveLength(2);
+  });
+
+  it("keeps ru-en for Cyrillic it cannot place (decision a) and logs reason and counts only", async () => {
+    riva();
+    const seen = stubFetch();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    await askWith("Корисне навантаження становить 35 кг.");
+    expect(seen[0]?.system).toBe("ru-en");
+    const lines = warn.mock.calls.map((c) => String(c[0]));
+    const line = lines.find((l) => l.includes("cyrillic_undetermined"));
+    expect(line).toBeDefined();
+    expect(line).toMatch(/cyrillic=\d+ latin=0 uk_only=0 ru_only=0/);
+    expect(lines.join("\n")).not.toContain("навантаження");
+  });
+
+  it("routes Russian that names a Ukrainian outlet as ru-en, as before D0", async () => {
+    riva();
+    const seen = stubFetch();
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    await askWith("Агентство Укрінформ сообщает о новом дроне.");
+    expect(seen[0]?.system).toBe("ru-en");
+  });
+
+  it("still short-circuits English: no pair, instruction kept", async () => {
+    riva();
+    const seen = stubFetch();
+    await askWith("The drone has a range of 250 km and it can be launched from a truck.");
+    expect(seen[0]?.system).toBe("Translate to English.");
+  });
+});
+
+describe("language provenance end to end (D0)", () => {
+  const run = async (sentence: string) => {
+    process.env["NVIDIA_API_KEY"] = "k-nv";
+    process.env["TRANSLATE_PROVIDER"] = "nvidia";
+    const seen = stubFetch();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    // 1. detection
+    const detection = detectLanguageWithEvidence(sentence);
+    // 2. translation routing
+    await translateCompletion({ system: "Translate to English.", prompt: sentence });
+    // 3. a frame row with no declared language becomes a frozen example;
+    // 4. the resolver call records what it was given.
+    const resolveSpy = vi.fn((input: Parameters<typeof CODE_SEED_SNAPSHOT.resolve>[0]) =>
+      CODE_SEED_SNAPSHOT.resolve(input),
+    );
+    const snapshot = { ...CODE_SEED_SNAPSHOT, resolve: resolveSpy };
+    const built = buildFrame(
+      [
+        {
+          sourceId: "dispatch-e2e",
+          rawKey: "range_km",
+          rawValue: "250",
+          excerpt: sentence,
+          publishedAt: "2026-03-02T00:00:00.000Z",
+        },
+      ],
+      {
+        frameId: "e2e",
+        snapshot,
+        resolverVersion: SEMANTIC_RESOLVER_VERSION,
+        schemaVersion: "1.1.0",
+      },
+    );
+    return { detection, system: seen[0]?.system, warn, example: built.examples[0]!, resolveSpy };
+  };
+
+  it("short decisive Ukrainian: uk, uk-en, detected not declared, resolver gets uk", async () => {
+    const r = await run("Дрон має дальність польоту 250 км.");
+    expect(r.detection).toMatchObject({ language: "uk", decisive: true });
+    expect(r.system).toBe("uk-en");
+    expect(r.example.declaredLanguage).toBeUndefined();
+    expect(r.example.detectedLanguage).toBe("uk");
+    expect(r.example.languageDetectionDecisive).toBe(true);
+    expect(r.example.language).toBe("uk");
+    expect(r.resolveSpy).toHaveBeenCalledTimes(1);
+    expect(r.resolveSpy.mock.calls[0]![0]).toMatchObject({ language: "uk" });
+  });
+
+  it("short Ukrainian whose only distinctive letter is in the first word: not decisive, ru-en, no language", async () => {
+    const r = await run("Дальність польоту становить 250 км.");
+    expect(r.detection).toMatchObject({ language: "ru", decisive: false });
+    expect(r.system).toBe("ru-en");
+    expect(r.example.declaredLanguage).toBeUndefined();
+    expect(r.example.language).toBe("unknown");
+    expect("language" in r.resolveSpy.mock.calls[0]![0]).toBe(false);
+  });
+
+  it("undecidable Ukrainian: ru-en kept, cyrillic_undetermined logged, resolver gets no language", async () => {
+    const r = await run("Корисне навантаження становить 35 кг.");
+    expect(r.detection).toMatchObject({
+      language: "ru",
+      decisive: false,
+      reason: "cyrillic_undetermined",
+    });
+    expect(r.system).toBe("ru-en");
+    expect(r.warn.mock.calls.some((c) => String(c[0]).includes("cyrillic_undetermined"))).toBe(
+      true,
+    );
+    expect(r.example.declaredLanguage).toBeUndefined();
+    expect(r.example.detectedLanguage).toBe("ru");
+    expect(r.example.languageDetectionDecisive).toBe(false);
+    expect(r.example.languageDetectionReason).toBe("cyrillic_undetermined");
+    expect(r.example.language).toBe("unknown");
+    expect(r.resolveSpy).toHaveBeenCalledTimes(1);
+    expect("language" in r.resolveSpy.mock.calls[0]![0]).toBe(false);
   });
 });

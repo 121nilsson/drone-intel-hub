@@ -10,10 +10,31 @@
  * verdict that matters is `Decision.blindVerdict`; `finalVerdict` is a diagnostic only.
  */
 
+import type { LanguageDetectionReason } from "../language";
 import type { SemanticResolutionResult } from "../semantic-result";
 
-/** Bumped on any breaking change to a record shape. Stored on every Example. */
+/**
+ * Bumped on any breaking change to a record shape. Stored on every Example.
+ *
+ * 1.0.0 is the original shape and stays the default the sampler emits: directories written under
+ * it (the committed fixtures) read and verify exactly as before.
+ */
 export const SEMANTIC_EVAL_SCHEMA_VERSION = "1.0.0";
+
+/**
+ * 1.1.0 adds language provenance (D0 of the v1.3.0 plan): `FrameRow.declaredLanguage`,
+ * `Example.declaredLanguage/detectedLanguage/languageDetectionDecisive/languageDetectionReason`
+ * and the `external_source` origin. Additive only. The sampler writes it only when asked
+ * (`FreezeOptions.schemaVersion`); readers accept both versions.
+ */
+export const SEMANTIC_EVAL_SCHEMA_VERSION_1_1 = "1.1.0";
+export const SUPPORTED_SCHEMA_VERSIONS: readonly string[] = [
+  SEMANTIC_EVAL_SCHEMA_VERSION,
+  SEMANTIC_EVAL_SCHEMA_VERSION_1_1,
+];
+
+/** How `Example.language` (the stratum language) is chosen in a 1.1.0 frame; stored in the manifest. */
+export const LANGUAGE_STRATUM_RULE = "declared, else detected if decisive, else unknown";
 
 /**
  * The one annotation protocol currently defined. A decision records the version it used.
@@ -43,8 +64,14 @@ export const LANGUAGES: readonly Language[] = ["en", "ru", "uk", "unknown"];
 export type ResolverStatus = "resolved" | "withheld";
 export const RESOLVER_STATUSES: readonly ResolverStatus[] = ["resolved", "withheld"];
 
-export type Origin = "historical" | "fixture" | "adversarial_ai";
-export const ORIGINS: readonly Origin[] = ["historical", "fixture", "adversarial_ai"];
+/** `external_source` (schema 1.1.0): not from the app's store, never counted as historical. */
+export type Origin = "historical" | "fixture" | "adversarial_ai" | "external_source";
+export const ORIGINS: readonly Origin[] = [
+  "historical",
+  "fixture",
+  "adversarial_ai",
+  "external_source",
+];
 
 /**
  * Protocol v1 verdicts. `insufficient_evidence` is a genuine answer, not a missing one: it is
@@ -143,7 +170,19 @@ export interface Example {
   readonly evidenceClusterId: string;
   readonly source: ExampleSource;
   readonly excerpt: string;
+  /**
+   * The stratum language. Schema 1.0.0: the frame row's `language` or else detection, as before.
+   * Schema 1.1.0: `declaredLanguage` if present, else `detectedLanguage` if decisive, else
+   * `unknown` (LANGUAGE_STRATUM_RULE).
+   */
   readonly language: Language;
+  /** 1.1.0: language stated by a trustworthy source. Never written from detection. */
+  readonly declaredLanguage?: Language | undefined;
+  /** 1.1.0: what detection said about the excerpt, kept even when a declared language wins. */
+  readonly detectedLanguage?: Language | undefined;
+  /** 1.1.0: whether detection was decisive. A non-decisive result never reaches the resolver. */
+  readonly languageDetectionDecisive?: boolean | undefined;
+  readonly languageDetectionReason?: LanguageDetectionReason | undefined;
   readonly rawKey: string;
   readonly rawLabel?: string | undefined;
   readonly rawValue?: string | undefined;
@@ -222,8 +261,15 @@ export interface FrameRow {
   readonly domain?: string | undefined;
   readonly systemClass?: string | undefined;
   readonly subsystem?: string | undefined;
-  /** Derived once from the excerpt and frozen; derived by the sampler when absent. */
+  /**
+   * LEGACY (schema 1.0.0): derived once from the excerpt and frozen; derived by the sampler when
+   * absent. Overloaded: it holds both declared and detected language. A 1.1.0 frame reads it as an
+   * author declaration (the committed fixture frames set it by hand) and prefers
+   * `declaredLanguage` when both are present.
+   */
   readonly language?: Language | undefined;
+  /** Language stated by a trustworthy source or its metadata; never filled in by detection. */
+  readonly declaredLanguage?: Language | undefined;
   readonly claimId?: string | undefined;
   readonly priorAnalystVerdict?: string | undefined;
   readonly origin?: Origin | undefined;
@@ -270,6 +316,8 @@ export interface SamplingManifest {
   readonly exclusions: readonly Exclusion[];
   readonly examplesSha256: string;
   readonly predictionsSha256: string;
+  /** Schema 1.1.0 frames only: the stratum language rule (LANGUAGE_STRATUM_RULE). */
+  readonly languageRule?: string | undefined;
 }
 
 export interface SourceConcentration {

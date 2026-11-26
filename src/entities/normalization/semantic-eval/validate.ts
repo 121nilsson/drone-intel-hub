@@ -7,6 +7,7 @@
  */
 
 import { isValidCanonicalId } from "../canonical-manifest";
+import { LANGUAGE_DETECTION_REASONS } from "../language";
 import type { SemanticResolutionResult } from "../semantic-result";
 import {
   REGISTRY_GUIDANCE,
@@ -19,7 +20,10 @@ import {
   ORIGINS,
   PROTOCOL_VERSIONS,
   RESOLVER_STATUSES,
-  SEMANTIC_EVAL_SCHEMA_VERSION,
+  LANGUAGES,
+  LANGUAGE_STRATUM_RULE,
+  SEMANTIC_EVAL_SCHEMA_VERSION_1_1,
+  SUPPORTED_SCHEMA_VERSIONS,
   VERDICTS,
   parseStratumKey,
   type Decision,
@@ -189,8 +193,48 @@ export function validateExample(value: unknown): Example {
   }
   if (typeof o.isPilot !== "boolean") fail(`${w}.isPilot`, "expected a boolean");
   const schemaVersion = str(`${w}.schemaVersion`, o.schemaVersion, { min: 1 });
-  if (schemaVersion !== SEMANTIC_EVAL_SCHEMA_VERSION) {
-    fail(`${w}.schemaVersion`, `expected ${SEMANTIC_EVAL_SCHEMA_VERSION}, got ${schemaVersion}`);
+  if (!SUPPORTED_SCHEMA_VERSIONS.includes(schemaVersion)) {
+    fail(
+      `${w}.schemaVersion`,
+      `expected one of ${SUPPORTED_SCHEMA_VERSIONS.join(", ")}, got ${schemaVersion}`,
+    );
+  }
+  const origin = enumOf<Origin>(`${w}.origin`, o.origin, ORIGINS);
+  // Schema 1.0.0 records are read exactly as before: provenance fields on them are not read.
+  let provenance: Partial<Example> = {};
+  if (schemaVersion === SEMANTIC_EVAL_SCHEMA_VERSION_1_1) {
+    const declared =
+      o.declaredLanguage !== undefined
+        ? enumOf<Language>(`${w}.declaredLanguage`, o.declaredLanguage, LANGUAGES)
+        : undefined;
+    const detected = enumOf<Language>(`${w}.detectedLanguage`, o.detectedLanguage, LANGUAGES);
+    if (typeof o.languageDetectionDecisive !== "boolean") {
+      fail(`${w}.languageDetectionDecisive`, "expected a boolean");
+    }
+    const reason = enumOf(
+      `${w}.languageDetectionReason`,
+      o.languageDetectionReason,
+      LANGUAGE_DETECTION_REASONS,
+    );
+    if (o.languageDetectionDecisive && detected === "unknown") {
+      fail(`${w}.languageDetectionDecisive`, "an unknown language cannot be decisive");
+    }
+    const expectedLanguage =
+      declared ?? (o.languageDetectionDecisive ? detected : ("unknown" as Language));
+    if (language !== expectedLanguage) {
+      fail(
+        `${w}.language`,
+        `is ${language} but the stratum rule (${LANGUAGE_STRATUM_RULE}) gives ${expectedLanguage}`,
+      );
+    }
+    provenance = {
+      ...(declared !== undefined ? { declaredLanguage: declared } : {}),
+      detectedLanguage: detected,
+      languageDetectionDecisive: o.languageDetectionDecisive,
+      languageDetectionReason: reason,
+    };
+  } else if (origin === "external_source") {
+    fail(`${w}.origin`, "external_source needs schema 1.1.0");
   }
   return {
     exampleId,
@@ -199,6 +243,7 @@ export function validateExample(value: unknown): Example {
     source,
     excerpt,
     language,
+    ...provenance,
     rawKey: str(`${w}.rawKey`, o.rawKey, { min: 1 }),
     ...(o.rawLabel !== undefined ? { rawLabel: optionalStr(`${w}.rawLabel`, o.rawLabel) } : {}),
     ...(o.rawValue !== undefined ? { rawValue: optionalStr(`${w}.rawValue`, o.rawValue) } : {}),
@@ -208,7 +253,7 @@ export function validateExample(value: unknown): Example {
     family,
     stratum,
     resolverStatus,
-    origin: enumOf<Origin>(`${w}.origin`, o.origin, ORIGINS),
+    origin,
     isPilot: o.isPilot,
     frameId: str(`${w}.frameId`, o.frameId, { min: 1 }),
     schemaVersion,
@@ -367,6 +412,9 @@ export function validateFrameRow(value: unknown): FrameRow {
   const language = o.language;
   if (language !== undefined)
     enumOf<Language>(`${w}.language`, language, ["en", "ru", "uk", "unknown"]);
+  const declaredLanguage = o.declaredLanguage;
+  if (declaredLanguage !== undefined)
+    enumOf<Language>(`${w}.declaredLanguage`, declaredLanguage, LANGUAGES);
   const origin = o.origin;
   if (origin !== undefined) enumOf<Origin>(`${w}.origin`, origin, ORIGINS);
   return {
@@ -386,6 +434,7 @@ export function validateFrameRow(value: unknown): FrameRow {
       : {}),
     ...(o.subsystem !== undefined ? { subsystem: optionalStr(`${w}.subsystem`, o.subsystem) } : {}),
     ...(language !== undefined ? { language: language as Language } : {}),
+    ...(declaredLanguage !== undefined ? { declaredLanguage: declaredLanguage as Language } : {}),
     ...(o.claimId !== undefined ? { claimId: str(`${w}.claimId`, o.claimId, { min: 1 }) } : {}),
     ...(o.priorAnalystVerdict !== undefined
       ? { priorAnalystVerdict: str(`${w}.priorAnalystVerdict`, o.priorAnalystVerdict) }

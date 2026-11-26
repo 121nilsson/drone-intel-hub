@@ -53,12 +53,19 @@
    - `detectLanguage` becomes a thin wrapper, so the rule is defined once.
    - **Uncertainty travels with the value.** Any module that hands a detected language to another module passes the whole `LanguageDetection`, never the bare string. A later component therefore cannot treat a guess as a fact.
    - **Uncertain Cyrillic is logged.** The detector stays pure. The calling server code (`ai-proxy.server.ts`, the sampler report) records `cyrillic_undetermined` cases, so they are available for later improvement. The record holds only the reason and counts, not the text.
-2. **Rule change (candidate, tested in memory in the RCA):** when Cyrillic dominates, the language is
-   - `uk` if there is at least 1 Ukrainian-only letter and 0 Russian-only letters,
-   - `ru` in the mirror case,
-   - otherwise the current ratio rule, marked `decisive: false`.
-
-   On the 24 frame rows this fixes 019 and 020, leaves 018 as `ru` (non-decisive: the excerpt has no distinguishing letter), and changes no `en` or `ru` row.
+2. **Rule (implemented; revised in review, 2026-11-26).** The RCA candidate counted every Ukrainian-only or Russian-only letter. In review it made Russian text that mentions a Ukrainian name decisive `uk`, for example "Агентство Укрінформ сообщает…" and "Київ подвергся атаке дронов…". The maintainer decided:
+   - **Proper names and place names never decide the language on their own.** A distinctive letter counts only in an **ordinary word**. That excludes:
+     - capitalised words;
+     - all-caps words;
+     - the first word of the text or of a sentence (after `.`, `!`, `?`, `:` or a line break);
+     - text inside «…», „…“ or "…".
+   - **Decisive needs sufficient aggregate evidence.** At least one Ukrainian-only (іїєґ) or Russian-only (ыэъё) letter must appear in an ordinary word, with none from the other language in ordinary words. Insufficient or conflicting evidence gives a non-decisive result.
+   - **Non-decisive Cyrillic keeps the pre-D0 language** from the old full-text rule (≥ 2 Ukrainian-only letters → `uk`, else `ru`). Translation routing for it is therefore unchanged.
+   - **Accepted consequence:** short sentences whose only distinctive letter is in the first word ("Дальність польоту становить 250 км.") are non-decisive. They route `ru-en` as before and pass no language to the resolver.
+   - **Known residual risks:**
+     - a lower-case proper name inside a sentence;
+     - Surzhyk or an unquoted Ukrainian word inside Russian text;
+     - Belarusian, which shares `і` and is not a supported language.
 
 3. **D0-Q1, decided: option (a).** Cyrillic text without a decisive letter:
    - translation callers keep today's behaviour (`ru`), for backward compatibility;
@@ -74,6 +81,9 @@
    - **`declaredLanguage` is never written by automatic detection** and never overwritten by it.
    - `Example.language` (the stratum language) follows one documented rule: declared if present; else detected if decisive; else `unknown`. The rule is recorded in the manifest.
    - **Backward compatibility is absolute.** Readers accept schema 1.0.0 unchanged, v1.2.0 directories verify bit-identically, and old data is never reinterpreted.
+   - **As implemented:**
+     - **1.1.0 is opt-in.** Use `--schema-version 1.1.0` on the sampler script; 1.0.0 stays the default.
+     - **Under 1.1.0 the legacy `FrameRow.language` is read as a declaration,** because the fixture frames set it by hand. **The D5 historical export must therefore never set `language`.** It sets `declaredLanguage` only from trustworthy source metadata and otherwise leaves both empty.
 5. **Resolver caller rule:** a caller passes a language to `resolve()` only when it is declared, or detected _and_ decisive. This is documented next to `appliesToLanguage`.
 
 ### End-to-end language provenance
@@ -88,29 +98,31 @@ source metadata / original text
   → semantic resolver                    (language passed only if declared or decisive)
 ```
 
-Each step is checked separately, plus at least one **end-to-end test**. It takes a short Ukrainian sentence without declared language ("Дальність польоту становить 250 км.") through every step and verifies that:
+Each step is checked separately, plus at least one **end-to-end test**. It takes a short Ukrainian sentence without declared language through every step. Under the revised rule the decisive sentence is "Дрон має дальність польоту 250 км.". It verifies that:
 
 - detection gives `uk`, decisive;
 - `pairFor` gives `uk-en`;
 - the frozen example keeps `declaredLanguage` empty and `detectedLanguage = uk`;
 - the resolver receives `uk`.
 
-A second run uses an undecidable Ukrainian sentence ("Корисне навантаження становить 35 кг…"). It verifies that translation keeps `ru-en` (decision (a)), the reason `cyrillic_undetermined` is recorded, and the resolver receives **no** language.
+Two further runs use undecidable Ukrainian sentences: "Корисне навантаження становить 35 кг." and "Дальність польоту становить 250 км." (whose distinctive letter is only in the first word). They verify that translation keeps `ru-en` (decision (a)), the reason `cyrillic_undetermined` is recorded, and the resolver receives **no** language.
 
 ### Language test corpus (new fixture, `origin: "fixture"`)
 
 Hand-written, labelled sentences in a separate file, for example `src/test/fixtures/language-detect-corpus.ts`. Every row has an expected language **and** an expected `decisive`. Minimum coverage, with at least 5 rows per category:
 
-| Category                                                                          | Expected                                                          |
-| --------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
-| Short Ukrainian with 1 distinctive letter ("Дальність польоту становить 250 км.") | `uk`, decisive                                                    |
-| Short Russian with ы/э/ъ/ё                                                        | `ru`, decisive                                                    |
-| Ukrainian without distinctive letters ("Корисне навантаження становить 35 кг…")   | non-decisive (not a confident `ru`)                               |
-| Russian without distinctive letters                                               | non-decisive                                                      |
-| Mixed: Russian quoting a Ukrainian name or place, and the reverse                 | the matrix language; decisive only if the evidence is unambiguous |
-| Technical keys and English values ("max_speed 120 km/h", "Geran-2")               | `unknown`                                                         |
-| Transliterated terms (`dalnost`, `maksimalnaya skorost`)                          | `unknown` (not `en`)                                              |
-| Existing cases in `language-detect.test.ts`                                       | unchanged                                                         |
+| Category                                                                                                                   | Expected                                                          |
+| -------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| Short Ukrainian with 1 distinctive letter in an ordinary word ("Дрон має дальність польоту 250 км.")                       | `uk`, decisive                                                    |
+| Short Russian with ы/э/ъ/ё                                                                                                 | `ru`, decisive                                                    |
+| Ukrainian without distinctive letters ("Корисне навантаження становить 35 кг…")                                            | non-decisive (not a confident `ru`)                               |
+| Russian without distinctive letters                                                                                        | non-decisive                                                      |
+| Mixed: Russian quoting a Ukrainian name or place, and the reverse                                                          | the matrix language; decisive only if the evidence is unambiguous |
+| Technical keys and English values ("max_speed 120 km/h", "Geran-2")                                                        | `unknown`                                                         |
+| Transliterated terms (`dalnost`, `maksimalnaya skorost`)                                                                   | `unknown` (not `en`)                                              |
+| Existing cases in `language-detect.test.ts`                                                                                | unchanged                                                         |
+| Russian starting with or mentioning Ukrainian names; Ukrainian starting with or mentioning Russian names (added in review) | never decisive in the wrong language                              |
+| Distinctive letter only in the first word, or only in quotations (added in review)                                         | non-decisive                                                      |
 
 ### New metric: Language Detection Accuracy
 
@@ -124,20 +136,26 @@ Hand-written, labelled sentences in a separate file, for example `src/test/fixtu
 
 ### Approval criteria D0
 
+Status 2026-11-26: implemented and reviewed, not yet committed.
+
+- **Corpus:** `src/test/fixtures/language-detect-corpus.ts`, 92 rows in 14 categories.
+- **Review probes:** 0 of 17 decisive-wrong. These were written independently of the corpus, after the first two rule versions failed review probes.
+- **Still open:** declared-vs-detected agreement for evaluation frames is not yet wired into a report. It belongs with the v1.3.0 evaluation (E4).
+
 - [x] D0-Q1 answered: option (a).
-- [ ] The corpus passes 100 %, with 0 decisive ru↔uk confusions.
-- [ ] Schema tests:
+- [x] The corpus passes 100 %, with 0 decisive ru↔uk confusions. A property test asserts that a row whose distinctive letters are only in names, first words or quotations is non-decisive.
+- [x] Schema tests:
   - declared vs detected language;
   - disagreement between the two (both kept, declared wins the stratum);
   - unknown language;
   - non-decisive detection;
   - a v1.2.0 directory with no new fields reads and verifies unchanged.
-- [ ] Both end-to-end provenance runs pass.
-- [ ] `cyrillic_undetermined` cases are logged with reason and counts only.
-- [ ] Existing `language-detect.test.ts` passes unchanged.
-- [ ] Translation-routing regression tests: `pairFor` gives `uk-en` for decisive Ukrainian; undecidable text behaves as decided in D0-Q1; English still short-circuits.
-- [ ] v1.2.0 S5 verification still passes, bit-identically.
-- [ ] `npm run green` shows no new findings.
+- [x] Both end-to-end provenance runs pass.
+- [x] `cyrillic_undetermined` cases are logged with reason and counts only.
+- [x] Existing `language-detect.test.ts` passes unchanged.
+- [x] Translation-routing regression tests: `pairFor` gives `uk-en` for decisive Ukrainian; undecidable text behaves as decided in D0-Q1; English still short-circuits.
+- [x] v1.2.0 S5 verification still passes. The command exits 0, and the committed directories are untouched.
+- [x] `npm run green` shows no new findings.
 
 ---
 
