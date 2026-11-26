@@ -136,10 +136,20 @@ Hand-written, labelled sentences in a separate file, for example `src/test/fixtu
 
 ### Approval criteria D0
 
-Status 2026-11-26: implemented and reviewed, not yet committed.
+Status 2026-11-26: implemented and committed (`a69ce6f`). **Not closed.** A second code review asked for adversarial tests against mixed-language text, and they found an open defect.
 
 - **Corpus:** `src/test/fixtures/language-detect-corpus.ts`, 92 rows in 14 categories.
-- **Review probes:** 0 of 17 decisive-wrong. These were written independently of the corpus, after the first two rule versions failed review probes.
+- **Name and first-word probes:** 0 of 17 decisive-wrong. These were written independently of the corpus.
+- **Adversarial mixed-language set** (`src/test/language-detect-adversarial.test.ts`, written independently of the detector): **10 of 29 rows are false-decisive.**
+  - Cause: one distinctive letter in one ordinary word is enough for a decisive result, and Russian or Ukrainian sentences often contain no distinctive letter at all.
+  - Affected cases:
+    - Russian with one Ukrainian word or typo: 2 of 6;
+    - Ukrainian with one Russian word: 1 of 5;
+    - a single switch of language form: 3 of 4;
+    - several sentences that switch language: 4 of 6.
+  - Short technical texts with model designations: 0 of 8.
+  - The failing rows are `it.fails` tests, so the suite stays green and turns red when the rule is fixed.
+- **The corpus criterion below is met on the corpus only.** Tier-1 (0 decisive ru↔uk confusions) is not met on the adversarial set. D0 stays open until the maintainer chooses a rule change and the set passes.
 - **Still open:** declared-vs-detected agreement for evaluation frames is not yet wired into a report. It belongs with the v1.3.0 evaluation (E4).
 
 - [x] D0-Q1 answered: option (a).
