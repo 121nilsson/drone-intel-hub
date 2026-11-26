@@ -279,10 +279,31 @@ Decided direction: alternatives 1 + 2 from the adversarial review. Sentence-leve
 - [x] Rule and word list reviewed and frozen in design (2026-11-26).
 - [ ] `LANGUAGE_DETECTOR_VERSION` introduced in code. The list in code carries a reason and a check of the other language for every word.
 - [x] Variant chosen on the development sets and recorded with the figures: **B** (2026-11-27).
-- [ ] Corpus: 100 %, 0 false-decisive.
-- [ ] Adversarial set: 0 false-decisive. All `it.fails` rows pass and are converted.
-- [ ] Holdout, evaluated once: 0 false-decisive ru↔uk. Non-decisive rate reported per category.
-- [ ] All D0 checks above re-run, including provenance, translation routing, end-to-end tests and v1.2.0 S5.
+- [x] Corpus: 100 %, 0 false-decisive (`acb6384`).
+- [x] Adversarial set: 0 false-decisive. All 10 `it.fails` rows pass and are converted.
+- [x] **Holdout, evaluated once** on 2026-11-27 by an unexposed session. It ran `scripts/evaluate-language-holdout.ts` once (exit 0) with detector 3.0.0. Result: **0 false-decisive in 147 rows** (no ru↔uk confusion and no other wrong claim). 36 rows were decisive; the non-decisive rate was 75.5 %. Per category:
+
+  | Category              | Rows | Decisive | False-decisive | Non-decisive |
+  | --------------------- | ---- | -------- | -------------- | ------------ |
+  | ru_natural            | 15   | 6        | 0              | 60.0 %       |
+  | uk_natural            | 15   | 8        | 0              | 46.7 %       |
+  | ru_short              | 11   | 2        | 0              | 81.8 %       |
+  | uk_short              | 11   | 2        | 0              | 81.8 %       |
+  | ru_with_uk_names      | 11   | 1        | 0              | 90.9 %       |
+  | uk_with_ru_names      | 11   | 1        | 0              | 90.9 %       |
+  | mixed_single_switch   | 12   | 2        | 0              | 83.3 %       |
+  | mixed_multi_sentence  | 10   | 2        | 0              | 80.0 %       |
+  | quotations            | 12   | 3        | 0              | 75.0 %       |
+  | technical_short       | 16   | 0        | 0              | 100.0 %      |
+  | english_with_cyrillic | 11   | 9        | 0              | 18.2 %       |
+  | other_cyrillic        | 12   | 0        | 0              | 100.0 %      |
+  - **What the result supports:** one sample of 147 hand-written rows with 0 false-decisive results. That is consistent with a low false-decisive rate. As a rough guide, the 95 % one-sided Clopper–Pearson upper bound is about 8 % among the 36 decisive rows and about 2 % over all rows. It does not prove zero errors in real use.
+  - **Coverage is low:**
+    - 20 of the 74 clearly Russian or Ukrainian rows (natural, short and named categories) are decisive.
+    - Short technical text is never decisive.
+  - **This holdout version is now used.** Any rule change made because of its results needs a new holdout version.
+
+- [x] All D0 checks above re-run (`acb6384`): provenance, translation routing, end-to-end tests, v1.2.0 S5 (exit 0) and `npm run green`.
 - [ ] Language provenance and translation routing reviewed again before D0 is closed.
 
 ---
