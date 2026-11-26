@@ -232,18 +232,26 @@ export function freezeFrame(rows: readonly FrameRow[], options: FreezeOptions): 
       row.priorAnalystVerdict !== undefined && row.claimId !== undefined
         ? { claimId: row.claimId, verdict: row.priorAnalystVerdict }
         : undefined;
-    const detection = detectLanguageWithEvidence(row.excerpt);
     if (!provenance && row.declaredLanguage !== undefined) {
       throw new Error(
         `row ${row.sourceId}/${row.rawKey} has declaredLanguage; freeze with schemaVersion 1.1.0`,
       );
     }
+    // A 1.0.0 frame carries no detector stamp, so it must not depend on detection at all.
+    if (!provenance && row.language === undefined) {
+      throw new Error(
+        `row ${row.sourceId}/${row.rawKey} has no language; schema 1.0.0 does not record a detector, use schemaVersion 1.1.0`,
+      );
+    }
+    // 1.1.0 detects on the stored (truncated) excerpt, so the stored provenance can be reproduced
+    // from the stored text. Detection on the full text would not be re-verifiable.
+    const detection = provenance ? detectLanguageWithEvidence(excerpt) : undefined;
     // 1.1.0: declared if present, else detected if decisive, else unknown. Never the reverse:
     // detection is stored beside the declaration and cannot overwrite it.
     const declared = provenance ? (row.declaredLanguage ?? row.language) : undefined;
-    const language: Language = provenance
+    const language: Language = detection
       ? (declared ?? (detection.decisive ? detection.language : "unknown"))
-      : (row.language ?? detection.language);
+      : row.language!;
     candidates.push({
       exampleId,
       sourceClusterId: sourceClusterIdFor(row),
@@ -255,7 +263,7 @@ export function freezeFrame(rows: readonly FrameRow[], options: FreezeOptions): 
       },
       excerpt,
       language,
-      ...(provenance
+      ...(detection
         ? {
             ...(declared !== undefined ? { declaredLanguage: declared } : {}),
             detectedLanguage: detection.language,

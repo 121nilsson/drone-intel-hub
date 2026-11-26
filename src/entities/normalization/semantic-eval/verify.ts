@@ -7,10 +7,17 @@
  * the current resolver version or to an unverified sample.
  */
 
+import {
+  LANGUAGE_DETECTOR_VERSION,
+  LANGUAGE_REASON_OUTCOMES,
+  detectLanguageWithEvidence,
+} from "../language";
 import { sha256Hex } from "../sha256";
 import { drawSample } from "./sampling";
 import {
+  LANGUAGE_STRATUM_RULE,
   PILOT_CEILING,
+  SEMANTIC_EVAL_SCHEMA_VERSION_1_1,
   type Decision,
   type Example,
   type Prediction,
@@ -48,6 +55,78 @@ function asManifest(value: unknown): SamplingManifest | undefined {
   return value as SamplingManifest;
 }
 
+/**
+ * Language provenance of a frame. Schema 1.0.0 directories are read as they always were: nothing is
+ * checked here. A 1.1.0 directory must be uniform, stamped, and internally consistent; when it was
+ * stamped by the current detector every stored excerpt must also re-detect to the stored fields.
+ * A frame stamped by another detector version cannot be re-verified with this one: that is a
+ * warning, not an error (the stamp is honest and the fields are still checked for consistency;
+ * an error would invalidate every committed frame at each detector bump).
+ */
+export function verifyLanguageProvenance(
+  manifest: Pick<SamplingManifest, "languageRule" | "languageDetectorVersion">,
+  examples: readonly Example[],
+): { readonly errors: string[]; readonly warnings: string[] } {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+  const versions = new Set(examples.map((e) => e.schemaVersion));
+  const provenance = examples.filter((e) => e.schemaVersion === SEMANTIC_EVAL_SCHEMA_VERSION_1_1);
+  if (provenance.length === 0) return { errors, warnings };
+  if (versions.size > 1) {
+    errors.push(
+      `examples mix schema versions (${[...versions].sort().join(", ")}); one frame, one schema`,
+    );
+  }
+  const stamped = manifest.languageDetectorVersion;
+  if (typeof stamped !== "string" || stamped.length === 0) {
+    errors.push("schema 1.1.0 manifest has no languageDetectorVersion");
+  }
+  if (typeof manifest.languageRule !== "string" || manifest.languageRule.length === 0) {
+    errors.push("schema 1.1.0 manifest has no languageRule");
+  } else if (manifest.languageRule !== LANGUAGE_STRATUM_RULE) {
+    errors.push(
+      `manifest languageRule "${manifest.languageRule}" is not the rule this verifier knows ("${LANGUAGE_STRATUM_RULE}")`,
+    );
+  }
+  const reverify = stamped === LANGUAGE_DETECTOR_VERSION;
+  for (const e of provenance) {
+    const reason = e.languageDetectionReason;
+    const outcome = reason === undefined ? undefined : LANGUAGE_REASON_OUTCOMES[reason];
+    if (
+      e.detectedLanguage === undefined ||
+      e.languageDetectionDecisive === undefined ||
+      outcome === undefined
+    ) {
+      errors.push(`example ${e.exampleId} lacks its language provenance fields`);
+      continue;
+    }
+    if (
+      e.languageDetectionDecisive !== outcome.decisive ||
+      !outcome.languages.includes(e.detectedLanguage)
+    ) {
+      errors.push(`example ${e.exampleId} has contradictory language provenance (${reason})`);
+    }
+    if (reverify) {
+      const d = detectLanguageWithEvidence(e.excerpt);
+      if (
+        d.language !== e.detectedLanguage ||
+        d.decisive !== e.languageDetectionDecisive ||
+        d.reason !== reason
+      ) {
+        errors.push(
+          `example ${e.exampleId} does not re-detect from its stored excerpt: stored ${e.detectedLanguage}/${e.languageDetectionDecisive}/${reason}, detector ${LANGUAGE_DETECTOR_VERSION} gives ${d.language}/${d.decisive}/${d.reason}`,
+        );
+      }
+    }
+  }
+  if (typeof stamped === "string" && stamped.length > 0 && !reverify) {
+    warnings.push(
+      `language detector ${stamped} is not the current ${LANGUAGE_DETECTOR_VERSION}: stored detection is not re-verifiable with this detector`,
+    );
+  }
+  return { errors, warnings };
+}
+
 /** Returns every integrity violation; an empty array means the inputs can be reported on. */
 export function verifyEvaluationInputs(input: EvaluationInputs): string[] {
   const errors: string[] = [];
@@ -77,6 +156,8 @@ export function verifyEvaluationInputs(input: EvaluationInputs): string[] {
       `population is ${input.examples.length}, manifest says ${manifest.populationCount}`,
     );
   }
+
+  errors.push(...verifyLanguageProvenance(manifest, input.examples).errors);
 
   let drawn: Set<string>;
   try {

@@ -33,10 +33,22 @@ describe("D0 adversarial review: every decisive language stamp is deserved", () 
     });
   }
 
-  it("records the size of the open defect: none since detector 3.0.0 (update deliberately)", () => {
+  it("records the size of the open defect (update deliberately)", () => {
     const all = Object.values(CATEGORIES).flat();
-    expect(all).toHaveLength(29);
-    expect(all.filter((r) => r.knownFalseDecisive)).toHaveLength(0);
+    expect(all).toHaveLength(42);
+    // Detector 3.0.0 cleared every row of the original 29; all open ones are other Cyrillic languages
+    // (Belarusian 1, Bulgarian 4), which the two-language model cannot tell apart. Not fixed here.
+    const open = all.filter((r) => r.knownFalseDecisive);
+    expect(open).toHaveLength(5);
+    expect(
+      CATEGORIES["Other Cyrillic languages"]!.filter((r) => r.knownFalseDecisive),
+    ).toHaveLength(5);
+    expect(
+      Object.entries(CATEGORIES)
+        .filter(([c]) => c !== "Other Cyrillic languages")
+        .flatMap(([, rows]) => rows)
+        .filter((r) => r.knownFalseDecisive),
+    ).toHaveLength(0);
   });
 
   it("keeps the six language-switch rows non-decisive under the production variant", () => {
@@ -46,7 +58,10 @@ describe("D0 adversarial review: every decisive language stamp is deserved", () 
   });
 
   it("is why variant B is the default: variant A is decisive on one switch row", () => {
-    const rows = Object.values(CATEGORIES).flat();
+    // The original 29 rows: the other-Cyrillic rows are a separate, open defect (see above).
+    const rows = Object.entries(CATEGORIES)
+      .filter(([c]) => c !== "Other Cyrillic languages")
+      .flatMap(([, r]) => r);
     const falseDecisive = (variant: "A" | "B") =>
       rows.filter((r) => {
         const d = detectLanguageWithVariant(r.text, variant);

@@ -33,7 +33,10 @@ import {
   renderMetricsReport,
 } from "../src/entities/normalization/semantic-eval/metrics";
 import type { Origin, SamplingManifest } from "../src/entities/normalization/semantic-eval/types";
-import { verifyEvaluationInputs } from "../src/entities/normalization/semantic-eval/verify";
+import {
+  verifyEvaluationInputs,
+  verifyLanguageProvenance,
+} from "../src/entities/normalization/semantic-eval/verify";
 import {
   canonicalJson,
   parseJsonl,
@@ -134,6 +137,9 @@ if (args.includes("--report")) {
       process.exit(1);
     }
     const manifest = parsedManifest as SamplingManifest;
+    for (const w of verifyLanguageProvenance(manifest, examples).warnings) {
+      process.stderr.write(`manifest warning: ${w}\n`);
+    }
     const manifestHash = sha256Hex(canonicalJson(manifest));
     const origins = value("--origins", "historical")
       .split(",")

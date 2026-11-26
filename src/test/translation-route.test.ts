@@ -287,6 +287,59 @@ describe("translation routing follows the language evidence (D0)", () => {
     expect(lines.join("\n")).not.toContain("навантаження");
   });
 
+  // One text per logged reason, taken from the adversarial review set. Routing is the old rule's
+  // answer; the log line carries the reason and counts, never the text.
+  const LOGGED = [
+    {
+      reason: "cyrillic_undetermined",
+      text: "Корисне навантаження становить 35 кг.",
+      pair: "ru-en",
+      counts: "uk_evidence=0 uk_channels=- ru_evidence=0 ru_channels=-",
+    },
+    {
+      reason: "cyrillic_mixed",
+      text: "Апарат має вагу 12 кг, а объем баку 5 л.",
+      pair: "ru-en",
+      counts: "uk_evidence=1 uk_channels=L ru_evidence=1 ru_channels=L",
+    },
+    {
+      reason: "conflicting_evidence",
+      text: "Ворожий дрон летів низько, его збили.",
+      pair: "ru-en",
+      counts: "uk_evidence=1 uk_channels=L ru_evidence=1 ru_channels=W",
+    },
+  ] as const;
+
+  for (const c of LOGGED) {
+    it(`logs ${c.reason} with counts and channels only, and keeps routing as ${c.pair}`, async () => {
+      riva();
+      expect(detectLanguageWithEvidence(c.text).reason).toBe(c.reason);
+      const seen = stubFetch();
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      await askWith(c.text);
+      expect(seen[0]?.system).toBe(c.pair);
+      const lines = warn.mock.calls.map((x) => String(x[0]));
+      const line = lines.find((l) => l.includes(c.reason));
+      expect(line, lines.join("\n")).toBeDefined();
+      expect(line).toContain("[ai-proxy]");
+      expect(line).toMatch(
+        /cyrillic=\d+ latin=\d+ uk_only=\d+ ru_only=\d+ uk_in_names=\d+ ru_in_names=\d+/,
+      );
+      expect(line).toContain(c.counts);
+      for (const word of c.text.split(/[^\p{L}]+/u).filter((w) => w.length > 2)) {
+        expect(lines.join("\n")).not.toContain(word);
+      }
+    });
+  }
+
+  it("does not log a decisive result", async () => {
+    riva();
+    stubFetch();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    await askWith("Дрон вже має дальність польоту 250 км.");
+    expect(warn).not.toHaveBeenCalled();
+  });
+
   it("routes Russian that names a Ukrainian outlet as ru-en, as before D0", async () => {
     riva();
     const seen = stubFetch();

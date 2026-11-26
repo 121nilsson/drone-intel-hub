@@ -243,7 +243,7 @@ describe("schema 1.0.0 stays as it was", () => {
   });
 
   it("reads a 1.0.0 example without the new fields unchanged, and ignores them if present", () => {
-    const built = buildFrame([row()], {
+    const built = buildFrame([row({ language: "uk" })], {
       frameId: sha256Hex("f"),
       snapshot: CODE_SEED_SNAPSHOT,
       resolverVersion: SEMANTIC_RESOLVER_VERSION,
@@ -255,10 +255,15 @@ describe("schema 1.0.0 stays as it was", () => {
     expect(validateExample(noisy)).toEqual(e);
   });
 
-  it("still derives the 1.0.0 language the old way (row language, else detection)", () => {
-    expect(freezeFrame([row()], { frameId: "f" }).units[0]!.language).toBe("uk");
+  it("still takes the 1.0.0 language from the row, and refuses a row that would need detection", () => {
+    const uk = freezeFrame([row({ language: "uk" })], { frameId: "f" }).units[0]!;
+    expect(uk.language).toBe("uk");
     expect(freezeFrame([row({ language: "en" })], { frameId: "f" }).units[0]!.language).toBe("en");
     // Old behaviour: any non-unknown language goes to the resolver.
-    expect(languageForResolver(freezeFrame([row()], { frameId: "f" }).units[0]!)).toBe("uk");
+    expect(languageForResolver(uk)).toBe("uk");
+    // No stamp exists in 1.0.0, so a row without a language must not silently use detector 3.0.0.
+    expect(() => freezeFrame([row()], { frameId: "f" })).toThrow(
+      /has no language; schema 1.0.0 does not record a detector, use schemaVersion 1.1.0/,
+    );
   });
 });

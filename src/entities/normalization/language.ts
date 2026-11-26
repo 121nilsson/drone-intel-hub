@@ -159,6 +159,27 @@ export const LANGUAGE_DETECTION_REASONS = [
 ] as const;
 export type LanguageDetectionReason = (typeof LANGUAGE_DETECTION_REASONS)[number];
 
+/**
+ * What each reason can emit: whether it is decisive, and which languages it can carry. Derived from
+ * `detect` below; a validator uses it to refuse stored provenance whose fields contradict each other.
+ */
+export const LANGUAGE_REASON_OUTCOMES: Readonly<
+  Record<
+    LanguageDetectionReason,
+    { readonly decisive: boolean; readonly languages: readonly DetectedLanguage[] }
+  >
+> = {
+  too_short: { decisive: false, languages: ["unknown"] },
+  mixed_scripts: { decisive: false, languages: ["unknown"] },
+  latin_english: { decisive: true, languages: ["en"] },
+  latin_not_english: { decisive: false, languages: ["unknown"] },
+  cyrillic_uk_letters: { decisive: true, languages: ["uk"] },
+  cyrillic_ru_letters: { decisive: true, languages: ["ru"] },
+  cyrillic_mixed: { decisive: false, languages: ["ru", "uk"] },
+  cyrillic_undetermined: { decisive: false, languages: ["ru", "uk"] },
+  conflicting_evidence: { decisive: false, languages: ["ru", "uk"] },
+};
+
 export type LanguageEvidenceChannel = "L" | "W";
 
 /** The counts a detection was based on. Never the text itself, so it is safe to log. */

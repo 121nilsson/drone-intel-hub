@@ -71,4 +71,48 @@ export const ADVERSARIAL_CATEGORIES: Readonly<Record<string, readonly Adversaria
     { text: "Герань-2 / Shahed-136, 50 кг, 2500 км.", allowed: null },
     { text: "Модель FPV-дрона з дальністю 10 км та камерою Caddx.", allowed: "uk" },
   ],
+  // Package 1 of the D0 review: other Cyrillic languages are outside the detector's two-language
+  // model, so no decisive result is acceptable (allowed null). Rows that the current detector
+  // stamps decisive anyway are marked: they are reproduced defects, not fixed here.
+  "Other Cyrillic languages": [
+    { text: "Беспілотнік упаў у поле каля вёскі, але лётчык застаўся жывы.", allowed: null },
+    {
+      text: "Дальнасць палёту апарата складае каля 40 кіламетраў, а вага — 12 кілаграмаў.",
+      allowed: null,
+    },
+    { text: "Мы ўбачылі, што дрон ляцеў вельмі нізка над ракой.", allowed: null },
+    { text: "Гэты апарат мае дальнасць каля 150 км і ўзлятае з любой пляцоўкі.", allowed: null },
+    {
+      text: "Апарат цяжкі, але мае вялікую дальнасць і ўзлятае або садзіцца без пляцоўкі.",
+      allowed: null,
+      knownFalseDecisive: true,
+    },
+    { text: "Дронът падна в полето край селото, но пилотът е жив.", allowed: null },
+    { text: "Този апарат има обхват около 40 километра и тежи 12 килограма.", allowed: null },
+    {
+      text: "Съобщиха, че безпилотният самолет е летял много ниско над реката.",
+      allowed: null,
+    },
+    { text: "Максималната височина на полета е четири хиляди метра.", allowed: null },
+    {
+      text: "Дронът има дълъг обхват, или поне така казват, около 40 км и тежи малко.",
+      allowed: null,
+      knownFalseDecisive: true,
+    },
+    {
+      text: "Как лети дронът, който е дълъг два метра, около пет километра над реката?",
+      allowed: null,
+      knownFalseDecisive: true,
+    },
+    {
+      text: "Самолетът е тънък и дълъг, или поне така изглежда, а тежи около 12 кг.",
+      allowed: null,
+      knownFalseDecisive: true,
+    },
+    {
+      text: "Дронът е със силен двигател, който е тежък, около 8 кг, и като е дълъг, не лети далеч.",
+      allowed: null,
+      knownFalseDecisive: true,
+    },
+  ],
 };

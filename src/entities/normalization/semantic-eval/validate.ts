@@ -7,7 +7,7 @@
  */
 
 import { isValidCanonicalId } from "../canonical-manifest";
-import { LANGUAGE_DETECTION_REASONS } from "../language";
+import { LANGUAGE_DETECTION_REASONS, LANGUAGE_REASON_OUTCOMES } from "../language";
 import type { SemanticResolutionResult } from "../semantic-result";
 import {
   REGISTRY_GUIDANCE,
@@ -218,6 +218,19 @@ export function validateExample(value: unknown): Example {
     );
     if (o.languageDetectionDecisive && detected === "unknown") {
       fail(`${w}.languageDetectionDecisive`, "an unknown language cannot be decisive");
+    }
+    const outcome = LANGUAGE_REASON_OUTCOMES[reason];
+    if (o.languageDetectionDecisive !== outcome.decisive) {
+      fail(
+        `${w}.languageDetectionDecisive`,
+        `reason ${reason} implies decisive=${outcome.decisive}, got ${o.languageDetectionDecisive}`,
+      );
+    }
+    if (!outcome.languages.includes(detected)) {
+      fail(
+        `${w}.detectedLanguage`,
+        `reason ${reason} allows ${outcome.languages.join(" or ")}, got ${detected}`,
+      );
     }
     const expectedLanguage =
       declared ?? (o.languageDetectionDecisive ? detected : ("unknown" as Language));

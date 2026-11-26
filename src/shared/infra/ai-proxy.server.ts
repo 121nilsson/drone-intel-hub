@@ -447,17 +447,26 @@ export async function translateCompletion(d: {
     : callSingleProvider(adapt(input, first), first);
 }
 
+/** Reasons of a non-decisive Cyrillic result: the language is a routing guess, so it is logged. */
+const CYRILLIC_GUESS_REASONS: ReadonlySet<string> = new Set([
+  "cyrillic_undetermined",
+  "cyrillic_mixed",
+  "conflicting_evidence",
+]);
+
 /** What is specific to NVIDIA's Riva-Translate models. */
 const riva = {
   is: (model: string) => /riva-translate/i.test(model),
   /** The system message that names the pair, for the sources this catalogue reads. */
   pairFor(text: string): string | null {
     const { language, decisive, reason, evidence } = detectLanguageWithEvidence(text);
-    // Cyrillic with no letter that separates Russian from Ukrainian keeps the old answer, ru-en
-    // (D0-Q1 option a). It is a guess, so it is logged: reason and counts only, never the text.
-    if (!decisive && reason === "cyrillic_undetermined") {
+    // Every non-decisive Cyrillic result keeps the old answer (ru-en, or uk-en on 2 or more
+    // Ukrainian-only letters; D0-Q1 option a). It is a guess, so it is logged: reason and counts
+    // only, never the text.
+    if (!decisive && CYRILLIC_GUESS_REASONS.has(reason)) {
+      const e = evidence;
       console.warn(
-        `[ai-proxy] translation language undetermined — ${reason} — cyrillic=${evidence.cyrillic} latin=${evidence.latin} uk_only=${evidence.ukrainianOnly} ru_only=${evidence.russianOnly} uk_in_names=${evidence.ukrainianOnlyInNames} ru_in_names=${evidence.russianOnlyInNames}; routing as ${language}-en`,
+        `[ai-proxy] translation language undetermined — ${reason} — cyrillic=${e.cyrillic} latin=${e.latin} uk_only=${e.ukrainianOnly} ru_only=${e.russianOnly} uk_in_names=${e.ukrainianOnlyInNames} ru_in_names=${e.russianOnlyInNames} uk_evidence=${e.ukrainianEvidenceDistinct} uk_channels=${e.ukrainianChannels.join("+") || "-"} ru_evidence=${e.russianEvidenceDistinct} ru_channels=${e.russianChannels.join("+") || "-"}; routing as ${language}-en`,
       );
     }
     return language === "ru" || language === "uk" ? `${language}-en` : null;

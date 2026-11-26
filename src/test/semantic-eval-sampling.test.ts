@@ -32,6 +32,8 @@ const row = (over: Partial<FrameRow> = {}): FrameRow => ({
   rawValue: "120",
   excerpt: "Maximum speed 120 km/h was reported for the airframe.",
   publishedAt: "2026-03-02T00:00:00.000Z",
+  // A 1.0.0 frame must declare its language: freezeFrame refuses to detect for it.
+  language: "en",
   ...over,
 });
 
@@ -147,6 +149,7 @@ describe("frame freeze and whole-frame replay", () => {
         rawKey: "корисне_навантаження",
         rawValue: "40",
         excerpt: "Безпілотник має корисне навантаження 40 кг, і ці дані є точними.",
+        language: "uk",
       }),
     ]);
     expect(built.exclusions).toContainEqual({ reason: "after_cutoff", count: 1 });

@@ -65,7 +65,7 @@
    - **Known residual risks:**
      - a lower-case proper name inside a sentence;
      - Surzhyk or an unquoted Ukrainian word inside Russian text;
-     - Belarusian, which shares `і` and is not a supported language.
+     - Belarusian and Bulgarian (and other Cyrillic languages), which are not supported. Reproduced in the development set: see "D0 status".
 
 3. **D0-Q1, decided: option (a).** Cyrillic text without a decisive letter:
    - translation callers keep today's behaviour (`ru`), for backward compatibility;
@@ -84,7 +84,7 @@
    - **As implemented:**
      - **1.1.0 is opt-in.** Use `--schema-version 1.1.0` on the sampler script; 1.0.0 stays the default.
      - **Under 1.1.0 the legacy `FrameRow.language` is read as a declaration,** because the fixture frames set it by hand. **The D5 historical export must therefore never set `language`.** It sets `declaredLanguage` only from trustworthy source metadata and otherwise leaves both empty.
-5. **Resolver caller rule:** a caller passes a language to `resolve()` only when it is declared, or detected _and_ decisive. This is documented next to `appliesToLanguage`.
+5. **Resolver caller rule:** a caller passes a language to `resolve()` only when it is declared, or detected _and_ decisive. As implemented, the rule lives in and is documented on `languageForResolver` in `src/entities/normalization/semantic-eval/sampling.ts`, the only place that passes a frame language to `resolve()`. `semantic-resolver.ts` was not changed.
 
 ### End-to-end language provenance
 
@@ -98,7 +98,7 @@ source metadata / original text
   → semantic resolver                    (language passed only if declared or decisive)
 ```
 
-Each step is checked separately, plus at least one **end-to-end test**. It takes a short Ukrainian sentence without declared language through every step. Under the revised rule the decisive sentence is "Дрон має дальність польоту 250 км.". It verifies that:
+Each step is checked separately, plus at least one **end-to-end test**. It takes a short Ukrainian sentence without declared language through every step. Under revision 3 (variant B) the decisive sentence is "Дрон вже має дальність польоту 250 км.": вже counts in channel W, має and дальність in channel L. The earlier "Дрон має дальність польоту 250 км." is non-decisive under B, because it has evidence from channel L only. The test verifies that:
 
 - detection gives `uk`, decisive;
 - `pairFor` gives `uk-en`;
@@ -111,18 +111,18 @@ Two further runs use undecidable Ukrainian sentences: "Корисне наван
 
 Hand-written, labelled sentences in a separate file, for example `src/test/fixtures/language-detect-corpus.ts`. Every row has an expected language **and** an expected `decisive`. Minimum coverage, with at least 5 rows per category:
 
-| Category                                                                                                                   | Expected                                                          |
-| -------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
-| Short Ukrainian with 1 distinctive letter in an ordinary word ("Дрон має дальність польоту 250 км.")                       | `uk`, decisive                                                    |
-| Short Russian with ы/э/ъ/ё                                                                                                 | `ru`, decisive                                                    |
-| Ukrainian without distinctive letters ("Корисне навантаження становить 35 кг…")                                            | non-decisive (not a confident `ru`)                               |
-| Russian without distinctive letters                                                                                        | non-decisive                                                      |
-| Mixed: Russian quoting a Ukrainian name or place, and the reverse                                                          | the matrix language; decisive only if the evidence is unambiguous |
-| Technical keys and English values ("max_speed 120 km/h", "Geran-2")                                                        | `unknown`                                                         |
-| Transliterated terms (`dalnost`, `maksimalnaya skorost`)                                                                   | `unknown` (not `en`)                                              |
-| Existing cases in `language-detect.test.ts`                                                                                | unchanged                                                         |
-| Russian starting with or mentioning Ukrainian names; Ukrainian starting with or mentioning Russian names (added in review) | never decisive in the wrong language                              |
-| Distinctive letter only in the first word, or only in quotations (added in review)                                         | non-decisive                                                      |
+| Category                                                                                                                   | Expected                                                                                                           |
+| -------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| Short Ukrainian with 1 distinctive letter in an ordinary word ("Дрон має дальність польоту 250 км.")                       | `uk`, decisive under revision 2. Under revision 3 (B) it is non-decisive unless a channel-W marker is also present |
+| Short Russian with ы/э/ъ/ё                                                                                                 | `ru`, decisive                                                                                                     |
+| Ukrainian without distinctive letters ("Корисне навантаження становить 35 кг…")                                            | non-decisive (not a confident `ru`)                                                                                |
+| Russian without distinctive letters                                                                                        | non-decisive                                                                                                       |
+| Mixed: Russian quoting a Ukrainian name or place, and the reverse                                                          | the matrix language; decisive only if the evidence is unambiguous                                                  |
+| Technical keys and English values ("max_speed 120 km/h", "Geran-2")                                                        | `unknown`                                                                                                          |
+| Transliterated terms (`dalnost`, `maksimalnaya skorost`)                                                                   | `unknown` (not `en`)                                                                                               |
+| Existing cases in `language-detect.test.ts`                                                                                | unchanged                                                                                                          |
+| Russian starting with or mentioning Ukrainian names; Ukrainian starting with or mentioning Russian names (added in review) | never decisive in the wrong language                                                                               |
+| Distinctive letter only in the first word, or only in quotations (added in review)                                         | non-decisive                                                                                                       |
 
 ### New metric: Language Detection Accuracy
 
@@ -135,6 +135,8 @@ Hand-written, labelled sentences in a separate file, for example `src/test/fixtu
 - On the fixture corpus it is a **Tier-1 test (100 %)**. On real data it is an exploratory measure that needs human-labelled language. No language labels are fabricated.
 
 ### Approval criteria D0
+
+Historical record for revision 2, kept unchanged. The current status is under "D0 status" below the revision 3 section.
 
 Status 2026-11-26: implemented and committed (`a69ce6f`). **Not closed.** A second code review asked for adversarial tests against mixed-language text, and they found an open defect.
 
@@ -161,13 +163,13 @@ Status 2026-11-26: implemented and committed (`a69ce6f`). **Not closed.** A seco
   - non-decisive detection;
   - a v1.2.0 directory with no new fields reads and verifies unchanged.
 - [x] Both end-to-end provenance runs pass.
-- [x] `cyrillic_undetermined` cases are logged with reason and counts only.
+- [x] `cyrillic_undetermined` cases are logged with reason and counts only. Since package 1 (2026-11-27), `cyrillic_mixed` and `conflicting_evidence` are logged too, with the distinct evidence words and channels per language; text is never logged.
 - [x] Existing `language-detect.test.ts` passes unchanged.
 - [x] Translation-routing regression tests: `pairFor` gives `uk-en` for decisive Ukrainian; undecidable text behaves as decided in D0-Q1; English still short-circuits.
 - [x] v1.2.0 S5 verification still passes. The command exits 0, and the committed directories are untouched.
 - [x] `npm run green` shows no new findings.
 
-### D0 revision 3: two evidence channels (design approved and frozen 2026-11-26; not implemented)
+### D0 revision 3: two evidence channels (design frozen 2026-11-26; implemented as detector 3.0.0 in `acb6384`)
 
 Design review, 2026-11-26:
 
@@ -222,7 +224,7 @@ Decided direction: alternatives 1 + 2 from the adversarial review. Sentence-leve
    - Distinct means distinct normalised word forms. Two occurrences of что count once.
    - A word that is evidence in both channels counts once.
    - The report keeps three things apart: occurrences, distinct words, and channels that contributed.
-2. **Conflict:** if both E_uk and E_ru are non-empty, the result is non-decisive. The reason is `conflicting_evidence`, or `cyrillic_mixed` when only channel L conflicts.
+2. **Conflict:** if both E_uk and E_ru are non-empty, the result is non-decisive. The reason is `cyrillic_mixed` when channel L conflicts, even if channel W conflicts too; otherwise it is `conflicting_evidence`. This wording was aligned with the code after the chain review (F5). The design said "only channel L", and the code and its comment were kept.
 3. **Sufficiency:** decisive `uk` needs |E_uk| ≥ 2 distinct words and E_ru empty. Decisive `ru` is the mirror case.
 4. **Absence is not evidence.** One word, no words, or a missing other-language signal can never make a result decisive.
 5. **Non-decisive Cyrillic** keeps the pre-D0 language from the old full-text rule, so translation routing for it does not change.
@@ -248,7 +250,7 @@ Decided direction: alternatives 1 + 2 from the adversarial review. Sentence-leve
 | Set                                                                                                                                                                                                                                                                                                                                                                                                 | Role                    | May drive rule changes?                                                                                                                       |
 | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
 | Corpus (`src/test/fixtures/language-detect-corpus.ts`, 92 rows)                                                                                                                                                                                                                                                                                                                                     | development, regression | yes                                                                                                                                           |
-| Adversarial review set (`src/test/language-detect-adversarial.test.ts`, 29 rows)                                                                                                                                                                                                                                                                                                                    | development             | yes. Its `it.fails` rows must turn into passing rows                                                                                          |
+| Adversarial review set (`src/test/fixtures/language-detect-adversarial.ts`: 29 rows at the 3.0.0 decision, 42 since package 1 added 13 other-Cyrillic rows)                                                                                                                                                                                                                                         | development             | yes. Its `it.fails` rows must turn into passing rows                                                                                          |
 | **Independent holdout** (written 2026-11-26 by an isolated author who saw neither the detector, its corpus, nor this word list; `src/test/fixtures/language-detect-holdout.ts`, 147 rows in 12 categories: 50 ru, 51 uk, 14 en, 13 mixed, 19 other; 32 rows where no decisive claim is acceptable. Neither the word-list designer nor the implementer reads its texts before the single evaluation) | **approval only**       | **no.** Evaluated once, after the rule and the word list are frozen. A rule change prompted by a holdout failure retires that holdout version |
 
 **Holdout exposure log** (kept so the holdout's independence can be judged):
@@ -277,7 +279,7 @@ Decided direction: alternatives 1 + 2 from the adversarial review. Sentence-leve
 #### Approval gate for revision 3
 
 - [x] Rule and word list reviewed and frozen in design (2026-11-26).
-- [ ] `LANGUAGE_DETECTOR_VERSION` introduced in code. The list in code carries a reason and a check of the other language for every word.
+- [x] `LANGUAGE_DETECTOR_VERSION` introduced in code (3.0.0, `acb6384`). The list in code carries a reason and a check of the other language for every word. The chain review found that check to be wrong for four words (F1, see "D0 status").
 - [x] Variant chosen on the development sets and recorded with the figures: **B** (2026-11-27).
 - [x] Corpus: 100 %, 0 false-decisive (`acb6384`).
 - [x] Adversarial set: 0 false-decisive. All 10 `it.fails` rows pass and are converted.
@@ -304,7 +306,62 @@ Decided direction: alternatives 1 + 2 from the adversarial review. Sentence-leve
   - **This holdout version is now used.** Any rule change made because of its results needs a new holdout version.
 
 - [x] All D0 checks above re-run (`acb6384`): provenance, translation routing, end-to-end tests, v1.2.0 S5 (exit 0) and `npm run green`.
-- [ ] Language provenance and translation routing reviewed again before D0 is closed.
+- [x] Language provenance and translation routing reviewed again (2026-11-27). The review was an independent end-to-end chain review by a fresh session that had not seen the holdout. Result: **PASS WITH FINDINGS**, F1–F7 (below). D0 is **not closed**.
+
+### D0 status (2026-11-27)
+
+| Version                               | Status                                                                                                              |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| D0 3.0.0 (`acb6384`)                  | **Historically evaluated, with known risk F1.** The holdout result (0 false-decisive in 147) stands for 3.0.0 only. |
+| D0 3.1.0 (package 2, planned)         | Once implemented: **technically verified, not statistically approved.** It does not inherit 3.0.0's holdout result. |
+| D0 3.1.0 after holdout v2 (package 3) | Can become statistically approved after one evaluation of an unused holdout.                                        |
+
+**Chain-review findings and their handling.**
+
+- **F1, should-fix (high), → package 2 (3.1.0).** заявив and упав are also standard Russian gerunds, and яка and яке are case forms of the Russian noun "як". Their documented cross-language check was wrong, and that is a design error. Two reproduced cases:
+  - "Беспилотник, упав в поле, загорелся; … обломки і детали." gives a decisive `uk` (false);
+  - "Губернатор, заявив об атаке, сообщил, что…" is non-decisive although it is clearly Russian.
+- **F2–F4 and F6, done in package 1** (no detector change; `LANGUAGE_DETECTOR_VERSION` stays 3.0.0):
+  - **F2:** `LANGUAGE_REASON_OUTCOMES` in `language.ts` defines, for each reason, the decisive value and the allowed languages. The schema 1.1.0 validator rejects any inconsistent combination. Tests cover the full matrix (9 reasons × 2 × 4; exactly 12 combinations pass) and a property test over the detector's own outputs.
+  - **F3:** `riva.pairFor` logs every non-decisive Cyrillic result: `cyrillic_undetermined`, `cyrillic_mixed` and `conflicting_evidence`. Each log line has the counts, the distinct evidence words and the channels per language. Text is never logged.
+  - **F4: verification of 1.1.0 directories** (`verifyLanguageProvenance`) requires:
+    - `languageDetectorVersion` and the current `languageRule` in the manifest;
+    - one schema version throughout;
+    - consistent provenance fields;
+    - when the stamp equals the current detector version, an exact re-detection from each stored excerpt.
+
+    A different detector version gives a **warning**: the stored detection is not re-verifiable with this detector. It is not an error, so historical 1.1.0 frames stay verifiable after a detector bump.
+
+  - **F4: schema 1.0.0.** Directories verify exactly as before. A **new** 1.0.0 freeze of a row without `language` is refused, because 1.0.0 records no detector; use 1.1.0.
+  - **F6:**
+    - Under 1.1.0, detection runs on the stored, truncated excerpt, so it can be reproduced.
+    - The evidence key is case-insensitive while detection is case-sensitive. A case-only difference that detects differently excludes the whole cluster as `conflicting_evidence_metadata`, which is conservative.
+    - When stratum languages match, the dropped duplicate's detection fields are discarded.
+  - **Other Cyrillic languages:** 13 development rows added (5 Belarusian, 8 Bulgarian). **5 are false-decisive with 3.0.0** (1 Belarusian as `uk`, 4 Bulgarian as `ru`, partly through the shared words але, або, или, около and как). They are pinned as `it.fails`. Russian and Ukrainian are the only supported languages; this is a known risk outside the two-language model. The adversarial set is now 42 rows, with 5 known false-decisive, all in this category. The original 29 rows remain at 0.
+- **F5 and F7 (documentation), synced in this document:**
+  - the decisive end-to-end sentence;
+  - the corpus table note;
+  - the revision 3 heading;
+  - the version gate box;
+  - where the resolver caller rule is documented;
+  - the `cyrillic_mixed` wording.
+- **Still open:**
+  - The sampler report does not yet summarise `cyrillic_undetermined` counts per frame. Reasons are stored per example.
+  - Declared-vs-detected agreement belongs with E4.
+
+**Next:**
+
+1. **Package 2 (3.1.0):** remove заявив, упав, яка and яке with no replacement. Add the reviewer's reproductions to the development set. Test both directions: false-decisive results that disappear, and conflicts that removal could also make disappear. Bump the version.
+2. Technical review: full regression, replay, backward compatibility, and a new chain review.
+3. **Package 3:** holdout v2 by an isolated author. Coverage includes:
+   - Russian gerunds and Ukrainian homographs;
+   - mixed Russian and Ukrainian;
+   - short texts without distinctive letters;
+   - natural Russian and Ukrainian;
+   - English with Cyrillic model designations;
+   - Belarusian, Bulgarian and other Cyrillic languages.
+
+   The author gets no development rows or known failures. It is evaluated once by an unexposed session.
 
 ---
 
