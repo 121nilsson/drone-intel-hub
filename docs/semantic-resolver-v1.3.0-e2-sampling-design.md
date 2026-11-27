@@ -8,6 +8,40 @@
 > - statistical inference: the separate derivation and tests in §6.3, before any confidence bound is reported;
 > - the seed, registered and committed before D5. This document changes no sampling code and creates no E2 material. Part of [semantic-resolver-v1.3.0-plan.md](./semantic-resolver-v1.3.0-plan.md) (§E2 method, D5).
 >
+> **Revision 2026-11-27 (maintainer decision A + B; supersedes the language parts below).** D0 3.1.0 was not approved, and no detector version may be a premise of E2. Three changes follow:
+>
+> - **A. The draw strata are routing strata, not language strata.** The strata key is the frozen rule from before D0 (`detectLanguagePreD0` in `src/entities/normalization/language-legacy.ts`), and its values are en, ru, uk and unknown.
+>   - The key is used **only to allocate the draw**, never as resolver input.
+>   - Design B stays as it is (minimum m per stratum, proportional remainder, §3.1).
+>   - The manifest records N_h, n_h, the inclusion probabilities and the weights per routing stratum. Population figures are weighted.
+>   - The key may misclassify. That does not affect validity, because it is known before the draw and the weights are applied.
+>   - **Name them routing strata, never language strata.** No result per routing stratum says anything about language or about any detector's accuracy.
+> - **B. The resolver's language comes from separate provenance sources:**
+>
+>   | Field                                | Meaning                                               | Use in E2                                 |
+>   | ------------------------------------ | ----------------------------------------------------- | ----------------------------------------- |
+>   | `declaredLanguage`                   | language declared in the source material              | used when present                         |
+>   | `adjudicatedLanguage` (new, planned) | language established by an independent human reviewer | used when no declared language exists     |
+>   | `detectedLanguage`                   | the detector's assessment                             | stored for analysis; never resolver input |
+>   - The effective resolver language is `declaredLanguage`, else `adjudicatedLanguage`, else unknown.
+>   - `adjudicatedLanguage` is **never written into `declaredLanguage`**. They are different sources of knowledge.
+>   - **Adjudication protocol:**
+>     - the blind reviewer records the language **before** the freeze, without seeing resolver output or expected outcomes;
+>     - the allowed values are `en`, `ru`, `uk`, `mixed` (mixed text is not forced into ru or uk) and `unknown` (ambiguous);
+>     - the protocol, any second reviewer and every disagreement are documented;
+>     - the adjudications are frozen with the E2 material.
+>     - `mixed` and `unknown` give the resolver no language.
+>
+> - **What E2 measures.** E2 measures the resolver's semantic behaviour when it has access to declared or independently adjudicated language. E2 does **not** measure:
+>   - the precision or coverage of language detection;
+>   - automatic language provenance from historical dispatches;
+>   - the whole production chain's ability to pick the right language.
+>     A good E2 result is no approval of 3.1.0, or of language detection in general.
+> - **Gates changed.**
+>   - The D0 gate in the status above is replaced: the routing key is the frozen pre-D0 rule and needs no detector approval.
+>   - `adjudicatedLanguage` must exist in the schema, with tests, before E2 is frozen.
+>   - Sections §1, §2.1, §2.2 (the "Language detector" row) and §3 are read with these changes. Where they say "detected language", read "routing stratum".
+>
 > **Position:** a smaller E2 that is well-motivated and statistically defensible is better than a larger one that gives false confidence. Every figure below that depends on the population is **illustrative**: the historical export (D5) does not exist yet, so the real stratum sizes are unknown. The numbers must be recomputed from the D5 counts before the size is fixed.
 
 ## 1. What can be decided now, and what waits
@@ -23,6 +57,8 @@
 ## 2. Strata
 
 ### 2.1 Decision: stratify the draw by detected language only; record family
+
+> **Superseded in part (2026-11-27):** the strata key is the pre-D0 routing rule (routing strata), not D0 detection. See the revision at the top. The family decision below still holds.
 
 **Draw strata:** `detectedLanguage` ∈ {`en`, `ru`, `uk`, `unknown`}.
 
