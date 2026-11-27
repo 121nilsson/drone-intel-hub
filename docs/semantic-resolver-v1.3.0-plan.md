@@ -316,11 +316,12 @@ The table shows the list of detector 3.1.0: 28 Russian and 22 Ukrainian markers.
 
 ### D0 status (2026-11-27)
 
-| Version                               | Status                                                                                                                                                                                                                  |
-| ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| D0 3.0.0 (`acb6384`)                  | **Historically evaluated, with known risk F1.** The holdout result (0 false-decisive in 147) stands for 3.0.0 only.                                                                                                     |
-| D0 3.1.0 (package 2)                  | **Technically verified** (technical review PASS WITH FINDINGS, R1–R6 fixed), **not statistically approved.** It does not inherit 3.0.0's holdout result.                                                                |
-| D0 3.1.0 after holdout v2 (package 3) | **Evaluated once on holdout v2 (2026-11-27): 2 false-decisive in 140 rows.** Statistical approval is **open**: it is a separate decision on the result and its confidence bounds (see "Holdout v2: single evaluation"). |
+| Version                               | Status                                                                                                                                                                                                                                 |
+| ------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| D0 3.0.0 (`acb6384`)                  | **Historically evaluated, with known risk F1.** The holdout result (0 false-decisive in 147) stands for 3.0.0 only.                                                                                                                    |
+| D0 3.1.0 (package 2)                  | **Technically verified** (technical review PASS WITH FINDINGS, R1–R6 fixed), **not statistically approved.** It does not inherit 3.0.0's holdout result.                                                                               |
+| D0 3.1.0 after holdout v2 (package 3) | **Evaluated once on holdout v2 (2026-11-27): 2 false-decisive in 140 rows. NOT APPROVED** for production use of decisive language decisions (decision 2026-11-27, see "D0 3.1.0: approval decision"). Frozen as the evaluated version. |
+| D0 3.2.0 (planned)                    | Development: mixed text and safe abstention outside the supported languages. Needs an independent holdout v3, sized by decisive claims.                                                                                                |
 
 **Limitation that holds for every version:** D0 tells Russian from Ukrainian. It cannot decide whether a Cyrillic text is Russian or Ukrainian at all. Belarusian, Bulgarian and other Cyrillic text can get a false decisive `ru` or `uk`: 5 of 13 development rows do with both 3.0.0 and 3.1.0. These 5 stay in every report as known development failures. Holdout v1's 0 false-decisive (its other-Cyrillic category was 12 rows, 0 decisive) does not mean 0 errors for all Cyrillic languages.
 
@@ -564,7 +565,28 @@ The table shows the list of detector 3.1.0: 28 Russian and 22 Ukrainian markers.
      - **Coverage stays low on ordinary text.** 23 of the 86 clearly Russian or Ukrainian rows are decisive (27 %), and short plain texts are almost never decisive (1 of 24).
      - **Composition limits the conclusions.** The rows are hand-written and stratified by design, not drawn from the real dispatch population. The rates are per category, not estimates of production frequencies. Hard categories (look-alikes, mixed, other Cyrillic) are over-represented on purpose.
      - **This result cannot be compared with v1 as an improvement or a regression.** v1 measured 3.0.0 on different texts (0 in 147).
-   - **Status:** v2 is consumed. Analysing the two failing rows (reading their texts) is development work. It may change the rule only in a new version, which then needs a new holdout. **Statistical approval of 3.1.0 is open** until the maintainer decides on this result.
+   - **Status:** v2 is consumed. Analysing the two failing rows (reading their texts) is development work. It may change the rule only in a new version, which then needs a new holdout.
+
+   **D0 3.1.0: approval decision (maintainer, 2026-11-27): NOT APPROVED** for production use of decisive language decisions.
+   - **Why.** The metric that matters for the resolver is the error rate per decisive claim, because only a decisive language reaches it. That rate is 2/36, with a one-sided 95 % upper bound of 16.47 %.
+     - The per-row bound (4.43 %) is diluted by the 74.3 % abstentions. Abstaining is part of the safety strategy, not a reason to count errors over more rows.
+     - Because v2 is hand-built and stratified, 4.43 % is also no evidence that the real production rate is under 5 %.
+   - **The two failures mean different things.**
+     - **Mixed text, `h2-mixed_ru_uk-12`:** a failure within the model's scope. It breaks the property the two-channel rule exists to protect, and it is the most serious finding.
+     - **Belarusian, `h2-belarusian-07`:** a decisive ru or uk outside the supported languages. This is a separate problem of scope and abstention, handled apart from the mixed-text failure.
+   - **What follows:**
+     1. **3.1.0 is frozen as the evaluated version.** Its rules are not changed after the fact.
+     2. **v2 is consumed**, and the whole evaluation record is kept: fixture, registry, output and this section.
+     3. **Development of D0 3.2.0 opens,** on mixed text and on safe abstention outside the supported languages.
+     4. **The two failing v2 texts may be investigated** as development work, but they do not become development fixtures in this evaluation chain. Anything learned from them leads only to a new version.
+     5. **3.2.0 is evaluated on an independent holdout v3,** sized by the number of expected **decisive** claims, not by rows. With exact one-sided 95 % Clopper–Pearson bounds, an upper bound under 5 % needs at least:
+        - 59 decisive observations with 0 errors;
+        - 93 with 1 error;
+        - 124 with 2 errors;
+        - 153 with 3 errors.
+
+        Aim well above the minimum, with mixed text strongly represented. v2 gave 36 decisive claims from 140 rows, so v3 needs far more rows, or categories where a decisive claim is expected.
+   - **Open:** the translation routing in `riva.pairFor` (`src/shared/infra/ai-proxy.server.ts`) on this branch already routes by a decisive 3.1.0 language. How that production use is handled is a separate decision. D0 is not on `main`.
 
 ---
 
