@@ -432,6 +432,13 @@ The table shows the list of detector 3.1.0: 28 Russian and 22 Ukrainian markers.
 
     Other findings are documented and prioritised, but they do not start a new blocking review round by themselves. U6 and U7 are of that kind.
 
+  - **U6, done (documentation):** T3 tightened the flags in two more ways than the empty value, both on purpose and in the spirit of T4. First, `evaluate-semantic-registry` validates its value flags (`--data-dir`, `--decisions`, `--origins`, `--report-out`) even without `--report`: `--origins` without a value now exits 2 in replay mode, where it used to be ignored. Second, the sampler checks all value flags first, so a malformed flag is reported before an invalid `--schema-version` value. No documented command line is affected.
+  - **U7, done (test quality):**
+    - the process test finds jiti's entry point through its public `bin` field, not its internal file layout;
+    - `jiti` is pinned to exactly 2.7.0;
+    - every "nothing written" check runs in an empty temporary directory, and the refused sampler run passes `--apply`, so the check could fail if the refusal regressed (U4).
+    - The scripts run under jiti in the test and under tsx in the documented commands. Both runners resolve the same `@/` alias and module paths.
+
   - **A registered 3.0.0 detector is not needed now.** The review found no frozen 1.1.0 or version-stamped artifact anywhere. It searched the working tree including ignored files, every `manifest.json`, all branches, stashes, history and worktrees.
 - **F5 and F7 (documentation), synced in this document:**
   - the decisive end-to-end sentence;

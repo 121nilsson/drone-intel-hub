@@ -15,7 +15,9 @@ import { dirname, join, resolve } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 
 const require = createRequire(import.meta.url);
-const JITI_CLI = join(dirname(require.resolve("jiti/package.json")), "lib", "jiti-cli.mjs");
+// The runner's entry point comes from jiti's public `bin` field, not from its internal layout (U7).
+const JITI_PKG = require.resolve("jiti/package.json");
+const JITI_CLI = join(dirname(JITI_PKG), (require(JITI_PKG) as { bin: { jiti: string } }).bin.jiti);
 const ROOT = resolve(".");
 const PILOT_ROWS = join(ROOT, "src/test/fixtures/semantic-eval/frame-rows.jsonl");
 const V120_DIR = join(ROOT, "src/test/fixtures/semantic-eval-v1.2.0");
