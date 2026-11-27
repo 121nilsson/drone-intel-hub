@@ -180,21 +180,38 @@ const ALLOWED = new Set<unknown>(["ru", "uk", "en", null]);
 
 /**
  * The rows of a holdout module's export, or undefined when the export is not an array of
- * well-formed rows (U2). Never prints or returns a text on failure.
+ * well-formed rows (U2, V3). A row is well formed when `id`, `category` and `text` are non-blank
+ * strings and `allowedDecisive` is ru, uk, en or null; row ids must be unique. Each field is read
+ * once into a frozen plain copy, so what is validated is exactly what is evaluated. Never prints or
+ * returns a text on failure.
  */
 export function holdoutRowsOf(value: unknown): readonly LanguageHoldoutRow[] | undefined {
   if (!Array.isArray(value)) return undefined;
-  for (const r of value as unknown[]) {
+  const rows: LanguageHoldoutRow[] = [];
+  const ids = new Set<string>();
+  for (let i = 0; i < value.length; i++) {
+    if (!(i in value)) return undefined; // a hole in a sparse array
+    const r: unknown = value[i];
     if (typeof r !== "object" || r === null) return undefined;
-    const row = r as Record<string, unknown>;
-    if (
-      typeof row["id"] !== "string" ||
-      typeof row["category"] !== "string" ||
-      typeof row["text"] !== "string" ||
-      !ALLOWED.has(row["allowedDecisive"])
-    ) {
+    const source = r as Record<string, unknown>;
+    const id = source["id"];
+    const category = source["category"];
+    const text = source["text"];
+    const allowedDecisive = source["allowedDecisive"];
+    const nonBlank = (x: unknown): x is string => typeof x === "string" && x.trim().length > 0;
+    if (!nonBlank(id) || !nonBlank(category) || !nonBlank(text) || !ALLOWED.has(allowedDecisive)) {
       return undefined;
     }
+    if (ids.has(id)) return undefined;
+    ids.add(id);
+    rows.push(
+      Object.freeze({
+        id,
+        category,
+        text,
+        allowedDecisive: allowedDecisive as LanguageHoldoutRow["allowedDecisive"],
+      }),
+    );
   }
-  return value as readonly LanguageHoldoutRow[];
+  return Object.freeze(rows);
 }

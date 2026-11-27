@@ -250,7 +250,9 @@ describe("holdout identity: id → fixture → module (Q1, T1, T5, U1)", () => {
   });
 
   it("accepts only arrays of well-formed rows (U2)", () => {
-    expect(holdoutRowsOf([FAKE_ROW, { ...FAKE_ROW, allowedDecisive: "uk" }])).toHaveLength(2);
+    expect(holdoutRowsOf([FAKE_ROW, { ...FAKE_ROW, id: "y", allowedDecisive: "uk" }])).toHaveLength(
+      2,
+    );
     expect(holdoutRowsOf([])).toEqual([]); // empty is refused by runHoldoutEvaluation
     for (const bad of [
       undefined,
@@ -263,9 +265,38 @@ describe("holdout identity: id → fixture → module (Q1, T1, T5, U1)", () => {
       [{ ...FAKE_ROW, category: null }],
       [{ ...FAKE_ROW, allowedDecisive: "be" }],
       [FAKE_ROW, "x"],
+      // V3: duplicate ids, blank fields
+      [FAKE_ROW, { ...FAKE_ROW, text: "other" }],
+      [{ ...FAKE_ROW, text: "" }],
+      [{ ...FAKE_ROW, text: "   " }],
+      [{ ...FAKE_ROW, category: "" }],
+      [{ ...FAKE_ROW, id: " " }],
     ]) {
       expect(holdoutRowsOf(bad), JSON.stringify(bad)).toBeUndefined();
     }
+    // A sparse array (a hole is not a row).
+    const sparse: unknown[] = [FAKE_ROW];
+    sparse[2] = { ...FAKE_ROW, id: "y" };
+    expect(holdoutRowsOf(sparse)).toBeUndefined();
+  });
+
+  it("evaluates a frozen plain copy: a getter-backed row is read once (V3)", () => {
+    let reads = 0;
+    const row = {
+      id: "g",
+      category: "c",
+      allowedDecisive: null,
+      get text() {
+        reads++;
+        return reads === 1 ? "validated" : "";
+      },
+    };
+    const rows = holdoutRowsOf([row])!;
+    expect(rows[0]).toEqual({ id: "g", category: "c", text: "validated", allowedDecisive: null });
+    expect(rows[0]!.text).toBe("validated");
+    expect(reads).toBe(1);
+    expect(Object.isFrozen(rows)).toBe(true);
+    expect(Object.isFrozen(rows[0])).toBe(true);
   });
 });
 

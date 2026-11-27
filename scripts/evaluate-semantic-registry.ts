@@ -15,7 +15,7 @@
  * Exit code 1 when a technical invariant fails. A parity difference never fails the run.
  * The committed report is formatted: run `npx prettier --write scripts/output/semantic-replay.md` after regenerating it.
  */
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { format, resolveConfig } from "prettier";
 import { semanticKeyFor } from "../src/entities/normalization/semantic";
@@ -85,15 +85,23 @@ const report = renderReport({
   invariants,
 });
 
-async function writeFormatted(path: string, text: string): Promise<void> {
+/** Formats a report for its target path, in memory; throws for a path prettier cannot format. */
+async function formatFor(path: string, text: string): Promise<string> {
+  return format(`${text}\n`, { filepath: path, ...((await resolveConfig(path)) ?? {}) });
+}
+
+function writeText(path: string, formatted: string): void {
   mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(
-    path,
-    await format(`${text}\n`, {
-      filepath: path,
-      ...((await resolveConfig(path)) ?? {}),
-    }),
-  );
+  writeFileSync(path, formatted);
+}
+
+async function writeFormatted(path: string, text: string): Promise<void> {
+  writeText(path, await formatFor(path, text));
+}
+
+/** Refuses a target that cannot be written as a file, before anything is written (V1). */
+function assertWritableTarget(path: string): void {
+  if (existsSync(path) && statSync(path).isDirectory()) throw new Error(`${path} is a directory`);
 }
 
 async function writeReplayReport(): Promise<void> {
@@ -211,11 +219,31 @@ if (args.includes("--report")) {
     process.stderr.write(`${(e as Error).message}\n`);
     process.exit(1);
   }
-  await writeReplayReport();
-  for (const w of s5.warnings) process.stderr.write(`manifest warning: ${w}\n`);
-  process.stdout.write(`${s5.replayLine}\n`);
-  await writeFormatted(s5.reportOut, s5.report);
-  process.stdout.write(`wrote ${s5.reportOut}\n`);
+  // Both outputs are formatted in memory and their targets checked before the first write (V1). A
+  // failure after that point (the file system refusing a write) can still leave the replay report
+  // behind; it is then reported as a plain message with exit 1, never as a stack trace.
+  try {
+    const replayPath = replayTarget.kind === "file" ? resolve(replayTarget.path) : undefined;
+    if (replayPath !== undefined) assertWritableTarget(replayPath);
+    assertWritableTarget(s5.reportOut);
+    const replayText = replayPath !== undefined ? await formatFor(replayPath, report) : undefined;
+    const metricsText = await formatFor(s5.reportOut, s5.report);
+    if (replayTarget.kind === "stdout") {
+      process.stdout.write(`${report}\n`);
+    } else if (replayPath !== undefined && replayText !== undefined) {
+      writeText(replayPath, replayText);
+      process.stdout.write(`wrote ${replayPath}\n`);
+    } else {
+      process.stdout.write("replay report not written (--report without --out or --stdout)\n");
+    }
+    for (const w of s5.warnings) process.stderr.write(`manifest warning: ${w}\n`);
+    process.stdout.write(`${s5.replayLine}\n`);
+    writeText(s5.reportOut, metricsText);
+    process.stdout.write(`wrote ${s5.reportOut}\n`);
+  } catch (e) {
+    process.stderr.write(`cannot write the reports: ${(e as Error).message.split("\n")[0]}\n`);
+    process.exit(1);
+  }
 } else {
   // Replay mode: the replay report documents the invariants, failed ones included.
   await writeReplayReport();

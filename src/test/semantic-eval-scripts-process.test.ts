@@ -8,7 +8,7 @@
  * only read. No run here can write to a tracked file, even if a refusal regressed.
  */
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -110,7 +110,46 @@ describe("evaluate-semantic-registry.ts as a process (T4, U3)", () => {
     expect(readdirSync(cwd)).toEqual([]);
   }, 60_000);
 
+  it("checks and formats both outputs before writing either (V1)", () => {
+    writeFileSync(join(tmp, "empty-decisions-v1.jsonl"), "");
+    for (const [name, target] of [
+      ["unknown extension", (cwd: string) => join(cwd, "metrics.unknownext")],
+      [
+        "directory",
+        (cwd: string) => (mkdirSync(join(tmp, "a-dir"), { recursive: true }), join(tmp, "a-dir")),
+      ],
+    ] as const) {
+      const cwd = freshDir(`s5-v1-${name.replace(/ /g, "-")}`);
+      const r = run(
+        "evaluate-semantic-registry.ts",
+        [
+          "--report",
+          "--origins",
+          "fixture",
+          "--data-dir",
+          V120_DIR,
+          "--decisions",
+          join(tmp, "empty-decisions-v1.jsonl"),
+          "--out",
+          join(cwd, "replay.md"),
+          "--report-out",
+          target(cwd),
+        ],
+        cwd,
+      );
+      expect(r.status, `${name}: ${r.stderr}`).toBe(1);
+      expect(r.stderr, name).toMatch(/^cannot write the reports: /m);
+      expect(r.stderr, name).not.toMatch(NO_STACK);
+      expect(r.stdout, name).not.toMatch(/wrote /);
+      expect(readdirSync(cwd), name).toEqual([]);
+    }
+  }, 120_000);
+
   it("writes nothing when well-formed S5 arguments turn out wrong (U3)", () => {
+    // A valid, empty decisions file outside every run's cwd: it passes parsing and the manifest
+    // checks, so the origins case reaches the origins check itself (V2).
+    const emptyDecisions = join(tmp, "empty-decisions.jsonl");
+    writeFileSync(emptyDecisions, "");
     const cases: [string, string[], RegExp][] = [
       ["missing data dir", ["--data-dir", join(tmp, "no-such-dir")], /missing .*examples\.jsonl/],
       [
@@ -120,15 +159,8 @@ describe("evaluate-semantic-registry.ts as a process (T4, U3)", () => {
       ],
       [
         "origins without examples",
-        [
-          "--data-dir",
-          V120_DIR,
-          "--decisions",
-          join(V120_DIR, "examples.jsonl"),
-          "--origins",
-          "bogus",
-        ],
-        /./,
+        ["--data-dir", V120_DIR, "--decisions", emptyDecisions, "--origins", "bogus"],
+        /^no examples for origins bogus; refusing an empty report$/m,
       ],
     ];
     for (const [name, extra, message] of cases) {

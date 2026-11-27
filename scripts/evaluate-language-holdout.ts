@@ -26,6 +26,11 @@ import {
 } from "../src/entities/normalization/language-holdout";
 
 const args = process.argv.slice(2);
+// One --holdout, named once: a repeated flag is refused, never resolved by position (V6).
+if (args.filter((a) => a === "--holdout").length > 1) {
+  process.stderr.write("refused: --holdout given more than once\n");
+  process.exit(2);
+}
 const i = args.indexOf("--holdout");
 const holdoutArg = i >= 0 ? args[i + 1] : undefined;
 // No default id: the holdout to evaluate is always named explicitly.

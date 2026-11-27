@@ -421,7 +421,7 @@ The table shows the list of detector 3.1.0: 28 Russian and 22 Ukrainian markers.
       - the path is built from `holdoutFixtureFor(id)` itself;
       - tests use a record whose `fixture` getter flips to v1 or to an outside path, and a `Map` whose `get()` lies. Only v2's own module is imported.
     - **U2:** a holdout module that exports an empty list, or malformed rows (`holdoutRowsOf`), is refused before evaluation. Earlier, the T1 claim that "a module without rows is a refusal" was not true for an empty list.
-    - **U3:** under `--report`, S5 validates and computes everything first (invariants, inputs, manifest checks, origins) and writes nothing unless all of it succeeds. Process tests cover a missing data directory, missing decisions and origins without examples, and check that no file is left behind. Replay mode without `--report` is unchanged.
+    - **U3:** under `--report`, S5 validates and computes everything first (invariants, inputs, manifest checks, origins) and writes nothing unless all of it succeeds. Process tests cover a missing data directory and missing decisions, and check that no file is left behind. (The origins case did not reach the origins check until V2, below.) Replay mode without `--report` is unchanged.
     - **U4:** every process test runs in an empty temporary working directory, with every output flag pointing into it. Repository inputs are passed as absolute paths and only read. Each test asserts that its directory is still empty afterwards.
     - **U5:** `LANGUAGE_HOLDOUTS` is a deeply frozen object, so writing to it throws. The guard works on a snapshot, and the script neither names the registry nor passes the test seam (text check).
   - **Stop rule for package 3 (decided 2026-11-27).** Package 3 is blocked only by a finding that can:
@@ -438,6 +438,13 @@ The table shows the list of detector 3.1.0: 28 Russian and 22 Ukrainian markers.
     - `jiti` is pinned to exactly 2.7.0;
     - every "nothing written" check runs in an empty temporary directory, and the refused sampler run passes `--apply`, so the check could fail if the refusal regressed (U4).
     - The scripts run under jiti in the test and under tsx in the documented commands. Both runners resolve the same `@/` alias and module paths.
+  - **Review of U1–U7 (2026-11-27, fresh session): PASS WITH FINDINGS.** Under the stop rule nothing blocked package 3. V1, V2, V3, V5 and V6 were fixed without a new review round. The fixes were checked with the existing and new tests and `npm run green`:
+    - **V1:** under `--report`, both reports are formatted in memory and both targets are checked (a directory, or a path prettier cannot format) before the first write. A write failure gives `cannot write the reports: <reason>`, exit 1 and no stack trace. **Remaining limit:** if the file system refuses the metrics write after the replay report has been written, the replay report stays behind, and the run exits 1.
+    - **V2:** the origins process test uses a valid, empty decisions file, so it reaches the origins check. It asserts the exact message `no examples for origins bogus; refusing an empty report`. My earlier claim that the test covered origins was wrong until this fix.
+    - **V3:** `holdoutRowsOf` refuses duplicate row ids, blank `id`, `category` or `text`, and sparse arrays. It evaluates a frozen plain copy, reading each field once.
+    - **V5:** removed an unused import.
+    - **V6:** a repeated `--holdout` is refused with exit 2.
+    - **V4** is a gate in package 3: see the package 3 acceptance criteria.
 
   - **A registered 3.0.0 detector is not needed now.** The review found no frozen 1.1.0 or version-stamped artifact anywhere. It searched the working tree including ignored files, every `manifest.json`, all branches, stashes, history and worktrees.
 - **F5 and F7 (documentation), synced in this document:**
@@ -464,6 +471,24 @@ The table shows the list of detector 3.1.0: 28 Russian and 22 Ukrainian markers.
    - Belarusian, Bulgarian and other Cyrillic languages.
 
    The author gets no development rows or known failures. It is evaluated once by an unexposed session.
+
+   **Acceptance criteria and order (decided 2026-11-27):**
+   1. An isolated author writes v2 from the frozen 3.1.0 design (the decision rule and the evidence channels as documented here; not the word lists, not development rows, known failures or v1 results). It is written as `src/test/fixtures/language-detect-holdout-v2.ts`, exporting `LANGUAGE_DETECT_HOLDOUT`.
+   2. Structural check: format and required fields, by counts only.
+   3. **V4 independence gate.** v2 is accepted as an independent holdout only if a check, which prints no text or excerpt, shows that:
+      - the v2 module has no `import` and no re-export;
+      - no row id overlaps v1's;
+      - no canonical text hash overlaps v1's.
+   4. **The hash method is documented and deterministic.** It is SHA-256 of the canonical text:
+      - Unicode NFC;
+      - lower-cased;
+      - every run of whitespace collapsed to one space;
+      - leading and trailing whitespace trimmed.
+   5. The check records its result, the module versions (commit and file hash) and the hash method, but no texts.
+   6. **The check fails safe.** If it cannot read or verify either set, v2 is not accepted.
+   7. **Overlap is not a warning.** Any overlap fails v2 as an independent holdout, and it is investigated before any evaluation.
+   8. v2 is committed and frozen. Only then is it registered (`v2`, `evaluatedWith: "3.1.0"`).
+   9. An unexposed session runs the single evaluation. The result applies to detector 3.1.0 only, and v2 is then consumed.
 
 ---
 
