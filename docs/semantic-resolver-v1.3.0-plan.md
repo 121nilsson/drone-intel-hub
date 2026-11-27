@@ -490,6 +490,30 @@ The table shows the list of detector 3.1.0: 28 Russian and 22 Ukrainian markers.
    8. v2 is committed and frozen. Only then is it registered (`v2`, `evaluatedWith: "3.1.0"`).
    9. An unexposed session runs the single evaluation. The result applies to detector 3.1.0 only, and v2 is then consumed.
 
+   **Holdout v2: written, checked and frozen (2026-11-27).** File: `src/test/fixtures/language-detect-holdout-v2.ts`.
+   - **Author.** An isolated agent session wrote the file. It worked from the brief only: the 3.1.0 design described as behaviour, the category table and the row format. It read no repository file, ran no repository code and used no git. It had no word lists, development rows, known failures or v1 material.
+   - **Size.** The brief's category targets add up to **140 rows**. Its "about 150" was wrong, and 140 is the intended size.
+   - **Structural check** (counts only; no text printed or read):
+     - 140 rows, with 140 unique ids and 140 unique texts. `holdoutRowsOf` accepts the file.
+     - Categories: `ru_natural` 15, `uk_natural` 15, `ru_short_plain` 12, `uk_short_plain` 12, `ru_lookalike_forms` 12, `uk_lookalike_forms` 8, `mixed_ru_uk` 14, `names_and_quotes` 12 (6 ru, 6 uk), `english_with_cyrillic` 12, `belarusian` 10, `bulgarian` 10, `other_cyrillic` 8.
+     - `trueLanguage`: ru 45, uk 41, en 12, mixed_ru_uk 14, be 10, bg 10, other 8.
+     - `allowedDecisive` is null on exactly the 42 mixed and other-language rows, and equal to `trueLanguage` on every other row (0 mismatches). All ids match `h2-<category>-NN`.
+     - Text lengths are 16–122 characters.
+   - **V4 independence gate:** ACCEPTED.
+     - The check ran with `scripts/check-holdout-independence.ts --new v2 --consumed v1` at commit `452df47`.
+     - The v2 module has no import or re-export.
+     - Overlap with v1 (147 rows): 0 row ids and 0 canonical text hashes. No text repeats within v2.
+     - Hash method: `HOLDOUT_TEXT_HASH_METHOD` (SHA-256 of NFC, lower-cased, whitespace-collapsed, trimmed text).
+     - Module SHA-256: v2 `4578cfe72e9420c0d1248a4180c9a5f8dde0e69813d029720bebda8bbd0e347b` (after a formatting-only prettier pass, re-checked), v1 `0b4273fec22e2a898958432d094a19cb6aeb50bd830563af99bcc39956f32b96`.
+   - **Frozen.** The committed file is byte-identical to the checked one (same SHA-256). Any later change to it means rerunning the structural check and V4.
+   - **Exposure:**
+
+     | Who                                      | Exposure                                                                            |
+     | ---------------------------------------- | ----------------------------------------------------------------------------------- |
+     | v2 author (isolated session)             | Wrote the texts. Saw neither the repository nor v1.                                 |
+     | Implementer session (this plan's author) | Structural check and V4 only: counts, ids, labels, hashes. No text printed or read. |
+     | Reviewers of R1–V6                       | None: the file did not exist during those reviews.                                  |
+
 ---
 
 ## D1 (P1): four safe improvements (resolver 1.3.0)
