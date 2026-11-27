@@ -6,10 +6,11 @@
 
 import { detectLanguagePreD0 } from "../../language-legacy";
 import { sha256Hex } from "../../sha256";
-import { ORIGINS, PROTOCOL_VERSIONS, type Origin } from "../types";
+import { ORIGINS, type Origin } from "../types";
 import { ValidationError, canonicalJson } from "../validate";
 import {
   ADJUDICATED_LANGUAGES,
+  E2_ADJUDICATION_PROTOCOL_VERSIONS,
   E2_DECLARED_LANGUAGES,
   E2_MAX_EXCERPT_CHARS,
   E2_RESOLVER_LANGUAGE_RULE,
@@ -214,7 +215,11 @@ export function validateE2Adjudication(value: unknown): E2Adjudication {
   ]);
   const exampleId = hex64(`${w}.exampleId`, o["exampleId"]);
   const reviewerId = str(`${w}.reviewerId`, o["reviewerId"]);
-  const protocolVersion = enumOf(`${w}.protocolVersion`, o["protocolVersion"], PROTOCOL_VERSIONS);
+  const protocolVersion = enumOf(
+    `${w}.protocolVersion`,
+    o["protocolVersion"],
+    E2_ADJUDICATION_PROTOCOL_VERSIONS,
+  );
   const first = enumOf<AdjudicatedLanguage>(
     `${w}.reviewerLanguage`,
     o["reviewerLanguage"],
@@ -477,7 +482,11 @@ export function validateE2AdjudicationManifest(value: unknown): E2AdjudicationMa
     schemaVersion: schemaVersion(`${w}.schemaVersion`, o["schemaVersion"]),
     sampleManifestSha256: hex64(`${w}.sampleManifestSha256`, o["sampleManifestSha256"]),
     adjudicationSha256: hex64(`${w}.adjudicationSha256`, o["adjudicationSha256"]),
-    protocolVersion: enumOf(`${w}.protocolVersion`, o["protocolVersion"], PROTOCOL_VERSIONS),
+    protocolVersion: enumOf(
+      `${w}.protocolVersion`,
+      o["protocolVersion"],
+      E2_ADJUDICATION_PROTOCOL_VERSIONS,
+    ),
     reviewerIds,
     secondReviewerUsed,
     disagreementCount,

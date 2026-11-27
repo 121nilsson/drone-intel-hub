@@ -10,9 +10,19 @@
  * is the simpler of the two allowed options; a later schema may add optional provenance.
  */
 
-import type { EvalProtocolVersion, Origin } from "../types";
+import type { Origin } from "../types";
 
 export const E2_SCHEMA_VERSION = "1.2.0";
+
+/**
+ * The language adjudication protocol (docs/semantic-resolver-v1.3.0-e2-adjudication-protocol.md).
+ * It is its own version string: the 1.0.0 decision protocol (`protocol-v1`) is a different thing.
+ */
+export const E2_ADJUDICATION_PROTOCOL_VERSION = "e2-lang-1";
+export type E2AdjudicationProtocolVersion = "e2-lang-1";
+export const E2_ADJUDICATION_PROTOCOL_VERSIONS: readonly E2AdjudicationProtocolVersion[] = [
+  E2_ADJUDICATION_PROTOCOL_VERSION,
+];
 
 /** Commit of the pre-D0 language rule that defines the routing stratum. */
 export const E2_ROUTING_RULE_SOURCE_COMMIT = "7aea9a6";
@@ -93,7 +103,7 @@ export interface E2Example {
 export interface E2Adjudication {
   readonly exampleId: string;
   readonly reviewerId: string;
-  readonly protocolVersion: EvalProtocolVersion;
+  readonly protocolVersion: E2AdjudicationProtocolVersion;
   readonly reviewerLanguage: AdjudicatedLanguage;
   readonly secondReviewerId?: string | undefined;
   readonly secondReviewerLanguage?: AdjudicatedLanguage | undefined;
@@ -158,7 +168,7 @@ export interface E2AdjudicationManifest {
   readonly schemaVersion: typeof E2_SCHEMA_VERSION;
   readonly sampleManifestSha256: string;
   readonly adjudicationSha256: string;
-  readonly protocolVersion: EvalProtocolVersion;
+  readonly protocolVersion: E2AdjudicationProtocolVersion;
   readonly reviewerIds: readonly string[];
   readonly secondReviewerUsed: boolean;
   readonly disagreementCount: number;
