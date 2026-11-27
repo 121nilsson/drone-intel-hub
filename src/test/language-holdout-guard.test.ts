@@ -6,26 +6,29 @@ import {
   LANGUAGE_HOLDOUTS,
   holdoutFixtureFor,
   holdoutModuleSpecifier,
+  holdoutRowsOf,
   holdoutRunRefusal,
   runHoldoutEvaluation,
   type LanguageHoldoutRecord,
 } from "@/entities/normalization/language-holdout";
 
 // These tests never load a real holdout: `importModule` is a stub that records the specifiers it
-// is asked for and returns a marker instead of rows.
+// is asked for and returns one fake row per call instead of a holdout.
 const V1_FIXTURE = "language-detect-holdout";
 const V1_SPECIFIER = holdoutModuleSpecifier(V1_FIXTURE);
+const V2_SPECIFIER = "../src/test/fixtures/language-detect-holdout-v2.ts";
+const FAKE_ROW = { id: "x", category: "c", text: "t", allowedDecisive: null };
 
-function stubImport() {
+function stubImport(rows: readonly unknown[] = [FAKE_ROW]) {
   const calls: string[] = [];
   const importModule = async (specifier: string) => {
     calls.push(specifier);
-    return specifier;
+    return rows;
   };
   return { importModule, calls };
 }
 
-const v1Consumed = LANGUAGE_HOLDOUTS.get("v1")!;
+const v1Consumed = LANGUAGE_HOLDOUTS["v1"]!;
 const registryWith = (v2: LanguageHoldoutRecord) =>
   new Map<string, LanguageHoldoutRecord>([
     ["v1", v1Consumed],
@@ -33,8 +36,11 @@ const registryWith = (v2: LanguageHoldoutRecord) =>
   ]);
 const v2 = { fixture: "language-detect-holdout-v2", evaluatedWith: LANGUAGE_DETECTOR_VERSION };
 
-async function runV2(registry: ReadonlyMap<string, LanguageHoldoutRecord>) {
-  const { importModule, calls } = stubImport();
+async function runV2(
+  registry: ReadonlyMap<string, LanguageHoldoutRecord>,
+  rows: readonly unknown[] = [FAKE_ROW],
+) {
+  const { importModule, calls } = stubImport(rows);
   let evaluated = false;
   const r = await runHoldoutEvaluation({
     holdoutId: "v2",
@@ -49,11 +55,9 @@ async function runV2(registry: ReadonlyMap<string, LanguageHoldoutRecord>) {
 }
 
 describe("holdout evaluation guard (R5)", () => {
-  it("records holdout v1 as consumed by detector 3.0.0", () => {
-    expect(v1Consumed).toEqual({
-      fixture: V1_FIXTURE,
-      evaluatedWith: "3.0.0",
-      consumedOn: "2026-11-27",
+  it("records holdout v1 as consumed by detector 3.0.0, and nothing else", () => {
+    expect(LANGUAGE_HOLDOUTS).toEqual({
+      v1: { fixture: V1_FIXTURE, evaluatedWith: "3.0.0", consumedOn: "2026-11-27" },
     });
   });
 
@@ -102,7 +106,7 @@ describe("holdout evaluation guard (R5)", () => {
   });
 });
 
-describe("holdout identity: id → fixture → module (Q1, T1, T5)", () => {
+describe("holdout identity: id → fixture → module (Q1, T1, T5, U1)", () => {
   it("derives the one fixture name of an id, and nothing for an id of any other form", () => {
     expect(holdoutFixtureFor("v1")).toBe(V1_FIXTURE);
     expect(holdoutFixtureFor("v2")).toBe("language-detect-holdout-v2");
@@ -128,13 +132,13 @@ describe("holdout identity: id → fixture → module (Q1, T1, T5)", () => {
 
   it("derives the module specifier from the fixture name only", () => {
     expect(V1_SPECIFIER).toBe("../src/test/fixtures/language-detect-holdout.ts");
-    expect(holdoutModuleSpecifier("language-detect-holdout-v2")).toBe(
-      "../src/test/fixtures/language-detect-holdout-v2.ts",
-    );
+    expect(holdoutModuleSpecifier("language-detect-holdout-v2")).toBe(V2_SPECIFIER);
   });
 
   it("every committed record names exactly the fixture derived from its id", () => {
-    for (const [id, h] of LANGUAGE_HOLDOUTS) expect(h.fixture, id).toBe(holdoutFixtureFor(id));
+    for (const [id, h] of Object.entries(LANGUAGE_HOLDOUTS)) {
+      expect(h.fixture, id).toBe(holdoutFixtureFor(id));
+    }
   });
 
   it("imports exactly v2's derived module, never v1's", async () => {
@@ -142,10 +146,9 @@ describe("holdout identity: id → fixture → module (Q1, T1, T5)", () => {
     expect(r).toEqual({
       ran: true,
       fixture: "language-detect-holdout-v2",
-      specifier: "../src/test/fixtures/language-detect-holdout-v2.ts",
+      specifier: V2_SPECIFIER,
     });
-    expect(calls).toEqual(["../src/test/fixtures/language-detect-holdout-v2.ts"]);
-    expect(calls).not.toContain(V1_SPECIFIER);
+    expect(calls).toEqual([V2_SPECIFIER]);
     expect(evaluated).toBe(true);
   });
 
@@ -174,11 +177,41 @@ describe("holdout identity: id → fixture → module (Q1, T1, T5)", () => {
     }
   });
 
+  it("imports only the id-derived module even if the record changes between reads (U1)", async () => {
+    // A record whose fixture answers correctly on the first read and with v1 or an outside path
+    // afterwards: the guard reads it once, and the specifier is built from the id, not re-read.
+    for (const later of [V1_FIXTURE, "../../../../outside/evil"]) {
+      let reads = 0;
+      const flipping = {
+        evaluatedWith: LANGUAGE_DETECTOR_VERSION,
+        get fixture() {
+          reads++;
+          return reads === 1 ? "language-detect-holdout-v2" : later;
+        },
+      } as LanguageHoldoutRecord;
+      const { r, calls } = await runV2(registryWith(flipping));
+      expect(r).toMatchObject({ ran: true, specifier: V2_SPECIFIER });
+      expect(calls).toEqual([V2_SPECIFIER]);
+      expect(reads).toBe(1);
+    }
+  });
+
+  it("reads a registry whose get() is stateful only once, by iteration (U1, U5)", async () => {
+    class Shifty extends Map<string, LanguageHoldoutRecord> {
+      override get(key: string) {
+        return key === "v2" ? { ...v2, fixture: V1_FIXTURE } : super.get(key);
+      }
+    }
+    const { r, calls } = await runV2(new Shifty(registryWith(v2)));
+    expect(r).toMatchObject({ ran: true, specifier: V2_SPECIFIER });
+    expect(calls).toEqual([V2_SPECIFIER]);
+  });
+
   it("refuses v2 when another id names the same fixture", async () => {
     const registry = new Map<string, LanguageHoldoutRecord>([
       ["v1", v1Consumed],
       ["v2", v2],
-      ["v3", { ...v2 }], // wrong: v3 must be -v3; refused for v3, and v2 sees the duplicate
+      ["v3", { ...v2 }],
     ]);
     const { r, calls } = await runV2(registry);
     expect(r).toEqual({
@@ -188,13 +221,19 @@ describe("holdout identity: id → fixture → module (Q1, T1, T5)", () => {
     expect(calls).toEqual([]);
   });
 
-  it("turns a failed or empty import into a refusal, without evaluating", async () => {
-    for (const importModule of [
-      async () => {
-        throw new Error("Cannot find module");
-      },
-      async () => undefined,
-    ]) {
+  it("turns a failed, missing or empty import into a refusal, without evaluating (U2)", async () => {
+    const cases: [string, () => Promise<readonly unknown[] | undefined>, RegExp][] = [
+      [
+        "throws",
+        async () => {
+          throw new Error("Cannot find module");
+        },
+        /cannot import/,
+      ],
+      ["undefined", async () => undefined, /does not export valid/],
+      ["empty", async () => [], /exports no rows/],
+    ];
+    for (const [name, importModule, message] of cases) {
       let evaluated = false;
       const r = await runHoldoutEvaluation({
         holdoutId: "v2",
@@ -205,18 +244,53 @@ describe("holdout identity: id → fixture → module (Q1, T1, T5)", () => {
           evaluated = true;
         },
       });
-      expect(r.ran).toBe(false);
-      expect(evaluated).toBe(false);
+      expect(r, name).toEqual({ ran: false, refusal: expect.stringMatching(message) });
+      expect(evaluated, name).toBe(false);
     }
   });
 
-  it("the evaluation script has no holdout path of its own: it imports only the guard's specifier", () => {
+  it("accepts only arrays of well-formed rows (U2)", () => {
+    expect(holdoutRowsOf([FAKE_ROW, { ...FAKE_ROW, allowedDecisive: "uk" }])).toHaveLength(2);
+    expect(holdoutRowsOf([])).toEqual([]); // empty is refused by runHoldoutEvaluation
+    for (const bad of [
+      undefined,
+      null,
+      {},
+      "rows",
+      [null],
+      [{ ...FAKE_ROW, id: 1 }],
+      [{ ...FAKE_ROW, text: undefined }],
+      [{ ...FAKE_ROW, category: null }],
+      [{ ...FAKE_ROW, allowedDecisive: "be" }],
+      [FAKE_ROW, "x"],
+    ]) {
+      expect(holdoutRowsOf(bad), JSON.stringify(bad)).toBeUndefined();
+    }
+  });
+});
+
+describe("registry immutability and the test seam (T6, U5)", () => {
+  it("the committed registry is deeply frozen and cannot be changed at run time", () => {
+    expect(Object.isFrozen(LANGUAGE_HOLDOUTS)).toBe(true);
+    expect(Object.isFrozen(LANGUAGE_HOLDOUTS["v1"])).toBe(true);
+    const r = LANGUAGE_HOLDOUTS as Record<string, LanguageHoldoutRecord>;
+    expect(() => {
+      r["v2"] = v2;
+    }).toThrow(TypeError);
+    expect(() => {
+      delete (r["v1"] as { consumedOn?: string }).consumedOn;
+    }).toThrow(TypeError);
+    expect(holdoutRunRefusal("v1", "3.0.0")).toMatch(/consumed/);
+  });
+
+  it("the evaluation script has no holdout path and never uses the test seam", () => {
     // Reads the script as text; never imports it (it would run) and never touches a holdout.
     const source = readFileSync(resolve("scripts/evaluate-language-holdout.ts"), "utf8");
     expect(source).not.toMatch(/language-detect-holdout/);
     expect(source).not.toMatch(/import\s*\(\s*["'`]/);
     expect(source.match(/import\s*\(/g)).toHaveLength(1);
     expect(source).toMatch(/import\(new URL\(specifier, import\.meta\.url\)\.href\)/);
-    expect(source).not.toMatch(/registry\s*:/);
+    expect(source).not.toMatch(/\bregistry\b/);
+    expect(source).not.toMatch(/LANGUAGE_HOLDOUTS/);
   });
 });

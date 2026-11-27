@@ -415,6 +415,23 @@ The table shows the list of detector 3.1.0: 28 Russian and 22 Ukrainian markers.
     - **T3:** one shared flag rule (`readFlags` in `semantic-eval/cli-args.ts`) is used by both scripts and by `replayReportTarget`, with unit tests. The one deliberate tightening over Q4 is that an empty value (`--in ""`) is now an error as well.
     - **T4:** `evaluate-semantic-registry` reads every value flag at startup. An invalid flag exits 2 before any report is written, and the process test checks that no replay report is left behind.
     - **T6:** the JSDoc of `runHoldoutEvaluation` marks `registry` as a test seam. The script never passes it, and a text check in the guard test confirms that.
+  - **Review of T1–T6 (2026-11-27, fresh session): PASS WITH FINDINGS**, U1–U7, no blocker. The stop rule below applies from here on. U1–U5 block package 3 and are done:
+    - **U1:** the guard checked the registry's fixture name but built the import path from a second read of the registry, so a record that changes between reads could steer the import. Now:
+      - the registry is read once, into a frozen snapshot;
+      - the path is built from `holdoutFixtureFor(id)` itself;
+      - tests use a record whose `fixture` getter flips to v1 or to an outside path, and a `Map` whose `get()` lies. Only v2's own module is imported.
+    - **U2:** a holdout module that exports an empty list, or malformed rows (`holdoutRowsOf`), is refused before evaluation. Earlier, the T1 claim that "a module without rows is a refusal" was not true for an empty list.
+    - **U3:** under `--report`, S5 validates and computes everything first (invariants, inputs, manifest checks, origins) and writes nothing unless all of it succeeds. Process tests cover a missing data directory, missing decisions and origins without examples, and check that no file is left behind. Replay mode without `--report` is unchanged.
+    - **U4:** every process test runs in an empty temporary working directory, with every output flag pointing into it. Repository inputs are passed as absolute paths and only read. Each test asserts that its directory is still empty afterwards.
+    - **U5:** `LANGUAGE_HOLDOUTS` is a deeply frozen object, so writing to it throws. The guard works on a snapshot, and the script neither names the registry nor passes the test seam (text check).
+  - **Stop rule for package 3 (decided 2026-11-27).** Package 3 is blocked only by a finding that can:
+    - get the wrong holdout registered, imported or evaluated;
+    - give a falsely approved, incomplete or misleading evaluation;
+    - overwrite or change frozen test data, rules or committed evaluation inputs;
+    - bypass the decided isolation between development and the final evaluation.
+
+    Other findings are documented and prioritised, but they do not start a new blocking review round by themselves. U6 and U7 are of that kind.
+
   - **A registered 3.0.0 detector is not needed now.** The review found no frozen 1.1.0 or version-stamped artifact anywhere. It searched the working tree including ignored files, every `manifest.json`, all branches, stashes, history and worktrees.
 - **F5 and F7 (documentation), synced in this document:**
   - the decisive end-to-end sentence;

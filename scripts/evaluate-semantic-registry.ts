@@ -96,105 +96,131 @@ async function writeFormatted(path: string, text: string): Promise<void> {
   );
 }
 
-if (replayTarget.kind === "stdout") {
-  process.stdout.write(`${report}\n`);
-} else if (replayTarget.kind === "file") {
-  const outPath = resolve(replayTarget.path);
-  await writeFormatted(outPath, report);
-  process.stdout.write(`wrote ${outPath}\n`);
-} else {
-  process.stdout.write("replay report not written (--report without --out or --stdout)\n");
+async function writeReplayReport(): Promise<void> {
+  if (replayTarget.kind === "stdout") {
+    process.stdout.write(`${report}\n`);
+  } else if (replayTarget.kind === "file") {
+    const outPath = resolve(replayTarget.path);
+    await writeFormatted(outPath, report);
+    process.stdout.write(`wrote ${outPath}\n`);
+  } else {
+    process.stdout.write("replay report not written (--report without --out or --stdout)\n");
+  }
 }
 
 const failed = invariants.filter((i) => !i.passed);
-if (failed.length > 0) {
-  process.stderr.write(`invariant failures: ${failed.map((f) => f.id).join(", ")}\n`);
-  process.exit(1);
-}
 
 // ── S5: evidence-labelled metrics report (needs real human decisions) ─────
-if (args.includes("--report")) {
+/**
+ * Reads, verifies and renders the S5 report without writing anything. Any problem throws, so
+ * that under --report nothing is written unless every input is valid (U3).
+ */
+async function buildS5Report(): Promise<{
+  readonly reportOut: string;
+  readonly report: string;
+  readonly replayLine: string;
+  readonly warnings: readonly string[];
+}> {
+  const dataDir = resolve(flagValues["--data-dir"]);
+  const decisionsPath = resolve(flagValues["--decisions"] || resolve(dataDir, "decisions.jsonl"));
+  const read = (p: string): string => {
+    if (!existsSync(p)) throw new Error(`missing ${p} — run the sampler and reviewer first`);
+    return readFileSync(p, "utf8");
+  };
+  const readOrEmpty = (p: string): string => (existsSync(p) ? readFileSync(p, "utf8") : "");
+  // The manifest is mandatory. Without it there is no verified frame, snapshot or sample to
+  // report on, and no acceptable fallback to the current resolver version.
+  const examplesText = read(resolve(dataDir, "examples.jsonl"));
+  const predictionsText = read(resolve(dataDir, "predictions.jsonl"));
+  const manifestText = read(resolve(dataDir, "manifest.json"));
+  const decisionsText = read(decisionsPath);
+  let parsedManifest: unknown;
   try {
-    const dataDir = resolve(flagValues["--data-dir"]);
-    const decisionsPath = resolve(flagValues["--decisions"] || resolve(dataDir, "decisions.jsonl"));
-    const read = (p: string): string => {
-      if (!existsSync(p)) throw new Error(`missing ${p} — run the sampler and reviewer first`);
-      return readFileSync(p, "utf8");
-    };
-    const readOrEmpty = (p: string): string => (existsSync(p) ? readFileSync(p, "utf8") : "");
-    // The manifest is mandatory. Without it there is no verified frame, snapshot or sample to
-    // report on, and no acceptable fallback to the current resolver version.
-    const examplesText = read(resolve(dataDir, "examples.jsonl"));
-    const predictionsText = read(resolve(dataDir, "predictions.jsonl"));
-    const manifestText = read(resolve(dataDir, "manifest.json"));
-    const decisionsText = read(decisionsPath);
-    let parsedManifest: unknown;
-    try {
-      parsedManifest = JSON.parse(manifestText);
-    } catch (e) {
-      throw new Error(`invalid manifest.json: ${(e as Error).message}`);
-    }
-    const examples = parseJsonl(examplesText, validateExample, "examples.jsonl");
-    const predictions = parseJsonl(predictionsText, validatePrediction, "predictions.jsonl");
-    const suggestions = parseJsonl(
-      readOrEmpty(resolve(dataDir, "suggestions.jsonl")),
-      validateSuggestion,
-      "suggestions.jsonl",
-    );
-    const decisions = parseJsonl(decisionsText, validateDecision, "decisions.jsonl");
-    const violations = verifyEvaluationInputs({
-      manifest: parsedManifest,
-      examples,
-      predictions,
-      decisions,
-      examplesText,
-      predictionsText,
-    });
-    if (violations.length > 0) {
-      for (const v of violations) process.stderr.write(`manifest check: ${v}\n`);
-      process.exit(1);
-    }
-    const manifest = parsedManifest as SamplingManifest;
-    const language = verifyLanguageProvenance(manifest, examples);
-    for (const w of language.warnings) process.stderr.write(`manifest warning: ${w}\n`);
-    const replayLine = describeLanguageReplay(language.replay);
-    process.stdout.write(`${replayLine}\n`);
-    const manifestHash = sha256Hex(canonicalJson(manifest));
-    const origins = flagValues["--origins"]
-      .split(",")
-      .map((o) => o.trim())
-      .filter((o) => o.length > 0) as Origin[];
-    const selectedExamples = examples.filter((e) => origins.includes(e.origin));
-    if (selectedExamples.length === 0) {
-      throw new Error(`no examples for origins ${origins.join(", ")}; refusing an empty report`);
-    }
-    const metricsInput = {
-      examples,
-      predictions,
-      decisions,
-      suggestions,
-      sampledExampleIds: manifest.cells.flatMap((c) => c.sampledExampleIds),
-      frameId: manifest.frameId,
-      seed: manifest.seed,
-      cutoff: manifest.cutoff,
-      snapshotHash: manifest.snapshotHash,
-      resolverVersion: manifest.resolverVersion,
-      manifestHash,
-      pilot: manifest.pilot,
-      origins,
-      allowMixedProtocol: args.includes("--allow-mixed-protocol"),
-      context: metricsContextFor(manifest, selectedExamples),
-    };
-    const reportOut = resolve(flagValues["--report-out"]);
-    const rendered = renderMetricsReport(metricsInput, computeMetrics(metricsInput));
-    // A 1.0.0 report stays byte-identical; a 1.1.0 report says whether its language strata were
-    // reproduced, so a report cannot pass as a reproduction it never performed.
-    const report =
-      language.replay.status === "not_applicable" ? rendered : `> ${replayLine}\n\n${rendered}`;
-    await writeFormatted(reportOut, report);
-    process.stdout.write(`wrote ${reportOut}\n`);
+    parsedManifest = JSON.parse(manifestText);
+  } catch (e) {
+    throw new Error(`invalid manifest.json: ${(e as Error).message}`);
+  }
+  const examples = parseJsonl(examplesText, validateExample, "examples.jsonl");
+  const predictions = parseJsonl(predictionsText, validatePrediction, "predictions.jsonl");
+  const suggestions = parseJsonl(
+    readOrEmpty(resolve(dataDir, "suggestions.jsonl")),
+    validateSuggestion,
+    "suggestions.jsonl",
+  );
+  const decisions = parseJsonl(decisionsText, validateDecision, "decisions.jsonl");
+  const violations = verifyEvaluationInputs({
+    manifest: parsedManifest,
+    examples,
+    predictions,
+    decisions,
+    examplesText,
+    predictionsText,
+  });
+  if (violations.length > 0) {
+    throw new Error(violations.map((v) => `manifest check: ${v}`).join("\n"));
+  }
+  const manifest = parsedManifest as SamplingManifest;
+  const language = verifyLanguageProvenance(manifest, examples);
+  const replayLine = describeLanguageReplay(language.replay);
+  const manifestHash = sha256Hex(canonicalJson(manifest));
+  const origins = flagValues["--origins"]
+    .split(",")
+    .map((o) => o.trim())
+    .filter((o) => o.length > 0) as Origin[];
+  const selectedExamples = examples.filter((e) => origins.includes(e.origin));
+  if (selectedExamples.length === 0) {
+    throw new Error(`no examples for origins ${origins.join(", ")}; refusing an empty report`);
+  }
+  const metricsInput = {
+    examples,
+    predictions,
+    decisions,
+    suggestions,
+    sampledExampleIds: manifest.cells.flatMap((c) => c.sampledExampleIds),
+    frameId: manifest.frameId,
+    seed: manifest.seed,
+    cutoff: manifest.cutoff,
+    snapshotHash: manifest.snapshotHash,
+    resolverVersion: manifest.resolverVersion,
+    manifestHash,
+    pilot: manifest.pilot,
+    origins,
+    allowMixedProtocol: args.includes("--allow-mixed-protocol"),
+    context: metricsContextFor(manifest, selectedExamples),
+  };
+  const reportOut = resolve(flagValues["--report-out"]);
+  const rendered = renderMetricsReport(metricsInput, computeMetrics(metricsInput));
+  // A 1.0.0 report stays byte-identical; a 1.1.0 report says whether its language strata were
+  // reproduced, so a report cannot pass as a reproduction it never performed.
+  const report =
+    language.replay.status === "not_applicable" ? rendered : `> ${replayLine}\n\n${rendered}`;
+  return { reportOut, report, replayLine, warnings: language.warnings };
+}
+
+if (args.includes("--report")) {
+  // S5: validate and compute everything first, and write nothing unless all of it succeeds (U3).
+  // A failed run leaves neither a replay report nor a metrics report behind.
+  if (failed.length > 0) {
+    process.stderr.write(`invariant failures: ${failed.map((f) => f.id).join(", ")}\n`);
+    process.exit(1);
+  }
+  let s5: Awaited<ReturnType<typeof buildS5Report>>;
+  try {
+    s5 = await buildS5Report();
   } catch (e) {
     process.stderr.write(`${(e as Error).message}\n`);
+    process.exit(1);
+  }
+  await writeReplayReport();
+  for (const w of s5.warnings) process.stderr.write(`manifest warning: ${w}\n`);
+  process.stdout.write(`${s5.replayLine}\n`);
+  await writeFormatted(s5.reportOut, s5.report);
+  process.stdout.write(`wrote ${s5.reportOut}\n`);
+} else {
+  // Replay mode: the replay report documents the invariants, failed ones included.
+  await writeReplayReport();
+  if (failed.length > 0) {
+    process.stderr.write(`invariant failures: ${failed.map((f) => f.id).join(", ")}\n`);
     process.exit(1);
   }
 }

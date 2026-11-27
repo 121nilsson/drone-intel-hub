@@ -6,10 +6,10 @@
  * session that has not seen the holdout texts, after the rule and the word list are frozen.
  *
  * The guard in `language-holdout.ts` refuses a consumed holdout or a detector version other than
- * the one the holdout is reserved for, before the holdout is loaded (review finding R5). The
- * fixture loaded is the one the registry names for `--holdout <id>`; there is no default id and no
- * default fixture (Q1). The module imported is derived from the guard's fixture name, so name and
- * path cannot drift apart (T1). Every refusal exits 2, before anything is imported or printed.
+ * the one the holdout is reserved for, before the holdout is loaded (review finding R5). The module
+ * imported is derived from `--holdout <id>` alone; there is no default id, no default fixture and
+ * no name-to-path table (Q1, T1, U1). Empty or malformed rows are refused (U2). Every refusal exits
+ * 2, before anything is evaluated or printed.
  *
  *   npx tsx scripts/evaluate-language-holdout.ts --holdout <id>
  */
@@ -19,16 +19,11 @@ import {
 } from "../src/entities/normalization/language";
 import { summariseDecisions } from "../src/entities/normalization/language-accuracy";
 import {
-  LANGUAGE_HOLDOUTS,
+  holdoutFixtureFor,
+  holdoutRowsOf,
   runHoldoutEvaluation,
+  type LanguageHoldoutRow,
 } from "../src/entities/normalization/language-holdout";
-
-interface HoldoutRow {
-  readonly id: string;
-  readonly category: string;
-  readonly text: string;
-  readonly allowedDecisive: "ru" | "uk" | "en" | null;
-}
 
 const args = process.argv.slice(2);
 const i = args.indexOf("--holdout");
@@ -43,17 +38,18 @@ const pct = (x: number) => `${(x * 100).toFixed(1)}%`;
 
 // The only import of a holdout module. The specifier comes from the guard, which derives it from
 // the holdout id's fixture name (T1): there is no name-to-path table to keep in sync. Every holdout
-// module exports its rows as LANGUAGE_DETECT_HOLDOUT.
-const importModule = async (specifier: string): Promise<readonly HoldoutRow[] | undefined> => {
+// module exports its rows as LANGUAGE_DETECT_HOLDOUT; malformed rows are refused, an empty list too
+// (U2).
+const importModule = async (
+  specifier: string,
+): Promise<readonly LanguageHoldoutRow[] | undefined> => {
   const mod = (await import(new URL(specifier, import.meta.url).href)) as {
     LANGUAGE_DETECT_HOLDOUT?: unknown;
   };
-  return Array.isArray(mod.LANGUAGE_DETECT_HOLDOUT)
-    ? (mod.LANGUAGE_DETECT_HOLDOUT as readonly HoldoutRow[])
-    : undefined;
+  return holdoutRowsOf(mod.LANGUAGE_DETECT_HOLDOUT);
 };
 
-const result = await runHoldoutEvaluation<readonly HoldoutRow[]>({
+const result = await runHoldoutEvaluation<readonly LanguageHoldoutRow[]>({
   holdoutId,
   detectorVersion: LANGUAGE_DETECTOR_VERSION,
   importModule,
@@ -68,7 +64,7 @@ const result = await runHoldoutEvaluation<readonly HoldoutRow[]>({
       detectLanguageWithEvidence,
     );
     console.log(
-      `holdout ${holdoutId} (fixture ${LANGUAGE_HOLDOUTS.get(holdoutId)!.fixture}), detector version: ${LANGUAGE_DETECTOR_VERSION}`,
+      `holdout ${holdoutId} (fixture ${holdoutFixtureFor(holdoutId)!}), detector version: ${LANGUAGE_DETECTOR_VERSION}`,
     );
     for (const c of summary.categories) {
       console.log(

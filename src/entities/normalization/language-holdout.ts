@@ -1,5 +1,6 @@
 /**
- * Guard for the single holdout evaluation of the language detector (review findings R5, Q1, T1, T5).
+ * Guard for the single holdout evaluation of the language detector (review findings R5, Q1, T1,
+ * T5, U1, U2, U5).
  *
  * A holdout supports approval of exactly one frozen detector version, once. After that it is
  * consumed: running it again, and above all running it with a newer detector, yields figures that
@@ -8,13 +9,13 @@
  *
  * Identity, not configuration, decides what is loaded:
  * - the id has a strict form (`v1`, `v2`, …) and its fixture name is derived from it
- *   (`holdoutFixtureFor`); a registry record that names any other fixture is refused (T5), so a
- *   variant spelling (`language-detect-holdout.ts`, `./…`, upper case, another id's name) can
- *   never pass;
- * - the module that is imported is derived from that same fixture name (`holdoutModuleSpecifier`),
- *   so name and import path cannot drift apart (T1);
- * - a fixture that any id has consumed is refused under every id.
- * Every refusal happens before anything is imported or evaluated.
+ *   (`holdoutFixtureFor`); a registry record that names any other fixture is refused (T5);
+ * - the module that is imported is built from `holdoutFixtureFor(id)` itself, never from a value
+ *   read back out of the registry (U1), so name and import path cannot drift apart (T1);
+ * - the registry is read exactly once per call into a frozen snapshot, and every decision uses
+ *   that snapshot (U1, U5); the committed registry is itself deeply frozen;
+ * - a fixture that any id has consumed is refused under every id;
+ * - an import that fails, or yields no rows, is refused before anything is evaluated (U2).
  */
 
 export interface LanguageHoldoutRecord {
@@ -26,9 +27,14 @@ export interface LanguageHoldoutRecord {
   readonly consumedOn?: string;
 }
 
-export const LANGUAGE_HOLDOUTS: ReadonlyMap<string, LanguageHoldoutRecord> = new Map([
-  ["v1", { fixture: "language-detect-holdout", evaluatedWith: "3.0.0", consumedOn: "2026-11-27" }],
-]);
+/** The committed registry. Deeply frozen: it cannot be changed at run time, cast or not (U5). */
+export const LANGUAGE_HOLDOUTS: Readonly<Record<string, LanguageHoldoutRecord>> = Object.freeze({
+  v1: Object.freeze({
+    fixture: "language-detect-holdout",
+    evaluatedWith: "3.0.0",
+    consumedOn: "2026-11-27",
+  }),
+});
 
 /** `v1`, `v2`, … `v10`: no leading zero, nothing else. */
 const HOLDOUT_ID = /^v[1-9][0-9]*$/;
@@ -50,15 +56,34 @@ export function holdoutModuleSpecifier(fixture: string): string {
   return `../src/test/fixtures/${fixture}.ts`;
 }
 
-/** Why a run must not happen, or undefined when it may. Checked before the holdout is loaded. */
-export function holdoutRunRefusal(
-  holdoutId: string,
-  detectorVersion: string,
-  registry: ReadonlyMap<string, LanguageHoldoutRecord> = LANGUAGE_HOLDOUTS,
-): string | undefined {
+type Snapshot = ReadonlyMap<string, LanguageHoldoutRecord>;
+
+/** Reads each entry and each field exactly once into frozen plain records. */
+function snapshotOf(entries: Iterable<readonly [string, LanguageHoldoutRecord]>): Snapshot {
+  const out = new Map<string, LanguageHoldoutRecord>();
+  for (const [id, record] of entries) {
+    if (typeof id !== "string") continue;
+    const fixture = record.fixture;
+    const evaluatedWith = record.evaluatedWith;
+    const consumedOn = record.consumedOn;
+    out.set(
+      id,
+      Object.freeze({
+        fixture: String(fixture),
+        evaluatedWith: String(evaluatedWith),
+        ...(consumedOn !== undefined ? { consumedOn: String(consumedOn) } : {}),
+      }),
+    );
+  }
+  return out;
+}
+
+const committedSnapshot = (): Snapshot => snapshotOf(Object.entries(LANGUAGE_HOLDOUTS));
+
+function refusalOn(snapshot: Snapshot, holdoutId: string, detectorVersion: string) {
   const expected = holdoutFixtureFor(holdoutId);
   if (expected === undefined) return `invalid holdout id "${holdoutId}" (expected v1, v2, …)`;
-  const h = registry.get(holdoutId);
+  const h = snapshot.get(holdoutId);
   if (!h) return `unknown holdout "${holdoutId}"`;
   if (h.fixture !== expected) {
     return `holdout ${holdoutId} names fixture "${h.fixture}", but its fixture must be "${expected}"`;
@@ -66,9 +91,9 @@ export function holdoutRunRefusal(
   if (h.consumedOn !== undefined) {
     return `holdout ${holdoutId} was consumed on ${h.consumedOn} by detector ${h.evaluatedWith}; a new run is not approval evidence for any version, including ${detectorVersion}`;
   }
-  for (const [otherId, other] of registry) {
-    if (otherId !== holdoutId && other.fixture === h.fixture) {
-      return `holdout ${holdoutId} names fixture ${h.fixture}, which is also registered as holdout ${otherId}${other.consumedOn !== undefined ? ` (consumed on ${other.consumedOn})` : ""}; one fixture, one holdout`;
+  for (const [otherId, other] of snapshot) {
+    if (otherId !== holdoutId && other.fixture === expected) {
+      return `holdout ${holdoutId} names fixture ${expected}, which is also registered as holdout ${otherId}${other.consumedOn !== undefined ? ` (consumed on ${other.consumedOn})` : ""}; one fixture, one holdout`;
     }
   }
   if (detectorVersion !== h.evaluatedWith) {
@@ -77,20 +102,36 @@ export function holdoutRunRefusal(
   return undefined;
 }
 
+/**
+ * Why a run must not happen, or undefined when it may. Checked before the holdout is loaded.
+ * `registry` is a test seam only (T6); production uses the committed registry.
+ */
+export function holdoutRunRefusal(
+  holdoutId: string,
+  detectorVersion: string,
+  registry?: ReadonlyMap<string, LanguageHoldoutRecord>,
+): string | undefined {
+  return refusalOn(
+    registry ? snapshotOf(registry) : committedSnapshot(),
+    holdoutId,
+    detectorVersion,
+  );
+}
+
 export type HoldoutRunResult =
   | { readonly ran: true; readonly fixture: string; readonly specifier: string }
   | { readonly ran: false; readonly refusal: string };
 
 /**
- * Runs the guard, then (only if it passes) imports the module derived from the holdout's fixture
- * name and evaluates it. `importModule` receives that derived specifier and nothing else; it
- * returns the holdout rows, or undefined when the module does not export them. A failed or empty
- * import is a refusal, never a fallback, and nothing is evaluated.
+ * Runs the guard on one registry snapshot, then (only if it passes) imports the module built from
+ * `holdoutFixtureFor(id)` and evaluates it. `importModule` receives that specifier and nothing
+ * else; it returns the holdout rows, or undefined when the module does not export valid rows. A
+ * failed import, a missing export or an empty row list is a refusal, and nothing is evaluated.
  *
  * `registry` is a test seam only: production callers (the evaluation script) never pass it, so
  * the committed `LANGUAGE_HOLDOUTS` is what decides in a real run (T6).
  */
-export async function runHoldoutEvaluation<T>(options: {
+export async function runHoldoutEvaluation<T extends readonly unknown[]>(options: {
   readonly holdoutId: string;
   readonly detectorVersion: string;
   readonly importModule: (specifier: string) => Promise<T | undefined>;
@@ -98,10 +139,12 @@ export async function runHoldoutEvaluation<T>(options: {
   /** Test seam only; see above. */
   readonly registry?: ReadonlyMap<string, LanguageHoldoutRecord>;
 }): Promise<HoldoutRunResult> {
-  const registry = options.registry ?? LANGUAGE_HOLDOUTS;
-  const refusal = holdoutRunRefusal(options.holdoutId, options.detectorVersion, registry);
+  const holdoutId = options.holdoutId;
+  const snapshot = options.registry ? snapshotOf(options.registry) : committedSnapshot();
+  const refusal = refusalOn(snapshot, holdoutId, options.detectorVersion);
   if (refusal !== undefined) return { ran: false, refusal };
-  const fixture = registry.get(options.holdoutId)!.fixture;
+  // Built from the id itself (validated above to equal the snapshot's record), never re-read.
+  const fixture = holdoutFixtureFor(holdoutId)!;
   const specifier = holdoutModuleSpecifier(fixture);
   let holdout: T | undefined;
   try {
@@ -110,8 +153,48 @@ export async function runHoldoutEvaluation<T>(options: {
     return { ran: false, refusal: `cannot import ${specifier}: ${(e as Error).message}` };
   }
   if (holdout === undefined) {
-    return { ran: false, refusal: `${specifier} does not export LANGUAGE_DETECT_HOLDOUT` };
+    return {
+      ran: false,
+      refusal: `${specifier} does not export valid LANGUAGE_DETECT_HOLDOUT rows`,
+    };
+  }
+  if (holdout.length === 0) {
+    return {
+      ran: false,
+      refusal: `${specifier} exports no rows; an empty holdout is not evaluated`,
+    };
   }
   options.evaluate(holdout);
   return { ran: true, fixture, specifier };
+}
+
+/** One holdout row as the evaluation reads it. */
+export interface LanguageHoldoutRow {
+  readonly id: string;
+  readonly category: string;
+  readonly text: string;
+  readonly allowedDecisive: "ru" | "uk" | "en" | null;
+}
+
+const ALLOWED = new Set<unknown>(["ru", "uk", "en", null]);
+
+/**
+ * The rows of a holdout module's export, or undefined when the export is not an array of
+ * well-formed rows (U2). Never prints or returns a text on failure.
+ */
+export function holdoutRowsOf(value: unknown): readonly LanguageHoldoutRow[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  for (const r of value as unknown[]) {
+    if (typeof r !== "object" || r === null) return undefined;
+    const row = r as Record<string, unknown>;
+    if (
+      typeof row["id"] !== "string" ||
+      typeof row["category"] !== "string" ||
+      typeof row["text"] !== "string" ||
+      !ALLOWED.has(row["allowedDecisive"])
+    ) {
+      return undefined;
+    }
+  }
+  return value as readonly LanguageHoldoutRow[];
 }
