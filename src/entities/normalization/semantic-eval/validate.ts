@@ -239,11 +239,28 @@ export function validateExample(value: unknown): Example {
         `is ${language} but the stratum rule (${LANGUAGE_STRATUM_RULE}) gives ${expectedLanguage}`,
       );
     }
+    let clusterDetected: Language[] | undefined;
+    if (o.clusterDetectedLanguages !== undefined) {
+      if (!Array.isArray(o.clusterDetectedLanguages)) {
+        fail(`${w}.clusterDetectedLanguages`, "expected an array");
+      }
+      clusterDetected = (o.clusterDetectedLanguages as unknown[]).map((x, i) =>
+        enumOf<Language>(`${w}.clusterDetectedLanguages[${i}]`, x, LANGUAGES),
+      );
+      const canonical = [...new Set(clusterDetected)].sort();
+      if (canonical.length < 2 || canonical.join() !== clusterDetected.join()) {
+        fail(`${w}.clusterDetectedLanguages`, "must be at least two distinct languages, sorted");
+      }
+      if (!clusterDetected.includes(detected)) {
+        fail(`${w}.clusterDetectedLanguages`, `must include the detected language ${detected}`);
+      }
+    }
     provenance = {
       ...(declared !== undefined ? { declaredLanguage: declared } : {}),
       detectedLanguage: detected,
       languageDetectionDecisive: o.languageDetectionDecisive,
       languageDetectionReason: reason,
+      ...(clusterDetected !== undefined ? { clusterDetectedLanguages: clusterDetected } : {}),
     };
   } else if (origin === "external_source") {
     fail(`${w}.origin`, "external_source needs schema 1.1.0");

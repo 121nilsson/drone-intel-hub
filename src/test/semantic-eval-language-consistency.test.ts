@@ -214,6 +214,71 @@ describe("F6: dedupe edge cases, documented", () => {
     expect(built.exclusions).not.toContainEqual(
       expect.objectContaining({ reason: "conflicting_evidence_metadata" }),
     );
+    // W4: the dropped row is counted, the kept row is the first in canonical order (whatever the
+    // input order), it keeps its own detection, and the cluster's detections are all recorded.
+    expect(built.exclusions).toContainEqual({ reason: "duplicate_evidence", count: 1 });
+    const reversed = freezeFrame([row({ sourceId: "b", excerpt: UPPER }), row({ sourceId: "a" })], {
+      frameId: "f",
+      schemaVersion: "1.1.0",
+    });
+    expect(reversed.units).toEqual(built.units);
+    const kept = built.units[0]!;
+    expect(kept.detectedLanguage).toBe(detectLanguageWithEvidence(kept.excerpt).language);
+    // Both rows detect as uk (they differ only in decisiveness), so nothing extra is recorded.
+    expect(detectLanguageWithEvidence(UPPER).language).toBe("uk");
+    expect(kept.clusterDetectedLanguages).toBeUndefined();
+  });
+
+  it("records every detected language of a cluster whose rows detect as different languages (W4)", () => {
+    // One Ukrainian-only letter: decisive uk in lower case; in capitals it no longer counts and the
+    // full-text fallback says ru. Same evidence cluster (case-insensitive), different languages.
+    const ONE = "Ця потужність вже становить 80 кВт.";
+    expect(detectLanguageWithEvidence(ONE).language).toBe("uk");
+    expect(detectLanguageWithEvidence(ONE.toUpperCase()).language).toBe("ru");
+    const rows = [
+      row({ sourceId: "a", excerpt: ONE }),
+      row({ sourceId: "b", excerpt: ONE.toUpperCase() }),
+    ];
+    const built = freezeFrame(rows, { frameId: "f", schemaVersion: "1.1.0" });
+    const reversed = freezeFrame([...rows].reverse(), { frameId: "f", schemaVersion: "1.1.0" });
+    expect(reversed.units).toEqual(built.units);
+    expect(built.units).toHaveLength(1);
+    expect(built.exclusions).toContainEqual({ reason: "duplicate_evidence", count: 1 });
+    const kept = built.units[0]!;
+    expect(kept.detectedLanguage).toBe(detectLanguageWithEvidence(kept.excerpt).language);
+    expect(kept.clusterDetectedLanguages).toEqual(["ru", "uk"]);
+    expect(kept.language).toBe("unknown");
+    // The field survives validation and is not set when the cluster agrees.
+    expect(
+      validateExample(JSON.parse(JSON.stringify(build11(rows).examples[0]!)))
+        .clusterDetectedLanguages,
+    ).toEqual(["ru", "uk"]);
+    expect(
+      validateExample(JSON.parse(JSON.stringify(build11([row()]).examples[0]!)))
+        .clusterDetectedLanguages,
+    ).toBeUndefined();
+  });
+
+  it("validates clusterDetectedLanguages strictly (W4)", () => {
+    const e = JSON.parse(JSON.stringify(build11([row()]).examples[0]!)) as Record<string, unknown>;
+    const detected = e["detectedLanguage"] as string;
+    const other = detected === "ru" ? "uk" : "ru";
+    const ok = [detected, other].sort();
+    expect(
+      validateExample({ ...e, clusterDetectedLanguages: ok }).clusterDetectedLanguages,
+    ).toEqual(ok);
+    for (const bad of [
+      [detected],
+      [...ok].reverse(),
+      [other, "unknown"].sort(),
+      "ru",
+      [detected, "de"],
+    ]) {
+      expect(
+        () => validateExample({ ...e, clusterDetectedLanguages: bad }),
+        JSON.stringify(bad),
+      ).toThrow(/clusterDetectedLanguages/);
+    }
   });
 
   it("still excludes a cluster whose rows declare different languages", () => {

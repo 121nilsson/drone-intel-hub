@@ -324,6 +324,18 @@ export function freezeFrame(rows: readonly FrameRow[], options: FreezeOptions): 
     if (signatures.size > 1) conflictingEvidence.add(id);
   }
   conflictingEvidence.forEach(() => addExclusion(exclusions, "conflicting_evidence_metadata"));
+  // W4: within a kept cluster, the first unit in canonical order keeps its own detection. If the
+  // cluster's rows were detected differently, every detected language is recorded on the kept
+  // example, so the sort order never silently decides what a detection analysis sees.
+  const clusterDetections = new Map<string, readonly Language[]>();
+  for (const [id, group] of byEvidence) {
+    const detected = [
+      ...new Set(
+        group.flatMap((u) => (u.detectedLanguage !== undefined ? [u.detectedLanguage] : [])),
+      ),
+    ].sort();
+    if (detected.length > 1) clusterDetections.set(id, detected);
+  }
 
   const seenEvidence = new Set<string>();
   const seenIds = new Set<string>();
@@ -342,7 +354,8 @@ export function freezeFrame(rows: readonly FrameRow[], options: FreezeOptions): 
     }
     seenEvidence.add(unit.evidenceClusterId);
     seenIds.add(unit.exampleId);
-    units.push(unit);
+    const differing = clusterDetections.get(unit.evidenceClusterId);
+    units.push(differing ? { ...unit, clusterDetectedLanguages: differing } : unit);
   }
   return {
     units,

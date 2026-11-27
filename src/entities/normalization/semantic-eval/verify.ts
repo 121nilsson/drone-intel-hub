@@ -83,11 +83,11 @@ export type LanguageReplay =
 export function describeLanguageReplay(r: LanguageReplay): string {
   switch (r.status) {
     case "not_applicable":
-      return "language replay: not applicable (schema 1.0.0 records no detection)";
+      return "detection provenance replay: not applicable (schema 1.0.0 records no detection)";
     case "replayed":
-      return `language replay: performed with detector ${r.detectorVersion}; every stored detection was reproduced`;
+      return `detection provenance replay (not used for strata or resolver input): performed with detector ${r.detectorVersion}; every stored detection was reproduced`;
     case "not_replayed":
-      return `language replay: NOT PERFORMED, ${r.reason}; stored detections were checked for consistency only and are not reproduced`;
+      return `detection provenance replay (not used for strata or resolver input): NOT PERFORMED, ${r.reason}; stored detections were checked for consistency only and are not reproduced`;
   }
 }
 

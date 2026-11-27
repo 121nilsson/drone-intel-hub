@@ -339,12 +339,12 @@ The table shows the list of detector 3.1.0: 28 Russian and 22 Ukrainian markers.
     - consistent provenance fields;
     - an exact re-detection from each stored excerpt, **with the detector version the manifest is stamped with** (`LANGUAGE_DETECTORS_BY_VERSION`), never with the current one in its place.
 
-    The result carries a replay status: `replayed`, `not_replayed` or `not_applicable` (1.0.0). When the stamped version is not available, the status is `not_replayed`, with a warning. `evaluate-semantic-registry` prints it and writes it at the top of a 1.1.0 report: "language replay: NOT PERFORMED … not reproduced". A historical 1.1.0 frame thus stays verifiable for consistency after a detector bump, but the report never claims to have reproduced it. Only the current detector is registered, because no committed frame carries an older stamp. A frozen copy is registered before an older-stamped frame has to be replayed. (The first version, package 1, ran the check only for the current version and otherwise raised a plain warning. It was changed after review on 2026-11-27.)
+    The result carries a replay status: `replayed`, `not_replayed` or `not_applicable` (1.0.0). When the stamped version is not available, the status is `not_replayed`, with a warning. `evaluate-semantic-registry` prints it and writes it at the top of a 1.1.0 report: "detection provenance replay (not used for strata or resolver input): NOT PERFORMED … not reproduced". A historical 1.1.0 frame thus stays verifiable for consistency after a detector bump, but the report never claims to have reproduced it. Only the current detector is registered, because no committed frame carries an older stamp. A frozen copy is registered before an older-stamped frame has to be replayed. (The first version, package 1, ran the check only for the current version and otherwise raised a plain warning. It was changed after review on 2026-11-27.)
 
   - **F4: schema 1.0.0.** Directories verify exactly as before. A **new** 1.0.0 freeze of a row without `language` is refused, because 1.0.0 records no detector; use 1.1.0.
   - **F6:**
     - Under 1.1.0, detection runs on the stored, truncated excerpt, so it can be reproduced.
-    - The evidence key is case-insensitive while detection is case-sensitive. A case-only difference that detects differently excludes the whole cluster as `conflicting_evidence_metadata`, which is conservative.
+    - The evidence key is case-insensitive while detection is case-sensitive. Since decision 2 (declared language only), detection no longer splits a cluster: undeclared rows of one cluster share the stratum `unknown`, the first in canonical order (canonical JSON of the frame row, independent of input order) is kept with its own detection, the other is counted as `duplicate_evidence`, and when the rows detected different languages all of them are recorded in `clusterDetectedLanguages` (W4). Rows with different declared languages still exclude the cluster as `conflicting_evidence_metadata`.
     - When stratum languages match, the dropped duplicate's detection fields are discarded.
   - **Other Cyrillic languages:** 13 development rows added (5 Belarusian, 8 Bulgarian). **5 are false-decisive with 3.0.0** (1 Belarusian as `uk`, 4 Bulgarian as `ru`, partly through the shared words але, або, или, около and как). They are pinned as `it.fails`. Russian and Ukrainian are the only supported languages; this is a known risk outside the two-language model. The adversarial set is now 42 rows, with 5 known false-decisive, all in this category. The original 29 rows remain at 0.
 - **Package 2, detector 3.1.0 (2026-11-27).** заявив, упав, яка and яке were removed from the Ukrainian list. No marker was added, and the decision rule is unchanged. Every changed outcome traces to one or more removed markers. One row contains two (заявив and упав).
@@ -788,6 +788,22 @@ Without E2, v1.3.0 can show at most "no regressions plus fixed known cases", not
     - E2 measures the resolver given declared or adjudicated language. It measures neither language detection nor the production chain.
     - Details and the adjudication protocol are in the revision section of the [E2 sampling design](./semantic-resolver-v1.3.0-e2-sampling-design.md).
     - **To do before E2 is frozen:** `adjudicatedLanguage` in schema 1.1.0, with tests; the routing-stratum key in the sampler.
+  - **Review of `c227e7a` and `84e9340` (2026-11-27, fresh session): PASS WITH FINDINGS**, W1–W6, none blocking. W1–W4 are fixed in one non-blocking commit:
+    - **W1:**
+      - `src/test/fixtures/language-pre-d0-golden.ts` is a frozen facit, computed once from the `7aea9a6` source and not from the function under test. It holds 170 texts: every development text plus edge cases.
+      - `detectLanguagePreD0` and the routing tests are checked against it.
+      - A lint rule, `@repo/no-unapproved-language-detector`, refuses value imports of `language.ts` in production code under `src`. Allowed are semantic-eval, `language-accuracy.ts`, the diagnostic log line in `ai-proxy.server.ts`, and tests. The rule has RuleTester tests.
+    - **W2:** the reverse disagreement is pinned. A text that 3.1.0 decides as `ru` and the pre-D0 rule as `uk` routes `uk-en`.
+    - **W3:**
+      - comments and the S5 replay line now say "detection provenance replay (not used for strata or resolver input)";
+      - the F6 note above describes the declared-only behaviour.
+      - One stale comment remains in `language.ts` ("which detector produced its strata"). It stays, because that file is frozen.
+    - **W4:**
+      - the kept row of an undeclared cluster is the first in canonical order, and it keeps its own detection;
+      - when the cluster's rows detected different languages, all of them are recorded in `clusterDetectedLanguages` (1.1.0, provenance only, validated). The sort order therefore never decides an analysis silently.
+      - Tests cover the kept row, the `duplicate_evidence` count, independence of input order, and the field.
+    - **Unchanged by this commit:** resolver output, the population, the metrics and the frozen reports. S5 reports for v1.2.0 and the pilot are byte-identical to the previous run, and `semantic-replay.md` is unchanged.
+    - **W5** is the specification for the next package (routing strata and `adjudicatedLanguage`). **W6** (verification depends on the 3.1.0 detector being deterministic) is noted.
 - **Resolver status is not a stratum for E2.** Stratifying on it would let the resolver under test shape its own test set. The status is computed only after the freeze.
 - Consequence: the existing exact bound (§F of the Phase 3.2 plan) assumes resolver-status strata. For E2, a bound is valid only conditionally on the realised R/W counts per cell, and that needs its own written derivation and hand-computed tests before any bound is printed. Until then, E2 figures are descriptive only.
 

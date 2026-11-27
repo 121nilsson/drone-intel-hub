@@ -198,8 +198,9 @@ async function buildS5Report(): Promise<{
   };
   const reportOut = resolve(flagValues["--report-out"]);
   const rendered = renderMetricsReport(metricsInput, computeMetrics(metricsInput));
-  // A 1.0.0 report stays byte-identical; a 1.1.0 report says whether its language strata were
-  // reproduced, so a report cannot pass as a reproduction it never performed.
+  // A 1.0.0 report stays byte-identical. A 1.1.0 report says whether its stored detections (provenance
+  // only: they decide neither strata nor resolver input) were reproduced, so a report cannot pass
+  // as a reproduction it never performed.
   const report =
     language.replay.status === "not_applicable" ? rendered : `> ${replayLine}\n\n${rendered}`;
   return { reportOut, report, replayLine, warnings: language.warnings };

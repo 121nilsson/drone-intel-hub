@@ -189,6 +189,13 @@ export interface Example {
   /** 1.1.0: whether detection was decisive. A non-decisive result never reaches the resolver. */
   readonly languageDetectionDecisive?: boolean | undefined;
   readonly languageDetectionReason?: LanguageDetectionReason | undefined;
+  /**
+   * 1.1.0, provenance only: set when the rows merged into this example (one evidence cluster)
+   * were detected as different languages. Sorted, distinct, at least two values. The example keeps
+   * the detection of the row that comes first in canonical order (the canonical JSON of the frame
+   * row); this field makes sure that choice is never silent (W4).
+   */
+  readonly clusterDetectedLanguages?: readonly Language[] | undefined;
   readonly rawKey: string;
   readonly rawLabel?: string | undefined;
   readonly rawValue?: string | undefined;
@@ -323,7 +330,10 @@ export interface SamplingManifest {
   readonly predictionsSha256: string;
   /** Schema 1.1.0 frames only: the stratum language rule (LANGUAGE_STRATUM_RULE). */
   readonly languageRule?: string | undefined;
-  /** Schema 1.1.0 frames only: LANGUAGE_DETECTOR_VERSION of the detector that produced the strata. */
+  /**
+   * Schema 1.1.0 frames only: LANGUAGE_DETECTOR_VERSION of the detector whose results are stored as
+   * provenance. It produces neither the strata nor the resolver input (declared language only).
+   */
   readonly languageDetectorVersion?: string | undefined;
 }
 

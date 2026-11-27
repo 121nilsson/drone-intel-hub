@@ -1,8 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { detectLanguageWithEvidence } from "@/entities/normalization/language";
 import { detectLanguagePreD0 } from "@/entities/normalization/language-legacy";
-import { ADVERSARIAL_CATEGORIES } from "./fixtures/language-detect-adversarial";
-import { LANGUAGE_CORPUS } from "./fixtures/language-detect-corpus";
+import { PRE_D0_GOLDEN } from "./fixtures/language-pre-d0-golden";
 import { buildFrame } from "@/entities/normalization/semantic-eval/sampling";
 import {
   CODE_SEED_SNAPSHOT,
@@ -279,21 +278,33 @@ describe("translation routing follows the language evidence (D0)", () => {
     }
   });
 
-  it("routes every development text exactly as the pre-D0 rule does", async () => {
-    const texts = [
-      ...Object.values(ADVERSARIAL_CATEGORIES).flatMap((rows) => rows.map((r) => r.text)),
-      ...LANGUAGE_CORPUS.map((r) => r.text),
-    ];
-    expect(texts.length).toBeGreaterThan(150);
-    for (const text of texts) {
+  it("routes the reverse disagreement by the pre-D0 rule too: 3.1.0 decisive ru, routed uk-en (W2)", async () => {
+    // Decision 1(a) accepts this misroute: routing is the pre-D0 rule's, whatever 3.1.0 says.
+    const text = "В Києві заявили, что беспилотник был сбит, сообщил штаб.";
+    riva();
+    const seen = stubFetch();
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    expect(detectLanguageWithEvidence(text)).toMatchObject({ language: "ru", decisive: true });
+    expect(PRE_D0_GOLDEN.find((r) => r.text === text)?.expected).toBe("uk");
+    await askWith(text);
+    expect(seen[0]?.system).toBe("uk-en");
+  });
+
+  it("routes every facit text as the frozen 7aea9a6 answer says (W1: expected values are not computed)", async () => {
+    // The texts include both directions of disagreement between 3.1.0 and the pre-D0 rule.
+    const disagreements = PRE_D0_GOLDEN.filter(
+      (r) => r.text.length > 0 && detectLanguageWithEvidence(r.text).language !== r.expected,
+    );
+    expect(disagreements.length).toBeGreaterThanOrEqual(4);
+    for (const { text, expected } of PRE_D0_GOLDEN) {
+      if (text.length === 0) continue;
       riva();
       const seen = stubFetch();
       vi.spyOn(console, "warn").mockImplementation(() => {});
       await askWith(text);
-      const legacy = detectLanguagePreD0(text);
-      const expected =
-        legacy === "ru" || legacy === "uk" ? `${legacy}-en` : "Translate to English.";
-      expect(seen[0]?.system, text).toBe(expected);
+      const pair =
+        expected === "ru" || expected === "uk" ? `${expected}-en` : "Translate to English.";
+      expect(seen[0]?.system, text).toBe(pair);
     }
   });
 

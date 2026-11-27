@@ -41,6 +41,7 @@ export default tseslint.config(
       "@repo/no-nordic-ui-copy": "error",
       "@repo/no-raw-controls": "error",
       "@repo/no-raw-db-import": "error",
+      "@repo/no-unapproved-language-detector": "error",
       "no-restricted-imports": [
         "error",
         {

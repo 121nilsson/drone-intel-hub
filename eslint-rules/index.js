@@ -31,6 +31,11 @@
  *    (storage/backend.server.ts, server-services.server.ts). Domain code asks `serverServices()`
  *    for a port, so the storage can change without touching it.
  *
+ * 7. `no-unapproved-language-detector` - production code does not load the D0 language detector
+ *    (src/entities/normalization/language.ts) by value: no detector version is approved, so
+ *    production language decisions use the pre-D0 rule in language-legacy.ts. Evaluation code, the
+ *    AI proxy's diagnostic log line and tests may load it.
+ *
  * The layer map these rules enforce:
  *
  *   src/entities/        pure domain. Imports nothing outside src/entities.
@@ -353,6 +358,53 @@ const noRawDbImport = {
   },
 };
 
+/**
+ * Where the D0 language detector (src/entities/normalization/language.ts) may be loaded by value.
+ * No detector version is approved (decision 2026-11-27), so it may not drive a production
+ * decision: production code uses the pre-D0 rule in language-legacy.ts. Allowed are the
+ * evaluation infrastructure, the one diagnostic log line in the AI proxy, the detector's own
+ * evaluation helpers, and tests. Code outside src (scripts) is not production and is not checked.
+ */
+const LANGUAGE_DETECTOR_MODULE = "entities/normalization/language";
+const LANGUAGE_DETECTOR_HOMES = [
+  path.join(SRC, "entities", "normalization", "semantic-eval") + path.sep,
+  path.join(SRC, "entities", "normalization", "language-accuracy.ts"),
+  path.join(SRC, "shared", "infra", "ai-proxy.server.ts"),
+  path.join(SRC, "test") + path.sep,
+];
+
+const noUnapprovedLanguageDetector = {
+  meta: {
+    type: "problem",
+    docs: "https://eslint.org/docs/latest/use/configure/rules",
+    schema: [],
+    messages: {
+      unapproved:
+        'Production code must not load the unapproved language detector ("{{source}}"). Use detectLanguagePreD0 from @/entities/normalization/language-legacy until a detector version passes its independent evaluation.',
+    },
+  },
+  create(context) {
+    const file = context.filename;
+    const rel = path.relative(SRC, file);
+    if (rel.startsWith("..") || path.isAbsolute(rel)) return {};
+    if (LANGUAGE_DETECTOR_HOMES.some((home) => file === home || file.startsWith(home))) return {};
+    return moduleLoadVisitors((sourceNode, loadsValue) => {
+      const source = sourceNode?.value;
+      if (typeof source !== "string" || !loadsValue) return;
+      const resolved = resolveSource(file, source);
+      if (!resolved) return;
+      const target = path
+        .relative(SRC, resolved)
+        .split(path.sep)
+        .join("/")
+        .replace(/\.tsx?$/, "");
+      if (target === LANGUAGE_DETECTOR_MODULE) {
+        context.report({ node: sourceNode, messageId: "unapproved", data: { source } });
+      }
+    });
+  },
+};
+
 export default {
   rules: {
     "no-raw-controls": noRawControls,
@@ -361,5 +413,6 @@ export default {
     "no-server-import-from-client": noServerImportFromClient,
     "no-nordic-ui-copy": noNordicUiCopy,
     "no-raw-db-import": noRawDbImport,
+    "no-unapproved-language-detector": noUnapprovedLanguageDetector,
   },
 };
