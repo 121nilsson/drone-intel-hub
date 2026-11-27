@@ -475,10 +475,11 @@ describe("drawE2Sample", () => {
 
 describe("E2 step b has no resolver", () => {
   const root = process.cwd();
+  // evaluation.ts is step d: it runs the injected snapshot, so it is covered by its own guard below.
   const files = [
-    ...readdirSync(join(root, "src/entities/normalization/semantic-eval/e2")).map((f) =>
-      join(root, "src/entities/normalization/semantic-eval/e2", f),
-    ),
+    ...readdirSync(join(root, "src/entities/normalization/semantic-eval/e2"))
+      .filter((f) => f !== "evaluation.ts")
+      .map((f) => join(root, "src/entities/normalization/semantic-eval/e2", f)),
     join(root, "scripts/e2-freeze-and-draw.ts"),
   ];
 
@@ -490,6 +491,19 @@ describe("E2 step b has no resolver", () => {
       for (const line of imports) {
         expect(line, f).not.toMatch(/semantic-resolver|snapshot|\/language"|canonical-manifest/);
       }
+    }
+  });
+
+  it("step d (evaluation.ts) takes the resolver only as a type and never the detector", () => {
+    const lines = readFileSync(
+      join(root, "src/entities/normalization/semantic-eval/e2/evaluation.ts"),
+      "utf8",
+    )
+      .split(/\r?\n/)
+      .filter((l) => /^\s*(import|export)\b.*\bfrom\b/.test(l));
+    for (const line of lines) {
+      expect(line).not.toMatch(/\/language"|canonical-manifest/);
+      if (/semantic-resolver/.test(line)) expect(line).toMatch(/^import type /);
     }
   });
 
