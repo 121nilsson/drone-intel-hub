@@ -33,8 +33,14 @@ export const SUPPORTED_SCHEMA_VERSIONS: readonly string[] = [
   SEMANTIC_EVAL_SCHEMA_VERSION_1_1,
 ];
 
-/** How `Example.language` (the stratum language) is chosen in a 1.1.0 frame; stored in the manifest. */
-export const LANGUAGE_STRATUM_RULE = "declared, else detected if decisive, else unknown";
+/**
+ * How `Example.language` (the stratum language) is chosen in a 1.1.0 frame; stored in the manifest.
+ * Declared language only (decision 2026-11-27): no language detector is approved, and a detector
+ * may not be a premise of an approved downstream evaluation before it passes its own. Detection is
+ * still recorded beside the declaration as provenance, but it decides neither the stratum nor the
+ * language handed to the resolver.
+ */
+export const LANGUAGE_STRATUM_RULE = "declared, else unknown; detection recorded only";
 
 /**
  * The one annotation protocol currently defined. A decision records the version it used.
@@ -171,9 +177,9 @@ export interface Example {
   readonly source: ExampleSource;
   readonly excerpt: string;
   /**
-   * The stratum language. Schema 1.0.0: the frame row's `language` or else detection, as before.
-   * Schema 1.1.0: `declaredLanguage` if present, else `detectedLanguage` if decisive, else
-   * `unknown` (LANGUAGE_STRATUM_RULE).
+   * The stratum language. Schema 1.0.0: the frame row's `language`, as before.
+   * Schema 1.1.0: `declaredLanguage` if present, else `unknown` (LANGUAGE_STRATUM_RULE); the
+   * detected language is never used for it.
    */
   readonly language: Language;
   /** 1.1.0: language stated by a trustworthy source. Never written from detection. */

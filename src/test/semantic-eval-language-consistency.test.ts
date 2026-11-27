@@ -56,8 +56,9 @@ function exampleWith(
   reason: string,
 ): Record<string, unknown> {
   const e = JSON.parse(JSON.stringify(build11([row()]).examples[0]!)) as Record<string, unknown>;
-  // The stratum rule says: detected if decisive, else unknown (no declaration here).
-  const stratumLanguage = decisive ? language : "unknown";
+  // The stratum rule says: declared, else unknown. There is no declaration here, so the stratum is
+  // unknown whatever the detection says (decision 2026-11-27).
+  const stratumLanguage = "unknown";
   const old = e["stratum"] as string;
   return {
     ...e,
@@ -198,14 +199,31 @@ describe("F3 sibling: 1.1.0 frames are detected on the stored excerpt (F6)", () 
 describe("F6: dedupe edge cases, documented", () => {
   const UPPER = UK.toUpperCase();
 
-  it("a case-only difference shares an evidence cluster but detects differently: the cluster is excluded", () => {
+  it("a case-only difference that detects differently no longer splits the stratum: one row is kept", () => {
+    // Detection decides no stratum any more (declared, else unknown), so two undeclared rows of one
+    // evidence cluster share the stratum `unknown` whatever their detection says. The first in
+    // canonical order is kept; the dropped row's detection fields go with it.
     expect(detectLanguageWithEvidence(UK).decisive).toBe(true);
     expect(detectLanguageWithEvidence(UPPER).decisive).toBe(false);
     const built = freezeFrame([row({ sourceId: "a" }), row({ sourceId: "b", excerpt: UPPER })], {
       frameId: "f",
       schemaVersion: "1.1.0",
     });
-    // Conservative: neither row survives, and the exclusion says why.
+    expect(built.units).toHaveLength(1);
+    expect(built.units[0]!.language).toBe("unknown");
+    expect(built.exclusions).not.toContainEqual(
+      expect.objectContaining({ reason: "conflicting_evidence_metadata" }),
+    );
+  });
+
+  it("still excludes a cluster whose rows declare different languages", () => {
+    const built = freezeFrame(
+      [
+        row({ sourceId: "a", declaredLanguage: "uk" }),
+        row({ sourceId: "b", excerpt: UPPER, declaredLanguage: "ru" }),
+      ],
+      { frameId: "f", schemaVersion: "1.1.0" },
+    );
     expect(built.units).toHaveLength(0);
     expect(built.exclusions).toContainEqual({ reason: "conflicting_evidence_metadata", count: 1 });
   });

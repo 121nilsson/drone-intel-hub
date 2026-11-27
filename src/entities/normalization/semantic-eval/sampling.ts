@@ -256,12 +256,10 @@ export function freezeFrame(rows: readonly FrameRow[], options: FreezeOptions): 
     // 1.1.0 detects on the stored (truncated) excerpt, so the stored provenance can be reproduced
     // from the stored text. Detection on the full text would not be re-verifiable.
     const detection = provenance ? detectLanguageWithEvidence(excerpt) : undefined;
-    // 1.1.0: declared if present, else detected if decisive, else unknown. Never the reverse:
-    // detection is stored beside the declaration and cannot overwrite it.
+    // 1.1.0: declared if present, else unknown (LANGUAGE_STRATUM_RULE). Detection is stored beside
+    // the declaration as provenance only: no detector is approved, so it decides nothing here.
     const declared = provenance ? row.declaredLanguage : undefined;
-    const language: Language = detection
-      ? (declared ?? (detection.decisive ? detection.language : "unknown"))
-      : row.language!;
+    const language: Language = detection ? (declared ?? "unknown") : row.language!;
     candidates.push({
       exampleId,
       sourceClusterId: sourceClusterIdFor(row),
@@ -361,17 +359,14 @@ export interface ResolvedFrame {
 }
 
 /**
- * The language a frame replay hands to `resolve()`: only one that is known. A 1.1.0 unit passes
- * its declared language, else its detected language when decisive; a non-decisive guess (for
- * example a `ru` fallback for Cyrillic without distinguishing letters) is never passed, so only
- * `all`-scoped rules apply. A 1.0.0 unit keeps its old rule: any language but `unknown`.
+ * The language a frame replay hands to `resolve()`: only a declared one. A 1.1.0 unit passes its
+ * declared language and nothing else: a detected language, decisive or not, is never passed
+ * (decision 2026-11-27, no detector approved), so without a declaration only `all`-scoped rules
+ * apply. A 1.0.0 unit keeps its old rule: any language but `unknown`.
  */
 export function languageForResolver(unit: FrozenUnit): Language | undefined {
   const language =
-    unit.schemaVersion === SEMANTIC_EVAL_SCHEMA_VERSION_1_1
-      ? (unit.declaredLanguage ??
-        (unit.languageDetectionDecisive === true ? unit.detectedLanguage : undefined))
-      : unit.language;
+    unit.schemaVersion === SEMANTIC_EVAL_SCHEMA_VERSION_1_1 ? unit.declaredLanguage : unit.language;
   return language === undefined || language === "unknown" ? undefined : language;
 }
 

@@ -44,7 +44,8 @@ const freeze11 = (r: FrameRow) => freezeFrame([r], { frameId: "f", schemaVersion
 const unit11 = (r: FrameRow) => freeze11(r).units[0]!;
 
 describe("schema 1.1.0 language provenance", () => {
-  it("keeps detection separate from declaration when only detected", () => {
+  it("records a decisive detection as provenance only: stratum unknown, nothing for the resolver", () => {
+    // Decision 2026-11-27: no detector is approved, so even a decisive detection decides nothing.
     const u = unit11(row());
     expect(u.schemaVersion).toBe("1.1.0");
     expect(u.declaredLanguage).toBeUndefined();
@@ -53,8 +54,9 @@ describe("schema 1.1.0 language provenance", () => {
       detectedLanguage: "uk",
       languageDetectionDecisive: true,
       languageDetectionReason: "cyrillic_uk_letters",
-      language: "uk",
+      language: "unknown",
     });
+    expect(languageForResolver(u)).toBeUndefined();
   });
 
   it("uses a declared language and keeps it even when detection disagrees (declared wins the stratum)", () => {
@@ -180,7 +182,8 @@ describe("schema 1.1.0 language provenance", () => {
         schemaVersion: "1.1.0",
       },
     );
-    expect(seen.sort()).toEqual([undefined, "ru", "uk", "uk"].sort());
+    // Only the declared language reaches resolve(); decisive detections (rows 1 and 4) do not.
+    expect(seen.sort()).toEqual([undefined, undefined, undefined, "uk"].sort());
   });
 
   it("validates a 1.1.0 example, enforces the stratum rule and the origin", () => {
@@ -192,7 +195,10 @@ describe("schema 1.1.0 language provenance", () => {
     });
     const e = built.examples[0]!;
     expect(validateExample(JSON.parse(JSON.stringify(e)))).toEqual(e);
-    const bad = { ...e, language: "ru", stratum: e.stratum.replace("uk|", "ru|") };
+    // The row is decisive uk but declares nothing, so its stratum language must be unknown; a
+    // stratum that takes the detected language breaks the rule.
+    expect(e.language).toBe("unknown");
+    const bad = { ...e, language: "uk", stratum: e.stratum.replace("unknown|", "uk|") };
     expect(() => validateExample(bad)).toThrow(/stratum rule/);
     expect(() => validateExample({ ...e, detectedLanguage: undefined })).toThrow(
       /detectedLanguage/,
@@ -221,7 +227,11 @@ describe("schema 1.1.0 language provenance", () => {
   });
 
   it("verifies a 1.1.0 frame end to end and records the stratum rule in the manifest field", () => {
-    const rows = [row(), row({ rawValue: "2", excerpt: UK_UNDECIDABLE })];
+    const rows = [
+      row({ declaredLanguage: "uk" }),
+      row({ rawValue: "2", excerpt: UK_UNDECIDABLE }),
+      row({ rawValue: "3", excerpt: RU_DECISIVE }),
+    ];
     const built = buildFrame(rows, {
       frameId: "",
       snapshot: CODE_SEED_SNAPSHOT,
@@ -261,7 +271,8 @@ describe("schema 1.1.0 language provenance", () => {
       languageDetectorVersion: LANGUAGE_DETECTOR_VERSION,
     };
     const parsed = parseJsonl(examplesText, validateExample, "examples.jsonl");
-    expect(parsed.map((e) => e.language).sort()).toEqual(["uk", "unknown"]);
+    // Declared → uk; undecidable and decisive-but-undeclared → unknown.
+    expect(parsed.map((e) => e.language).sort()).toEqual(["uk", "unknown", "unknown"]);
     const errors = verifyEvaluationInputs({
       manifest,
       examples: parsed,

@@ -232,8 +232,7 @@ export function validateExample(value: unknown): Example {
         `reason ${reason} allows ${outcome.languages.join(" or ")}, got ${detected}`,
       );
     }
-    const expectedLanguage =
-      declared ?? (o.languageDetectionDecisive ? detected : ("unknown" as Language));
+    const expectedLanguage = declared ?? ("unknown" as Language);
     if (language !== expectedLanguage) {
       fail(
         `${w}.language`,

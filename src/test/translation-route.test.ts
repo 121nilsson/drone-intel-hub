@@ -440,16 +440,18 @@ describe("language provenance end to end (D0)", () => {
     return { detection, system: seen[0]?.system, warn, example: built.examples[0]!, resolveSpy };
   };
 
-  it("short decisive Ukrainian: uk, uk-en, detected not declared, resolver gets uk", async () => {
+  it("short decisive Ukrainian: uk-en by the pre-D0 rule, detection recorded only, resolver gets no language", async () => {
+    // Decision 2026-11-27: a decisive 3.1.0 detection is provenance only. The pair is uk-en
+    // because the pre-D0 rule also says uk here; the stratum is unknown without a declaration.
     const r = await run("Дрон вже має дальність польоту 250 км.");
     expect(r.detection).toMatchObject({ language: "uk", decisive: true });
     expect(r.system).toBe("uk-en");
     expect(r.example.declaredLanguage).toBeUndefined();
     expect(r.example.detectedLanguage).toBe("uk");
     expect(r.example.languageDetectionDecisive).toBe(true);
-    expect(r.example.language).toBe("uk");
+    expect(r.example.language).toBe("unknown");
     expect(r.resolveSpy).toHaveBeenCalledTimes(1);
-    expect(r.resolveSpy.mock.calls[0]![0]).toMatchObject({ language: "uk" });
+    expect("language" in r.resolveSpy.mock.calls[0]![0]).toBe(false);
   });
 
   it("short Ukrainian whose only distinctive letter is in the first word: not decisive, ru-en, no language", async () => {

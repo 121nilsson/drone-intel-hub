@@ -778,7 +778,10 @@ Without E2, v1.3.0 can show at most "no regressions plus fixed known cases", not
 
 - The draw is a seeded **stratified** random sample over the strata **detected language** (en, ru, uk, unknown), with a minimum per language. Criteria are fixed in writing before the draw. A simple random draw could yield very few Russian or Ukrainian rows. Family is recorded and descriptive only. Details are in [semantic-resolver-v1.3.0-e2-sampling-design.md](./semantic-resolver-v1.3.0-e2-sampling-design.md).
 - Allocation and any weights are recorded in the manifest.
-- Language for stratification is the D0 detection: decisive languages are their own strata, and non-decisive rows go to `unknown`. D5 therefore depends on D0.
+- ~~Language for stratification is the D0 detection: decisive languages are their own strata, and non-decisive rows go to `unknown`. D5 therefore depends on D0.~~ **Superseded 2026-11-27.** No D0 version is approved, so the declared-only rule applies.
+  - **Resolver input:** E2 hands the resolver only a declared language (`languageForResolver`; schema 1.1.0 rule `LANGUAGE_STRATUM_RULE` = "declared, else unknown; detection recorded only"). A missing declaration means `unknown`; no detection fills it in, whether 3.1.0 or decisive. Detection is still recorded per example as provenance.
+  - **Validity:** E2 results describe the resolver's behaviour given declared language provenance. They are no evidence that any detector version is approved.
+  - **Open, the stratification key:** historical dispatches store no language, so under the declared-only rule every historical row is `unknown`. The language strata of the E2 sampling design then collapse into one. This needs a separate decision; see "Decisions".
 - **Resolver status is not a stratum for E2.** Stratifying on it would let the resolver under test shape its own test set. The status is computed only after the freeze.
 - Consequence: the existing exact bound (§F of the Phase 3.2 plan) assumes resolver-status strata. For E2, a bound is valid only conditionally on the realised R/W counts per cell, and that needs its own written derivation and hand-computed tests before any bound is printed. Until then, E2 figures are descriptive only.
 
