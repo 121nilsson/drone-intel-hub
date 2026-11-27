@@ -55,10 +55,18 @@ async function runV2(
 }
 
 describe("holdout evaluation guard (R5)", () => {
-  it("records holdout v1 as consumed by detector 3.0.0, and nothing else", () => {
+  it("records v1 as consumed by 3.0.0 and v2 as reserved for 3.1.0, and nothing else", () => {
     expect(LANGUAGE_HOLDOUTS).toEqual({
       v1: { fixture: V1_FIXTURE, evaluatedWith: "3.0.0", consumedOn: "2026-11-27" },
+      v2: { fixture: "language-detect-holdout-v2", evaluatedWith: "3.1.0" },
     });
+  });
+
+  it("lets the committed v2 run only with detector 3.1.0, which is the current detector", () => {
+    expect(LANGUAGE_DETECTOR_VERSION).toBe("3.1.0");
+    expect(holdoutRunRefusal("v2", "3.1.0")).toBeUndefined();
+    expect(holdoutRunRefusal("v2", "3.0.0")).toMatch(/reserved for detector 3\.1\.0/);
+    expect(holdoutRunRefusal("v2", "3.2.0")).toMatch(/reserved for detector 3\.1\.0/);
   });
 
   it("refuses to run the consumed v1 with the current detector, before importing it", async () => {

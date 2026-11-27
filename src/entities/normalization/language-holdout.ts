@@ -34,6 +34,11 @@ export const LANGUAGE_HOLDOUTS: Readonly<Record<string, LanguageHoldoutRecord>> 
     evaluatedWith: "3.0.0",
     consumedOn: "2026-11-27",
   }),
+  // Package 3: frozen in 27b7542 (module SHA-256 4578cfe7…), V4 accepted; not yet evaluated.
+  v2: Object.freeze({
+    fixture: "language-detect-holdout-v2",
+    evaluatedWith: "3.1.0",
+  }),
 });
 
 /** `v1`, `v2`, … `v10`: no leading zero, nothing else. */
