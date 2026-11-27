@@ -26,6 +26,8 @@ export const SEMANTIC_EVAL_SCHEMA_VERSION = "1.0.0";
  * `Example.declaredLanguage/detectedLanguage/languageDetectionDecisive/languageDetectionReason`
  * and the `external_source` origin. Additive only. The sampler writes it only when asked
  * (`FreezeOptions.schemaVersion`); readers accept both versions.
+ *
+ * SUPERSEDED FOR E2: 1.1.0 has no committed frames; E2 uses 1.2.0 (see ./e2). Nothing here changes.
  */
 export const SEMANTIC_EVAL_SCHEMA_VERSION_1_1 = "1.1.0";
 export const SUPPORTED_SCHEMA_VERSIONS: readonly string[] = [
