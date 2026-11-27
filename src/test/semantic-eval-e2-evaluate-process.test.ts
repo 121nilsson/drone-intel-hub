@@ -31,12 +31,22 @@ afterAll(() => rmSync(tmp, { recursive: true, force: true }));
 const NO_STACK = /^\s+at /m;
 
 function runScript(script: string, args: readonly string[], cwd: string) {
-  const r = spawnSync(process.execPath, [JITI_CLI, join(ROOT, "scripts", script), ...args], {
-    cwd,
-    encoding: "utf8",
-    env: { ...process.env, JITI_ALIAS: JSON.stringify({ "@/": `${join(ROOT, "src")}/` }) },
-    timeout: 120_000,
-  });
+  const extra =
+    script === "e2-evaluate.ts"
+      ? args[0] === "run"
+        ? ["--frozen-commit", "f".repeat(40), "--e2-root", cwd]
+        : []
+      : ["--e2-root", cwd];
+  const r = spawnSync(
+    process.execPath,
+    [JITI_CLI, join(ROOT, "scripts", script), ...args, ...extra],
+    {
+      cwd,
+      encoding: "utf8",
+      env: { ...process.env, JITI_ALIAS: JSON.stringify({ "@/": `${join(ROOT, "src")}/` }) },
+      timeout: 120_000,
+    },
+  );
   return { status: r.status, stdout: r.stdout, stderr: r.stderr };
 }
 const evaluate = (args: readonly string[], cwd: string) => runScript("e2-evaluate.ts", args, cwd);
@@ -242,6 +252,11 @@ describe("e2-evaluate.ts as a process", () => {
     expect(nonEmpty.status).toBe(2);
     expect(nonEmpty.stderr).toMatch(/not empty/);
     expect(readdirSync(full)).toEqual(["keep.txt"]);
+
+    const outside = evaluate(["run", ...base, "--out", join(tmp, "escape-eval")], cwd);
+    expect(outside.status).toBe(2);
+    expect(outside.stderr).toMatch(/not inside --e2-root/);
+    expect(existsSync(join(tmp, "escape-eval"))).toBe(false);
 
     const insideInput = evaluate(["run", ...base, "--out", join(sampleDir, "x")], cwd);
     expect(insideInput.status).toBe(2);

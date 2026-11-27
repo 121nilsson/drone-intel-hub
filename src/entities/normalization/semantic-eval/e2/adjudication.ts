@@ -25,6 +25,7 @@ import {
   type E2Adjudication,
   type E2AdjudicationManifest,
   type E2Example,
+  type E2IdenticalExcerptConflict,
   type E2PopulationManifest,
   type E2SampleManifest,
 } from "./types";
@@ -347,6 +348,8 @@ export function freezeE2Adjudications(input: E2AdjudicationInput): E2Adjudicatio
     });
   });
   rows.sort((a, b) => byCodeUnits(a.exampleId, b.exampleId));
+  const finalLanguages = new Map(rows.map((r) => [r.exampleId, r.finalAdjudicatedLanguage]));
+  const flags = e2AdjudicationConflictFlags(sampleRows, finalLanguages);
   const jsonl = e2AdjudicationsJsonl(rows);
   const manifest = validateE2AdjudicationManifest({
     stage: "adjudication",
@@ -357,6 +360,10 @@ export function freezeE2Adjudications(input: E2AdjudicationInput): E2Adjudicatio
     reviewerIds: second !== undefined ? [first.reviewerId, second.reviewerId] : [first.reviewerId],
     secondReviewerUsed: second !== undefined,
     disagreementCount: disagreeing.size,
+    flaggedDeclaredAdjudicatedConflictCount: flags.declaredAdjudicatedExampleIds.length,
+    flaggedDeclaredAdjudicatedExampleIds: flags.declaredAdjudicatedExampleIds,
+    flaggedIdenticalExcerptConflictCount: flags.identicalExcerptConflicts.length,
+    flaggedIdenticalExcerptConflicts: flags.identicalExcerptConflicts,
     frozenAt: input.frozenAt ?? new Date().toISOString(),
   });
   const chain = checkE2HashChain({
@@ -366,6 +373,50 @@ export function freezeE2Adjudications(input: E2AdjudicationInput): E2Adjudicatio
   });
   if (chain.length > 0) refuse(`hash chain: ${chain.join("; ")}`);
   return { rows, jsonl, manifest };
+}
+
+/**
+ * Conflicts the tool can report but must never settle. Declared language keeps precedence for
+ * resolver input, so a declared/adjudicated mismatch is only a flag. Identical excerpts with
+ * different final languages are left for explicit review; no sorting or dedupe chooses a winner.
+ */
+export interface E2AdjudicationConflictFlags {
+  readonly declaredAdjudicatedExampleIds: readonly string[];
+  readonly identicalExcerptConflicts: readonly E2IdenticalExcerptConflict[];
+}
+
+export function e2AdjudicationConflictFlags(
+  sampleRows: readonly E2Example[],
+  finalLanguages: ReadonlyMap<string, AdjudicatedLanguage>,
+): E2AdjudicationConflictFlags {
+  const declaredAdjudicatedExampleIds = sampleRows
+    .filter((e) => {
+      const final = finalLanguages.get(e.exampleId);
+      return (
+        e.declaredLanguage !== undefined && final !== undefined && final !== e.declaredLanguage
+      );
+    })
+    .map((e) => e.exampleId)
+    .sort(byCodeUnits);
+
+  const byExcerpt = new Map<string, string[]>();
+  for (const e of sampleRows) {
+    const ids = byExcerpt.get(e.excerpt) ?? [];
+    ids.push(e.exampleId);
+    byExcerpt.set(e.excerpt, ids);
+  }
+  const identicalExcerptConflicts: E2IdenticalExcerptConflict[] = [];
+  for (const [excerpt, ids] of byExcerpt) {
+    if (ids.length < 2) continue;
+    const languages = new Set(ids.map((id) => finalLanguages.get(id)));
+    if (languages.size < 2) continue;
+    identicalExcerptConflicts.push({
+      excerptSha256: sha256Hex(excerpt),
+      exampleIds: [...ids].sort(byCodeUnits),
+    });
+  }
+  identicalExcerptConflicts.sort((a, b) => byCodeUnits(a.excerptSha256, b.excerptSha256));
+  return { declaredAdjudicatedExampleIds, identicalExcerptConflicts };
 }
 
 /** Pretty manifest text as written to disk. */

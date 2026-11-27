@@ -1,8 +1,8 @@
 /**
  * E2 step c: blind human language adjudication of the drawn sample. Never runs the resolver.
  *
- *   export  --sample-dir <dir> --out <file.csv>
- *   import  --sample-dir <dir> --reviewer <csv> --reviewer-id <id> --out <dir>
+ *   export  --sample-dir <dir> --out <file.csv> --e2-root <dir>
+ *   import  --sample-dir <dir> --reviewer <csv> --reviewer-id <id> --out <dir> --e2-root <dir>
  *           [--second-reviewer <csv> --second-reviewer-id <id>] [--resolutions <csv|jsonl>]
  *
  * `export` writes the blind CSV (example_id, excerpt, language) and refuses an existing file.
@@ -27,6 +27,7 @@ import {
   validateE2PopulationManifest,
   validateE2SampleManifest,
 } from "../src/entities/normalization/semantic-eval/e2/validate";
+import { checkE2OutputPath } from "./lib/e2-output-guard";
 
 function refuse(message: string): never {
   process.stderr.write(`${message}\n`);
@@ -68,12 +69,14 @@ function requireValues<K extends string>(
 
 try {
   if (command === "export") {
-    const flags = readFlags(rest, { "--sample-dir": "", "--out": "" });
+    const flags = readFlags(rest, { "--sample-dir": "", "--out": "", "--e2-root": "" });
     if (!flags.ok) refuse(flags.reason);
     const v = flags.values;
-    requireValues(v, ["--sample-dir", "--out"]);
+    requireValues(v, ["--sample-dir", "--out", "--e2-root"]);
     const sampleDir = resolve(v["--sample-dir"]);
     const out = resolve(v["--out"]);
+    const guardError = checkE2OutputPath(v["--e2-root"], out, "file");
+    if (guardError !== undefined) refuse(guardError);
     if (existsSync(out)) refuse(`--out ${out} already exists: an export is never overwritten`);
     if (insideOrEqual(out, sampleDir)) refuse("--out must not be inside the sample directory");
     const { rows } = loadSampleDir(sampleDir);
@@ -90,15 +93,18 @@ try {
       "--second-reviewer-id": "",
       "--resolutions": "",
       "--out": "",
+      "--e2-root": "",
     });
     if (!flags.ok) refuse(flags.reason);
     const v = flags.values;
-    requireValues(v, ["--sample-dir", "--reviewer", "--reviewer-id", "--out"]);
+    requireValues(v, ["--sample-dir", "--reviewer", "--reviewer-id", "--out", "--e2-root"]);
     if ((v["--second-reviewer"] === "") !== (v["--second-reviewer-id"] === "")) {
       refuse("--second-reviewer and --second-reviewer-id must be given together");
     }
     const sampleDir = resolve(v["--sample-dir"]);
     const outDir = resolve(v["--out"]);
+    const guardError = checkE2OutputPath(v["--e2-root"], outDir, "dir");
+    if (guardError !== undefined) refuse(guardError);
     if (insideOrEqual(outDir, sampleDir)) refuse("--out must not be inside the sample directory");
     if (existsSync(outDir)) {
       if (!statSync(outDir).isDirectory()) refuse(`--out ${outDir} exists and is not a directory`);

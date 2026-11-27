@@ -44,12 +44,16 @@ function freshDir(name: string): string {
 }
 
 function runScript(script: string, args: readonly string[], cwd: string) {
-  const r = spawnSync(process.execPath, [JITI_CLI, join(ROOT, "scripts", script), ...args], {
-    cwd,
-    encoding: "utf8",
-    env: { ...process.env, JITI_ALIAS: JSON.stringify({ "@/": `${join(ROOT, "src")}/` }) },
-    timeout: 60_000,
-  });
+  const r = spawnSync(
+    process.execPath,
+    [JITI_CLI, join(ROOT, "scripts", script), ...args, "--e2-root", cwd],
+    {
+      cwd,
+      encoding: "utf8",
+      env: { ...process.env, JITI_ALIAS: JSON.stringify({ "@/": `${join(ROOT, "src")}/` }) },
+      timeout: 60_000,
+    },
+  );
   return { status: r.status, stdout: r.stdout, stderr: r.stderr };
 }
 const adj = (args: readonly string[], cwd: string) => runScript("e2-adjudication.ts", args, cwd);
@@ -218,6 +222,15 @@ describe("e2-adjudication.ts as a process", () => {
       expect(r.stderr).toMatch(/not empty/);
       expect(r.stderr).not.toMatch(NO_STACK);
       expect(readdirSync(out)).toEqual(["keep.txt"]);
+    }, 120_000);
+
+    it("an export outside the allowlisted root", () => {
+      const s = setup("export-escape");
+      const outside = join(tmp, "escape.csv");
+      const r = adj(["export", "--sample-dir", s.sampleDir, "--out", outside], s.cwd);
+      expect(r.status, r.stderr).toBe(2);
+      expect(r.stderr).toMatch(/not inside --e2-root/);
+      expect(existsSync(outside)).toBe(false);
     }, 120_000);
 
     it("an existing export file", () => {

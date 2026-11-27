@@ -44,7 +44,7 @@ function freshDir(name: string): string {
 function run(args: readonly string[], cwd: string) {
   const r = spawnSync(
     process.execPath,
-    [JITI_CLI, join(ROOT, "scripts", "e2-freeze-and-draw.ts"), ...args],
+    [JITI_CLI, join(ROOT, "scripts", "e2-freeze-and-draw.ts"), ...args, "--e2-root", cwd],
     {
       cwd,
       encoding: "utf8",
@@ -115,6 +115,7 @@ describe("e2-freeze-and-draw.ts as a process", () => {
     expect(popManifest.populationCount).toBe(7);
     expect(popManifest.stratumCounts).toEqual({ en: 3, ru: 2, uk: 1, unknown: 1 });
     expect(popManifest.populationRowsSha256).toBe(sha(popText));
+    expect(popManifest.rawExportSha256).toBe(sha(readFileSync(input, "utf8")));
     expect(sampleManifest.drawnRowsSha256).toBe(sha(sampleText));
     expect(sampleRows.length).toBe(5);
     // minima 1 each = 4, r = 1 over en (3) and ru (2): remainders 3 and 2 -> en. en 2, ru 1.
@@ -122,6 +123,16 @@ describe("e2-freeze-and-draw.ts as a process", () => {
     expect(checkE2HashChain({ population: popManifest, sample: sampleManifest })).toEqual([]);
     // The input stays where it was and nothing else appeared in the working directory.
     expect(readdirSync(cwd).sort()).toEqual(["out", "rows.jsonl"]);
+  }, 60_000);
+
+  it("exit 2 when --out leaves the allowlisted root, nothing written", () => {
+    const cwd = freshDir("escape");
+    const input = writeRows(cwd, GOOD);
+    const out = join(tmp, "escape-out");
+    const r = run(["--in", input, "--out", out, "--seed", "s", "--n", "5", "--m", "1"], cwd);
+    expect(r.status, r.stderr).toBe(2);
+    expect(r.stderr).toMatch(/not inside --e2-root/);
+    expect(existsSync(out)).toBe(false);
   }, 60_000);
 
   it("exit 2 without --out, nothing written", () => {

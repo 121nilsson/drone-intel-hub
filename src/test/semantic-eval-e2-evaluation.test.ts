@@ -22,7 +22,8 @@ import {
 } from "../entities/normalization/semantic-eval/e2/evaluation";
 import {
   e2RowsJsonl,
-  freezeE2Population,
+  freezeE2Population as freezePopulationWithHash,
+  type E2FreezeOptions,
 } from "../entities/normalization/semantic-eval/e2/population";
 import {
   E2_RESOLVER_LANGUAGE_RULE,
@@ -37,6 +38,14 @@ import {
 import type { FrameRow } from "../entities/normalization/semantic-eval/types";
 
 const sha = (s: string) => createHash("sha256").update(s).digest("hex");
+
+const RAW = "a".repeat(64);
+const freezeE2Population = (rows: readonly FrameRow[], extra: Partial<E2FreezeOptions> = {}) =>
+  freezePopulationWithHash(rows, { rawExportSha256: RAW, ...extra });
+const PROVENANCE = {
+  evaluatedAt: "2026-11-28T12:00:00.000Z",
+  frozenArtifactsCommit: "b".repeat(40),
+};
 
 const EN = "The aircraft is a long range drone that is used by the army and it has been seen";
 const RU = "Беспилотник имеет максимальную скорость это километров в час при полете";
@@ -127,7 +136,7 @@ function makeFiles(
 }
 
 function evaluate(files: E2RecordFiles, snap: E2Snapshot = stub()) {
-  const run = runE2Evaluation(files, snap, "9.9.9");
+  const run = runE2Evaluation(files, snap, "9.9.9", PROVENANCE);
   return {
     run,
     full: {
@@ -281,7 +290,9 @@ describe("runE2Evaluation", () => {
     for (const [name, mutate] of refusals) {
       it(name, () => {
         const s = stub();
-        expect(() => runE2Evaluation(mutate(makeFiles(6)), s, "9.9.9")).toThrow(/refusing to run/);
+        expect(() => runE2Evaluation(mutate(makeFiles(6)), s, "9.9.9", PROVENANCE)).toThrow(
+          /refusing to run/,
+        );
         expect(s.calls).toHaveLength(0);
       });
     }
@@ -294,6 +305,17 @@ describe("verifyE2Record", () => {
     expect(verify(full)).toEqual([]);
     const again = evaluate(makeFiles(4));
     expect(again.full.predictionsJsonl).toBe(full.predictionsJsonl);
+  });
+
+  it("refuses to run when the evaluation claims to predate the adjudication freeze", () => {
+    const snap = stub();
+    expect(() =>
+      runE2Evaluation(makeFiles(4), snap, "9.9.9", {
+        ...PROVENANCE,
+        evaluatedAt: "2026-11-26T00:00:00.000Z",
+      }),
+    ).toThrow(/precedes adjudication frozenAt/);
+    expect(snap.calls).toHaveLength(0);
   });
 
   const tampers: [
@@ -358,6 +380,28 @@ describe("verifyE2Record", () => {
         };
       },
       /recorded resolver language ru, the frozen values give uk/,
+    ],
+    [
+      "extra whitespace in the population manifest text",
+      (f) => ({ ...f, populationManifestText: `${f.populationManifestText}\n` }),
+      /population: population-manifest\.json SHA-256/,
+    ],
+    [
+      "extra whitespace in adjudications.jsonl",
+      (f) => ({ ...f, adjudicationsJsonl: `${f.adjudicationsJsonl}\n` }),
+      /adjudication: adjudications\.jsonl SHA-256/,
+    ],
+    [
+      "a flagged conflict id edited in an otherwise valid manifest",
+      (f) => ({
+        ...f,
+        adjudicationManifestText: pretty({
+          ...JSON.parse(f.adjudicationManifestText!),
+          flaggedDeclaredAdjudicatedConflictCount: 1,
+          flaggedDeclaredAdjudicatedExampleIds: ["f".repeat(64)],
+        }),
+      }),
+      /flagged declared\/adjudicated conflicts do not match/,
     ],
     [
       "a broken link",

@@ -2,7 +2,7 @@
  * E2 step d: run the resolver on the drawn sample after the adjudication freeze, and verify the
  * whole hash-chained record from files.
  *
- *   run    --sample-dir <dir> --adjudication-dir <dir> --out <dir>
+ *   run    --sample-dir <dir> --adjudication-dir <dir> --out <dir> --frozen-commit <sha> --e2-root <dir>
  *   verify --sample-dir <dir> --adjudication-dir <dir> --evaluation-dir <dir>
  *
  * `run` verifies population -> sample -> adjudication first and refuses (exit 2, no resolver call)
@@ -24,6 +24,7 @@ import {
   verifyE2Record,
   type E2RecordFiles,
 } from "../src/entities/normalization/semantic-eval/e2/evaluation";
+import { checkE2OutputPath } from "./lib/e2-output-guard";
 
 function refuse(message: string): never {
   process.stderr.write(`${message}\n`);
@@ -62,13 +63,23 @@ const [command, ...rest] = process.argv.slice(2);
 
 try {
   if (command === "run") {
-    const flags = readFlags(rest, { "--sample-dir": "", "--adjudication-dir": "", "--out": "" });
+    const flags = readFlags(rest, {
+      "--sample-dir": "",
+      "--adjudication-dir": "",
+      "--out": "",
+      "--frozen-commit": "",
+      "--e2-root": "",
+    });
     if (!flags.ok) refuse(flags.reason);
     const v = flags.values;
     const sampleDir = dirArg("--sample-dir", v["--sample-dir"]);
     const adjudicationDir = dirArg("--adjudication-dir", v["--adjudication-dir"]);
     if (v["--out"].length === 0) refuse("--out is required");
+    if (v["--frozen-commit"].length === 0) refuse("--frozen-commit is required");
+    if (v["--e2-root"].length === 0) refuse("--e2-root is required");
     const outDir = resolve(v["--out"]);
+    const guardError = checkE2OutputPath(v["--e2-root"], outDir, "dir");
+    if (guardError !== undefined) refuse(guardError);
     for (const input of [sampleDir, adjudicationDir]) {
       if (insideOrEqual(outDir, input) || insideOrEqual(input, outDir)) {
         refuse("--out must not be inside or contain an input directory");
@@ -84,6 +95,10 @@ try {
       frozenFiles(sampleDir, adjudicationDir),
       CODE_SEED_SNAPSHOT,
       SEMANTIC_RESOLVER_VERSION,
+      {
+        evaluatedAt: new Date().toISOString(),
+        frozenArtifactsCommit: v["--frozen-commit"].trim(),
+      },
     );
     mkdirSync(outDir, { recursive: true });
     writeFileSync(join(outDir, "predictions.jsonl"), run.predictionsJsonl);

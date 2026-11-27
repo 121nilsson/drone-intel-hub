@@ -19,7 +19,10 @@ import {
 } from "../entities/normalization/semantic-eval/e2/adjudication";
 import { allocateE2 } from "../entities/normalization/semantic-eval/e2/allocation";
 import { drawE2Sample } from "../entities/normalization/semantic-eval/e2/draw";
-import { freezeE2Population } from "../entities/normalization/semantic-eval/e2/population";
+import {
+  freezeE2Population as freezePopulationWithHash,
+  type E2FreezeOptions,
+} from "../entities/normalization/semantic-eval/e2/population";
 import type { AdjudicatedLanguage } from "../entities/normalization/semantic-eval/e2/types";
 import {
   checkE2HashChain,
@@ -30,6 +33,10 @@ import {
 import type { FrameRow } from "../entities/normalization/semantic-eval/types";
 
 const sha = (s: string) => createHash("sha256").update(s).digest("hex");
+
+const RAW = "a".repeat(64);
+const freezeE2Population = (rows: readonly FrameRow[], extra: Partial<E2FreezeOptions> = {}) =>
+  freezePopulationWithHash(rows, { rawExportSha256: RAW, ...extra });
 
 const EN = "The aircraft is a long range drone that is used by the army and it has been seen";
 const RU = "Беспилотник имеет максимальную скорость сто километров в час при полете";
@@ -69,6 +76,16 @@ function entries(values: readonly AdjudicatedLanguage[]) {
 }
 
 const ALL_FIVE: readonly AdjudicatedLanguage[] = ["en", "ru", "uk", "mixed", "unknown", "en", "ru"];
+
+// Hand-derived from the fixture above: declared rows 1 (uk), 2 (ru) and 4 (en) are compared with
+// the final value at the same position in the sorted blind export.
+const DECLARED_CONFLICT_IDS = sample.rows
+  .filter(
+    (e) =>
+      e.declaredLanguage !== undefined && ALL_FIVE[IDS.indexOf(e.exampleId)] !== e.declaredLanguage,
+  )
+  .map((e) => e.exampleId)
+  .sort();
 
 function base(over: Partial<E2AdjudicationInput> = {}): E2AdjudicationInput {
   return {
@@ -188,6 +205,10 @@ describe("importing one reviewer", () => {
       reviewerIds: ["rev-1"],
       secondReviewerUsed: false,
       disagreementCount: 0,
+      flaggedDeclaredAdjudicatedConflictCount: DECLARED_CONFLICT_IDS.length,
+      flaggedDeclaredAdjudicatedExampleIds: DECLARED_CONFLICT_IDS,
+      flaggedIdenticalExcerptConflictCount: 0,
+      flaggedIdenticalExcerptConflicts: [],
       frozenAt: "2026-11-27T12:00:00Z",
     });
     expect(f.jsonl).toBe(e2AdjudicationsJsonl(f.rows));
@@ -393,6 +414,39 @@ describe("reviewer CSV and resolution parsing", () => {
     expect(() =>
       parseResolutions("example_id,final_language,resolved_by\na,en,r\na,ru,r\n", "csv"),
     ).toThrow(/duplicate resolution/);
+  });
+});
+
+describe("flagged conflicts", () => {
+  it("reports identical excerpts with conflicting finals without picking a winner", () => {
+    const rows: FrameRow[] = [
+      { ...frameRow(11, EN), excerpt: EN },
+      { ...frameRow(12, EN), excerpt: EN },
+    ];
+    const population2 = freezeE2Population(rows);
+    const allocation2 = allocateE2(population2.manifest.stratumCounts, 2, 1);
+    const sample2 = drawE2Sample(population2, allocation2, "dup-excerpt");
+    const ids2 = sample2.rows.map((e) => e.exampleId);
+    const frozen = freezeE2Adjudications({
+      sampleRows: sample2.rows,
+      sampleManifest: sample2.manifest,
+      populationManifest: population2.manifest,
+      first: {
+        reviewerId: "rev-1",
+        entries: ids2.map((exampleId, i) => ({
+          exampleId,
+          language: (i === 0 ? "en" : "ru") as AdjudicatedLanguage,
+        })),
+      },
+      frozenAt: "2026-11-27T12:00:00Z",
+    });
+    expect(frozen.rows.map((r) => r.finalAdjudicatedLanguage)).toEqual(["en", "ru"]);
+    expect(frozen.manifest.flaggedIdenticalExcerptConflictCount).toBe(1);
+    expect(frozen.manifest.flaggedIdenticalExcerptConflicts).toEqual([
+      { excerptSha256: sha(EN), exampleIds: ids2 },
+    ]);
+    expect(frozen.manifest.flaggedDeclaredAdjudicatedConflictCount).toBe(0);
+    expect(frozen.manifest.disagreementCount).toBe(0);
   });
 });
 

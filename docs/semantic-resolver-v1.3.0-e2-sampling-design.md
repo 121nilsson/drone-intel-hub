@@ -234,7 +234,7 @@ After E2 is frozen, v1.2.0 and v1.3.0 are run over the **whole** frozen frame. T
 1. **Seed is fixed before the export.** It is a plain string such as `drone-intel-hub-e2-v1`, written into this document in a commit that comes **before** the D5 export and the draw in the documented history. Choosing among several seeds is not allowed.
    - The commit is an audit trail, not cryptographic proof of when the seed was chosen.
    - The stronger reproducibility checks are the export file's hash, the manifest hashes and the exact replay (points 2 and 4).
-2. **Input.** The draw reads only the frozen D5 export file. Its SHA-256 and the database snapshot boundary (cutoff, row count, hash of ordered source ids) are in the manifest.
+2. **Input.** The draw reads only the frozen D5 export file. Its SHA-256 and the database snapshot boundary (cutoff, row count, hash of ordered source ids) are in the manifest. The population manifest records `rawExportSha256` over the exact export bytes, before the freeze or dedupe, so the raw population can be verified independently.
 3. **Algorithm:** the existing one, unchanged except for the stratum key.
    - Rows are grouped by stratum.
    - Ids within a stratum are sorted lexicographically by `exampleId`.

@@ -15,7 +15,8 @@ import { allocateE2 } from "../entities/normalization/semantic-eval/e2/allocatio
 import { drawE2Sample } from "../entities/normalization/semantic-eval/e2/draw";
 import {
   e2RowsJsonl,
-  freezeE2Population,
+  freezeE2Population as freezePopulationWithHash,
+  type E2FreezeOptions,
 } from "../entities/normalization/semantic-eval/e2/population";
 import {
   ROUTING_STRATA,
@@ -32,6 +33,11 @@ import {
 import type { FrameRow } from "../entities/normalization/semantic-eval/types";
 
 const sha = (s: string) => createHash("sha256").update(s).digest("hex");
+
+// Every unit test uses the same stand-in for the raw export hash; the CLI computes the real one.
+const RAW = "a".repeat(64);
+const freezeE2Population = (rows: readonly FrameRow[], extra: Partial<E2FreezeOptions> = {}) =>
+  freezePopulationWithHash(rows, { rawExportSha256: RAW, ...extra });
 
 type Counts = Record<RoutingStratum, number>;
 const counts = (en: number, ru: number, uk: number, unknown: number): Counts => ({

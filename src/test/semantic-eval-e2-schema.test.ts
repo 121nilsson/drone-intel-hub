@@ -5,6 +5,8 @@
  * by only to build a link, with the broken-link case using a literal).
  */
 
+import { readFileSync, readdirSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { e2ResolverLanguage } from "../entities/normalization/semantic-eval/e2/resolver-language";
 import {
@@ -39,6 +41,9 @@ const H1 = "a".repeat(64);
 const H2 = "b".repeat(64);
 const H3 = "c".repeat(64);
 const H4 = "d".repeat(64);
+const ID_A = "1".repeat(64);
+const ID_B = "2".repeat(64);
+const COMMIT = "e".repeat(40);
 
 const EN_TEXT = "The drone is on the way to the base and it was seen by the crew";
 const RU_TEXT = "Беспилотник летит над городом сегодня";
@@ -81,6 +86,7 @@ const popManifest: E2PopulationManifest = {
   routingRuleSourceCommit: "7aea9a6",
   cutoff: "2026-11-01T00:00:00Z",
   frameId: "frame-1",
+  rawExportSha256: H1,
   populationRowsSha256: H1,
   populationCount: 10,
   stratumCounts: { en: 6, ru: 2, uk: 1, unknown: 1 },
@@ -429,12 +435,20 @@ describe("adjudication and evaluation manifests", () => {
     reviewerIds: ["r1", "r2"],
     secondReviewerUsed: true,
     disagreementCount: 2,
+    flaggedDeclaredAdjudicatedConflictCount: 1,
+    flaggedDeclaredAdjudicatedExampleIds: [ID_A],
+    flaggedIdenticalExcerptConflictCount: 1,
+    flaggedIdenticalExcerptConflicts: [{ excerptSha256: H2, exampleIds: [ID_A, ID_B] }],
     frozenAt: "2026-12-01T10:00:00Z",
   };
   const evalM: E2EvaluationManifest = {
     stage: "evaluation",
     schemaVersion: "1.2.0",
     adjudicationManifestSha256: H1,
+    populationManifestSha256: H3,
+    adjudicationRowsSha256: H4,
+    evaluatedAt: "2026-12-01T11:00:00Z",
+    frozenArtifactsCommit: COMMIT,
     resolverLanguageRule: E2_RESOLVER_LANGUAGE_RULE,
     snapshotHash: "snap-1",
     resolverVersion: "1.3.0",
@@ -444,6 +458,35 @@ describe("adjudication and evaluation manifests", () => {
   it("accepts valid manifests", () => {
     expect(validateE2AdjudicationManifest(adjM).disagreementCount).toBe(2);
     expect(validateE2EvaluationManifest(evalM).resolverVersion).toBe("1.3.0");
+  });
+
+  it("requires a raw-export hash and a valid commit reference", () => {
+    const { rawExportSha256: _raw, ...noRaw } = popManifest;
+    expect(() => validateE2PopulationManifest(noRaw)).toThrow(/rawExportSha256: expected a string/);
+    expect(() => validateE2EvaluationManifest({ ...evalM, frozenArtifactsCommit: "HEAD" })).toThrow(
+      /frozenArtifactsCommit: expected a 40- or 64-char lowercase hex commit id/,
+    );
+    expect(() => validateE2EvaluationManifest({ ...evalM, evaluatedAt: "yesterday" })).toThrow(
+      /evaluatedAt: not an ISO date/,
+    );
+  });
+
+  it("keeps flagged conflicts separate from resolved reviewer disagreements", () => {
+    expect(() =>
+      validateE2AdjudicationManifest({ ...adjM, flaggedDeclaredAdjudicatedConflictCount: 2 }),
+    ).toThrow(/flaggedDeclaredAdjudicatedConflictCount: is 2 but 1 ids are flagged/);
+    expect(() =>
+      validateE2AdjudicationManifest({
+        ...adjM,
+        flaggedIdenticalExcerptConflicts: [{ excerptSha256: H2, exampleIds: [ID_A] }],
+      }),
+    ).toThrow(/a conflict needs at least two examples/);
+    expect(() =>
+      validateE2AdjudicationManifest({
+        ...adjM,
+        flaggedDeclaredAdjudicatedExampleIds: [ID_B, ID_A],
+      }),
+    ).toThrow(/ids must be unique and sorted/);
   });
 
   it("rejects inconsistent reviewers and disagreements", () => {
@@ -488,12 +531,20 @@ describe("checkE2HashChain", () => {
     reviewerIds: ["r1"],
     secondReviewerUsed: false,
     disagreementCount: 0,
+    flaggedDeclaredAdjudicatedConflictCount: 0,
+    flaggedDeclaredAdjudicatedExampleIds: [],
+    flaggedIdenticalExcerptConflictCount: 0,
+    flaggedIdenticalExcerptConflicts: [],
     frozenAt: "2026-12-01T10:00:00Z",
   };
   const evalOk: E2EvaluationManifest = {
     stage: "evaluation",
     schemaVersion: "1.2.0",
     adjudicationManifestSha256: e2ManifestHash(adjOk),
+    populationManifestSha256: e2ManifestHash(popManifest),
+    adjudicationRowsSha256: H4,
+    evaluatedAt: "2026-12-01T11:00:00Z",
+    frozenArtifactsCommit: COMMIT,
     resolverLanguageRule: E2_RESOLVER_LANGUAGE_RULE,
     snapshotHash: "snap-1",
     resolverVersion: "1.3.0",
@@ -546,6 +597,18 @@ describe("checkE2HashChain", () => {
       }),
     ).toEqual([
       "chain: evaluation.adjudicationManifestSha256 does not match the adjudication manifest",
+    ]);
+  });
+
+  it("refuses an evaluation that claims to predate the adjudication freeze", () => {
+    const errors = checkE2HashChain({
+      population: popManifest,
+      sample: sampleOk,
+      adjudication: adjOk,
+      evaluation: { ...evalOk, evaluatedAt: "2026-12-01T09:00:00Z" },
+    });
+    expect(errors).toEqual([
+      "chain: evaluation evaluatedAt 2026-12-01T09:00:00Z precedes adjudication frozenAt 2026-12-01T10:00:00Z",
     ]);
   });
 
@@ -614,5 +677,19 @@ describe("isolation from schemas 1.0.0 and 1.1.0", () => {
     expect(() => validateE2Example(example({ schemaVersion: "1.0.0" }))).toThrow(
       /schemaVersion: expected 1.2.0/,
     );
+  });
+
+  it("has no import path to the 3.1.0 detector", () => {
+    const dir = join(process.cwd(), "src", "entities", "normalization", "semantic-eval", "e2");
+    for (const file of readdirSync(dir)) {
+      if (!file.endsWith(".ts")) continue;
+      const text = readFileSync(join(dir, file), "utf8");
+      expect(text, `${file} must not load the language detector`).not.toMatch(
+        /from\s+["'][^"']*\/language["']/,
+      );
+    }
+    const population = readFileSync(join(dir, "population.ts"), "utf8");
+    expect(population).toMatch(/from "\.\.\/frame-identity"/);
+    expect(population).not.toMatch(/from "\.\.\/sampling"/);
   });
 });

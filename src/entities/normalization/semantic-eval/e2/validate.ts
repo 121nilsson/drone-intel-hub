@@ -25,6 +25,7 @@ import {
   type E2EvaluationManifest,
   type E2Example,
   type E2Exclusion,
+  type E2IdenticalExcerptConflict,
   type E2PopulationManifest,
   type E2SampleManifest,
   type E2StratumAllocation,
@@ -303,6 +304,7 @@ export function validateE2PopulationManifest(value: unknown): E2PopulationManife
     "routingRuleSourceCommit",
     "cutoff",
     "frameId",
+    "rawExportSha256",
     "populationRowsSha256",
     "populationCount",
     "stratumCounts",
@@ -336,6 +338,7 @@ export function validateE2PopulationManifest(value: unknown): E2PopulationManife
     routingRuleSourceCommit: E2_ROUTING_RULE_SOURCE_COMMIT,
     cutoff: isoDate(`${w}.cutoff`, o["cutoff"]),
     frameId: str(`${w}.frameId`, o["frameId"]),
+    rawExportSha256: hex64(`${w}.rawExportSha256`, o["rawExportSha256"]),
     populationRowsSha256: hex64(`${w}.populationRowsSha256`, o["populationRowsSha256"]),
     populationCount,
     stratumCounts: counts,
@@ -446,6 +449,44 @@ export function validateE2SampleManifest(value: unknown): E2SampleManifest {
   };
 }
 
+function conflictIds(where: string, x: unknown): readonly string[] {
+  if (!Array.isArray(x)) fail(where, "expected an array");
+  const out = (x as unknown[]).map((v, i) => hex64(`${where}[${i}]`, v));
+  for (let i = 1; i < out.length; i++) {
+    if (out[i - 1]! >= out[i]!) fail(where, "ids must be unique and sorted");
+  }
+  return out;
+}
+
+function identicalExcerptConflicts(
+  where: string,
+  x: unknown,
+): readonly E2IdenticalExcerptConflict[] {
+  if (!Array.isArray(x)) fail(where, "expected an array");
+  const seenExcerpts = new Set<string>();
+  const seenIds = new Set<string>();
+  const out = (x as unknown[]).map((v, i) => {
+    const p = `${where}[${i}]`;
+    const o = obj(p, v, ["excerptSha256", "exampleIds"]);
+    const excerptSha256 = hex64(`${p}.excerptSha256`, o["excerptSha256"]);
+    if (seenExcerpts.has(excerptSha256)) fail(`${p}.excerptSha256`, "listed twice");
+    seenExcerpts.add(excerptSha256);
+    const exampleIds = conflictIds(`${p}.exampleIds`, o["exampleIds"]);
+    if (exampleIds.length < 2) fail(`${p}.exampleIds`, "a conflict needs at least two examples");
+    for (const id of exampleIds) {
+      if (seenIds.has(id)) fail(`${p}.exampleIds`, `${id} appears in more than one conflict`);
+      seenIds.add(id);
+    }
+    return { excerptSha256, exampleIds };
+  });
+  for (let i = 1; i < out.length; i++) {
+    if (out[i - 1]!.excerptSha256 >= out[i]!.excerptSha256) {
+      fail(where, "groups must be sorted by excerptSha256");
+    }
+  }
+  return out;
+}
+
 export function validateE2AdjudicationManifest(value: unknown): E2AdjudicationManifest {
   const w = "E2AdjudicationManifest";
   const o = obj(w, value, [
@@ -457,6 +498,10 @@ export function validateE2AdjudicationManifest(value: unknown): E2AdjudicationMa
     "reviewerIds",
     "secondReviewerUsed",
     "disagreementCount",
+    "flaggedDeclaredAdjudicatedConflictCount",
+    "flaggedDeclaredAdjudicatedExampleIds",
+    "flaggedIdenticalExcerptConflictCount",
+    "flaggedIdenticalExcerptConflicts",
     "frozenAt",
   ]);
   stage(`${w}.stage`, o["stage"], "adjudication");
@@ -477,6 +522,34 @@ export function validateE2AdjudicationManifest(value: unknown): E2AdjudicationMa
   if (!secondReviewerUsed && disagreementCount !== 0) {
     fail(`${w}.disagreementCount`, "must be 0 without a second reviewer");
   }
+  const flaggedDeclaredAdjudicatedExampleIds = conflictIds(
+    `${w}.flaggedDeclaredAdjudicatedExampleIds`,
+    o["flaggedDeclaredAdjudicatedExampleIds"],
+  );
+  const flaggedIdenticalExcerptConflicts = identicalExcerptConflicts(
+    `${w}.flaggedIdenticalExcerptConflicts`,
+    o["flaggedIdenticalExcerptConflicts"],
+  );
+  const flaggedDeclaredAdjudicatedConflictCount = nonNegInt(
+    `${w}.flaggedDeclaredAdjudicatedConflictCount`,
+    o["flaggedDeclaredAdjudicatedConflictCount"],
+  );
+  const flaggedIdenticalExcerptConflictCount = nonNegInt(
+    `${w}.flaggedIdenticalExcerptConflictCount`,
+    o["flaggedIdenticalExcerptConflictCount"],
+  );
+  if (flaggedDeclaredAdjudicatedConflictCount !== flaggedDeclaredAdjudicatedExampleIds.length) {
+    fail(
+      `${w}.flaggedDeclaredAdjudicatedConflictCount`,
+      `is ${flaggedDeclaredAdjudicatedConflictCount} but ${flaggedDeclaredAdjudicatedExampleIds.length} ids are flagged`,
+    );
+  }
+  if (flaggedIdenticalExcerptConflictCount !== flaggedIdenticalExcerptConflicts.length) {
+    fail(
+      `${w}.flaggedIdenticalExcerptConflictCount`,
+      `is ${flaggedIdenticalExcerptConflictCount} but ${flaggedIdenticalExcerptConflicts.length} groups are flagged`,
+    );
+  }
   return {
     stage: "adjudication",
     schemaVersion: schemaVersion(`${w}.schemaVersion`, o["schemaVersion"]),
@@ -490,6 +563,10 @@ export function validateE2AdjudicationManifest(value: unknown): E2AdjudicationMa
     reviewerIds,
     secondReviewerUsed,
     disagreementCount,
+    flaggedDeclaredAdjudicatedConflictCount,
+    flaggedDeclaredAdjudicatedExampleIds,
+    flaggedIdenticalExcerptConflictCount,
+    flaggedIdenticalExcerptConflicts,
     frozenAt: isoDate(`${w}.frozenAt`, o["frozenAt"]),
   };
 }
@@ -500,6 +577,10 @@ export function validateE2EvaluationManifest(value: unknown): E2EvaluationManife
     "stage",
     "schemaVersion",
     "adjudicationManifestSha256",
+    "populationManifestSha256",
+    "adjudicationRowsSha256",
+    "evaluatedAt",
+    "frozenArtifactsCommit",
     "resolverLanguageRule",
     "snapshotHash",
     "resolverVersion",
@@ -509,6 +590,10 @@ export function validateE2EvaluationManifest(value: unknown): E2EvaluationManife
   if (o["resolverLanguageRule"] !== E2_RESOLVER_LANGUAGE_RULE) {
     fail(`${w}.resolverLanguageRule`, "must equal E2_RESOLVER_LANGUAGE_RULE");
   }
+  const commit = str(`${w}.frozenArtifactsCommit`, o["frozenArtifactsCommit"]);
+  if (!/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(commit)) {
+    fail(`${w}.frozenArtifactsCommit`, "expected a 40- or 64-char lowercase hex commit id");
+  }
   return {
     stage: "evaluation",
     schemaVersion: schemaVersion(`${w}.schemaVersion`, o["schemaVersion"]),
@@ -516,6 +601,10 @@ export function validateE2EvaluationManifest(value: unknown): E2EvaluationManife
       `${w}.adjudicationManifestSha256`,
       o["adjudicationManifestSha256"],
     ),
+    populationManifestSha256: hex64(`${w}.populationManifestSha256`, o["populationManifestSha256"]),
+    adjudicationRowsSha256: hex64(`${w}.adjudicationRowsSha256`, o["adjudicationRowsSha256"]),
+    evaluatedAt: isoDate(`${w}.evaluatedAt`, o["evaluatedAt"]),
+    frozenArtifactsCommit: commit,
     resolverLanguageRule: E2_RESOLVER_LANGUAGE_RULE,
     snapshotHash: str(`${w}.snapshotHash`, o["snapshotHash"]),
     resolverVersion: str(`${w}.resolverVersion`, o["resolverVersion"]),
@@ -574,6 +663,13 @@ export function checkE2HashChain(chain: E2ManifestChain): string[] {
     if (evaluation.adjudicationManifestSha256 !== e2ManifestHash(adjudication)) {
       errors.push(
         "chain: evaluation.adjudicationManifestSha256 does not match the adjudication manifest",
+      );
+    }
+    // An instant is not proof of order, but an evaluation that claims to predate the freeze is
+    // impossible. Commit provenance and the direct artifact hashes are checked in evaluate.ts.
+    if (Date.parse(evaluation.evaluatedAt) < Date.parse(adjudication.frozenAt)) {
+      errors.push(
+        `chain: evaluation evaluatedAt ${evaluation.evaluatedAt} precedes adjudication frozenAt ${adjudication.frozenAt}`,
       );
     }
   }

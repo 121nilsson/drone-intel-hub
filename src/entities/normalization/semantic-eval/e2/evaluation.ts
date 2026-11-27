@@ -18,7 +18,7 @@ import { sha256Hex } from "../../sha256";
 import type { ResolutionContextInput } from "../../semantic-resolver";
 import type { Prediction } from "../types";
 import { ValidationError, canonicalJson, toJsonl } from "../validate";
-import { e2AdjudicationsJsonl } from "./adjudication";
+import { e2AdjudicationConflictFlags, e2AdjudicationsJsonl } from "./adjudication";
 import { allocateE2 } from "./allocation";
 import { drawE2Sample } from "./draw";
 import { e2RowsJsonl } from "./population";
@@ -34,6 +34,7 @@ import {
   type E2Example,
   type E2PopulationManifest,
   type E2ResolverLanguage,
+  type E2RunProvenance,
   type E2SampleManifest,
   type RoutingStratum,
 } from "./types";
@@ -382,6 +383,27 @@ export function verifyE2Frozen(files: E2RecordFiles): {
   ) {
     errors.push("adjudication: secondReviewerUsed does not match the records");
   }
+  const flags = e2AdjudicationConflictFlags(sampleRows, final);
+  if (
+    canonicalJson(flags.declaredAdjudicatedExampleIds) !==
+      canonicalJson(adjudicationManifest.flaggedDeclaredAdjudicatedExampleIds) ||
+    adjudicationManifest.flaggedDeclaredAdjudicatedConflictCount !==
+      flags.declaredAdjudicatedExampleIds.length
+  ) {
+    errors.push(
+      "adjudication: flagged declared/adjudicated conflicts do not match the frozen sample and records",
+    );
+  }
+  if (
+    canonicalJson(flags.identicalExcerptConflicts) !==
+      canonicalJson(adjudicationManifest.flaggedIdenticalExcerptConflicts) ||
+    adjudicationManifest.flaggedIdenticalExcerptConflictCount !==
+      flags.identicalExcerptConflicts.length
+  ) {
+    errors.push(
+      "adjudication: flagged identical-excerpt conflicts do not match the frozen sample and records",
+    );
+  }
 
   if (errors.length > 0) return { errors };
   return {
@@ -418,12 +440,30 @@ export function runE2Evaluation(
   files: E2RecordFiles,
   snapshot: E2Snapshot,
   resolverVersion: string,
+  provenance: E2RunProvenance,
 ): E2EvaluationRun {
   const frozen = verifyE2Frozen(files);
   if (frozen.record === undefined) {
     throw new ValidationError(`refusing to run: ${frozen.errors.join("; ")}`);
   }
   const { record } = frozen;
+  if (files.populationManifestText === undefined || files.adjudicationsJsonl === undefined) {
+    throw new ValidationError("refusing to run: frozen artifact text is missing");
+  }
+  // Check provenance before any resolve() call: an impossible ordering or an unparsable reference
+  // must never produce predictions that look like a valid evaluation.
+  const evaluatedMs = Date.parse(provenance.evaluatedAt);
+  if (Number.isNaN(evaluatedMs)) {
+    throw new ValidationError(`refusing to run: invalid evaluatedAt ${provenance.evaluatedAt}`);
+  }
+  if (!/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(provenance.frozenArtifactsCommit)) {
+    throw new ValidationError("refusing to run: invalid frozenArtifactsCommit");
+  }
+  if (evaluatedMs < Date.parse(record.adjudicationManifest.frozenAt)) {
+    throw new ValidationError(
+      `refusing to run: evaluation evaluatedAt ${provenance.evaluatedAt} precedes adjudication frozenAt ${record.adjudicationManifest.frozenAt}`,
+    );
+  }
   const predictions = e2Predictions(
     record.sampleRows,
     record.finalLanguages,
@@ -435,6 +475,10 @@ export function runE2Evaluation(
     stage: "evaluation",
     schemaVersion: E2_SCHEMA_VERSION,
     adjudicationManifestSha256: e2ManifestHash(record.adjudicationManifest),
+    populationManifestSha256: sha256Hex(files.populationManifestText),
+    adjudicationRowsSha256: sha256Hex(files.adjudicationsJsonl),
+    evaluatedAt: provenance.evaluatedAt,
+    frozenArtifactsCommit: provenance.frozenArtifactsCommit,
     resolverLanguageRule: E2_RESOLVER_LANGUAGE_RULE,
     snapshotHash: snapshot.contentHash,
     resolverVersion,
@@ -502,6 +546,18 @@ export function verifyE2Record(
       evaluation,
     }),
   );
+  if (
+    files.populationManifestText !== undefined &&
+    sha256Hex(files.populationManifestText) !== evaluation.populationManifestSha256
+  ) {
+    errors.push("population: population-manifest.json SHA-256 does not match the manifest");
+  }
+  if (
+    files.adjudicationsJsonl !== undefined &&
+    sha256Hex(files.adjudicationsJsonl) !== evaluation.adjudicationRowsSha256
+  ) {
+    errors.push("adjudication: adjudications.jsonl SHA-256 does not match the manifest");
+  }
   if (sha256Hex(predictionsText) !== evaluation.predictionsSha256) {
     errors.push("predictions: predictions.jsonl SHA-256 does not match the manifest");
   }

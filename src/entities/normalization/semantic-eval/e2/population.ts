@@ -24,7 +24,7 @@ import {
   evidenceClusterIdFor,
   exampleIdFor,
   sourceClusterIdFor,
-} from "../sampling";
+} from "../frame-identity";
 import { canonicalJson, toJsonl } from "../validate";
 import {
   E2_DECLARED_LANGUAGES,
@@ -48,6 +48,8 @@ import {
 export interface E2FreezeOptions {
   readonly cutoff?: string;
   readonly defaultOrigin?: FrameRow["origin"];
+  /** SHA-256 of the exact export bytes; supplied by the CLI, never derived from the rows. */
+  readonly rawExportSha256: string;
 }
 
 export interface E2Population {
@@ -73,7 +75,7 @@ function describeRow(row: FrameRow): string {
 
 export function freezeE2Population(
   rows: readonly FrameRow[],
-  options: E2FreezeOptions = {},
+  options: E2FreezeOptions,
 ): E2Population {
   const cutoff = options.cutoff ?? FRAME_CUTOFF;
   const cutoffMs = Date.parse(cutoff);
@@ -215,6 +217,7 @@ export function freezeE2Population(
     routingRuleSourceCommit: E2_ROUTING_RULE_SOURCE_COMMIT,
     cutoff,
     frameId,
+    rawExportSha256: options.rawExportSha256,
     populationRowsSha256: sha256Hex(e2RowsJsonl(population)),
     populationCount: population.length,
     stratumCounts,

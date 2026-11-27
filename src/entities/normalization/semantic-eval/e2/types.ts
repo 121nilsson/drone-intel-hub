@@ -128,6 +128,8 @@ export interface E2PopulationManifest {
   readonly routingRuleSourceCommit: string;
   readonly cutoff: string;
   readonly frameId: string;
+  /** SHA-256 of the exact bytes of the read-only population export, before any freeze or dedupe. */
+  readonly rawExportSha256: string;
   readonly populationRowsSha256: string;
   readonly populationCount: number;
   readonly stratumCounts: Readonly<Record<RoutingStratum, number>>;
@@ -162,7 +164,18 @@ export interface E2SampleManifest {
   readonly drawnRowsSha256: string;
 }
 
-/** Stage 3. */
+/** One group of drawn rows whose identical excerpts received different final languages. */
+export interface E2IdenticalExcerptConflict {
+  readonly excerptSha256: string;
+  readonly exampleIds: readonly string[];
+}
+
+/**
+ * Stage 3. `disagreementCount` counts reviewer disagreements that WERE explicitly resolved in this
+ * freeze. The flagged fields below are different: they are conflicts the tool only reports, never
+ * resolves. Declared language keeps precedence for resolver input, and an identical-excerpt conflict
+ * is left for explicit human review; original annotations are preserved either way.
+ */
 export interface E2AdjudicationManifest {
   readonly stage: "adjudication";
   readonly schemaVersion: typeof E2_SCHEMA_VERSION;
@@ -172,16 +185,36 @@ export interface E2AdjudicationManifest {
   readonly reviewerIds: readonly string[];
   readonly secondReviewerUsed: boolean;
   readonly disagreementCount: number;
+  readonly flaggedDeclaredAdjudicatedConflictCount: number;
+  readonly flaggedDeclaredAdjudicatedExampleIds: readonly string[];
+  readonly flaggedIdenticalExcerptConflictCount: number;
+  readonly flaggedIdenticalExcerptConflicts: readonly E2IdenticalExcerptConflict[];
   readonly frozenAt: string;
 }
 
-/** Stage 4. */
+/**
+ * Stage 4. `evaluatedAt` is the actual evaluation time, and `frozenArtifactsCommit` names the commit
+ * in which the frozen artifacts are recorded; an independent reviewer verifies both against git
+ * history and the recorded artifact hashes. A timestamp alone is not proof of execution order.
+ */
 export interface E2EvaluationManifest {
   readonly stage: "evaluation";
   readonly schemaVersion: typeof E2_SCHEMA_VERSION;
   readonly adjudicationManifestSha256: string;
+  /** Direct hash of the exact population-manifest file text, for independent verification. */
+  readonly populationManifestSha256: string;
+  /** Direct hash of the exact adjudications.jsonl text, for independent verification. */
+  readonly adjudicationRowsSha256: string;
+  readonly evaluatedAt: string;
+  readonly frozenArtifactsCommit: string;
   readonly resolverLanguageRule: string;
   readonly snapshotHash: string;
   readonly resolverVersion: string;
   readonly predictionsSha256: string;
+}
+
+/** Supplied at run time: the CLI owns the clock and the operator-supplied commit reference. */
+export interface E2RunProvenance {
+  readonly evaluatedAt: string;
+  readonly frozenArtifactsCommit: string;
 }

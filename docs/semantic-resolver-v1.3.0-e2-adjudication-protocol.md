@@ -70,7 +70,7 @@ npx tsx scripts/e2-adjudication.ts import --sample-dir <dir> --reviewer <csv> --
   [--second-reviewer <csv> --second-reviewer-id <id>] [--resolutions <csv|jsonl>] --out <dir>
 ```
 
-`export` refuses an existing file. `import` requires `--out`, refuses a non-empty one, and never writes into the sample directory. Errors exit with code 2 and one message.
+`export` refuses an existing file. `import` requires `--out`, refuses a non-empty one, and never writes into the sample directory. All three E2 CLIs also require `--e2-root`: every output must be inside that allowlisted directory, with traversal, symlinks, source/docs/migrations/fixtures and committed Phase 3.2 output paths refused. Errors exit with code 2 and one message.
 
 ## Completeness and integrity
 
@@ -80,4 +80,13 @@ The import refuses a missing id, an unknown id, a duplicate id in a reviewer fil
 
 `adjudication-manifest.json`: `sampleManifestSha256` (the hash of the sample manifest), `adjudicationSha256` (SHA-256 of `adjudications.jsonl`), the protocol version, the reviewer ids, `secondReviewerUsed`, `disagreementCount` and `frozenAt`. A frozen stage is never rewritten.
 
+`disagreementCount` counts **resolved** reviewer disagreements: each has a `resolvedBy` in its adjudication record. Two further flagged categories are reported and never resolved by the tool:
+
+- `flaggedDeclaredAdjudicatedConflictCount` and `flaggedDeclaredAdjudicatedExampleIds`: drawn rows where a declared language exists and the final adjudication differs from it, including `mixed` and `unknown`. Declared language keeps precedence for resolver input; the flag is not a silent correction.
+- `flaggedIdenticalExcerptConflictCount` and `flaggedIdenticalExcerptConflicts`: groups of drawn rows with an identical stored excerpt but different final adjudications. Each group records `excerptSha256` and sorted `exampleIds`. The tool preserves every annotation and does not choose a winner; such rows need explicit human review before the real E2 run if they affect resolver input.
+
 `mixed` and `unknown` give the resolver no language.
+
+## Evaluation provenance
+
+The evaluation manifest carries `evaluatedAt` (the actual resolver execution time), `frozenArtifactsCommit` (the commit in which the frozen population, sample and adjudication artifacts were recorded), `populationManifestSha256` and `adjudicationRowsSha256` (direct SHA-256 hashes of the exact frozen file texts), in addition to its link to the adjudication manifest. Verification refuses an `evaluatedAt` earlier than the adjudication `frozenAt` and checks the direct hashes. A timestamp by itself is not proof of order: the commit and artifact hashes are the evidence an independent reviewer checks in git history.
