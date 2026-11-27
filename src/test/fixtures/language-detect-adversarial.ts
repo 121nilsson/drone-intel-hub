@@ -5,10 +5,11 @@
  * `allowed` is the only language a decisive result may claim; `null` means the text genuinely mixes
  * Russian and Ukrainian, so no decisive result is acceptable.
  *
- * Revision 3 (two evidence channels, variant B) cleared all ten rows that the committed rule
- * got wrong, so no row is marked any more. `knownFalseDecisive` stays available: a row that is a
- * reproduced defect uses `it.fails`, which turns red the moment a fix lands. Do not "fix" a row by
- * changing its `allowed` value.
+ * Revision 3 (two evidence channels, variant B) cleared all ten rows that the committed rule got
+ * wrong. The rows still marked `knownFalseDecisive` are the five Belarusian and Bulgarian rows
+ * under "Other Cyrillic languages": a known limitation of the two-language model, not fixed. A
+ * marked row runs as `it.fails`, which turns red the moment a fix lands. Do not "fix" a row by
+ * changing its `allowed` value or removing its mark.
  */
 export interface AdversarialRow {
   readonly text: string;

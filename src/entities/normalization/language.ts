@@ -30,6 +30,7 @@ const ENGLISH_WORDS = new Set(
  * Bump when the marker lists or the decision rule change. It is stamped in every sampling manifest
  * (schema 1.1.0) that used language detection, so a frame says which detector produced its strata.
  * 3.0.0: revision 3, two evidence channels (distinctive letters L, marker words W).
+ * 3.1.0: заявив, упав, яка, яке removed from the Ukrainian markers (also Russian; finding F1).
  */
 export const LANGUAGE_DETECTOR_VERSION = "3.1.0";
 

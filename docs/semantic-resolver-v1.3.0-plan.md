@@ -163,7 +163,7 @@ Status 2026-11-26: implemented and committed (`a69ce6f`). **Not closed.** A seco
   - non-decisive detection;
   - a v1.2.0 directory with no new fields reads and verifies unchanged.
 - [x] Both end-to-end provenance runs pass.
-- [x] `cyrillic_undetermined` cases are logged with reason and counts only. Since package 1 (2026-11-27), `cyrillic_mixed` and `conflicting_evidence` are logged too, with the distinct evidence words and channels per language; text is never logged.
+- [x] `cyrillic_undetermined` cases are logged with reason and counts only. Since package 1 (2026-11-27), `cyrillic_mixed` and `conflicting_evidence` are logged too, with counts, distinct-evidence counts and channels per language; neither text nor evidence words are logged.
 - [x] Existing `language-detect.test.ts` passes unchanged.
 - [x] Translation-routing regression tests: `pairFor` gives `uk-en` for decisive Ukrainian; undecidable text behaves as decided in D0-Q1; English still short-circuits.
 - [x] v1.2.0 S5 verification still passes. The command exits 0, and the committed directories are untouched.
@@ -316,11 +316,11 @@ The table shows the list of detector 3.1.0: 28 Russian and 22 Ukrainian markers.
 
 ### D0 status (2026-11-27)
 
-| Version                               | Status                                                                                                                           |
-| ------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| D0 3.0.0 (`acb6384`)                  | **Historically evaluated, with known risk F1.** The holdout result (0 false-decisive in 147) stands for 3.0.0 only.              |
-| D0 3.1.0 (package 2)                  | **Technically verified (pending the technical review), not statistically approved.** It does not inherit 3.0.0's holdout result. |
-| D0 3.1.0 after holdout v2 (package 3) | Can become statistically approved after one evaluation of an unused holdout.                                                     |
+| Version                               | Status                                                                                                                                                   |
+| ------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| D0 3.0.0 (`acb6384`)                  | **Historically evaluated, with known risk F1.** The holdout result (0 false-decisive in 147) stands for 3.0.0 only.                                      |
+| D0 3.1.0 (package 2)                  | **Technically verified** (technical review PASS WITH FINDINGS, R1–R6 fixed), **not statistically approved.** It does not inherit 3.0.0's holdout result. |
+| D0 3.1.0 after holdout v2 (package 3) | Can become statistically approved after one evaluation of an unused holdout.                                                                             |
 
 **Limitation that holds for every version:** D0 tells Russian from Ukrainian. It cannot decide whether a Cyrillic text is Russian or Ukrainian at all. Belarusian, Bulgarian and other Cyrillic text can get a false decisive `ru` or `uk`: 5 of 13 development rows do with both 3.0.0 and 3.1.0. These 5 stay in every report as known development failures. Holdout v1's 0 false-decisive (its other-Cyrillic category was 12 rows, 0 decisive) does not mean 0 errors for all Cyrillic languages.
 
@@ -331,7 +331,7 @@ The table shows the list of detector 3.1.0: 28 Russian and 22 Ukrainian markers.
   - "Губернатор, заявив об атаке, сообщил, что…" is non-decisive although it is clearly Russian.
 - **F2–F4 and F6, done in package 1** (no detector change; `LANGUAGE_DETECTOR_VERSION` stays 3.0.0):
   - **F2:** `LANGUAGE_REASON_OUTCOMES` in `language.ts` defines, for each reason, the decisive value and the allowed languages. The schema 1.1.0 validator rejects any inconsistent combination. Tests cover the full matrix (9 reasons × 2 × 4; exactly 12 combinations pass) and a property test over the detector's own outputs.
-  - **F3:** `riva.pairFor` logs every non-decisive Cyrillic result: `cyrillic_undetermined`, `cyrillic_mixed` and `conflicting_evidence`. Each log line has the counts, the distinct evidence words and the channels per language. Text is never logged.
+  - **F3:** `riva.pairFor` logs every non-decisive Cyrillic result: `cyrillic_undetermined`, `cyrillic_mixed` and `conflicting_evidence`. Each log line has the counts, the number of distinct evidence words and the channels per language. Neither text nor the evidence words themselves are logged.
   - **F4: verification of 1.1.0 directories** (`verifyLanguageProvenance`) requires:
     - `languageDetectorVersion` and the current `languageRule` in the manifest;
     - one schema version throughout;
@@ -346,29 +346,49 @@ The table shows the list of detector 3.1.0: 28 Russian and 22 Ukrainian markers.
     - The evidence key is case-insensitive while detection is case-sensitive. A case-only difference that detects differently excludes the whole cluster as `conflicting_evidence_metadata`, which is conservative.
     - When stratum languages match, the dropped duplicate's detection fields are discarded.
   - **Other Cyrillic languages:** 13 development rows added (5 Belarusian, 8 Bulgarian). **5 are false-decisive with 3.0.0** (1 Belarusian as `uk`, 4 Bulgarian as `ru`, partly through the shared words але, або, или, около and как). They are pinned as `it.fails`. Russian and Ukrainian are the only supported languages; this is a known risk outside the two-language model. The adversarial set is now 42 rows, with 5 known false-decisive, all in this category. The original 29 rows remain at 0.
-- **Package 2, detector 3.1.0 (2026-11-27).** заявив, упав, яка and яке were removed from the Ukrainian list. No marker was added, and the decision rule is unchanged. 3.0.0 (`b55ab34`) and 3.1.0 were compared on every development text. Every changed outcome traces to exactly one removed marker.
+- **Package 2, detector 3.1.0 (2026-11-27).** заявив, упав, яка and яке were removed from the Ukrainian list. No marker was added, and the decision rule is unchanged. Every changed outcome traces to one or more removed markers. One row contains two (заявив and упав).
+  - **Compared text sets.** 3.0.0 (`b55ab34`) and 3.1.0 were compared on:
+    - the development sets listed below;
+    - the technical review's sweep of every Cyrillic string in tracked files under `src/test` (except the holdout), `docs`, `scripts`, `src/entities` and `src/shared`: 1,923 unique texts, including `src/test/fixtures/eval-catalog.json`.
+  - **Safety:** no new false-decisive result in any compared set. Two Russian rows that were false-decisive `uk` became non-decisive.
+  - **Coverage loss on real text:** two genuine Ukrainian news summaries in `src/test/fixtures/eval-catalog.json` go from decisive `uk` to non-decisive (`cyrillic_undetermined`, language still `uk`):
+    - the TENCORE summary, through яка;
+    - the summary about an enterprise "яке виготовляє" drones, through яке.
+
+    These are the only real texts in the repository whose outcome changed. No real text gained coverage. This is not a safety regression, but it belongs in the assessment of 3.1.0: on real Ukrainian text the change lost coverage.
+
   - **Development texts:** the 92-row corpus, the 42 earlier adversarial rows, and two groups of new rows:
     - 13 rows in "Russian gerunds and Ukrainian homographs": the reviewer's 3 reproductions verbatim plus 10 rows by the implementer, partly variations of them;
     - 18 rows in "…, independent author", written by a separate session that saw only the four words and the reason for their removal. It saw neither the reproductions, the other rows nor the detector.
-  - Changes from 3.0.0 to 3.1.0 by row set. Each cell counts rows (the removed marker that caused the change):
+  - Changes from 3.0.0 to 3.1.0 by row set. Each cell counts rows (with the removed markers that caused the change):
 
-    | Change                                                      | Reproductions + implementer (13) | Independent author (18)       |
-    | ----------------------------------------------------------- | -------------------------------- | ----------------------------- |
-    | Fixed false-decisive (3.0.0 wrong, 3.1.0 abstains or right) | 2 (упав)                         | 0                             |
-    | **New false-decisive**                                      | **0**                            | **0**                         |
-    | Coverage lost (correct decisive → non-decisive)             | 0                                | **1** (упав, a Ukrainian row) |
-    | Coverage gained (non-decisive → correct decisive)           | 1 (заявив)                       | 4 (заявив 2, упав 1, яка 1)   |
-    | Decisive in both, language changed                          | 0                                | 0                             |
-    | Reason only (spurious `conflicting_evidence` gone)          | 4 (заявив 2, упав 1, яка 1)      | 6                             |
-    | Unchanged                                                   | 6                                | 7                             |
+    | Change                                                      | Reproductions + implementer (13) | Independent author (18)                           |
+    | ----------------------------------------------------------- | -------------------------------- | ------------------------------------------------- |
+    | Fixed false-decisive (3.0.0 wrong, 3.1.0 abstains or right) | 2 (упав)                         | 0                                                 |
+    | **New false-decisive**                                      | **0**                            | **0**                                             |
+    | Coverage lost (correct decisive → non-decisive)             | 0                                | **1** (упав, a Ukrainian row)                     |
+    | Coverage gained (non-decisive → correct decisive)           | 1 (заявив)                       | 4 (заявив 2, упав 1, яка 1)                       |
+    | Decisive in both, language changed                          | 0                                | 0                                                 |
+    | Reason only (spurious `conflicting_evidence` gone)          | 4 (заявив 2, упав 1, яка 1)      | 6 (заявив 1, упав 2, яка 1, яке 1, заявив+упав 1) |
+    | Unchanged                                                   | 6                                | 7                                                 |
 
-    The corpus and the 42 earlier adversarial rows have no transition. No marker was added to win back the lost row.
+    The corpus and the 42 earlier adversarial rows have no transition. No marker was added to win back the lost rows (development or real). Outside these sets and the two eval-catalog summaries, the review sweep found 42 texts whose evidence counts changed but whose outcome did not.
 
   - **Figures** (rows / decisive / false-decisive / non-decisive), 3.0.0 → 3.1.0:
     - corpus: 92 / 9 / 0 / 90.2 % → unchanged;
     - adversarial, all 73 rows: 73 / 15 / 7 / 79.5 % → 73 / 17 / 5 / 76.7 %;
     - the 5 remaining false-decisive rows are the Belarusian and Bulgarian rows (see the limitation above).
   - **Checks:** all tests and `npm run green` pass, S5 exits 0 for both evaluation directories, and the holdout file was not opened.
+- **Technical review of 3.1.0 (2026-11-27).** A fresh Opus session that had not seen the holdout reviewed it. Result: **PASS WITH FINDINGS**, no blocker; findings R1–R6. This is a technical pass only, not a statistical approval.
+  - **R1, should-fix, done (`8907a35`):** schema 1.1.0 refuses the legacy `FrameRow.language` (see the 1.1.0 decision above). A regression test covers the exact case of a non-decisive `ru` exported into that field.
+  - **R2, should-fix, done:** this section. The compared sets are named, the eval-catalog coverage loss is recorded, the markers are broken down per row, and the claim "exactly one marker" is corrected.
+  - **R3, done:** `LANGUAGE_DETECTORS_BY_VERSION` is a `Map`, so a stamp such as `toString` or `__proto__` gives `not_replayed` instead of a misleading error or a crash.
+  - **R4, done:** stale comments synced (adversarial fixture and test, the version history in `language.ts`, `FrameRow.language`, and the F3 wording here).
+  - **R5, done:** `scripts/evaluate-language-holdout.ts` goes through `src/entities/normalization/language-holdout.ts`.
+    - Holdout v1 is registered as consumed by 3.0.0, and every new run is refused before the holdout is loaded.
+    - A test runs the guard with the current detector and a loader that fails if it is called.
+  - **R6, done:** under `--report`, `evaluate-semantic-registry` writes the replay report only with `--out` or `--stdout`. The committed `scripts/output/semantic-replay.md` is never rewritten implicitly.
+  - **A registered 3.0.0 detector is not needed now.** The review found no frozen 1.1.0 or version-stamped artifact anywhere. It searched the working tree including ignored files, every `manifest.json`, all branches, stashes, history and worktrees.
 - **F5 and F7 (documentation), synced in this document:**
   - the decisive end-to-end sentence;
   - the corpus table note;

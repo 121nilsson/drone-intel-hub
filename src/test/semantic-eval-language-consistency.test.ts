@@ -318,10 +318,18 @@ describe("F4: verifying language provenance", () => {
   });
 
   it("keeps a replay implementation for exactly the current detector version", () => {
-    expect(Object.keys(LANGUAGE_DETECTORS_BY_VERSION)).toEqual([LANGUAGE_DETECTOR_VERSION]);
-    expect(LANGUAGE_DETECTORS_BY_VERSION[LANGUAGE_DETECTOR_VERSION]).toBe(
+    expect([...LANGUAGE_DETECTORS_BY_VERSION.keys()]).toEqual([LANGUAGE_DETECTOR_VERSION]);
+    expect(LANGUAGE_DETECTORS_BY_VERSION.get(LANGUAGE_DETECTOR_VERSION)).toBe(
       detectLanguageWithEvidence,
     );
+  });
+
+  it("treats inherited property names as unknown versions, not as detectors (R3)", () => {
+    for (const v of ["toString", "__proto__", "constructor", "hasOwnProperty"]) {
+      const r = verifyLanguageProvenance({ ...stamp, languageDetectorVersion: v }, examples());
+      expect(r.errors, v).toEqual([]);
+      expect(r.replay, v).toMatchObject({ status: "not_replayed", detectorVersion: v });
+    }
   });
 
   it("does not look at a pure 1.0.0 directory", () => {

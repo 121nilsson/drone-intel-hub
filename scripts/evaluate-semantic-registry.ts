@@ -9,6 +9,9 @@
  *   npx tsx scripts/evaluate-semantic-registry.ts --out some.md   # custom path
  *   npx tsx scripts/evaluate-semantic-registry.ts --report        # S5: metrics from reviewed decisions
  *
+ * Under --report the replay report is written only with --out or --stdout; S5 never rewrites the
+ * committed scripts/output/semantic-replay.md implicitly. The invariants still run and still fail.
+ *
  * Exit code 1 when a technical invariant fails. A parity difference never fails the run.
  * The committed report is formatted: run `npx prettier --write scripts/output/semantic-replay.md` after regenerating it.
  */
@@ -24,6 +27,7 @@ import {
 import {
   renderReport,
   replayFixtures,
+  replayReportTarget,
   runInvariants,
 } from "../src/entities/normalization/semantic-eval/replay";
 import { UNIT_NORMALIZER_VERSION } from "../src/entities/normalization/units";
@@ -50,11 +54,7 @@ import { sha256Hex } from "../src/entities/normalization/sha256";
 import { SEMANTICS } from "../src/test/fixtures/normalization-corpus";
 
 const args = process.argv.slice(2);
-const toStdout = args.includes("--stdout");
-const outIdx = args.indexOf("--out");
-const outPath = resolve(
-  outIdx >= 0 && args[outIdx + 1] ? args[outIdx + 1]! : "scripts/output/semantic-replay.md",
-);
+const replayTarget = replayReportTarget(args);
 const value = (flag: string, fallback: string): string => {
   const i = args.indexOf(flag);
   return i >= 0 && args[i + 1] ? args[i + 1]! : fallback;
@@ -82,11 +82,14 @@ async function writeFormatted(path: string, text: string): Promise<void> {
   );
 }
 
-if (toStdout) {
+if (replayTarget.kind === "stdout") {
   process.stdout.write(`${report}\n`);
-} else {
+} else if (replayTarget.kind === "file") {
+  const outPath = resolve(replayTarget.path);
   await writeFormatted(outPath, report);
   process.stdout.write(`wrote ${outPath}\n`);
+} else {
+  process.stdout.write("replay report not written (--report without --out or --stdout)\n");
 }
 
 const failed = invariants.filter((i) => !i.passed);

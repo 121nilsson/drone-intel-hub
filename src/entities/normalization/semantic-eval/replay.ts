@@ -684,3 +684,26 @@ export function renderReport(input: ReportInput): string {
   );
   return lines.join("\n");
 }
+
+/** The committed parity report that `evaluate-semantic-registry` regenerates in replay mode. */
+export const DEFAULT_REPLAY_REPORT_PATH = "scripts/output/semantic-replay.md";
+
+/**
+ * Where `evaluate-semantic-registry` writes the parity replay report, from its arguments.
+ * Replay mode (no `--report`) regenerates the committed report by default. Under `--report` (S5)
+ * the run is a check of an evaluation directory, so it writes the replay report only when `--out`
+ * or `--stdout` asks for it and never rewrites the committed file implicitly (review finding R6).
+ */
+export function replayReportTarget(
+  args: readonly string[],
+):
+  | { readonly kind: "stdout" }
+  | { readonly kind: "file"; readonly path: string }
+  | { readonly kind: "skip" } {
+  if (args.includes("--stdout")) return { kind: "stdout" };
+  const i = args.indexOf("--out");
+  const out = i >= 0 ? args[i + 1] : undefined;
+  if (out) return { kind: "file", path: out };
+  if (args.includes("--report")) return { kind: "skip" };
+  return { kind: "file", path: DEFAULT_REPLAY_REPORT_PATH };
+}

@@ -61,10 +61,12 @@ function asManifest(value: unknown): SamplingManifest | undefined {
  * with. Historical replay uses the stamped version's implementation, never the current one in its
  * place. Only the current detector is kept: no committed frame is stamped with an older version.
  * Add a frozen copy here before a frame stamped with an older version has to be replayed.
+ * A Map, not an object: a stamp such as "toString" or "__proto__" must find nothing (R3).
  */
-export const LANGUAGE_DETECTORS_BY_VERSION: Readonly<
-  Record<string, (text: string) => LanguageDetection>
-> = { [LANGUAGE_DETECTOR_VERSION]: detectLanguageWithEvidence };
+export const LANGUAGE_DETECTORS_BY_VERSION: ReadonlyMap<
+  string,
+  (text: string) => LanguageDetection
+> = new Map([[LANGUAGE_DETECTOR_VERSION, detectLanguageWithEvidence]]);
 
 /**
  * Whether the stored language detections were reproduced. `replayed`: every stored excerpt was run
@@ -127,7 +129,7 @@ export function verifyLanguageProvenance(
     );
   }
   const hasStamp = typeof stamped === "string" && stamped.length > 0;
-  const detector = hasStamp ? LANGUAGE_DETECTORS_BY_VERSION[stamped] : undefined;
+  const detector = hasStamp ? LANGUAGE_DETECTORS_BY_VERSION.get(stamped) : undefined;
   for (const e of provenance) {
     const reason = e.languageDetectionReason;
     const outcome = reason === undefined ? undefined : LANGUAGE_REASON_OUTCOMES[reason];

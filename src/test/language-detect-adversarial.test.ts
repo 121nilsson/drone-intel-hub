@@ -60,7 +60,7 @@ describe("D0 adversarial review: every decisive language stamp is deserved", () 
   });
 
   it("is why variant B is the default: variant A is decisive on one switch row", () => {
-    // The original 29 rows: the other-Cyrillic rows are a separate, open defect (see above).
+    // Every row except the other-Cyrillic ones, which are a separate, open defect (see above).
     const rows = Object.entries(CATEGORIES)
       .filter(([c]) => c !== "Other Cyrillic languages")
       .flatMap(([, r]) => r);
