@@ -169,9 +169,10 @@ export interface FreezeOptions {
   /**
    * Which Example schema to write. Default 1.0.0, so every existing caller, test and committed
    * directory is unchanged. 1.1.0 records language provenance (declared vs detected).
-   * With 1.1.0 the legacy `FrameRow.language` is read as a declaration (the committed fixture
-   * frames set it by hand, never from detection); `FrameRow.declaredLanguage` wins if both are set.
-   * With 1.0.0 a row carrying `declaredLanguage` is refused rather than silently flattened.
+   * With 1.1.0 a row that sets the legacy `FrameRow.language` is refused (R1): only
+   * `FrameRow.declaredLanguage` is a declaration, and detection is done by the freeze itself.
+   * With 1.0.0 `FrameRow.language` is required, and a row carrying `declaredLanguage` is refused
+   * rather than silently flattened.
    */
   readonly schemaVersion?:
     typeof SEMANTIC_EVAL_SCHEMA_VERSION | typeof SEMANTIC_EVAL_SCHEMA_VERSION_1_1;

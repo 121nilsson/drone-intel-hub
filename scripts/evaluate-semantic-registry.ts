@@ -55,9 +55,20 @@ import { SEMANTICS } from "../src/test/fixtures/normalization-corpus";
 
 const args = process.argv.slice(2);
 const replayTarget = replayReportTarget(args);
+if (replayTarget.kind === "invalid") {
+  process.stderr.write(`${replayTarget.reason}\n`);
+  process.exit(2);
+}
 const value = (flag: string, fallback: string): string => {
   const i = args.indexOf(flag);
-  return i >= 0 && args[i + 1] ? args[i + 1]! : fallback;
+  if (i < 0) return fallback;
+  const v = args[i + 1];
+  // A missing value, or the next flag in its place, is an error, never a path (Q4).
+  if (v === undefined || v.startsWith("--")) {
+    process.stderr.write(`${flag} needs a value\n`);
+    process.exit(2);
+  }
+  return v;
 };
 
 const parity = replayFixtures(SEMANTICS, CODE_SEED_SNAPSHOT, semanticKeyFor);

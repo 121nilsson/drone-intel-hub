@@ -22,6 +22,11 @@ npx tsx scripts/sample-historical-evaluation-set.ts --in src/test/fixtures/seman
 npx tsx scripts/evaluate-semantic-registry.ts --report --data-dir src/test/fixtures/semantic-eval-v1.2.0 --decisions src/test/fixtures/semantic-eval/decisions.jsonl --report-out scripts/output/semantic-metrics-v1.2.0.md --origins fixture
 ```
 
+Schema 1.1.0 (`--schema-version 1.1.0`, language provenance) does not read the legacy `language`
+field and refuses rows that set it (exit 2, the message names `declaredLanguage`). The rows here
+set it on every row, so they freeze only under the default 1.0.0. A 1.1.0 frame puts a real
+declaration in `declaredLanguage` or leaves it empty and lets the sampler detect.
+
 `exampleId` names one occurrence: the same attribute twice in one source gets two ids. Identical
 evidence is collapsed before the frame is frozen; different attributes of one document are kept.
 

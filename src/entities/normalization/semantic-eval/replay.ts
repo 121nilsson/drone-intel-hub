@@ -699,11 +699,21 @@ export function replayReportTarget(
 ):
   | { readonly kind: "stdout" }
   | { readonly kind: "file"; readonly path: string }
-  | { readonly kind: "skip" } {
-  if (args.includes("--stdout")) return { kind: "stdout" };
+  | { readonly kind: "skip" }
+  | { readonly kind: "invalid"; readonly reason: string } {
   const i = args.indexOf("--out");
-  const out = i >= 0 ? args[i + 1] : undefined;
-  if (out) return { kind: "file", path: out };
+  if (i >= 0) {
+    const out = args[i + 1];
+    // A missing value, or the next flag in its place, is an error, never a file name (Q4).
+    if (out === undefined || out.length === 0 || out.startsWith("--")) {
+      return { kind: "invalid", reason: "--out needs a file path" };
+    }
+    if (args.includes("--stdout")) {
+      return { kind: "invalid", reason: "--out and --stdout exclude each other" };
+    }
+    return { kind: "file", path: out };
+  }
+  if (args.includes("--stdout")) return { kind: "stdout" };
   if (args.includes("--report")) return { kind: "skip" };
   return { kind: "file", path: DEFAULT_REPLAY_REPORT_PATH };
 }

@@ -6,6 +6,12 @@
  *   npx tsx --env-file=.env.local scripts/sample-historical-evaluation-set.ts --apply
  *   npx tsx scripts/sample-historical-evaluation-set.ts --in my-frame.jsonl --seed my-seed --apply
  *
+ *   npx tsx scripts/sample-historical-evaluation-set.ts --schema-version 1.1.0 --in rows.jsonl --out dir
+ *
+ * Schema 1.1.0 (language provenance) refuses rows that set the legacy `language` field: put a real
+ * declaration in `declaredLanguage` or leave it empty. The committed pilot rows set `language` on
+ * every row, so they freeze only under the default 1.0.0. A refused input exits 2.
+ *
  * The input is a JSONL export of eligible spec attributes (FrameRow records). D1: this script never
  * reads verification_audit. It only uses the deterministic code-seed snapshot; no DB, no network.
  */
@@ -49,7 +55,14 @@ import { sha256Hex } from "../src/entities/normalization/sha256";
 const args = process.argv.slice(2);
 const value = (flag: string, fallback: string): string => {
   const i = args.indexOf(flag);
-  return i >= 0 && args[i + 1] ? args[i + 1]! : fallback;
+  if (i < 0) return fallback;
+  const v = args[i + 1];
+  // A missing value, or the next flag in its place, is an error, never a path (Q4).
+  if (v === undefined || v.startsWith("--")) {
+    process.stderr.write(`${flag} needs a value\n`);
+    process.exit(2);
+  }
+  return v;
 };
 const apply = args.includes("--apply");
 // 1.0.0 stays the default; 1.1.0 (language provenance) is opt-in for new directories only.
@@ -92,15 +105,23 @@ const rows: FrameRow[] = parseJsonl(
   validateFrameRow,
   "frame-rows.jsonl",
 );
-const built = buildFrame(rows, {
-  frameId: "", // replaced below once ids are known; frameIdFor hashes the frozen example ids
-  snapshot: CODE_SEED_SNAPSHOT,
-  resolverVersion: SEMANTIC_RESOLVER_VERSION,
-  cutoff,
-  isPilot: pilot,
-  defaultOrigin: "historical",
-  schemaVersion: schemaFlag,
-});
+let built: ReturnType<typeof buildFrame>;
+try {
+  built = buildFrame(rows, {
+    frameId: "", // replaced below once ids are known; frameIdFor hashes the frozen example ids
+    snapshot: CODE_SEED_SNAPSHOT,
+    resolverVersion: SEMANTIC_RESOLVER_VERSION,
+    cutoff,
+    isPilot: pilot,
+    defaultOrigin: "historical",
+    schemaVersion: schemaFlag,
+  });
+} catch (e) {
+  // An input the freeze refuses (for example the legacy `language` field under 1.1.0) is a
+  // controlled refusal with the reason, not a stack trace (Q3).
+  process.stderr.write(`refused: ${(e as Error).message}\n`);
+  process.exit(2);
+}
 const frameId = frameIdFor(built.examples);
 const examples = built.examples.map((e) => ({ ...e, frameId }));
 const sample = drawSample(examples, { seed, ceiling });

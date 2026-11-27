@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   LANGUAGE_DETECTOR_VERSION,
@@ -88,6 +90,21 @@ describe("schema 1.1.0 language provenance", () => {
     expect(u.declaredLanguage).toBeUndefined();
     expect(u.language).toBe("unknown");
     expect(languageForResolver(u)).toBeUndefined();
+  });
+
+  it("refuses the committed pilot frame rows under 1.1.0, naming declaredLanguage (Q3)", () => {
+    const rows = parseJsonl(
+      readFileSync(resolve("src/test/fixtures/semantic-eval/frame-rows.jsonl"), "utf8"),
+      validateFrameRow,
+      "frame-rows.jsonl",
+    );
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.every((r) => r.language !== undefined)).toBe(true);
+    expect(() =>
+      freezeFrame(rows, { frameId: "f", schemaVersion: "1.1.0", defaultOrigin: "historical" }),
+    ).toThrow(/legacy language field.*declaredLanguage/);
+    // The same rows still freeze under the default 1.0.0.
+    expect(freezeFrame(rows, { frameId: "f" }).units.length).toBeGreaterThan(0);
   });
 
   it("keeps 1.0.0 behaviour: the legacy field is still the row's language there", () => {

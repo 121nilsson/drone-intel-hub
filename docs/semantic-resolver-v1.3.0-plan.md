@@ -82,7 +82,7 @@
    - `Example.language` (the stratum language) follows one documented rule: declared if present; else detected if decisive; else `unknown`. The rule is recorded in the manifest.
    - **Backward compatibility is absolute.** Readers accept schema 1.0.0 unchanged, v1.2.0 directories verify bit-identically, and old data is never reinterpreted.
    - **As implemented:**
-     - **1.1.0 is opt-in.** Use `--schema-version 1.1.0` on the sampler script; 1.0.0 stays the default.
+     - **1.1.0 is opt-in.** Use `--schema-version 1.1.0` on the sampler script; 1.0.0 stays the default. Under 1.1.0 the input rows must not set `language` (see below). The committed pilot rows (`src/test/fixtures/semantic-eval/frame-rows.jsonl`) set it on every row, so they freeze only under 1.0.0. Under 1.1.0 the sampler refuses them with exit 2 and a message that names `declaredLanguage`.
      - **Under 1.1.0 the legacy `FrameRow.language` is refused** (review finding R1, 2026-11-27). The field cannot say whether it holds a declaration or a detection, so it is never used as a fallback for `declaredLanguage`. The freeze fails with an error that names `declaredLanguage`. A fixture frame frozen under 1.1.0 must move its hand-set language to `declaredLanguage`. The D5 historical export sets `declaredLanguage` only from trustworthy source metadata, and otherwise leaves it empty. Schema 1.0.0 keeps its behaviour: there, `language` is required. (Before R1, 1.1.0 read `language` as a declaration, and only this document stopped an export from filling it from detection.)
 5. **Resolver caller rule:** a caller passes a language to `resolve()` only when it is declared, or detected _and_ decisive. As implemented, the rule lives in and is documented on `languageForResolver` in `src/entities/normalization/semantic-eval/sampling.ts`, the only place that passes a frame language to `resolve()`. `semantic-resolver.ts` was not changed.
 
@@ -349,7 +349,7 @@ The table shows the list of detector 3.1.0: 28 Russian and 22 Ukrainian markers.
 - **Package 2, detector 3.1.0 (2026-11-27).** заявив, упав, яка and яке were removed from the Ukrainian list. No marker was added, and the decision rule is unchanged. Every changed outcome traces to one or more removed markers. One row contains two (заявив and упав).
   - **Compared text sets.** 3.0.0 (`b55ab34`) and 3.1.0 were compared on:
     - the development sets listed below;
-    - the technical review's sweep of every Cyrillic string in tracked files under `src/test` (except the holdout), `docs`, `scripts`, `src/entities` and `src/shared`: 1,923 unique texts, including `src/test/fixtures/eval-catalog.json`.
+    - the technical review's sweep of every Cyrillic string in tracked files under `src/test` (except the holdout), `docs`, `scripts`, `src/entities` and `src/shared`, including `src/test/fixtures/eval-catalog.json`. The number of unique texts depends on how strings are extracted from code, JSON and Markdown: the technical review counted 1,923, and the review of R1–R6 counted 1,832 with its own extraction. The outcome result is the same under both: only the two eval-catalog summaries change outcome.
   - **Safety:** no new false-decisive result in any compared set. Two Russian rows that were false-decisive `uk` became non-decisive.
   - **Coverage loss on real text:** two genuine Ukrainian news summaries in `src/test/fixtures/eval-catalog.json` go from decisive `uk` to non-decisive (`cyrillic_undetermined`, language still `uk`):
     - the TENCORE summary, through яка;
@@ -372,7 +372,7 @@ The table shows the list of detector 3.1.0: 28 Russian and 22 Ukrainian markers.
     | Reason only (spurious `conflicting_evidence` gone)          | 4 (заявив 2, упав 1, яка 1)      | 6 (заявив 1, упав 2, яка 1, яке 1, заявив+упав 1) |
     | Unchanged                                                   | 6                                | 7                                                 |
 
-    The corpus and the 42 earlier adversarial rows have no transition. No marker was added to win back the lost rows (development or real). Outside these sets and the two eval-catalog summaries, the review sweep found 42 texts whose evidence counts changed but whose outcome did not.
+    The corpus and the 42 earlier adversarial rows have no transition. No marker was added to win back the lost rows (development or real). Outside these sets and the two eval-catalog summaries, about 40 texts changed evidence counts but not outcome (42 and 38 in the two reviews, depending on the extraction).
 
   - **Figures** (rows / decisive / false-decisive / non-decisive), 3.0.0 → 3.1.0:
     - corpus: 92 / 9 / 0 / 90.2 % → unchanged;
@@ -383,7 +383,7 @@ The table shows the list of detector 3.1.0: 28 Russian and 22 Ukrainian markers.
   - **R1, should-fix, done (`8907a35`):** schema 1.1.0 refuses the legacy `FrameRow.language` (see the 1.1.0 decision above). A regression test covers the exact case of a non-decisive `ru` exported into that field.
   - **R2, should-fix, done:** this section. The compared sets are named, the eval-catalog coverage loss is recorded, the markers are broken down per row, and the claim "exactly one marker" is corrected.
   - **R3, done:** `LANGUAGE_DETECTORS_BY_VERSION` is a `Map`, so a stamp such as `toString` or `__proto__` gives `not_replayed` instead of a misleading error or a crash.
-  - **R4, done:** stale comments synced (adversarial fixture and test, the version history in `language.ts`, `FrameRow.language`, and the F3 wording here).
+  - **R4, done:** stale comments synced (adversarial fixture and test, the version history in `language.ts`, and the F3 wording here). The `FrameRow.language` comment was synced in the R1 commit (`8907a35`), not under R4. One stale comment was missed and fixed later as Q2.
   - **R5, done:** `scripts/evaluate-language-holdout.ts` goes through `src/entities/normalization/language-holdout.ts`.
     - Holdout v1 is registered as consumed by 3.0.0, and every new run is refused before the holdout is loaded.
     - A test runs the guard with the current detector and a loader that fails if it is called.
@@ -395,6 +395,15 @@ The table shows the list of detector 3.1.0: 28 Russian and 22 Ukrainian markers.
     - Tests use stub loaders. They show that v2 loads only its own fixture, and that a v2 without a loader or pointing at the v1 fixture is refused before any loader runs.
     - v2 may be registered only after this fix is reviewed.
   - **R6, done:** under `--report`, `evaluate-semantic-registry` writes the replay report only with `--out` or `--stdout`. The committed `scripts/output/semantic-replay.md` is never rewritten implicitly.
+  - **Review of R1–R6 (2026-11-27, fresh session): PASS WITH FINDINGS**, Q1–Q6, no blocker. Q1 is above. The rest:
+    - **Q2:** the `FreezeOptions.schemaVersion` JSDoc in `sampling.ts` now says that 1.1.0 refuses `language`.
+    - **Q3:** the sampler catches a refused freeze and exits 2 with the reason. Its header, the fixture README and the opt-in note above document the 1.1.0 input rule. A test freezes the committed pilot rows under 1.1.0 and expects a clean refusal.
+    - **Q4:**
+      - `--out` followed by another flag, or by nothing, is an error with exit 2, never a file name;
+      - `--out` together with `--stdout` is an error;
+      - the value helpers in both scripts treat a following flag as a missing value.
+    - **Q5:** the sweep counts above are stated as extraction-dependent.
+    - **Q6:** the R4 entry above credits the `FrameRow.language` comment to R1.
   - **A registered 3.0.0 detector is not needed now.** The review found no frozen 1.1.0 or version-stamped artifact anywhere. It searched the working tree including ignored files, every `manifest.json`, all branches, stashes, history and worktrees.
 - **F5 and F7 (documentation), synced in this document:**
   - the decisive end-to-end sentence;
