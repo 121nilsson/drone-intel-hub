@@ -215,3 +215,86 @@ export function holdoutRowsOf(value: unknown): readonly LanguageHoldoutRow[] | u
   }
   return Object.freeze(rows);
 }
+
+// ── V4: independence of a new holdout from the consumed ones ────────────────────────────────────
+
+/** The documented, deterministic text canonicalisation behind the V4 hash check. */
+export const HOLDOUT_TEXT_HASH_METHOD =
+  "sha256 hex of: Unicode NFC, then lower-cased (locale-independent), then every whitespace run collapsed to one space, then trimmed";
+
+export function canonicalHoldoutText(text: string): string {
+  return text.normalize("NFC").toLowerCase().replace(/\s+/gu, " ").trim();
+}
+
+/** Any import, re-export or require in a holdout module's source. A holdout is plain data. */
+const MODULE_LINK = [
+  /^\s*import\b/m,
+  /\bimport\s*\(/,
+  /\bexport\s*\*/,
+  /\bexport\s*\{[^}]*\}\s*from\b/,
+  /\brequire\s*\(/,
+];
+
+export interface HoldoutIndependence {
+  readonly accepted: boolean;
+  /** Why it is not accepted; never contains a text or an excerpt. */
+  readonly reasons: readonly string[];
+  readonly counts: {
+    readonly newRows: number;
+    readonly consumedRows: number;
+    readonly idOverlap: number;
+    readonly textHashOverlap: number;
+    readonly duplicateTextsInNew: number;
+  };
+}
+
+/**
+ * V4 gate: is the new holdout independent of the consumed one(s)? Fails safe: rows that cannot be
+ * read or verified, or a missing source, mean "not accepted". Reports counts and reasons only.
+ */
+export function holdoutIndependence(input: {
+  /** SHA-256 hex of a string; injected so this module stays free of the hashing implementation. */
+  readonly sha256: (text: string) => string;
+  readonly newRows: unknown;
+  readonly newSource: string | undefined;
+  readonly consumedRows: unknown;
+}): HoldoutIndependence {
+  const reasons: string[] = [];
+  const fresh = holdoutRowsOf(input.newRows);
+  const consumed = holdoutRowsOf(input.consumedRows);
+  if (fresh === undefined || fresh.length === 0)
+    reasons.push("new holdout rows cannot be read or verified");
+  if (consumed === undefined || consumed.length === 0) {
+    reasons.push("consumed holdout rows cannot be read or verified");
+  }
+  if (typeof input.newSource !== "string" || input.newSource.length === 0) {
+    reasons.push("new holdout source cannot be read");
+  } else if (MODULE_LINK.some((re) => re.test(input.newSource!))) {
+    reasons.push("new holdout module imports, re-exports or requires another module");
+  }
+  const consumedIds = new Set((consumed ?? []).map((r) => r.id));
+  const hash = (text: string) => input.sha256(canonicalHoldoutText(text));
+  const consumedHashes = new Set((consumed ?? []).map((r) => hash(r.text)));
+  const freshHashes = (fresh ?? []).map((r) => hash(r.text));
+  const idOverlap = (fresh ?? []).filter((r) => consumedIds.has(r.id)).length;
+  const textHashOverlap = freshHashes.filter((h) => consumedHashes.has(h)).length;
+  const duplicateTextsInNew = freshHashes.length - new Set(freshHashes).size;
+  if (idOverlap > 0) reasons.push(`${idOverlap} row id(s) overlap the consumed holdout`);
+  if (textHashOverlap > 0) {
+    reasons.push(`${textHashOverlap} canonical text hash(es) overlap the consumed holdout`);
+  }
+  if (duplicateTextsInNew > 0) {
+    reasons.push(`${duplicateTextsInNew} canonical text(s) repeat within the new holdout`);
+  }
+  return {
+    accepted: reasons.length === 0,
+    reasons,
+    counts: {
+      newRows: fresh?.length ?? 0,
+      consumedRows: consumed?.length ?? 0,
+      idOverlap,
+      textHashOverlap,
+      duplicateTextsInNew,
+    },
+  };
+}
