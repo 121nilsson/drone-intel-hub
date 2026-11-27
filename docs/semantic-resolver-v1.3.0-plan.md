@@ -387,6 +387,13 @@ The table shows the list of detector 3.1.0: 28 Russian and 22 Ukrainian markers.
   - **R5, done:** `scripts/evaluate-language-holdout.ts` goes through `src/entities/normalization/language-holdout.ts`.
     - Holdout v1 is registered as consumed by 3.0.0, and every new run is refused before the holdout is loaded.
     - A test runs the guard with the current detector and a loader that fails if it is called.
+  - **R5 follow-up, Q1 (review of R1–R6, done):** the first R5 version always loaded the v1 fixture, whatever the id. So once v2 was registered, `--holdout v2` would have measured the consumed v1.
+    - The loader is now chosen from the fixture name that the registry records for the id, and there is no default.
+    - A fixture that any id has consumed is refused under every id.
+    - `--holdout` is required.
+    - Every refusal exits with code 2.
+    - Tests use stub loaders. They show that v2 loads only its own fixture, and that a v2 without a loader or pointing at the v1 fixture is refused before any loader runs.
+    - v2 may be registered only after this fix is reviewed.
   - **R6, done:** under `--report`, `evaluate-semantic-registry` writes the replay report only with `--out` or `--stdout`. The committed `scripts/output/semantic-replay.md` is never rewritten implicitly.
   - **A registered 3.0.0 detector is not needed now.** The review found no frozen 1.1.0 or version-stamped artifact anywhere. It searched the working tree including ignored files, every `manifest.json`, all branches, stashes, history and worktrees.
 - **F5 and F7 (documentation), synced in this document:**
