@@ -262,10 +262,9 @@ export interface FrameRow {
   readonly systemClass?: string | undefined;
   readonly subsystem?: string | undefined;
   /**
-   * LEGACY (schema 1.0.0): derived once from the excerpt and frozen; derived by the sampler when
-   * absent. Overloaded: it holds both declared and detected language. A 1.1.0 frame reads it as an
-   * author declaration (the committed fixture frames set it by hand) and prefers
-   * `declaredLanguage` when both are present.
+   * LEGACY (schema 1.0.0 only): the row's language, required by a 1.0.0 freeze (which records no
+   * detector and refuses a row without it). Overloaded: it may hold a declared or a detected
+   * language, so a 1.1.0 freeze refuses any row that sets it; use `declaredLanguage` there.
    */
   readonly language?: Language | undefined;
   /** Language stated by a trustworthy source or its metadata; never filled in by detection. */

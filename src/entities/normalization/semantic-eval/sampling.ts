@@ -237,6 +237,15 @@ export function freezeFrame(rows: readonly FrameRow[], options: FreezeOptions): 
         `row ${row.sourceId}/${row.rawKey} has declaredLanguage; freeze with schemaVersion 1.1.0`,
       );
     }
+    // 1.1.0 separates declared from detected language. The legacy `language` field cannot say
+    // which one it holds (an exporter may have filled it from detection), so it is never read as
+    // a declaration: a non-decisive detection must not become a declared language that reaches
+    // the resolver (review finding R1).
+    if (provenance && row.language !== undefined) {
+      throw new Error(
+        `row ${row.sourceId}/${row.rawKey} sets the legacy language field; schema 1.1.0 does not read it, put a real declaration in declaredLanguage and leave detection to the sampler`,
+      );
+    }
     // A 1.0.0 frame carries no detector stamp, so it must not depend on detection at all.
     if (!provenance && row.language === undefined) {
       throw new Error(
@@ -248,7 +257,7 @@ export function freezeFrame(rows: readonly FrameRow[], options: FreezeOptions): 
     const detection = provenance ? detectLanguageWithEvidence(excerpt) : undefined;
     // 1.1.0: declared if present, else detected if decisive, else unknown. Never the reverse:
     // detection is stored beside the declaration and cannot overwrite it.
-    const declared = provenance ? (row.declaredLanguage ?? row.language) : undefined;
+    const declared = provenance ? row.declaredLanguage : undefined;
     const language: Language = detection
       ? (declared ?? (detection.decisive ? detection.language : "unknown"))
       : row.language!;

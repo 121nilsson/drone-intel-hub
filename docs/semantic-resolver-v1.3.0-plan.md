@@ -83,7 +83,7 @@
    - **Backward compatibility is absolute.** Readers accept schema 1.0.0 unchanged, v1.2.0 directories verify bit-identically, and old data is never reinterpreted.
    - **As implemented:**
      - **1.1.0 is opt-in.** Use `--schema-version 1.1.0` on the sampler script; 1.0.0 stays the default.
-     - **Under 1.1.0 the legacy `FrameRow.language` is read as a declaration,** because the fixture frames set it by hand. **The D5 historical export must therefore never set `language`.** It sets `declaredLanguage` only from trustworthy source metadata and otherwise leaves both empty.
+     - **Under 1.1.0 the legacy `FrameRow.language` is refused** (review finding R1, 2026-11-27). The field cannot say whether it holds a declaration or a detection, so it is never used as a fallback for `declaredLanguage`. The freeze fails with an error that names `declaredLanguage`. A fixture frame frozen under 1.1.0 must move its hand-set language to `declaredLanguage`. The D5 historical export sets `declaredLanguage` only from trustworthy source metadata, and otherwise leaves it empty. Schema 1.0.0 keeps its behaviour: there, `language` is required. (Before R1, 1.1.0 read `language` as a declaration, and only this document stopped an export from filling it from detection.)
 5. **Resolver caller rule:** a caller passes a language to `resolve()` only when it is declared, or detected _and_ decisive. As implemented, the rule lives in and is documented on `languageForResolver` in `src/entities/normalization/semantic-eval/sampling.ts`, the only place that passes a frame language to `resolve()`. `semantic-resolver.ts` was not changed.
 
 ### End-to-end language provenance

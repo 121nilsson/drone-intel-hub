@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { LANGUAGE_DETECTOR_VERSION } from "@/entities/normalization/language";
+import {
+  LANGUAGE_DETECTOR_VERSION,
+  detectLanguageWithEvidence,
+} from "@/entities/normalization/language";
 import {
   CODE_SEED_SNAPSHOT,
   SEMANTIC_RESOLVER_VERSION,
@@ -61,9 +64,36 @@ describe("schema 1.1.0 language provenance", () => {
     expect(languageForResolver(u)).toBe("ru");
   });
 
-  it("maps the legacy FrameRow.language to a declaration, and declaredLanguage outranks it", () => {
-    expect(unit11(row({ language: "en" })).declaredLanguage).toBe("en");
-    expect(unit11(row({ language: "en", declaredLanguage: "uk" })).declaredLanguage).toBe("uk");
+  it("refuses the legacy FrameRow.language under 1.1.0 and names declaredLanguage (R1)", () => {
+    for (const r of [
+      row({ language: "en" }),
+      row({ language: "en", declaredLanguage: "uk" }),
+      row({ language: "unknown" }),
+      row({ language: "uk", origin: "fixture" }),
+    ]) {
+      expect(() => freeze11(r)).toThrow(/legacy language field.*declaredLanguage/);
+    }
+  });
+
+  it("R1 regression: a non-decisive detection exported into `language` cannot become a declared ru that reaches the resolver", () => {
+    // The dangerous export: Ukrainian text without enough evidence; the detector's non-decisive
+    // fallback says "ru", and an exporter writes that into the legacy field.
+    const d = detectLanguageWithEvidence(UK_UNDECIDABLE);
+    expect(d).toMatchObject({ language: "ru", decisive: false });
+    const exported = row({ excerpt: UK_UNDECIDABLE, language: d.language, origin: "historical" });
+    expect(() => freeze11(exported)).toThrow(/declaredLanguage/);
+    // The same row without the legacy field: detection is stored beside, nothing is declared, the
+    // stratum is unknown and the resolver gets no language.
+    const u = unit11(row({ excerpt: UK_UNDECIDABLE, origin: "historical" }));
+    expect(u.declaredLanguage).toBeUndefined();
+    expect(u.language).toBe("unknown");
+    expect(languageForResolver(u)).toBeUndefined();
+  });
+
+  it("keeps 1.0.0 behaviour: the legacy field is still the row's language there", () => {
+    const u = freezeFrame([row({ language: "uk" })], { frameId: "f" }).units[0]!;
+    expect(u.language).toBe("uk");
+    expect(u.declaredLanguage).toBeUndefined();
   });
 
   it("stratifies a non-decisive detection as unknown and withholds the language from the resolver", () => {
