@@ -586,7 +586,19 @@ The table shows the list of detector 3.1.0: 28 Russian and 22 Ukrainian markers.
         - 153 with 3 errors.
 
         Aim well above the minimum, with mixed text strongly represented. v2 gave 36 decisive claims from 140 rows, so v3 needs far more rows, or categories where a decisive claim is expected.
-   - **Open:** the translation routing in `riva.pairFor` (`src/shared/infra/ai-proxy.server.ts`) on this branch already routes by a decisive 3.1.0 language. How that production use is handled is a separate decision. D0 is not on `main`.
+   - **Principle (decided 2026-11-27):** a detector version may not influence production decisions, or be a premise of an approved downstream evaluation, until that version has passed its own independent evaluation. A failed component must not gain approval indirectly by being used elsewhere.
+   - **Translation routing, decision 1(a):** every production language decision uses the rule from before D0 (`detectLanguagePreD0` in `src/entities/normalization/language-legacy.ts`, copied verbatim from `7aea9a6`). That covers:
+     - `riva.pairFor`, which chooses the translation pair;
+     - the "already English" checks in `ai-proxy.functions.ts` and `dossier-summary.tsx`.
+
+     The 3.1.0 detector is called in production only for the log line about undetermined Cyrillic text, which never affects the pair. `language.ts` is unchanged. Regression tests check three things:
+     - three development texts that 3.1.0 calls a decisive `uk` route as `ru-en`, as the pre-D0 rule says;
+     - every development text (165) routes exactly as the pre-D0 rule does;
+     - the logging tests are unchanged.
+
+     Before this change, a decisive 3.1.0 result changed the pair on 3 of the 165 development texts.
+
+   - **Resolver evaluation (E2), decision 2:** E2 uses declared language only. See E2.
 
 ---
 

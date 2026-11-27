@@ -1,5 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { detectLanguageWithEvidence } from "@/entities/normalization/language";
+import { detectLanguagePreD0 } from "@/entities/normalization/language-legacy";
+import { ADVERSARIAL_CATEGORIES } from "./fixtures/language-detect-adversarial";
+import { LANGUAGE_CORPUS } from "./fixtures/language-detect-corpus";
 import { buildFrame } from "@/entities/normalization/semantic-eval/sampling";
 import {
   CODE_SEED_SNAPSHOT,
@@ -240,14 +243,58 @@ describe("translation routing follows the language evidence (D0)", () => {
   const askWith = (prompt: string) =>
     translateCompletion({ system: "Translate to English.", prompt });
 
-  it("sends short Ukrainian with evidence from both channels as uk-en", async () => {
+  it("routes by the pre-D0 rule even when detector 3.1.0 is decisive (3.1.0 not approved)", async () => {
     riva();
     const seen = stubFetch();
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    // Both are decisive uk for 3.1.0; the pre-D0 rule says uk (2 Ukrainian-only letters) and ru
+    // (only 1). Routing follows the pre-D0 rule, and a decisive result is not logged.
+    expect(detectLanguageWithEvidence("Ця потужність вже становить 80 кВт.")).toMatchObject({
+      language: "uk",
+      decisive: true,
+    });
     await askWith("Дрон вже має дальність польоту 250 км.");
     await askWith("Ця потужність вже становить 80 кВт.");
-    expect(seen.map((s) => s.system)).toEqual(["uk-en", "uk-en"]);
+    expect(seen.map((s) => s.system)).toEqual(["uk-en", "ru-en"]);
     expect(warn).not.toHaveBeenCalled();
+  });
+
+  it("never lets a decisive 3.1.0 answer change the pair (regression, decision 2026-11-27)", async () => {
+    // Development texts where 3.1.0 is decisive uk and the pre-D0 rule says ru.
+    for (const text of [
+      "Це рішення, яке ухвалили вчора, викликало суперечки.",
+      "Мер заявив про нову програму, яка допоможе родинам, що втратили домівки.",
+      "Автор написав: «объём вырос» і додав ще слово.",
+    ]) {
+      riva();
+      const seen = stubFetch();
+      vi.spyOn(console, "warn").mockImplementation(() => {});
+      expect(detectLanguageWithEvidence(text), text).toMatchObject({
+        language: "uk",
+        decisive: true,
+      });
+      expect(detectLanguagePreD0(text), text).toBe("ru");
+      await askWith(text);
+      expect(seen[0]?.system, text).toBe("ru-en");
+    }
+  });
+
+  it("routes every development text exactly as the pre-D0 rule does", async () => {
+    const texts = [
+      ...Object.values(ADVERSARIAL_CATEGORIES).flatMap((rows) => rows.map((r) => r.text)),
+      ...LANGUAGE_CORPUS.map((r) => r.text),
+    ];
+    expect(texts.length).toBeGreaterThan(150);
+    for (const text of texts) {
+      riva();
+      const seen = stubFetch();
+      vi.spyOn(console, "warn").mockImplementation(() => {});
+      await askWith(text);
+      const legacy = detectLanguagePreD0(text);
+      const expected =
+        legacy === "ru" || legacy === "uk" ? `${legacy}-en` : "Translate to English.";
+      expect(seen[0]?.system, text).toBe(expected);
+    }
   });
 
   it("logs short Ukrainian with evidence from one channel only as undetermined; routing follows the old rule (detector 3.0.0)", async () => {

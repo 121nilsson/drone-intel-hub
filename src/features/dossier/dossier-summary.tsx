@@ -3,7 +3,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { translateText, generateSystemSummary } from "@/shared/infra/ai-proxy.functions";
 import { buildSystemEvidenceDigest } from "@/shared/infra/system-evidence-digest";
 import { useAttached, useServices } from "@/shared/infra/use-services";
-import { detectLanguage } from "@/entities/normalization/language";
+import { detectLanguagePreD0 } from "@/entities/normalization/language-legacy";
 import { awaitingBrief, summaryView } from "./summary-view";
 import { type Drone } from "@/entities/drone/types";
 import { Collapsible } from "@/shared/ui/collapsible";
@@ -92,7 +92,7 @@ export function DossierSummary({
   const summary = generatedSummary ?? sourceSummary;
   const storageSummary = drone.summaryEnglish;
   // Text that is already English is not sent anywhere: a translator given English has no target.
-  const likelyEnglish = Boolean(generatedSummary) || detectLanguage(sourceSummary) === "en";
+  const likelyEnglish = Boolean(generatedSummary) || detectLanguagePreD0(sourceSummary) === "en";
   // Nothing below starts before the store has attached, because the server's AI configuration
   // arrives with it. Starting earlier meant acting on defaults and then again on the real values.
   const ready = useAttached();

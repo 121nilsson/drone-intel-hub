@@ -24,6 +24,7 @@ import {
 } from "./ai-providers";
 import { parseModelJson } from "./model-json";
 import { detectLanguageWithEvidence } from "@/entities/normalization/language";
+import { detectLanguagePreD0 } from "@/entities/normalization/language-legacy";
 
 export interface ChatInput {
   baseUrl?: string;
@@ -459,17 +460,19 @@ const riva = {
   is: (model: string) => /riva-translate/i.test(model),
   /** The system message that names the pair, for the sources this catalogue reads. */
   pairFor(text: string): string | null {
-    const { language, decisive, reason, evidence } = detectLanguageWithEvidence(text);
-    // Every non-decisive Cyrillic result keeps the old answer (ru-en, or uk-en on 2 or more
-    // Ukrainian-only letters; D0-Q1 option a). It is a guess, so it is logged: reason and counts
-    // only, never the text.
+    // Routing uses the rule from before D0, always: detector 3.1.0 is not approved for production
+    // use of decisive decisions (2026-11-27), so its answer never chooses the pair.
+    const routed = detectLanguagePreD0(text);
+    // Diagnostics only: when the D0 detector cannot place Cyrillic text, log its reason and
+    // counts (never the text). The log does not affect the pair.
+    const { decisive, reason, evidence } = detectLanguageWithEvidence(text);
     if (!decisive && CYRILLIC_GUESS_REASONS.has(reason)) {
       const e = evidence;
       console.warn(
-        `[ai-proxy] translation language undetermined — ${reason} — cyrillic=${e.cyrillic} latin=${e.latin} uk_only=${e.ukrainianOnly} ru_only=${e.russianOnly} uk_in_names=${e.ukrainianOnlyInNames} ru_in_names=${e.russianOnlyInNames} uk_evidence=${e.ukrainianEvidenceDistinct} uk_channels=${e.ukrainianChannels.join("+") || "-"} ru_evidence=${e.russianEvidenceDistinct} ru_channels=${e.russianChannels.join("+") || "-"}; routing as ${language}-en`,
+        `[ai-proxy] translation language undetermined — ${reason} — cyrillic=${e.cyrillic} latin=${e.latin} uk_only=${e.ukrainianOnly} ru_only=${e.russianOnly} uk_in_names=${e.ukrainianOnlyInNames} ru_in_names=${e.russianOnlyInNames} uk_evidence=${e.ukrainianEvidenceDistinct} uk_channels=${e.ukrainianChannels.join("+") || "-"} ru_evidence=${e.russianEvidenceDistinct} ru_channels=${e.russianChannels.join("+") || "-"}; routing as ${routed}-en`,
       );
     }
-    return language === "ru" || language === "uk" ? `${language}-en` : null;
+    return routed === "ru" || routed === "uk" ? `${routed}-en` : null;
   },
 };
 
