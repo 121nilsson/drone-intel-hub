@@ -8,7 +8,8 @@
  * The guard in `language-holdout.ts` refuses a consumed holdout or a detector version other than
  * the one the holdout is reserved for, before the holdout is loaded (review finding R5). The
  * fixture loaded is the one the registry names for `--holdout <id>`; there is no default id and no
- * default fixture (Q1). Every refusal exits 2.
+ * default fixture (Q1). The module imported is derived from the guard's fixture name, so name and
+ * path cannot drift apart (T1). Every refusal exits 2, before anything is imported or printed.
  *
  *   npx tsx scripts/evaluate-language-holdout.ts --holdout <id>
  */
@@ -40,20 +41,22 @@ if (holdoutArg === undefined || holdoutArg.startsWith("--")) {
 const holdoutId = holdoutArg;
 const pct = (x: number) => `${(x * 100).toFixed(1)}%`;
 
-// One loader per fixture name, each importing exactly that module. The registry's `fixture` field
-// picks the loader; there is no default (Q1). Add a holdout's loader here when it is registered.
-const loaders = new Map<string, () => Promise<readonly HoldoutRow[]>>([
-  [
-    "language-detect-holdout",
-    async () =>
-      (await import("../src/test/fixtures/language-detect-holdout")).LANGUAGE_DETECT_HOLDOUT,
-  ],
-]);
+// The only import of a holdout module. The specifier comes from the guard, which derives it from
+// the holdout id's fixture name (T1): there is no name-to-path table to keep in sync. Every holdout
+// module exports its rows as LANGUAGE_DETECT_HOLDOUT.
+const importModule = async (specifier: string): Promise<readonly HoldoutRow[] | undefined> => {
+  const mod = (await import(new URL(specifier, import.meta.url).href)) as {
+    LANGUAGE_DETECT_HOLDOUT?: unknown;
+  };
+  return Array.isArray(mod.LANGUAGE_DETECT_HOLDOUT)
+    ? (mod.LANGUAGE_DETECT_HOLDOUT as readonly HoldoutRow[])
+    : undefined;
+};
 
 const result = await runHoldoutEvaluation<readonly HoldoutRow[]>({
   holdoutId,
   detectorVersion: LANGUAGE_DETECTOR_VERSION,
-  loaders,
+  importModule,
   evaluate: (holdout) => {
     const summary = summariseDecisions(
       holdout.map((r) => ({

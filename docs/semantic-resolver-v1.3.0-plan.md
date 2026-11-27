@@ -394,6 +394,12 @@ The table shows the list of detector 3.1.0: 28 Russian and 22 Ukrainian markers.
     - Every refusal exits with code 2.
     - Tests use stub loaders. They show that v2 loads only its own fixture, and that a v2 without a loader or pointing at the v1 fixture is refused before any loader runs.
     - v2 may be registered only after this fix is reviewed.
+  - **T1 and T5 (review of Q1–Q6, done):** the Q1 script still paired fixture names with import paths by hand (T1), and fixture names were compared as raw strings (T5). Identity now decides what is loaded:
+    - the holdout id has a strict form (`v1`, `v2`, …);
+    - the fixture name is derived from the id (`holdoutFixtureFor`: v1 keeps `language-detect-holdout`, later ids use `language-detect-holdout-<id>`), and a registry record naming anything else is refused;
+    - the imported module is derived from that name (`holdoutModuleSpecifier`), and the script holds no holdout path of its own;
+    - a failed import, or a module without rows, is a refusal.
+    - Tests use a stub importer. For eleven wrong spellings or couplings of v2 (including every v1 variant), nothing is imported or evaluated. A text check confirms that the script has exactly one dynamic import and no holdout name.
   - **R6, done:** under `--report`, `evaluate-semantic-registry` writes the replay report only with `--out` or `--stdout`. The committed `scripts/output/semantic-replay.md` is never rewritten implicitly.
   - **Review of R1–R6 (2026-11-27, fresh session): PASS WITH FINDINGS**, Q1–Q6, no blocker. Q1 is above. The rest:
     - **Q2:** the `FreezeOptions.schemaVersion` JSDoc in `sampling.ts` now says that 1.1.0 refuses `language`.
