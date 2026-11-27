@@ -410,6 +410,11 @@ The table shows the list of detector 3.1.0: 28 Russian and 22 Ukrainian markers.
       - the value helpers in both scripts treat a following flag as a missing value.
     - **Q5:** the sweep counts above are stated as extraction-dependent.
     - **Q6:** the R4 entry above credits the `FrameRow.language` comment to R1.
+  - **Review of Q1–Q6 (2026-11-27, fresh session): PASS WITH FINDINGS**, T1–T6, no blocker. T1 and T5 are above. The rest:
+    - **T2:** `src/test/semantic-eval-scripts-process.test.ts` runs the sampler as a separate process, through `jiti`, now an explicit devDependency. It asserts exit 2, the `refused: …declaredLanguage` message, no stack trace and no file written.
+    - **T3:** one shared flag rule (`readFlags` in `semantic-eval/cli-args.ts`) is used by both scripts and by `replayReportTarget`, with unit tests. The one deliberate tightening over Q4 is that an empty value (`--in ""`) is now an error as well.
+    - **T4:** `evaluate-semantic-registry` reads every value flag at startup. An invalid flag exits 2 before any report is written, and the process test checks that no replay report is left behind.
+    - **T6:** the JSDoc of `runHoldoutEvaluation` marks `registry` as a test seam. The script never passes it, and a text check in the guard test confirms that.
   - **A registered 3.0.0 detector is not needed now.** The review found no frozen 1.1.0 or version-stamped artifact anywhere. It searched the working tree including ignored files, every `manifest.json`, all branches, stashes, history and worktrees.
 - **F5 and F7 (documentation), synced in this document:**
   - the decisive end-to-end sentence;

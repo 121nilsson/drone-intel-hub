@@ -51,22 +51,28 @@ import {
   validateFrameRow,
 } from "../src/entities/normalization/semantic-eval/validate";
 import { sha256Hex } from "../src/entities/normalization/sha256";
+import { readFlags } from "../src/entities/normalization/semantic-eval/cli-args";
 
 const args = process.argv.slice(2);
-const value = (flag: string, fallback: string): string => {
-  const i = args.indexOf(flag);
-  if (i < 0) return fallback;
-  const v = args[i + 1];
-  // A missing value, or the next flag in its place, is an error, never a path (Q4).
-  if (v === undefined || v.startsWith("--")) {
-    process.stderr.write(`${flag} needs a value\n`);
-    process.exit(2);
-  }
-  return v;
-};
+// Every value flag is read once, here, with the shared rule (T3): a missing value or the next flag
+// in its place exits 2 before anything is read or written.
+const flags = readFlags(args, {
+  // 1.0.0 stays the default; 1.1.0 (language provenance) is opt-in for new directories only.
+  "--schema-version": SEMANTIC_EVAL_SCHEMA_VERSION,
+  "--in": "src/test/fixtures/semantic-eval/frame-rows.jsonl",
+  "--out": "src/test/fixtures/semantic-eval",
+  "--report": "scripts/output/semantic-sampling.md",
+  "--ceiling": String(PILOT_CEILING),
+  "--seed": SAMPLING_SEED,
+  "--cutoff": FRAME_CUTOFF,
+});
+if (!flags.ok) {
+  process.stderr.write(`${flags.reason}\n`);
+  process.exit(2);
+}
+const value = (flag: keyof typeof flags.values): string => flags.values[flag];
 const apply = args.includes("--apply");
-// 1.0.0 stays the default; 1.1.0 (language provenance) is opt-in for new directories only.
-const schemaFlag = value("--schema-version", SEMANTIC_EVAL_SCHEMA_VERSION);
+const schemaFlag = value("--schema-version");
 if (
   schemaFlag !== SEMANTIC_EVAL_SCHEMA_VERSION &&
   schemaFlag !== SEMANTIC_EVAL_SCHEMA_VERSION_1_1
@@ -75,12 +81,12 @@ if (
   process.exit(2);
 }
 
-const inPath = resolve(value("--in", "src/test/fixtures/semantic-eval/frame-rows.jsonl"));
-const outDir = resolve(value("--out", "src/test/fixtures/semantic-eval"));
-const reportPath = resolve(value("--report", "scripts/output/semantic-sampling.md"));
-const ceiling = Number(value("--ceiling", String(PILOT_CEILING)));
-const seed = value("--seed", SAMPLING_SEED);
-const cutoff = value("--cutoff", FRAME_CUTOFF);
+const inPath = resolve(value("--in"));
+const outDir = resolve(value("--out"));
+const reportPath = resolve(value("--report"));
+const ceiling = Number(value("--ceiling"));
+const seed = value("--seed");
+const cutoff = value("--cutoff");
 // Pilot status follows the configuration, so the report never has to guess from the ceiling.
 const pilot = ceiling <= PILOT_CEILING;
 

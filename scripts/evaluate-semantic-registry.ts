@@ -36,6 +36,7 @@ import {
   metricsContextFor,
   renderMetricsReport,
 } from "../src/entities/normalization/semantic-eval/metrics";
+import { readFlags } from "../src/entities/normalization/semantic-eval/cli-args";
 import type { Origin, SamplingManifest } from "../src/entities/normalization/semantic-eval/types";
 import {
   describeLanguageReplay,
@@ -59,17 +60,19 @@ if (replayTarget.kind === "invalid") {
   process.stderr.write(`${replayTarget.reason}\n`);
   process.exit(2);
 }
-const value = (flag: string, fallback: string): string => {
-  const i = args.indexOf(flag);
-  if (i < 0) return fallback;
-  const v = args[i + 1];
-  // A missing value, or the next flag in its place, is an error, never a path (Q4).
-  if (v === undefined || v.startsWith("--")) {
-    process.stderr.write(`${flag} needs a value\n`);
-    process.exit(2);
-  }
-  return v;
-};
+// Every value flag is read here, before anything is written (T4): an invalid flag exits 2 and
+// leaves no report behind. "" for --decisions means "decisions.jsonl in the data directory".
+const flags = readFlags(args, {
+  "--data-dir": "src/test/fixtures/semantic-eval",
+  "--decisions": "",
+  "--origins": "historical",
+  "--report-out": "scripts/output/semantic-metrics.md",
+});
+if (!flags.ok) {
+  process.stderr.write(`${flags.reason}\n`);
+  process.exit(2);
+}
+const flagValues = flags.values;
 
 const parity = replayFixtures(SEMANTICS, CODE_SEED_SNAPSHOT, semanticKeyFor);
 const invariants = runInvariants({ snapshot: CODE_SEED_SNAPSHOT, rules: CODE_SEED_RULES });
@@ -112,8 +115,8 @@ if (failed.length > 0) {
 // ── S5: evidence-labelled metrics report (needs real human decisions) ─────
 if (args.includes("--report")) {
   try {
-    const dataDir = resolve(value("--data-dir", "src/test/fixtures/semantic-eval"));
-    const decisionsPath = resolve(value("--decisions", resolve(dataDir, "decisions.jsonl")));
+    const dataDir = resolve(flagValues["--data-dir"]);
+    const decisionsPath = resolve(flagValues["--decisions"] || resolve(dataDir, "decisions.jsonl"));
     const read = (p: string): string => {
       if (!existsSync(p)) throw new Error(`missing ${p} — run the sampler and reviewer first`);
       return readFileSync(p, "utf8");
@@ -157,7 +160,7 @@ if (args.includes("--report")) {
     const replayLine = describeLanguageReplay(language.replay);
     process.stdout.write(`${replayLine}\n`);
     const manifestHash = sha256Hex(canonicalJson(manifest));
-    const origins = value("--origins", "historical")
+    const origins = flagValues["--origins"]
       .split(",")
       .map((o) => o.trim())
       .filter((o) => o.length > 0) as Origin[];
@@ -182,7 +185,7 @@ if (args.includes("--report")) {
       allowMixedProtocol: args.includes("--allow-mixed-protocol"),
       context: metricsContextFor(manifest, selectedExamples),
     };
-    const reportOut = resolve(value("--report-out", "scripts/output/semantic-metrics.md"));
+    const reportOut = resolve(flagValues["--report-out"]);
     const rendered = renderMetricsReport(metricsInput, computeMetrics(metricsInput));
     // A 1.0.0 report stays byte-identical; a 1.1.0 report says whether its language strata were
     // reproduced, so a report cannot pass as a reproduction it never performed.

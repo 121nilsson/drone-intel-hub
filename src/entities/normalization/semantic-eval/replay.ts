@@ -15,6 +15,7 @@
  */
 
 import { isValidCanonicalId } from "../canonical-manifest";
+import { readFlags } from "./cli-args";
 import {
   compileSemanticSnapshot,
   type Class1_3AliasDefinition,
@@ -701,13 +702,12 @@ export function replayReportTarget(
   | { readonly kind: "file"; readonly path: string }
   | { readonly kind: "skip" }
   | { readonly kind: "invalid"; readonly reason: string } {
-  const i = args.indexOf("--out");
-  if (i >= 0) {
-    const out = args[i + 1];
-    // A missing value, or the next flag in its place, is an error, never a file name (Q4).
-    if (out === undefined || out.length === 0 || out.startsWith("--")) {
-      return { kind: "invalid", reason: "--out needs a file path" };
-    }
+  if (args.includes("--out")) {
+    // A missing value, or the next flag in its place, is an error, never a file name (Q4); the
+    // rule is the shared one in cli-args.ts (T3).
+    const r = readFlags(args, { "--out": "" });
+    if (!r.ok) return { kind: "invalid", reason: "--out needs a file path" };
+    const out = r.values["--out"];
     if (args.includes("--stdout")) {
       return { kind: "invalid", reason: "--out and --stdout exclude each other" };
     }
