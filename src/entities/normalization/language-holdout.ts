@@ -34,10 +34,12 @@ export const LANGUAGE_HOLDOUTS: Readonly<Record<string, LanguageHoldoutRecord>> 
     evaluatedWith: "3.0.0",
     consumedOn: "2026-11-27",
   }),
-  // Package 3: frozen in 27b7542 (module SHA-256 4578cfe7…), V4 accepted; not yet evaluated.
+  // Package 3: frozen in 27b7542 (module SHA-256 4578cfe7…), V4 accepted, evaluated once at
+  // 04acef0 (2 false-decisive in 140; scripts/output/language-holdout-v2-evaluation.txt).
   v2: Object.freeze({
     fixture: "language-detect-holdout-v2",
     evaluatedWith: "3.1.0",
+    consumedOn: "2026-11-27",
   }),
 });
 

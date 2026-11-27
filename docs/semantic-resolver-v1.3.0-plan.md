@@ -316,11 +316,11 @@ The table shows the list of detector 3.1.0: 28 Russian and 22 Ukrainian markers.
 
 ### D0 status (2026-11-27)
 
-| Version                               | Status                                                                                                                                                   |
-| ------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| D0 3.0.0 (`acb6384`)                  | **Historically evaluated, with known risk F1.** The holdout result (0 false-decisive in 147) stands for 3.0.0 only.                                      |
-| D0 3.1.0 (package 2)                  | **Technically verified** (technical review PASS WITH FINDINGS, R1–R6 fixed), **not statistically approved.** It does not inherit 3.0.0's holdout result. |
-| D0 3.1.0 after holdout v2 (package 3) | Can become statistically approved after one evaluation of an unused holdout.                                                                             |
+| Version                               | Status                                                                                                                                                                                                                  |
+| ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| D0 3.0.0 (`acb6384`)                  | **Historically evaluated, with known risk F1.** The holdout result (0 false-decisive in 147) stands for 3.0.0 only.                                                                                                     |
+| D0 3.1.0 (package 2)                  | **Technically verified** (technical review PASS WITH FINDINGS, R1–R6 fixed), **not statistically approved.** It does not inherit 3.0.0's holdout result.                                                                |
+| D0 3.1.0 after holdout v2 (package 3) | **Evaluated once on holdout v2 (2026-11-27): 2 false-decisive in 140 rows.** Statistical approval is **open**: it is a separate decision on the result and its confidence bounds (see "Holdout v2: single evaluation"). |
 
 **Limitation that holds for every version:** D0 tells Russian from Ukrainian. It cannot decide whether a Cyrillic text is Russian or Ukrainian at all. Belarusian, Bulgarian and other Cyrillic text can get a false decisive `ru` or `uk`: 5 of 13 development rows do with both 3.0.0 and 3.1.0. These 5 stay in every report as known development failures. Holdout v1's 0 false-decisive (its other-Cyrillic category was 12 rows, 0 decisive) does not mean 0 errors for all Cyrillic languages.
 
@@ -513,6 +513,58 @@ The table shows the list of detector 3.1.0: 28 Russian and 22 Ukrainian markers.
      | v2 author (isolated session)             | Wrote the texts. Saw neither the repository nor v1.                                 |
      | Implementer session (this plan's author) | Structural check and V4 only: counts, ids, labels, hashes. No text printed or read. |
      | Reviewers of R1–V6                       | None: the file did not exist during those reviews.                                  |
+     | Evaluation session (unexposed)           | Ran the script once and saw its output only (counts and ids). Read no text.         |
+
+   **Holdout v2: single evaluation (2026-11-27).**
+   - **Run.**
+     - An unexposed session checked four preconditions, and all passed:
+       - HEAD `04acef0`, with no tracked changes;
+       - v2's SHA-256 `4578cfe7…`, the same in HEAD and in the working tree;
+       - `LANGUAGE_DETECTOR_VERSION` `3.1.0`;
+       - the detector, guard and script unchanged since `04acef0`.
+     - It ran `scripts/evaluate-language-holdout.ts --holdout v2` **exactly once**: exit 0 with a TOTAL line, so **the run is valid**. No technical error.
+     - Output, verbatim and without texts: `scripts/output/language-holdout-v2-evaluation.txt`.
+     - v2 is now registered as consumed, and every further run is refused under any version.
+   - **Result, detector 3.1.0:**
+
+     | Category              | Rows | Decisive | False-decisive | Non-decisive |
+     | --------------------- | ---- | -------- | -------------- | ------------ |
+     | ru_natural            | 15   | 9        | 0              | 40.0 %       |
+     | uk_natural            | 15   | 6        | 0              | 60.0 %       |
+     | ru_short_plain        | 12   | 1        | 0              | 91.7 %       |
+     | uk_short_plain        | 12   | 0        | 0              | 100.0 %      |
+     | ru_lookalike_forms    | 12   | 1        | 0              | 91.7 %       |
+     | uk_lookalike_forms    | 8    | 2        | 0              | 75.0 %       |
+     | mixed_ru_uk           | 14   | 1        | **1**          | 92.9 %       |
+     | names_and_quotes      | 12   | 4        | 0              | 66.7 %       |
+     | english_with_cyrillic | 12   | 11       | 0              | 8.3 %        |
+     | belarusian            | 10   | 1        | **1**          | 90.0 %       |
+     | bulgarian             | 10   | 0        | 0              | 100.0 %      |
+     | other_cyrillic        | 8    | 0        | 0              | 100.0 %      |
+     | **Total**             | 140  | 36       | **2**          | 74.3 %       |
+
+     The false-decisive ids are `h2-mixed_ru_uk-12` (a mixed text given a decisive language) and `h2-belarusian-07` (Belarusian given a decisive ru or uk).
+
+   - **Rows not assessable:** none. All 140 rows were evaluated, and none was excluded or re-labelled.
+   - **Confidence:** exact Clopper–Pearson, one-sided 95 % upper bound.
+
+     | Population                                          | False-decisive | Point  | Upper bound |
+     | --------------------------------------------------- | -------------- | ------ | ----------- |
+     | all rows                                            | 2 / 140        | 1.43 % | 4.43 %      |
+     | decisive rows (how often a decisive claim is wrong) | 2 / 36         | 5.56 % | 16.47 %     |
+     | in the model's scope (ru, uk, en, mixed; 112 rows)  | 1 / 112        | 0.89 % | 4.17 %      |
+     | outside the model (be, bg, other; 28 rows)          | 1 / 28         | 3.57 % | 15.85 %     |
+
+     For reference, 0 in 140 would give an upper bound of 2.12 %.
+
+   - **What the result supports, and what it does not:**
+     - **The rate per row is below 5 % at 95 %:** the upper bound over all rows is 4.43 %. **The rate per decisive claim is not:** with only 36 decisive rows, its upper bound is 16.5 %. Of the detector's decisive claims, between none and about one in six may be wrong.
+     - **Inside the model's scope there is one failure, on mixed text.** That is the case the two-channel rule is built to refuse, so it is a real defect, not a scope limitation.
+     - **The Belarusian failure is the known limitation outside the model.** The development set already pins 5 such rows. The holdout confirms that it occurs on unseen text.
+     - **Coverage stays low on ordinary text.** 23 of the 86 clearly Russian or Ukrainian rows are decisive (27 %), and short plain texts are almost never decisive (1 of 24).
+     - **Composition limits the conclusions.** The rows are hand-written and stratified by design, not drawn from the real dispatch population. The rates are per category, not estimates of production frequencies. Hard categories (look-alikes, mixed, other Cyrillic) are over-represented on purpose.
+     - **This result cannot be compared with v1 as an improvement or a regression.** v1 measured 3.0.0 on different texts (0 in 147).
+   - **Status:** v2 is consumed. Analysing the two failing rows (reading their texts) is development work. It may change the rule only in a new version, which then needs a new holdout. **Statistical approval of 3.1.0 is open** until the maintainer decides on this result.
 
 ---
 

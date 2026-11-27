@@ -1,0 +1,15 @@
+holdout v2 (fixture language-detect-holdout-v2), detector version: 3.1.0
+ru_natural: rows=15 decisive=9 false-decisive=0 non-decisive=40.0%
+uk_natural: rows=15 decisive=6 false-decisive=0 non-decisive=60.0%
+ru_short_plain: rows=12 decisive=1 false-decisive=0 non-decisive=91.7%
+uk_short_plain: rows=12 decisive=0 false-decisive=0 non-decisive=100.0%
+ru_lookalike_forms: rows=12 decisive=1 false-decisive=0 non-decisive=91.7%
+uk_lookalike_forms: rows=8 decisive=2 false-decisive=0 non-decisive=75.0%
+mixed_ru_uk: rows=14 decisive=1 false-decisive=1 non-decisive=92.9%
+names_and_quotes: rows=12 decisive=4 false-decisive=0 non-decisive=66.7%
+english_with_cyrillic: rows=12 decisive=11 false-decisive=0 non-decisive=8.3%
+belarusian: rows=10 decisive=1 false-decisive=1 non-decisive=90.0%
+bulgarian: rows=10 decisive=0 false-decisive=0 non-decisive=100.0%
+other_cyrillic: rows=8 decisive=0 false-decisive=0 non-decisive=100.0%
+TOTAL: rows=140 decisive=36 false-decisive=2 non-decisive=74.3%
+false-decisive ids: h2-mixed_ru_uk-12, h2-belarusian-07
